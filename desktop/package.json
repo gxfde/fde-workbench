@@ -11,6 +11,7 @@
     "dev": "electron-vite dev",
     "icon:mac": "bash scripts/generate-icon.sh",
     "package:mac": "npm run build && npm run icon:mac && electron-builder --mac dmg --arm64",
+    "package:win": "npm run build && electron-builder --win nsis --x64",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
@@ -62,6 +63,24 @@
           ]
         }
       ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "dmg": {
       "title": "FDE 工作台 ${version}",
