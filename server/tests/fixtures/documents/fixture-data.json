@@ -1,0 +1,80 @@
+{
+  "project": {
+    "name": "星河 PoV",
+    "enterprise_name": "星河制造",
+    "project_code": "FDE-POV-0001",
+    "status": "active",
+    "planned_start_date": "2026-08-22",
+    "planned_end_date": "2026-09-15"
+  },
+  "enterprise": {
+    "name": "星河制造",
+    "contact_name": "王工",
+    "contact_phone": "13800000000",
+    "address": "上海市星河路 1 号"
+  },
+  "subjects": {
+    "roles": [
+      {
+        "id": "r1",
+        "name": "仓库主管",
+        "subject_type": "role",
+        "subject_key": "warehouse_manager",
+        "description": "负责仓库出入库与盘点",
+        "status": "active",
+        "sort_order": 0
+      },
+      {
+        "id": "r2",
+        "name": "计划员",
+        "subject_type": "role",
+        "subject_key": "planner",
+        "description": "负责排产计划",
+        "status": "active",
+        "sort_order": 1
+      }
+    ],
+    "processes": [
+      {
+        "id": "p1",
+        "name": "收货入库流程",
+        "subject_type": "process",
+        "subject_key": "inbound",
+        "description": "收货、质检、上架",
+        "status": "active",
+        "sort_order": 0
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "task_key": "build_pov",
+      "name": "开发 PoV 方案",
+      "status": "in_progress",
+      "progress": 40,
+      "planned_start_date": "2026-08-22",
+      "planned_end_date": "2026-08-30",
+      "assignee": {"id": "u1", "display_name": "陈工"}
+    }
+  ],
+  "members": [
+    {
+      "id": "m1",
+      "user_id": "u1",
+      "display_name": "陈工",
+      "role": "project_lead"
+    }
+  ],
+  "research": {
+    "role_interview": {
+      "main_problem": {"text": "排产信息分散"},
+      "painpoint": {"text": "手工报表多"}
+    }
+  },
+  "document": {
+    "business_code": "OPP-0001",
+    "version_number": 1,
+    "document_type": "sow"
+  }
+}

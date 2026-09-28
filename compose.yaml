@@ -1,0 +1,30 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: fde_workbench
+      MYSQL_USER: fde
+      MYSQL_PASSWORD: fde_dev_password
+      MYSQL_ROOT_PASSWORD: fde_root_password
+      TZ: UTC
+    ports: ["3306:3306"]
+    volumes: ["fde_mysql:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ufde", "-pfde_dev_password"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["fde_redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  fde_mysql:
+  fde_redis:

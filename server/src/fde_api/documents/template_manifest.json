@@ -1,0 +1,223 @@
+{
+  "research_result": {
+    "name": "调研结果",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "调研摘要",
+      "关键发现",
+      "建议",
+      "调研记录"
+    ]
+  },
+  "project_plan_progress": {
+    "name": "项目计划及进度",
+    "source": "built",
+    "modules": [],
+    "required_sections": [
+      "企业与项目信息",
+      "客户目标与项目指引",
+      "任务甘特图",
+      "任务清单"
+    ]
+  },
+  "prediagnosis": {
+    "name": "预调研表",
+    "source": "built",
+    "modules": [
+      "pre_diagnosis"
+    ],
+    "required_sections": [
+      "企业概览",
+      "业务目标与范围",
+      "现状与痛点",
+      "初步AI机会判断"
+    ]
+  },
+  "job_description": {
+    "name": "岗位说明书",
+    "source": "built",
+    "modules": [
+      "pre_diagnosis"
+    ],
+    "required_sections": [
+      "岗位职责",
+      "任职要求",
+      "考核指标"
+    ]
+  },
+  "job_questionnaire": {
+    "name": "岗位问卷",
+    "source": "built",
+    "modules": [
+      "pre_diagnosis"
+    ],
+    "required_sections": [
+      "岗位背景",
+      "日常工作",
+      "工具与系统",
+      "痛点与期望"
+    ]
+  },
+  "shadowing_record": {
+    "name": "现场访谈与跟岗记录",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "访谈对象",
+      "跟岗时段",
+      "流程观察",
+      "问题记录"
+    ]
+  },
+  "process_system_map": {
+    "name": "流程与系统数据地图",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "业务流程",
+      "系统清单",
+      "数据流转",
+      "系统间依赖"
+    ]
+  },
+  "ai_opportunity_score": {
+    "name": "AI机会清单与评分表",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "场景清单",
+      "评分维度",
+      "优先级排序"
+    ]
+  },
+  "scenario_decision": {
+    "name": "场景决策记录",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "候选场景",
+      "决策依据",
+      "结论",
+      "下一步"
+    ]
+  },
+  "pov_plan": {
+    "name": "PoV验证方案",
+    "source": "built",
+    "modules": [
+      "pov"
+    ],
+    "required_sections": [
+      "验证目标",
+      "验证场景",
+      "数据准备",
+      "验收标准"
+    ]
+  },
+  "pov_report": {
+    "name": "PoV验证结果报告",
+    "source": "built",
+    "modules": [
+      "pov"
+    ],
+    "required_sections": [
+      "验证过程",
+      "数据结果",
+      "结论",
+      "建议"
+    ]
+  },
+  "sow": {
+    "name": "SOW工作说明书",
+    "source": "built",
+    "modules": [
+      "production_deployment"
+    ],
+    "required_sections": [
+      "项目信息",
+      "关联 AI 机会",
+      "方案设计",
+      "交付物",
+      "预期指标与验收标准",
+      "所需数据与系统",
+      "计划排期",
+      "风险与依赖",
+      "商务与责任事项",
+      "变更与确认"
+    ]
+  },
+  "weekly_issue": {
+    "name": "项目周报与问题清单",
+    "source": "built",
+    "modules": [
+      "diagnosis"
+    ],
+    "required_sections": [
+      "本周进展",
+      "问题清单",
+      "风险",
+      "下周计划"
+    ]
+  },
+  "change_request": {
+    "name": "需求变更单",
+    "source": "built",
+    "modules": [
+      "production_deployment"
+    ],
+    "required_sections": [
+      "变更内容",
+      "变更原因",
+      "影响评估",
+      "审批"
+    ]
+  },
+  "acceptance": {
+    "name": "上线验收单",
+    "source": "built",
+    "modules": [
+      "production_deployment"
+    ],
+    "required_sections": [
+      "验收基本信息",
+      "验收依据与效力",
+      "交付物记录"
+    ]
+  },
+  "training_handover": {
+    "name": "培训与运营移交清单",
+    "source": "built",
+    "modules": [
+      "training_handover"
+    ],
+    "required_sections": [
+      "培训计划",
+      "培训记录",
+      "运维移交",
+      "交接确认"
+    ]
+  },
+  "contract": {
+    "name": "标准合同",
+    "source": "built",
+    "modules": [
+      "production_deployment"
+    ],
+    "required_sections": [
+      "合同信息",
+      "定义与文件优先顺序",
+      "服务与SOW机制"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fde-api"
+version = "0.1.0"
+description = "FDE Workbench Flask API"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "Flask>=3.1,<4",
+  "gunicorn>=23,<24",
+  "SQLAlchemy>=2.0,<3",
+  "alembic>=1.14,<2",
+  "PyMySQL>=1.1,<2",
+  "redis>=5,<7",
+  "requests>=2.34,<3",
+  "defusedxml==0.7.1",
+  "cryptography>=46,<51",
+  "qrcode==8.2",
+  "pypdf>=6,<7",
+  "openpyxl==3.1.5",
+  "PyJWT>=2.10,<3",
+  "argon2-cffi>=23.1,<24",
+  "pydantic-settings>=2.7,<3",
+  "oss2==2.19.1",
+  "python-docx>=1.1,<2",
+  "docxtpl>=0.18,<1",
+  "bleach>=6,<7",
+  "markdown-it-py==3.0.0",
+  "playwright==1.58.0"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<10",
+  "pytest-cov>=6,<7",
+  "freezegun>=1.5,<2"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "mysql_observer: requires a same-instance privileged MySQL observer for deterministic lock inspection and bounded cleanup",
+  "oss: exercises the object-storage contract against the local adapter by default; real Aliyun OSS only when FDE_RUN_OSS_TESTS=1 and OSS credentials are supplied"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

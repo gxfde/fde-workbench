@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#172554"/>
+      <stop offset="0.52" stop-color="#3730A3"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="284" y1="264" x2="768" y2="784" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="208" fill="url(#background)"/>
+  <path d="M248 306c0-32 26-58 58-58h412c32 0 58 26 58 58v412c0 32-26 58-58 58H306c-32 0-58-26-58-58V306Z" fill="none" stroke="url(#accent)" stroke-width="28" opacity="0.9"/>
+  <circle cx="738" cy="286" r="34" fill="#67E8F9"/>
+  <text x="512" y="590" text-anchor="middle" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="232" font-weight="750" letter-spacing="-8">FDE</text>
+  <path d="M326 672h372" stroke="#C4B5FD" stroke-width="24" stroke-linecap="round"/>
+</svg>

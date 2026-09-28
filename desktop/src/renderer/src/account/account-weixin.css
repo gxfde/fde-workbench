@@ -1,0 +1,4 @@
+.weixin-qr { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 16px; margin: 18px 0; border: 1px solid #dce5f0; border-radius: 14px; background: #f7faff; text-align: center; }
+.weixin-qr img { display: block; width: 220px; height: 220px; max-width: 100%; background: #fff; border-radius: 8px; }
+.weixin-qr small { color: #64748b; line-height: 1.6; }
+.weixin-verify { display: grid; gap: 12px; max-width: 360px; margin: 18px auto; }
