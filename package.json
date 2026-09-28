@@ -14,6 +14,7 @@
     "test:e2e": "node scripts/run-e2e.mjs",
     "typecheck": "npm --workspace desktop run typecheck",
     "package:mac": "npm --workspace desktop run package:mac",
+    "package:win": "npm --workspace desktop run package:win",
     "verify:mac": "bash scripts/verify-dmg.sh"
   },
   "allowScripts": {
