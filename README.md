@@ -1,22 +1,46 @@
-# FDE Workbench
+<div align="center">
+  <img src="desktop/src/renderer/src/assets/logo.png" width="112" alt="FDE Workbench Logo" />
+  <h1>FDE Workbench</h1>
+  <p>面向 Forward Deployed Engineer 团队的开源项目工作台</p>
+  <p>
+    <img src="https://img.shields.io/badge/version-v0.1.0-2d7dd2" alt="版本 v0.1.0" />
+    <img src="https://img.shields.io/badge/license-MIT-22a06b" alt="MIT 许可证" />
+    <img src="https://img.shields.io/badge/desktop-macOS%20arm64-555b6e" alt="macOS arm64 桌面端" />
+    <img src="https://img.shields.io/badge/release-source%20only-f59e0b" alt="仅源码发布" />
+  </p>
+  <p>
+    <a href="#主要能力">主要能力</a> ·
+    <a href="#首次启动">首次启动</a> ·
+    <a href="#配置边界">配置说明</a> ·
+    <a href="#后端运维">后端运维</a> ·
+    <a href="#开发与测试">开发与测试</a> ·
+    <a href="CHANGELOG.md">版本记录</a>
+  </p>
+</div>
 
-最新版本与变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+---
 
-FDE Workbench 是面向 Forward Deployed Engineer 团队的开源项目工作台，覆盖项目、任务、调研、AI 机会、方案、交付文档、文件、用户、Skills、插件和模型配置。项目由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 MySQL、Redis 和文件存储中。
+FDE Workbench 覆盖项目、任务、调研、AI 机会、方案、交付文档、文件、用户、Skills、插件和模型配置。它由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 MySQL、Redis 和文件存储中。
 
-本仓库是干净的开源发行版：不包含生产数据库、客户资料、运行日志、对象存储文件、访问凭据、安装包、发布备份或客户端自更新模块。
+| 当前版本 | 你需要知道的事 |
+| --- | --- |
+| 桌面平台 | 仅配置 macOS Apple Silicon（arm64）DMG 构建；**没有 Windows 客户端** |
+| 发布内容 | 提供源码，不附带已签名、公证的安装包；不包含客户端自更新 |
+| 首次登录 | 空数据库初始化后使用 `admin` / `ChangeMe123!`，首次登录强制改密 |
+| AI 功能 | 基础功能无需 AI Key；模型及其他外部集成由管理员分别配置 |
 
-> **使用与商用提示**：本项目是以 *vibe coding*（AI 辅助快速开发）方式构建的产品。开源发布不代表代码已经完成全面的安全审计、合规评估、性能压测或生产级验收，也不构成对特定业务场景的适用性保证。用于商用、对外服务或处理真实客户数据前，请自行审查源码及依赖，验证权限隔离、数据安全、文件处理、模型输出、备份恢复和升级迁移，并按所在地法律法规与行业要求完成合规评估。不要把默认配置或初始管理员凭据直接用于生产环境。
+> [!IMPORTANT]
+> 本仓库是清理后的开源发行版，不包含生产数据库、客户资料、运行日志、对象存储文件、访问凭据、安装包或发布备份。
+
+> [!WARNING]
+> **商用前请独立核验。**本项目以 *vibe coding*（AI 辅助快速开发）方式构建。开源发布不代表已经完成全面的安全审计、合规评估、性能压测或生产级验收，也不保证适用于特定业务。商用、对外服务或处理真实客户数据前，请审查源码及依赖，并验证权限隔离、数据安全、文件处理、模型输出、备份恢复和升级迁移；同时完成适用的法律与行业合规评估。不要直接将默认配置或初始管理员凭据用于生产。
 
 ## 主要能力
 
-- 项目、成员、任务、甘特关系与项目阶段管理
-- 调研对象、调研表、备忘录、AI 机会与方案设计
-- 文档模板、交付文档、版本和项目文件管理
-- 角色权限：管理员、项目负责人、FDE 工程师、查看者
-- AI 模型、Skills、插件、AI Server、微信/ClawBot 集成
-- 管理员系统配置：模型服务、扩展市场、对象存储和 ClamAV
-- Electron 桌面端；本项目不包含客户端自更新能力
+| 项目协作 | 调研与交付 | AI 与管理 |
+| --- | --- | --- |
+| 项目、成员、任务、甘特关系和阶段管理 | 调研对象、调研表、备忘录、AI 机会和方案设计 | AI 模型、Skills、插件、AI Server、微信/ClawBot 集成 |
+| 项目负责人、FDE 工程师、查看者等角色权限 | 文档模板、交付文档、版本和项目文件管理 | 管理员配置模型服务、扩展市场、对象存储和 ClamAV |
 
 ## 平台支持
 
