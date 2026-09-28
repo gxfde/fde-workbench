@@ -25,14 +25,28 @@ def register_cli(app: Flask) -> None:
     def bootstrap_open_source_command() -> None:
         """Create only generic catalog data and the forced-change initial admin."""
         from fde_api.control.builtin_skills import seed_public_skills
-        from fde_api.documents.template_service import seed_document_templates
+        from fde_api.documents.template_service import (
+            SYSTEM_USERNAME,
+            seed_document_templates,
+        )
 
         session = db.session()
         try:
             with session.begin():
                 seed_workbench(session)
                 seed_document_templates(session)
-                existing_users = int(session.scalar(select(func.count()).select_from(User)) or 0)
+                # seed_document_templates inserts the `system` seed user first and
+                # that account carries an empty password hash, so it can never log
+                # in. Counting it here would make the initial admin unreachable on
+                # a fresh database, leaving the deployment without any usable login.
+                existing_users = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(User)
+                        .where(User.username != SYSTEM_USERNAME)
+                    )
+                    or 0
+                )
                 if existing_users == 0:
                     session.add(User(username="admin", display_name="系统管理员", role=ROLE_ADMIN,
                                      password_hash=hash_password("ChangeMe123!"), must_change_password=True, is_active=True))
