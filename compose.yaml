@@ -1,3 +1,44 @@
+# Pinned so the project name, and therefore container and volume names, stay
+# stable even if the checkout directory is renamed.
+name: fde-workbench
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: server/Dockerfile
+
+# Container-internal hostnames. The host-oriented values in server/.env use
+# 127.0.0.1 and deliberately do NOT apply here: server/.env is excluded from the
+# build context via .dockerignore, and these explicit vars win over pydantic's
+# dotenv layer regardless.
+x-backend-env: &backend-env
+  FDE_ENV: development
+  FDE_DATABASE_URL: mysql+pymysql://fde:fde_dev_password@mysql:3306/fde_workbench
+  FDE_REDIS_URL: redis://redis:6379/2
+  FDE_JWT_SECRET: ${FDE_JWT_SECRET:?create a root .env containing FDE_JWT_SECRET, see README}
+  FDE_LOCAL_STORAGE_ROOT: /app/server/.fde-storage
+  # Used to build the MCP callback URL handed to an external AI server.
+  # Admin-overridable at runtime in 系统配置; api:8010 resolves inside the network.
+  FDE_AI_INTERNAL_API_URL: http://api:8010
+  FDE_API_HOST: 0.0.0.0
+  FDE_API_PORT: "8010"
+
+x-backend-base: &backend-base
+  build: *backend-build
+  image: fde-workbench-backend:local
+  init: true
+  restart: unless-stopped
+  environment: *backend-env
+  volumes:
+    # Shared: the worker writes generated documents, the API serves them.
+    - fde_storage:/app/server/.fde-storage
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
 services:
   mysql:
     image: mysql:8.4
@@ -25,6 +66,55 @@ services:
       timeout: 3s
       retries: 20
 
+  # One-shot. `alembic upgrade head` and `bootstrap-open-source` are both
+  # idempotent, so re-running on every `up` is safe and never overwrites data.
+  migrate:
+    build: *backend-build
+    image: fde-workbench-backend:local
+    init: true
+    restart: "no"
+    environment: *backend-env
+    volumes:
+      - fde_storage:/app/server/.fde-storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "[migrate] alembic upgrade head"
+        alembic upgrade head
+        echo "[migrate] bootstrap-open-source"
+        flask --app fde_api.app:create_app bootstrap-open-source
+        echo "[migrate] done"
+
+  api:
+    <<: *backend-base
+    ports: ["8010:8010"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health/live', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    <<: *backend-base
+    command: ["flask", "--app", "fde_api.app:create_app", "worker"]
+
+  scheduler:
+    <<: *backend-base
+    command: ["flask", "--app", "fde_api.app:create_app", "scheduler"]
+
 volumes:
   fde_mysql:
   fde_redis:
+  fde_storage:

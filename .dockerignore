@@ -1,0 +1,47 @@
+# Build context is the repo root; only `server/` and `resources/` are copied.
+# node_modules alone would otherwise dominate the context size.
+
+# Secrets and local config must never enter the image.
+.env
+.env.*
+!.env.example
+server/.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+
+# VCS and editor state
+.git
+.gitignore
+.idea
+.mcp.json
+.DS_Store
+
+# Node / desktop build output (not needed by the backend image)
+node_modules
+desktop/node_modules
+desktop/out
+release
+test-results
+.artifacts
+artifacts
+
+# Python caches and local runtime state
+server/.venv
+server/.pytest_cache
+server/.coverage
+server/.fde-storage
+__pycache__
+*.pyc
+*.egg-info
+*.tsbuildinfo
+
+# Local data dumps
+*.sql
+*.dump
+*.sqlite
+*.sqlite3
+*.log
