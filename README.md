@@ -5,7 +5,7 @@
   <p>
     <img src="https://img.shields.io/badge/version-v0.1.0-2d7dd2" alt="版本 v0.1.0" />
     <img src="https://img.shields.io/badge/license-MIT-22a06b" alt="MIT 许可证" />
-    <img src="https://img.shields.io/badge/desktop-macOS%20arm64-555b6e" alt="macOS arm64 桌面端" />
+    <img src="https://img.shields.io/badge/desktop-macOS%20arm64%20%7C%20Windows%20x64%20build-555b6e" alt="macOS arm64 与 Windows x64 构建配置" />
     <img src="https://img.shields.io/badge/release-source%20only-f59e0b" alt="仅源码发布" />
   </p>
   <p>
@@ -24,8 +24,8 @@ FDE Workbench 覆盖项目、任务、调研、AI 机会、方案、交付文档
 
 | 当前版本 | 你需要知道的事 |
 | --- | --- |
-| 桌面平台 | 仅配置 macOS Apple Silicon（arm64）DMG 构建；**没有 Windows 客户端** |
-| 发布内容 | 提供源码，不附带已签名、公证的安装包；不包含客户端自更新 |
+| 桌面平台 | macOS Apple Silicon（arm64）DMG 与 Windows x64 NSIS 构建配置；Windows 尚未完成发行验收 |
+| 发布内容 | 提供源码，不附带已签名、已验收的安装包；不包含客户端自更新 |
 | 首次登录 | 空数据库初始化后使用 `admin` / `ChangeMe123!`，首次登录强制改密 |
 | AI 功能 | 基础功能无需 AI Key；模型及其他外部集成由管理员分别配置 |
 
@@ -44,7 +44,7 @@ FDE Workbench 覆盖项目、任务、调研、AI 机会、方案、交付文档
 
 ## 平台支持
 
-当前仅提供 **macOS Apple Silicon（arm64）DMG** 的构建配置。项目目前没有 Windows 客户端版本，也不提供 Windows 安装包、Windows 构建脚本或兼容性保障。Windows 支持属于后续社区开发范围。
+源码包含 **macOS Apple Silicon（arm64）DMG** 和 **Windows x64 NSIS** 的构建配置。Windows 构建支持来自社区贡献 [PR #1](https://github.com/gxfde/fde-workbench/pull/1)；贡献者报告在 Windows 11 x64 上构建并安装成功，但安装包图标、卸载，以及连接后端后的完整业务流程尚未完成验收。本项目目前不提供已经签名、可直接视为正式发行版的 Windows 安装包，也不承诺其他 Windows 架构或版本的兼容性。
 
 ## 技术架构
 
@@ -195,11 +195,27 @@ FDE_E2E_DATABASE_URL='mysql+pymysql://USER:PASSWORD@127.0.0.1:3306/fde_workbench
 
 ## 打包桌面端
 
+macOS Apple Silicon（arm64）DMG：
+
 ```bash
 npm run package:mac
 ```
 
-当前配置仅生成 Apple Silicon macOS DMG，并使用本地临时签名。正式外发应由发行者使用自己的 Developer ID 完成签名、公证和 Gatekeeper 验收。本仓库不包含证书、公证凭据或历史安装包。当前没有 Windows 客户端或 Windows 安装包；`package:mac` 也不适用于 Windows。
+Windows x64 NSIS 安装包（在 Windows 构建环境执行）：
+
+```bash
+npm run package:win
+```
+
+桌面安装包只包含客户端；使用前仍需按上文部署后端、MySQL 和 Redis。默认 API 地址为 `http://127.0.0.1:8010`，连接远程后端时须在打包前配置 `desktop/package.json` 中的 `build.extraMetadata.fdeApiUrl` 为受信任的 HTTPS 地址。
+
+`package:mac` 使用本地临时签名，**不是**已签名公证的正式 macOS 发行流程。正式外发应使用发行者自己的 Developer ID 完成签名、公证、装订及 Gatekeeper 验收。Windows 构建脚本能生成安装包，但构建或安装成功不等于发行验收；公开分发前应完成代码签名，并在真实 Windows 环境验证安装包图标、安装、启动、登录及后端连接、主要功能和卸载。**未签名安装包不能当作已验收发行版发布或宣传。**本仓库不包含签名证书、公证凭据或历史安装包。
+
+### 更换 Logo 与安装图标
+
+- 界面及本 README 页首使用 [`desktop/src/renderer/src/assets/logo.png`](desktop/src/renderer/src/assets/logo.png)。更换 Logo 时，直接用同名 PNG 替换该文件，再重新构建客户端。
+- macOS 安装图标由 `npm run package:mac` 调用 `icon:mac`，根据上述 Logo 生成 [`desktop/build/icon.png`](desktop/build/icon.png) 和 [`desktop/build/icon.icns`](desktop/build/icon.icns)。
+- Windows 应用图标使用 [`desktop/build/icon.png`](desktop/build/icon.png)，NSIS 安装及卸载图标使用 [`desktop/build/icon.ico`](desktop/build/icon.ico)。更换 Logo 后还需用新图标重新生成并替换 `.ico`；仅替换界面 Logo 不会自动更新 Windows 安装图标。
 
 ## 数据与安全
 
