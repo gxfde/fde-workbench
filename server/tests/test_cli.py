@@ -3,6 +3,7 @@ from threading import Barrier, Thread
 from sqlalchemy import select
 
 from fde_api.auth.models import User
+from fde_api.documents.template_service import SYSTEM_USERNAME
 
 
 INITIAL_PASSWORD = "InitialPass!234"
@@ -175,3 +176,71 @@ def test_concurrent_create_admin_treats_same_active_admin_winner_as_success(
     assert len(admins) == 1
     assert admins[0].role == "admin"
     assert admins[0].is_active is True
+
+
+def test_bootstrap_open_source_creates_initial_admin_despite_system_seed_user(
+    app, db_session
+):
+    """The seeded `system` user must not be mistaken for an operator account.
+
+    Seeding document templates inserts `system` with an empty password hash
+    before the user count runs. Treating it as an existing user left a fresh
+    database with no usable login at all.
+    """
+    result = app.test_cli_runner().invoke(args=["bootstrap-open-source"])
+
+    assert result.exit_code == 0
+    assert "initial_admin_created=True" in result.output
+    db_session.expire_all()
+    admin = db_session.scalars(select(User).where(User.username == "admin")).one()
+    assert admin.role == "admin"
+    assert admin.is_active is True
+    assert admin.must_change_password is True
+    assert admin.password_hash != ""
+    seeded = db_session.scalars(
+        select(User).where(User.username == SYSTEM_USERNAME)
+    ).one()
+    assert seeded.password_hash == ""
+
+
+def test_bootstrap_open_source_keeps_existing_admin_on_rerun(app, db_session):
+    runner = app.test_cli_runner()
+    assert runner.invoke(args=["bootstrap-open-source"]).exit_code == 0
+    db_session.expire_all()
+    original = db_session.scalars(select(User).where(User.username == "admin")).one()
+    original_id = original.id
+    original_hash = original.password_hash
+
+    result = runner.invoke(args=["bootstrap-open-source"])
+
+    assert result.exit_code == 0
+    assert "initial_admin_created=False" in result.output
+    db_session.expire_all()
+    admins = db_session.scalars(select(User).where(User.username == "admin")).all()
+    assert len(admins) == 1
+    assert admins[0].id == original_id
+    assert admins[0].password_hash == original_hash
+
+
+def test_bootstrap_open_source_respects_existing_non_seed_user(app, db_session):
+    """An already-present operator still suppresses the initial admin."""
+    from fde_api.auth.passwords import hash_password
+
+    db_session.add(
+        User(
+            username="operator",
+            display_name="Operator",
+            role="viewer",
+            password_hash=hash_password(INITIAL_PASSWORD),
+            must_change_password=False,
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    result = app.test_cli_runner().invoke(args=["bootstrap-open-source"])
+
+    assert result.exit_code == 0
+    assert "initial_admin_created=False" in result.output
+    db_session.expire_all()
+    assert db_session.scalars(select(User).where(User.username == "admin")).all() == []
