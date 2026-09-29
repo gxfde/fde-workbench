@@ -61,7 +61,7 @@ FDE Workbench 覆盖项目、任务、调研、AI 机会、方案、交付文档
 - Node.js 22+ 与 npm 10+
 - Python 3.12 或 3.13
 - MySQL 8.0+、Redis 7+
-- Docker（可选，仅用于快速启动 MySQL/Redis）
+- Docker（可选；可只用于启动 MySQL/Redis，也可运行整个后端）
 - ClamAV、LibreOffice（可选；用于病毒扫描和文档预览/转换）
 
 ## 首次启动
@@ -75,6 +75,8 @@ docker compose up -d mysql redis
 ```
 
 也可以使用已有服务，并在 `server/.env` 中填写连接地址。
+
+如需用 Docker 一并运行 API、worker 和 scheduler，跳过以下第 2~4 步，直接看「用 Docker 运行后端」。
 
 ### 2. 安装依赖并创建启动配置
 
@@ -136,6 +138,43 @@ npm run dev
 
 无需先配置 AI Key 即可登录和使用项目、任务、调研记录、文件等非 AI 功能；AI 生成、分析和对话等功能需要对应模型服务及 API Key。OSS、微信/ClawBot 等外部集成也需分别配置，并非填写一个 AI Key 就能开启全部功能。所有功能均要求后端及其数据库、Redis 等基础服务正常运行。
 
+## 用 Docker 运行后端
+
+除 MySQL/Redis 外，compose 也可以把 API、worker 和 scheduler 一起跑在容器里：`migrate` 服务先执行迁移与初始化，随后三个长期进程启动。桌面端是 Electron 原生程序，仍需在本机运行，见「首次启动」第 5 步。
+
+### 1. 准备密钥
+
+compose 从仓库根目录的 `.env` 读取 `FDE_JWT_SECRET`。该文件已被 `.gitignore` 排除，不会提交：
+
+```bash
+python3 -c 'import secrets; print("FDE_JWT_SECRET=" + secrets.token_urlsafe(48))' > .env
+```
+
+`FDE_JWT_SECRET` 同时是加密已存集成密钥的根材料。一旦更换，之前保存的密钥将无法解密，因此请妥善保存并保持稳定。
+
+### 2. 启动与停止
+
+```bash
+docker compose up -d          # 启动全部服务
+docker compose ps             # 查看状态
+docker compose logs -f api    # 跟踪 API 日志
+docker compose down           # 停止（加 -v 会一并删除数据卷）
+```
+
+`migrate` 是一次性服务，退出码为 0 表示迁移与初始化完成。`alembic upgrade head` 与 `bootstrap-open-source` 均可重复执行，因此每次 `up` 都重新执行一遍也是安全的。API 监听宿主机 `8010` 端口，与桌面端开发态的默认地址一致。
+
+### 3. 镜像说明
+
+容器不读取 `server/.env`（该文件在 `.dockerignore` 中排除，其中的 `127.0.0.1` 地址在容器内不适用）；连接信息由 `compose.yaml` 显式注入。
+
+| 项目 | 说明 |
+| --- | --- |
+| 基础镜像 | `python:3.12-slim`，镜像约 570MB |
+| 代码位置 | 源码在构建时写入镜像；修改后端代码后需 `docker compose build && docker compose up -d` 生效 |
+| 文件存储 | `fde_storage` 数据卷，挂载到 `/app/server/.fde-storage`，由 API 与 worker 共享 |
+| 浏览器功能 | 默认不安装 Playwright Chromium，Mermaid 图表渲染与 LCSC 浏览器自动化不可用；需要时用 `docker compose build --build-arg INSTALL_PLAYWRIGHT_BROWSERS=1 api` 开启 |
+| 文档预览 / 病毒扫描 | 镜像不含 LibreOffice 与 ClamAV，相关功能会降级失败，不影响其他功能 |
+
 ## 配置边界
 
 工作台运行后可变的集成配置全部由管理员在“系统配置”或“AI 与扩展”中管理。以下是应用启动前的基础设施配置，服务尚未启动时无法通过界面设置：
@@ -165,8 +204,8 @@ cd server
 
 ### 健康检查
 
-- `GET /health/live`：进程存活
-- `GET /health/ready`：数据库、Redis 等依赖就绪状态
+- `GET /api/v1/health/live`：进程存活
+- `GET /api/v1/health/ready`：数据库、Redis 等依赖就绪状态
 
 ### 生产部署要点
 
