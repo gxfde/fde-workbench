@@ -31,7 +31,10 @@ def test_admin_can_save_runtime_configuration_without_secret_echo(authorized_cli
     admin_client = authorized_client("admin")
     current = admin_client.get("/api/v1/system/configuration")
     assert current.status_code == 200
-    payload = current.json
+    # 所有接口统一使用 { "data": ..., "error": null } 信封，桌面端按此解析
+    assert set(current.json) == {"data", "error"}
+    assert current.json["error"] is None
+    payload = current.json["data"]
     assert set(payload["values"]) == PUBLIC_FIELDS
 
     values = dict(payload["values"])
@@ -49,7 +52,7 @@ def test_admin_can_save_runtime_configuration_without_secret_echo(authorized_cli
         json={"values": values, "secrets": {"dsh_service_token": "secret-runtime-token"}, "clear_secrets": [], "version": payload["version"]},
     )
     assert response.status_code == 200
-    result = response.json
+    result = response.json["data"]
     assert result["values"]["dsh_enabled"] is True
     assert result["secrets_configured"]["dsh_service_token"] is True
     assert "secret-runtime-token" not in response.get_data(as_text=True)
@@ -57,7 +60,7 @@ def test_admin_can_save_runtime_configuration_without_secret_echo(authorized_cli
 
 def test_enabling_runtime_without_token_is_rejected(authorized_client):
     admin_client = authorized_client("admin")
-    current = admin_client.get("/api/v1/system/configuration").json
+    current = admin_client.get("/api/v1/system/configuration").json["data"]
     values = dict(current["values"])
     values["dsh_enabled"] = True
     response = admin_client.client.put(

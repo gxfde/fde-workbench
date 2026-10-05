@@ -5,7 +5,7 @@ import json
 from typing import Any
 from urllib.parse import urlparse
 
-from flask import Blueprint, current_app, g, request
+from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import JSON, String, Text, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
@@ -53,6 +53,11 @@ INT_RANGES = {
     "clamav_timeout_seconds": (1, 300), "clamav_socket_timeout_seconds": (1, 300),
 }
 URL_FIELDS = {"deepseek_base_url", "kimi_base_url", "dsh_base_url", "ai_internal_api_url", "dsh_market_registry_url", "oss_endpoint"}
+
+
+def _data(value: Any) -> Any:
+    """Wrap a payload in the shared {"data": ..., "error": null} envelope."""
+    return jsonify({"data": value, "error": None})
 
 
 def _decrypt(item: SystemConfiguration | None) -> dict[str, str]:
@@ -135,7 +140,8 @@ def apply_persisted_configuration(app) -> None:
 @require_role(ROLE_ADMIN)
 def get_configuration():
     with db.session() as session:
-        return _serialize(session.get(SystemConfiguration, ROW_ID), current_app.config["SETTINGS"]), 200
+        payload = _serialize(session.get(SystemConfiguration, ROW_ID), current_app.config["SETTINGS"])
+    return _data(payload), 200
 
 
 @blueprint.put("")
@@ -179,4 +185,4 @@ def put_configuration():
         session.flush()
         result = _serialize(item, current_app.config["SETTINGS"])
     _apply(current_app._get_current_object(), item)
-    return result, 200
+    return _data(result), 200
