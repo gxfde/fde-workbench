@@ -426,13 +426,17 @@ def test_l2_promotion_requires_repurchase_and_mentee(db_session):
 
 
 def _settlement_context(db_session, *, with_profile_city: bool = False):
-    """4 个项目（SOW a/b/c/d）× 已接交付包 × G8 过门 × 7 条里程碑实收。"""
+    """4 个项目（SOW a/b/c/d）× 已接交付包 × G8 过门 × 7 条里程碑实收。
+
+    with_profile_city=True 时：档案 home_city 故意取「深圳」≠ 包侧客户城「杭州」
+    （三段代号第三段）——留注⑤ 终版口径的回归钉：冷启动判定只认包侧城市，
+    若实现回退到 home_city 代理，序号口径即错（第 4 单误判冷启动）。"""
     admin = _user("r2.settle.admin")
     fde = _user("r2.settle.fde", role="fde_engineer")
     template = _template(db_session)
     db_session.add_all([admin, fde])
     if with_profile_city:
-        db_session.add(FdeProfile(user_id=fde.id, home_city="杭州"))
+        db_session.add(FdeProfile(user_id=fde.id, home_city="深圳"))
     context = {}
     for sow, keys in (
         ("a", ("G3",)),
@@ -443,7 +447,9 @@ def _settlement_context(db_session, *, with_profile_city: bool = False):
         project = _project(
             db_session,
             template,
-            enterprise_code=f"r2 结算 {sow}·{uuid4().hex[:6]}",
+            enterprise_code=(
+                f"r2 结算{sow}·行业·杭州" if with_profile_city else f"r2 结算 {sow}·{uuid4().hex[:6]}"
+            ),
             leader=admin,
         )
         _package(db_session, project, seat_delivery=fde.id, sow_type=sow)
@@ -480,7 +486,7 @@ def test_seven_milestones_four_seats_and_cumulative_withholding(db_session):
     assert len(settlements) == 7
 
     by_key = {row.settlement_key: row for row in settlements}
-    # 四席位 35/5/20/40（该 FDE 无档案城市 → 无冷启动例外）
+    # 四席位 35/5/20/40（项目代号两段=无包侧客户城 → 无冷启动例外）
     for key in ("G3", "G4", "G8", "SOW-C M1", "SOW-C M2", "SOW-C M3", "D"):
         row = by_key[key]
         assert row.status == "accrued"
@@ -515,7 +521,9 @@ def test_seven_milestones_four_seats_and_cumulative_withholding(db_session):
 
 
 def test_cold_start_shares_first_three_city_orders(db_session):
-    """§7.1 冷启动：同城前 3 单 40/5/15/40（上浮自城市合伙人扣），第 4 单回基准。"""
+    """§7.1 冷启动：同城（包侧客户城，留注⑤ 终版口径）前 3 单 40/5/15/40
+    （上浮自城市合伙人扣），第 4 单回基准。档案 home_city（深圳）≠包侧城（杭州）
+    ——判定只认包侧，home_city 代理已退役。"""
     admin, fde, context = _settlement_context(db_session, with_profile_city=True)
     now = datetime.now(timezone.utc)
     packages = db_session.scalars(

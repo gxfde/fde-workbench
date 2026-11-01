@@ -23,17 +23,17 @@ from test_dispatch_p1_r5 import _active_rule, _onsite_package, _profile, _user
 
 
 def test_newcomer_protection_city_only(db_session):
-    """C10：新人（完成单 < 5）只推同城——南京老手可入，南京新人出局；
+    """C10：新人（完成单 < 5）只推同城——深圳老手可入，深圳新人出局；
     完成单 ≥5 后同一非同城候选恢复入围。"""
     admin, package = _onsite_package(db_session)
     _active_rule(db_session)
     publish_package(db_session, actor=admin, package_id=package.id)
     city_newcomer = _user("r8.np.city", role="fde_engineer")
     _profile(db_session, city_newcomer, level="L2", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     far_newcomer = _user("r8.np.far", role="fde_engineer")
     _profile(db_session, far_newcomer, level="L4", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     db_session.flush()
 
     result = match_package_helper(db_session, admin, package)
@@ -49,7 +49,7 @@ def test_newcomer_protection_city_only(db_session):
     # 老手（完成单 = 5）：非同城恢复入围
     senior = _user("r8.np.senior", role="fde_engineer")
     _profile(db_session, senior, level="L4", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     db_session.flush()
     for round_no in (91, 92, 93, 94, 95):  # 远端轮次（唯一约束=project+round，避开主包 round 1）
         db_session.add(
@@ -104,7 +104,7 @@ def test_b1_no_repush_to_earlier_decliners(db_session):
     publish_package(db_session, actor=admin, package_id=package.id)
     decliner = _user("r8.b1.decliner", role="fde_engineer")
     _profile(db_session, decliner, level="L2", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     # declined 落在「更早轮」：包置于 round 2、拒单在 round 1
     package.dispatch_round = 2
     db_session.add(

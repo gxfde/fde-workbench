@@ -1,26 +1,31 @@
 {
   "meta": {
-    "generated_at": "2026-10-31T00:00:00+00:00",
-    "generator": "goal-r4 P1-5（派单设计 §12 建议名单）",
+    "generated_at": "2026-11-01T00:00:00+00:00",
+    "generator": "r12 B-④ 终版拍板（2026-11-01）——全行业服务口径 + 优先南方和一线城市",
     "sources": {
       "design": {
         "path": "蔡工FDE工作台_派单撮合引擎产品与技术设计_v1.0.md",
-        "section": "§12 首批城市白名单（6 城，建议名单待拍板——附录 B-④）"
+        "section": "§12 首批城市白名单（原 6 城制造业口径建议名单，已被 2026-11-01 拍板取代）"
+      },
+      "decision": {
+        "date": "2026-11-01",
+        "by": "业务拍板（B-④，交互确认单）",
+        "principle": "工作台转全行业服务口径：首发=一线+数字服务业最强新一线（全南方），制造业走廊口径（苏州/无锡/常州等）退役；后续扩圈按 §4.7 metro_group 推进"
       }
     },
     "conventions": [
       "白名单只管需求侧开城，不管供给侧注册（供给池全国开放，§12 导语）",
-      "claim_enabled 由 §6.4 开闸三条件驱动，种子默认 false（§11.1 备案未完成=claim 关闭的降级态）",
+      "claim_enabled 由 §6.4 开闸三条件驱动，种子默认 false（§11.1 备案未完成=claim 关闭的降级态）——名单定稿≠开闸",
       "subsidy_scheme 选填（P2-6 扩字段），metro_group 为都市圈归属（扩圈链 geo_tier 依据，§4.7）"
     ],
-    "warnings": ["终版名单待拍板（附录 B-④）；本表为设计建议，入选理由均可追溯"]
+    "warnings": ["拍板终版名单（B-④，2026-11-01）；claim 仍全关——等 B-① 备案完成+公示后按 §6.4 逐城开闸"]
   },
   "cities": [
-    {"city": "苏州", "province": "江苏", "metro_group": "苏锡常都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
-    {"city": "无锡", "province": "江苏", "metro_group": "苏锡常都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
-    {"city": "常州", "province": "江苏", "metro_group": "苏锡常都市圈", "city_tier": "T2", "claim_enabled": false, "subsidy_scheme": null},
-    {"city": "南京", "province": "江苏", "metro_group": "南京都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
-    {"city": "南通", "province": "江苏", "metro_group": "上海大都市圈", "city_tier": "T2", "claim_enabled": false, "subsidy_scheme": null},
-    {"city": "宁波", "province": "浙江", "metro_group": "宁波都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null}
+    {"city": "上海", "province": "上海", "metro_group": "上海大都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
+    {"city": "广州", "province": "广东", "metro_group": "粤港澳大湾区", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
+    {"city": "深圳", "province": "广东", "metro_group": "粤港澳大湾区", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
+    {"city": "杭州", "province": "浙江", "metro_group": "杭州都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
+    {"city": "成都", "province": "四川", "metro_group": "成渝都市圈", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null},
+    {"city": "武汉", "province": "湖北", "metro_group": "长江中游城市群", "city_tier": "T1", "claim_enabled": false, "subsidy_scheme": null}
   ]
 }

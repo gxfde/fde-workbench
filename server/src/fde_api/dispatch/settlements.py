@@ -23,8 +23,9 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
 from fde_api.auth.models import User
+from fde_api.dispatch.cities import city_from_enterprise_code, package_client_city
 from fde_api.dispatch.errors import DispatchServiceError
-from fde_api.dispatch.models import DeliveryPackage, DeliverySettlement, FdeProfile
+from fde_api.dispatch.models import DeliveryPackage, DeliverySettlement
 from fde_api.dispatch.rules import active_rule_snapshot
 from fde_api.projects.events import record_event
 from fde_api.system_configuration import DISPATCH_CONSTANTS
@@ -57,7 +58,7 @@ def _money(value: Decimal) -> Decimal:
 
 def seat_shares_for(session: Session, package: DeliveryPackage) -> dict[str, int]:
     """席位份额 %：active 版本快照优先（§7.3-3），回退 DISPATCH_CONSTANTS。
-    冷启动判定 = 该城（交付席位 FDE 常驻城）已接单序号 ≤ 前 N 单（§7.1）。"""
+    冷启动判定 = 该城（包侧客户城，留注⑤ 终版口径）已接单序号 ≤ 前 N 单（§7.1）。"""
     snapshot = active_rule_snapshot(session)
     base_shares = (snapshot or {}).get("seat_shares") or DISPATCH_CONSTANTS["seat_shares"]
     cold_shares = (snapshot or {}).get("cold_start_seat_shares") or (
@@ -72,29 +73,27 @@ def seat_shares_for(session: Session, package: DeliveryPackage) -> dict[str, int
 
 
 def _city_order_rank(session: Session, package: DeliveryPackage) -> int:
-    """该包在同城的接单序号（1 起）。城 = 交付席位 FDE 档案 home_city 的代理
-    口径（交付包本身无城市字段，P0-1 发布服务 + dispatch_cities.json 落地后
-    改为包侧城市；留注 goal-r2）。无城可判 → 返回大数（不触发冷启动）。"""
-    if package.seat_delivery is None:
-        return 1 << 30
-    city = session.scalar(
-        select(FdeProfile.home_city).where(FdeProfile.user_id == package.seat_delivery)
-    )
+    """该包在同城的接单序号（1 起）。城 = **包侧客户城**（企业代号第三段，
+    §3.1 三段式——留注⑤ 终版切换：home_city 代理随 B-④ 城市拍板退役，
+    与 cities.package_client_city 同口径）。无城可判 → 返回大数（不触发冷启动）。"""
+    city = package_client_city(session, package)
     if not city:
         return 1 << 30
-    earlier = session.scalar(
-        select(func.count())
-        .select_from(DeliveryPackage)
-        .outerjoin(FdeProfile, FdeProfile.user_id == DeliveryPackage.seat_delivery)
+    earlier_rows = session.execute(
+        select(DeliveryPackage.id, Project.enterprise_code)
+        .join(Project, Project.id == DeliveryPackage.project_id)
         .where(
             DeliveryPackage.id != package.id,
             DeliveryPackage.dispatch_status == "accepted",
             DeliveryPackage.accepted_at.is_not(None),
-            DeliveryPackage.accepted_at < (package.accepted_at or datetime.now(timezone.utc)),
-            FdeProfile.home_city == city,
+            DeliveryPackage.accepted_at
+            < (package.accepted_at or datetime.now(timezone.utc)),
         )
+    ).all()
+    earlier = sum(
+        1 for _row_id, code in earlier_rows if city_from_enterprise_code(code) == city
     )
-    return (earlier or 0) + 1
+    return earlier + 1
 
 
 def split_four_seats(

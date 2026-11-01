@@ -78,14 +78,18 @@ def city_is_whitelisted(city: str | None) -> bool:
     return any(row["city"] == city for row in _city_seed())
 
 
-def _package_city(session: Session, package: DeliveryPackage) -> str | None:
-    """包的客户城 = 企业代号第三段（§3.1 三段式「客户·行业·城市」）。"""
+def city_from_enterprise_code(code: str | None) -> str | None:
+    """企业代号 → 客户城（§3.1 三段式「客户·行业·城市」第三段；不足三段 = 无城）。"""
+    segments = (code or "").split("·")
+    return segments[2] if len(segments) == 3 else None
+
+
+def package_client_city(session: Session, package: DeliveryPackage) -> str | None:
+    """包的客户城 = 企业代号第三段（§3.1 三段式「客户·行业·城市」）。
+    留注⑤ 终版口径：包侧城市唯一权威，home_city 代理已退役（r12 B-④）。"""
     project = session.get(Project, package.project_id)
     code = project.enterprise_code if project is not None else None
-    if not code:
-        return None
-    segments = code.split("·")
-    return segments[2] if len(segments) == 3 else None
+    return city_from_enterprise_code(code)
 
 
 def claim_gate_status(
@@ -112,7 +116,7 @@ def claim_gate_status(
             DeliveryPackage.published_at >= window_start,
         )
     ).all()
-    demand = sum(1 for row in published_rows if _package_city(session, row) == city)
+    demand = sum(1 for row in published_rows if package_client_city(session, row) == city)
 
     round_offers = session.scalars(
         select(DispatchOffer).where(
@@ -124,7 +128,7 @@ def claim_gate_status(
         offer
         for offer in round_offers
         if (offer_package := session.get(DeliveryPackage, offer.package_id)) is not None
-        and _package_city(session, offer_package) == city
+        and package_client_city(session, offer_package) == city
     ]
     offered = len(city_offers)
     rejected = sum(1 for offer in city_offers if offer.status == "declined")

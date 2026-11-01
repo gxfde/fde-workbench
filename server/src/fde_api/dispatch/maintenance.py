@@ -21,13 +21,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fde_api.dispatch.cities import claim_gate_status
+from fde_api.dispatch.cities import claim_gate_status, package_client_city
 from fde_api.dispatch.disputes import run_l0_reconciliation
 from fde_api.dispatch.models import DeliveryPackage, DeliverySettlement, Dispute, DispatchOffer
 from fde_api.dispatch.offer_service import actor_system, expire_stale_offers
 from fde_api.dispatch.packages import publish_package
 from fde_api.projects.events import record_event
-from fde_api.workbench.models import Payment, Project
+from fde_api.workbench.models import Payment
 
 RETENTION_MATCHING_YEARS = 3   # 撮合流水与评分留痕（§6.2 / 规则表 B11）
 RETENTION_TAX_YEARS = 10       # 涉税资料（§7.4 / B11）
@@ -95,12 +95,9 @@ def session_get_any_package(session: Session):
 
 
 def _client_city_of(session: Session, package: DeliveryPackage) -> str | None:
-    """客户城归属（企业代号三段两枚「·」的第三段）——与 claim_package 同口径。"""
-    project = session.get(Project, package.project_id)
-    if project is None:
-        return None
-    segments = (project.enterprise_code or "").split("·")
-    return segments[2] if len(segments) == 3 else None
+    """客户城归属（企业代号三段两枚「·」的第三段）——统一走 cities 公共助手
+    （r12 B-④ 去重：与 claim 冷启动/开闸同口径，home_city 代理已退役）。"""
+    return package_client_city(session, package)
 
 
 def convert_stale_assign_to_claim(
