@@ -59,6 +59,9 @@ export function AppShell({
           {isPlatform ? (
             <NavLink route={route} target={{ kind: "metrics" }} label="指标报表" icon={<BoxesIcon />} />
           ) : null}
+          {isAdmin ? (
+            <NavLink route={route} target={{ kind: "pilot" }} label="试点报告" icon={<BoxesIcon />} />
+          ) : null}
           <NavLink route={route} target={{ kind: "extensions" }} label="AI 与扩展" icon={<ExtensionIcon />} />
           <NavLink route={route} target={{ kind: "help" }} label="使用帮助" icon={<HelpIcon />} />
           {isAdmin ? <>

@@ -276,6 +276,11 @@ class Project(Base, TimestampMixin, VersionedMixin):
     )
     background: Mapped[str] = mapped_column(Text, nullable=False, default="")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # T6 高成本 run 前评审的项目级关闭开关（goal-d11，总纲 §2.2 T6「可按
+    # 项目关闭」）；全局阈值在 settings.t6_review_cost_threshold。
+    t6_review_disabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     planned_start_date: Mapped[date] = mapped_column(Date, nullable=False)
     planned_end_date: Mapped[date | None] = mapped_column(Date)

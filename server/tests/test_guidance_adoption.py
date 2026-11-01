@@ -262,3 +262,26 @@ def test_translator_adopt_in_catalog() -> None:
     assert entry["method"] == "POST"
     assert entry["write"] is True
     assert entry["path"] == "/api/v1/translator/translations/{translation_id}/adopt"
+
+
+def test_translation_exposes_adopted_into(d4_client, d4_settings, db_session) -> None:
+    """goal-d10 挂账 #1：门户侧采纳状态透出（详情与列表都带 adopted_into）。"""
+    owner = _persist_user(db_session)
+    project = _persist_project(db_session, owner, code=f"adopt-{uuid4().hex[:6]}")
+    translation = _persist_translation(db_session, owner)
+    headers = _headers(owner, d4_settings)
+    before = d4_client.get(
+        f"/api/v1/translator/translations/{translation.id}", headers=headers
+    ).json["data"]
+    assert before["adopted_into"] == []
+    assert _adopt(d4_client, owner, d4_settings, translation.id, project.id).status_code == 200
+    after = d4_client.get(
+        f"/api/v1/translator/translations/{translation.id}", headers=headers
+    ).json["data"]
+    assert after["adopted_into"] == [
+        {"project_id": project.id, "analysis_id": after["adopted_into"][0]["analysis_id"]}
+    ]
+    assert after["adopted_into"][0]["project_id"] == project.id
+    listing = d4_client.get("/api/v1/translator/translations", headers=headers).json["data"]
+    row = next(item for item in listing["items"] if item["id"] == translation.id)
+    assert row["adopted_into"] and row["adopted_into"][0]["project_id"] == project.id

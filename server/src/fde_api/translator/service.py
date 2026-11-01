@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
-from fde_api.guidance.models import INTERVIEW_MODES
+from fde_api.guidance.models import INTERVIEW_MODES, ProjectGuidanceAnalysis
 from fde_api.jobs.outbox import enqueue_outbox
 from fde_api.translator.jobs import TRANSLATOR_JOB_TYPE
 from fde_api.translator.models import TranslatorTranslation
@@ -60,7 +60,8 @@ def list_translations(*, actor: User) -> list[dict[str, Any]]:
             .order_by(TranslatorTranslation.created_at.desc(), TranslatorTranslation.id.desc())
             .limit(_LIST_LIMIT)
         ).all()
-        return [serialize_translation(row) for row in rows]
+        adopted = _adopted_index(session, [row.id for row in rows])
+        return [serialize_translation(row, adopted_into=adopted.get(row.id, [])) for row in rows]
     finally:
         session.close()
 
@@ -71,9 +72,30 @@ def get_translation(*, actor: User, translation_id: str) -> dict[str, Any]:
         row = session.get(TranslatorTranslation, translation_id)
         if row is None or (row.created_by_user_id != actor.id and actor.role != "admin"):
             raise TranslatorServiceError("translation_not_found", "翻译记录不存在。", 404)
-        return serialize_translation(row)
+        adopted = _adopted_index(session, [row.id])
+        return serialize_translation(row, adopted_into=adopted.get(row.id, []))
     finally:
         session.close()
+
+
+def _adopted_index(session, translation_ids: list[str]) -> dict[str, list[dict[str, str]]]:
+    """goal-d10 挂账 #1：门户侧采纳状态透出——按 translation_id 反查已采纳
+    的项目指引版本（(project_id, translation_id) 唯一约束保证无重复）。"""
+    if not translation_ids:
+        return {}
+    rows = session.execute(
+        select(
+            ProjectGuidanceAnalysis.translation_id,
+            ProjectGuidanceAnalysis.project_id,
+            ProjectGuidanceAnalysis.id,
+        ).where(ProjectGuidanceAnalysis.translation_id.in_(translation_ids))
+    ).all()
+    index: dict[str, list[dict[str, str]]] = {}
+    for translation_id, project_id, analysis_id in rows:
+        index.setdefault(translation_id, []).append(
+            {"project_id": project_id, "analysis_id": analysis_id}
+        )
+    return index
 
 
 def _validate_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -104,8 +126,11 @@ def _validate_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def serialize_translation(row: TranslatorTranslation) -> dict[str, Any]:
+def serialize_translation(
+    row: TranslatorTranslation, *, adopted_into: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
     return {
+        "adopted_into": adopted_into or [],
         "id": row.id,
         "created_by_user_id": row.created_by_user_id,
         "profile": row.profile_json or {},

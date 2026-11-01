@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     deepseek_document_generation_model: str = "deepseek-v4-pro"
     # goal-d9：翻译器管道（文本 JSON 提炼，与 research_form/project_draft 同栈）。
     deepseek_translator_model: str = "deepseek-v4-pro"
+    # T6 高成本 run 前评审（goal-d11，总纲 §2.2 T6）：拟用 agent 的
+    # max_cost_units 超过该阈值（或为 0=单 run 不限额，即最高成本档）时，
+    # start_run 前置 T6 评审闸；0 = 全局关闭（试点期默认）。项目级关闭见
+    # projects.t6_review_disabled。
+    t6_review_cost_threshold: int = 0
     # E5 降级链：主模型瞬时故障（超时/限流/5xx）时切换的备用模型；
     # 留空表示不降级（行为与旧版一致）。主备都失败 → ai_manual_handoff 转人工。
     deepseek_fallback_model: str = "deepseek-v4"

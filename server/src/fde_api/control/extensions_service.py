@@ -37,6 +37,12 @@ def extensions_center(*, user: User) -> dict[str, Any]:
     level, _ = effective_ai_access(user)
     session = db.session()
     try:
+        # 插件能力登记表种子（goal-d11，d6 挂账⑥）：懒装载幂等——首次进入
+        # 扩展中心时装载已知插件（存在即跳过，不覆写现场）。
+        from fde_api.control.plugin_seeds import ensure_plugin_seeds
+
+        ensure_plugin_seeds(session, user)
+        session.commit()
         skills = list(
             session.scalars(
                 select(SkillDefinition)

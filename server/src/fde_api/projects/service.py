@@ -396,6 +396,7 @@ def update_project(
                 "project_code": "project_code",
                 "planned_start_date": "planned_start_date",
                 "planned_end_date": "planned_end_date",
+                "t6_review_disabled": "t6_review_disabled",
             }
             for input_name, model_name in field_map.items():
                 if input_name in normalized_changes:
@@ -1327,6 +1328,13 @@ def _normalize_update_input(changes: Mapping[str, Any]) -> dict[str, Any]:
             if not isinstance(status, str) or status not in PROJECT_STATUSES:
                 raise ValueError
             normalized_changes["status"] = status
+        if "t6_review_disabled" in changes:
+            # T6 项目级关闭开关（goal-d11）：显式布尔——不允许真值洗白
+            # （字符串 "false"/0 之类拒绝，非布尔即 400）。
+            value = changes["t6_review_disabled"]
+            if type(value) is not bool:
+                raise ValueError
+            normalized_changes["t6_review_disabled"] = value
         return normalized_changes
     except (TypeError, ValueError):
         raise _invalid_request_error() from None
@@ -1645,6 +1653,7 @@ def _serialize_project(
         "business_line": project.business_line,
         "background": project.background,
         "notes": project.notes,
+        "t6_review_disabled": project.t6_review_disabled,
         "status": project.status,
         "planned_start_date": project.planned_start_date.isoformat(),
         "planned_end_date": (

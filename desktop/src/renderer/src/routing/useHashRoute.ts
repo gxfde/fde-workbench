@@ -16,6 +16,7 @@ export type AppRoute =
   | { kind: "task-center" }
   | { kind: "translator" }
   | { kind: "metrics" }
+  | { kind: "pilot" }
   | {
       kind: "dispatch"
       tab?:
@@ -63,6 +64,7 @@ export function parseHashRoute(hash: string): AppRoute {
   if (hash === "#task-center") return { kind: "task-center" }
   if (hash === "#translator") return { kind: "translator" }
   if (hash === "#metrics") return { kind: "metrics" }
+  if (hash === "#pilot") return { kind: "pilot" }
   if (hash === "#dispatch") return { kind: "dispatch" }
   if (hash === "#dispatch/pool") return { kind: "dispatch", tab: "pool" }
   if (hash === "#dispatch/mine") return { kind: "dispatch", tab: "mine" }
@@ -144,6 +146,7 @@ export function routeHash(route: AppRoute): string {
     case "task-center": return "#task-center"
     case "translator": return "#translator"
     case "metrics": return "#metrics"
+    case "pilot": return "#pilot"
     case "dispatch":
       return route.tab && route.tab !== "pool" ? `#dispatch/${route.tab}` : "#dispatch"
     case "help": return "#help"

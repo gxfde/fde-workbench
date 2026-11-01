@@ -32,6 +32,7 @@ const POLL_MAX_MS = 90_000
 interface TranslationDto {
   id: string
   status: 'pending' | 'running' | 'ready' | 'failed'
+  adopted_into?: { project_id: string; analysis_id: string }[]
   result: {
     customer_vision?: string
     current_phase_objective?: string
@@ -269,6 +270,7 @@ function TranslationResultCard({ translation }: { translation: TranslationDto })
   }
   const problems = translation.result?.key_business_problems ?? []
   const openQuestions = translation.result?.open_questions ?? []
+  const adopted = translation.adopted_into ?? []
   return <div className="card translator-result" aria-live="polite">
     <div className="card-heading">
       <div>
@@ -277,6 +279,15 @@ function TranslationResultCard({ translation }: { translation: TranslationDto })
           <span className="badge warning">AI 草稿 · 待人工确认</span>
           {' '}模型 {translation.ai_model || '—'} · 问题 {problems.length} 条 · 待确认 {openQuestions.length} 条
         </p>
+        {adopted.length > 0 ? (
+          <p className="muted translator-adopted">
+            {adopted.map((item) => (
+              <span key={item.project_id} className="badge ok">
+                已采纳 <a href={`#/projects/${item.project_id}`}>项目</a>
+              </span>
+            ))}
+          </p>
+        ) : null}
       </div>
     </div>
     {translation.result?.executive_summary ? <p>{translation.result.executive_summary}</p> : null}

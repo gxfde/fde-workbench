@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({ apiRequest: vi.fn() }))
 vi.mock('../../src/renderer/src/auth/AuthProvider', () => ({ useAuth: () => mocks }))
 
 import { MetricsReportPage } from '../../src/renderer/src/metrics/MetricsReportPage'
+import { PilotReportPage } from '../../src/renderer/src/pilot/PilotReportPage'
 import { TranslatorPortalPage } from '../../src/renderer/src/translator/TranslatorPortalPage'
 
 beforeEach(() => { mocks.apiRequest.mockReset() })
@@ -124,6 +125,33 @@ describe('翻译器门户（goal-d9 P3 全量）', () => {
     expect(adoptCalls).toHaveLength(1)
     expect(adoptCalls[0].body).toEqual({ project_id: 'p1' })
   })
+
+  it('已采纳徽标（goal-d10 挂账 #1）：详情带 adopted_into 时渲染项目链接', async () => {
+    mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
+        return Promise.resolve({ id: 't7', status: 'pending' })
+      }
+      if (path === '/api/v1/translator/translations/t7') {
+        return Promise.resolve({
+          id: 't7', status: 'ready', ai_model: 'deepseek-v4-pro',
+          failure_code: null, failure_message: null,
+          adopted_into: [{ project_id: 'p9', analysis_id: 'g9' }],
+          result: {
+            executive_summary: '摘要',
+            key_business_problems: [
+              { text: '问题一', severity: 'low', module: 'wms', classification: 'customer_stated' },
+            ],
+            open_questions: [],
+          },
+        })
+      }
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    await userEvent.setup().type(screen.getByLabelText(/客户诉求原话/), '诉求')
+    await userEvent.setup().click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
+    expect(await screen.findAllByRole('link', { name: '项目' })).toHaveLength(1)
+  })
 })
 
 describe('P0/P1 指标报表页（goal-d8）', () => {
@@ -166,5 +194,41 @@ describe('P0/P1 指标报表页（goal-d8）', () => {
     mocks.apiRequest.mockRejectedValue(new Error('down'))
     render(<MetricsReportPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent(/无法加载指标报表/)
+  })
+})
+
+
+describe('试点报告页（goal-d11）', () => {
+  const report = {
+    pilot: {
+      enabled: true, active: true, started_at: '2026-11-01T00:00:00+00:00',
+      expires_at: '2026-12-01T00:00:00+00:00', window_days: 30,
+      runs_used: 5, runs_limit: 20, runs_remaining: 15, days_remaining: 29,
+      exhausted: false,
+    },
+    metrics: {
+      intercept_rate: 0.25, first_pass_rate: null,
+      avg_meeting_cost_units: 0.75, degraded_rate: null,
+      circuit_breaker_rate: 0.1, median_run_cost_units: 42,
+    },
+    stuck_inflight_runs: 1,
+  }
+
+  it('试点状态卡与六指标渲染；None 指标灰态「数据未积累」', async () => {
+    mocks.apiRequest.mockResolvedValue(report)
+    render(<PilotReportPage />)
+    expect(await screen.findByText('进行中')).toBeInTheDocument()
+    expect(screen.getByText('5 / 20（余 15）')).toBeInTheDocument()
+    expect(screen.getByText('25.0%')).toBeInTheDocument() // intercept_rate
+    expect(screen.getByText('42')).toBeInTheDocument() // median_run_cost_units
+    const empty = screen.getAllByText('数据未积累')
+    expect(empty.length).toBe(2) // first_pass_rate + degraded_rate
+  })
+
+  it('试点未启用时状态徽标与空态文案（不编造数值）', async () => {
+    mocks.apiRequest.mockResolvedValue({ pilot: { enabled: false, active: false }, metrics: {}, stuck_inflight_runs: 0 })
+    render(<PilotReportPage />)
+    expect(await screen.findByText('未启用')).toBeInTheDocument()
+    expect(screen.getByText(/试点窗口未配置/)).toBeInTheDocument()
   })
 })

@@ -1,0 +1,34 @@
+{
+  "plugins": [
+    {
+      "plugin_key": "lcsc-browser-baseline",
+      "name": "立创商城浏览器基线",
+      "description": "立创商城元件检索基线插件（上游 fork 既有能力）：器件搜索、数据手册入口、库存与价格快照查看。F1 边界：不在客户交付线内，仅系统运维员档可用。",
+      "publisher": "fde-workbench",
+      "current_version": "1.0.0",
+      "category": "component-query",
+      "source": "internal",
+      "verified": true,
+      "manifest": {
+        "capabilities": ["lcsc.browse"],
+        "entry": "lcsc-browser-baseline",
+        "kind": "browser-baseline"
+      }
+    },
+    {
+      "plugin_key": "lcsc-browser-jev",
+      "name": "Jev 立创查询",
+      "description": "经 Jev（typesafe）通道的立创商城查询插件：仅用于立创 Skill 判断，不替换对话默认模型（模型侧见 model-preferences 的 Jev 凭据）。",
+      "publisher": "fde-workbench",
+      "current_version": "1.0.0",
+      "category": "component-query",
+      "source": "internal",
+      "verified": true,
+      "manifest": {
+        "capabilities": ["lcsc.browse"],
+        "entry": "lcsc-browser-jev",
+        "kind": "jev-query"
+      }
+    }
+  ]
+}

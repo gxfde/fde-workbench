@@ -105,6 +105,7 @@ UPDATE_FIELDS = frozenset(
         "planned_end_date",
         "leader_user_id",
         "status",
+        "t6_review_disabled",
     }
 )
 MEMBER_CREATE_FIELDS = frozenset({"user_id", "role", "version"})

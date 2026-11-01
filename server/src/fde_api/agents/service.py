@@ -78,7 +78,12 @@ from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
-from fde_api.meetings.service import latest_sealed_mandatory_minutes, t1_gate_satisfied, t2_gate_satisfied
+from fde_api.meetings.service import (
+    latest_sealed_mandatory_minutes,
+    t1_gate_satisfied,
+    t2_gate_satisfied,
+    t6_gate_satisfied,
+)
 from fde_api.dispatch.agent_assisted import ORDER_DIFFICULTY_RUN_MAP
 from fde_api.dispatch.models import DeliveryPackage
 from fde_api.projects.events import record_event
@@ -750,6 +755,33 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
                     409,
                     detail={"gate": "T1", "solution_id": solution.id, "required": "sealed_t1_minutes"},
                 )
+
+        # T6 高成本 run 前评审（总纲 §2.2 T6，goal-d11）：拟用 agent 的授权
+        # 成本档超全局阈值（max_cost_units=0 = 单 run 不限额，即最高成本档，
+        # 必触发）且项目未显式关闭时，须先有已封存 T6 纪要侧链该项目——
+        # 闸序在协同声明与计划评审之后（先过准入与计划门，再谈性价比）。
+        threshold = int(getattr(settings, "t6_review_cost_threshold", 0) or 0)
+        agent_cost_tier = int(agent.max_cost_units or 0)
+        if (
+            threshold > 0
+            and (agent_cost_tier == 0 or agent_cost_tier > threshold)
+            and not project.t6_review_disabled
+            and not t6_gate_satisfied(session, project_id=project.id)
+        ):
+            raise _error(
+                "t6_gate_open",
+                "T6 高成本评审门未放行：该 agent 授权成本档超过阈值"
+                f"（max_cost_units={'不限额' if agent_cost_tier == 0 else agent_cost_tier} > {threshold}），"
+                "请先召开 T6 评审会（性价比评审）并封存纪要，或由项目负责人在项目设置中关闭 T6 评审。",
+                409,
+                detail={
+                    "gate": "T6",
+                    "project_id": project.id,
+                    "agent_max_cost_units": agent.max_cost_units,
+                    "threshold": threshold,
+                    "required": "sealed_t6_minutes",
+                },
+            )
 
         idempotency_key = client_key or _derived_idempotency_key(agent.id, project.id, solution_id)
         existing = session.scalar(

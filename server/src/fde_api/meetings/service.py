@@ -1316,6 +1316,31 @@ def t1_gate_satisfied(session: Any, *, solution_id: str) -> bool:
     return False
 
 
+def t6_gate_satisfied(session: Any, *, project_id: str) -> bool:
+    """T6 高成本 run 前评审强制门（总纲 §2.2 T6，goal-d11）：max_cost_units
+    超阈值档的 run，start_run 前置闸——须存在已封存 T6 模板强制纪要侧链该
+    项目（topic_refs.project_id）。评审对象是「项目内高成本 run 的性价比」，
+    同项目评审一次即放行后续 run。auto 纪要排除（决议 4：自动收敛纪要不作
+    强制门证据）。
+    """
+    rows = list(
+        session.execute(
+            select(ReviewMeeting, ReviewMeetingMinutes)
+            .join(ReviewMeetingMinutes, ReviewMeetingMinutes.meeting_id == ReviewMeeting.id)
+            .where(ReviewMeeting.trigger == "mandatory")
+        )
+    )
+    for meeting, minutes in rows:
+        if _minutes_is_auto(minutes):
+            continue
+        template = get_template(meeting.template_id) or {}
+        if template.get("gate") != "T6":
+            continue
+        if str((meeting.topic_refs or {}).get("project_id") or "") == project_id:
+            return True
+    return False
+
+
 def latest_sealed_mandatory_minutes(
     session: Any, *, run_id: str, idempotency_key: str | None
 ) -> ReviewMeetingMinutes | None:

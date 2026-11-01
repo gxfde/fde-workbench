@@ -86,6 +86,8 @@ export function CapabilityProfilesPage() {
           <h1>能力档案与产能看板</h1>
           <p className="page-subtitle">
             四域分是等级晋级评定维度（短板决定），不进派单排序；负载=在途÷上限，仅作容量硬过滤。
+            等级核验证据链（goal-d11 M10）支持引用工作台评审会纪要：source_uri 填
+            <code>workbench-minutes:&lt;meeting_id&gt;</code>，sha256 必须等于该纪要 sealed_sha256。
           </p>
         </div>
         <button className="secondary-button" type="button" onClick={load}>

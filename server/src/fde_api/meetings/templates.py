@@ -71,6 +71,22 @@ _T5_LITE: dict[str, Any] = {
     "description": "T5 降级恢复补审：L1 恢复后的产物补审会，补审纪要封存后恢复通道放行。",
 }
 
+_T6_LITE: dict[str, Any] = {
+    "template_id": "T6-lite",
+    "name": "高成本 run 评审会（lite）",
+    "gate": "T6",  # 高成本 run 前评审（总纲 §2.2 T6，goal-d11）：max_cost_units
+    # 超阈值档（0=不限额视为最高档）的 run，start_run 前置闸——无已封存 T6
+    # 纪要侧链该项目则 409 t6_gate_open；项目可经 projects.t6_review_disabled 关闭
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["quality_guard", "module_agent", "persona:finance"],
+    "trigger": "mandatory",
+    "min_difficulty": None,
+    "persona_addons": ["persona:finance"],
+    "sections": ["consensus", "disputes", "todos"],
+    "description": "T6 高成本 run 前评审（性价比评审）：拟用 agent 成本档超阈值时先评审性价比，纪要封存后该项目放行。",
+}
+
 _T3_ADHOC: dict[str, Any] = {
     "template_id": "T3-adhoc",
     "name": "自主评审会（adhoc）",
@@ -190,6 +206,7 @@ MEETING_TEMPLATES: dict[str, dict[str, Any]] = {
     "T2-lite": _T2_LITE,
     "T3-adhoc": _T3_ADHOC,
     "T5-lite": _T5_LITE,
+    "T6-lite": _T6_LITE,
     "S1-diagnosis": _S1_DIAGNOSIS,
     "S2-solution-review": _S2_SOLUTION_REVIEW,
     "S3-business-alignment": _S3_BUSINESS,
