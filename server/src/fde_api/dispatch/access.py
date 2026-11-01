@@ -184,4 +184,7 @@ def serialize_package_whitelist(
         # 知道「是否已声明协同 / 难度映射后的 run 档位」，透明化口径
         "agent_assisted": package.agent_assisted,
         "difficulty": package.difficulty,
+        # goal-d9（桌面化）：接单人资源 id（声明按钮门控=本人或 admin；
+        # 沿「id 是资源标识非内容字段」先例，不含业务内容）
+        "accepted_user_id": package.accepted_user_id,
     }

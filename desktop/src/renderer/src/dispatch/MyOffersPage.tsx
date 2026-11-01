@@ -99,8 +99,8 @@ function ProfileCard() {
     void apiRequest<unknown>("/api/v1/dispatch/profiles/me", { method: "GET" })
       .then((payload) => {
         if (cancelled) return
-        const data = (payload as { data?: unknown } | null)?.data
-        setProfile(isMyProfileView(data) ? data : null)
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setProfile(isMyProfileView(payload) ? payload : null)
       })
       .catch((caught: unknown) => {
         if (cancelled) return
@@ -297,8 +297,8 @@ export function MyOffersPage() {
     void apiRequest<unknown>("/api/v1/dispatch/offers/mine", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setOffers(Array.isArray(rows) ? rows.filter(isMyOfferView) : [])
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setOffers(Array.isArray(payload) ? payload.filter(isMyOfferView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

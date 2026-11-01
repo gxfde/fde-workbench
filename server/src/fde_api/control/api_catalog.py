@@ -113,6 +113,10 @@ ENTRIES = [
     # 同 packages_publish 配置类写路径先例）；指标报表 = P0/P1 观测只读聚合
     ("dispatch.agent_assisted_declare", "POST", "/api/v1/dispatch/packages/{package_id}/agent-assisted", "接单人显式声明/撤销智能体协同（D2 裁决三：声明后启用 T1–T6 评审门与溯源联动；难度 high 禁声明；8 态机零改动）", "enabled（布尔必填）"),
     ("metrics.report", "GET", "/api/v1/metrics/report", "P0/P1 指标报表（PRD §10 只读聚合：售前确认率/草稿耗时/lite 占比/一次通过率/降级率/成本中位数/额度动作；样本不足显式标注）", ""),
+    # P3 翻译器（goal-d9）：创作类写路径先例收编——AI 只出草稿（confirmed
+    # 一律 False），无拍板语义；人工拍板类路径（solutions signoff）永不收编
+    ("translator.translate", "POST", "/api/v1/translator/translations", "翻译器：引导式表单（客户画像/诉求原话/阶段目标）→ AI 翻译管道 → guidance 全契约草稿落库（AI 只出草稿，confirmed 一律 False）", "industry/scale/region/interview_mode/customer_vision/phase_objective"),
+    ("translator.translations", "GET", "/api/v1/translator/translations", "本人翻译草稿列表与详情（创建人或 admin；轮询 pending/running/ready/failed）", ""),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

@@ -11,10 +11,10 @@ from flask import current_app
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from fde_api.agents.models import AgentArtifact, AgentRun
+from fde_api.agents.models import AgentArtifact, AgentRun, SolutionReviewCheckpoint
 from fde_api.auth.models import User
 from fde_api.auth.passwords import verify_password
-from fde_api.control.access import authorize_ai_capability
+from fde_api.control.access import ACCESS_RANK, authorize_ai_capability, effective_ai_access
 from fde_api.documents import draft_service as documents
 from fde_api.documents.ai_content import _client
 from fde_api.documents.models import DocumentGenerationJob, ProjectDocument, ProjectDocumentDraft, ProjectDocumentVersion
@@ -224,6 +224,9 @@ def solution_review_trail(*, actor: User, project_id: str, solution_id: str) -> 
 
     范围 = ``topic_refs.solution_id`` 侧链 ∪ ``triggered_by_run_id`` ∈
     ``agent_run_id`` 幂等键家族；未封存会议只给状态不吐纪要内容。
+    goal-d9 扩展（终审台合并视图数据源）：响应追加 ``artifacts``（幂等键
+    家族全部产物——含 L1/L3 降级路 ``linked_solution_id=None`` 的留痕）与
+    ``signoff``（方案最新 signoff checkpoint 状态；无则 None）。
     """
     with db.session() as session:
         project = documents._load_project_for_view(session, actor, project_id)
@@ -268,10 +271,112 @@ def solution_review_trail(*, actor: User, project_id: str, solution_id: str) -> 
                     "todos": minutes.todos,
                 }
             meetings.append(item)
+        checkpoint = session.scalar(
+            select(SolutionReviewCheckpoint)
+            .where(SolutionReviewCheckpoint.solution_id == solution.id)
+            .where(SolutionReviewCheckpoint.checkpoint_type == "signoff")
+            .order_by(SolutionReviewCheckpoint.created_at.desc(), SolutionReviewCheckpoint.id.desc())
+            .limit(1)
+        )
+        # goal-d9：handoff 路（L1/L3 转人工）的 run 未接线 solution.agent_run_id
+        # ——触发 run 经 checkpoint.handoff_run_id 并入家族，产物才进终审台
+        if checkpoint is not None and checkpoint.handoff_run_id:
+            family_ids.add(checkpoint.handoff_run_id)
+        artifacts = session.scalars(
+            select(AgentArtifact).where(AgentArtifact.run_id.in_(family_ids)).order_by(AgentArtifact.created_at, AgentArtifact.id)
+        ).all() if family_ids else []
         return {
             "solution_id": solution.id,
             "agent_run_id": solution.agent_run_id,
             "meetings": meetings,
+            "artifacts": [
+                {
+                    "id": artifact.id,
+                    "run_id": artifact.run_id,
+                    "kind": artifact.kind,
+                    "storage_ref": artifact.storage_ref,
+                    "sha256": artifact.sha256,
+                    "reviewed": bool(artifact.reviewed),
+                    "linked_solution_id": artifact.linked_solution_id,
+                    "created_at": artifact.created_at.isoformat(),
+                }
+                for artifact in artifacts
+            ],
+            "signoff": None if checkpoint is None else {
+                "checkpoint_id": checkpoint.id,
+                "status": checkpoint.status,
+                "required_level": checkpoint.required_level,
+                "reviewer_user_id": checkpoint.reviewer_user_id,
+                "handoff_run_id": checkpoint.handoff_run_id,
+                "evidence_ref": checkpoint.evidence_ref,
+                "created_at": checkpoint.created_at.isoformat(),
+                "updated_at": checkpoint.updated_at.isoformat(),
+            },
+        }
+
+
+def resolve_signoff(*, actor: User, project_id: str, solution_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """终审台拍板收口（goal-d9，总纲 U5/PRD §3.2 P3）：signoff checkpoint 的
+    approved/rejected 是**人工拍板动作**——api_catalog 永不收编（红线：不收
+    代拍板写路径；本端点只由人调用，权限档闸 = checkpoint.required_level）。
+
+    attempt 计数 = 该方案此前已 rejected 的 signoff checkpoint 数 + 1（事件
+    payload 携带，供「SOW 一次拍板通过率」口径复核；报表主口径走事件序）。
+    """
+    if set(payload) - {"decision", "evidence_ref"}:
+        _error("invalid_request", "请求字段无效。")
+    decision = payload.get("decision")
+    if decision not in ("approved", "rejected"):
+        _error("invalid_request", "decision 仅可为 approved 或 rejected。")
+    evidence_ref = payload.get("evidence_ref")
+    if evidence_ref is not None and (not isinstance(evidence_ref, str) or not evidence_ref.strip() or len(evidence_ref) > 255):
+        _error("invalid_request", "evidence_ref 须为 ≤255 字符的指针。")
+    with db.session() as session, session.begin():
+        project = documents._load_project_for_view(session, actor, project_id)
+        solution = _load(session, project.id, solution_id)
+        checkpoint = session.scalar(
+            select(SolutionReviewCheckpoint)
+            .where(SolutionReviewCheckpoint.solution_id == solution.id)
+            .where(SolutionReviewCheckpoint.checkpoint_type == "signoff")
+            .where(SolutionReviewCheckpoint.status == "pending")
+            .order_by(SolutionReviewCheckpoint.created_at.asc(), SolutionReviewCheckpoint.id.asc())
+        )
+        if checkpoint is None:
+            _error("signoff_not_pending", "该方案没有待收口的终审检查点。", 409)
+        level, _source = effective_ai_access(actor)
+        if ACCESS_RANK.get(level, 0) < ACCESS_RANK.get(checkpoint.required_level, 0):
+            _error("signoff_level_required", f"终审拍板需要 {checkpoint.required_level} 档访问级别。", 403)
+        rejected_prior = int(session.scalar(
+            select(func.count()).select_from(SolutionReviewCheckpoint)
+            .where(SolutionReviewCheckpoint.solution_id == solution.id)
+            .where(SolutionReviewCheckpoint.checkpoint_type == "signoff")
+            .where(SolutionReviewCheckpoint.status == "rejected")
+        ) or 0)
+        checkpoint.status = decision
+        checkpoint.reviewer_user_id = actor.id
+        if evidence_ref is not None:
+            checkpoint.evidence_ref = evidence_ref.strip()
+        session.flush()
+        # updated_at 走 onupdate=func.now()（server 端生成）：flush 后回读再序列化
+        session.refresh(checkpoint)
+        record_event(session, actor, "solution_signoff_resolved", project, {
+            "checkpoint_id": checkpoint.id,
+            "solution_id": solution.id,
+            "decision": decision,
+            "attempt": rejected_prior + 1,
+            "run_id": checkpoint.handoff_run_id,
+            "required_level": checkpoint.required_level,
+        })
+        project.version += 1
+        return {
+            "checkpoint_id": checkpoint.id,
+            "solution_id": solution.id,
+            "status": checkpoint.status,
+            "required_level": checkpoint.required_level,
+            "reviewer_user_id": actor.id,
+            "handoff_run_id": checkpoint.handoff_run_id,
+            "evidence_ref": checkpoint.evidence_ref,
+            "updated_at": checkpoint.updated_at.isoformat(),
         }
 
 

@@ -621,6 +621,14 @@ def _execute_run(
     )
     if failures:
         # C-1：先落账（产物 reviewed=False 永不进终审）再抛 422，失败码可见
+        # goal-d9 埋点（指标三件）：422 输出扫描拦截事件留痕——产物行承载
+        # 「哪份产物被拒」，事件承载「发生了拦截」这一可聚合事实（拦截率）。
+        with db.session() as session, session.begin():
+            record_event(session, actor, "ai_output_intercepted", project, {
+                "run_id": run_id,
+                "intercepted_count": len(failures),
+                "reasons": sorted({reason for item in failures for reason in item.get("reasons", [])})[:10],
+            })
         raise _error(
             "artifact_validation_failed",
             "产物校验未通过，已拒绝进入终审；请回退补录后重试。",
@@ -869,8 +877,13 @@ def handoff_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> dict[st
                     checkpoint_type="signoff",
                     required_level="project_manager",
                     status="pending",
+                    # goal-d9：触发 run 软链——终审台按 run 配对「接管→拍板」
+                    # 时长（资深介入时长样本），拍板事件 payload 携带 run_id
+                    handoff_run_id=run.id,
                 )
                 session.add(checkpoint)
+            elif checkpoint.handoff_run_id is None:
+                checkpoint.handoff_run_id = run.id
         record_event(session, actor, "agent_run_handoff", project, {"run_id": run.id, "fallback_level": "L3"})
         session.flush()
         data = _serialize_run(session, run, detail=True)

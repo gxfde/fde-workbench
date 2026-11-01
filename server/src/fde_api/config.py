@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     deepseek_ai_opportunity_model: str = "deepseek-v4-pro"
     deepseek_research_export_model: str = "deepseek-v4-pro"
     deepseek_document_generation_model: str = "deepseek-v4-pro"
+    # goal-d9：翻译器管道（文本 JSON 提炼，与 research_form/project_draft 同栈）。
+    deepseek_translator_model: str = "deepseek-v4-pro"
     # E5 降级链：主模型瞬时故障（超时/限流/5xx）时切换的备用模型；
     # 留空表示不降级（行为与旧版一致）。主备都失败 → ai_manual_handoff 转人工。
     deepseek_fallback_model: str = "deepseek-v4"

@@ -66,8 +66,8 @@ export function SimulatorPage() {
     setError("")
     void apiRequest<unknown>("/api/v1/dispatch/simulator/replay", { method: "POST" })
       .then((payload) => {
-        const data = (payload as { data?: unknown } | null)?.data
-        if (isReplayReport(data)) setReport(data)
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        if (isReplayReport(payload)) setReport(payload)
         else throw new Error("invalid replay report")
       })
       .catch((caught: unknown) => {

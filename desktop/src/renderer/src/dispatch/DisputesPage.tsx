@@ -85,8 +85,8 @@ export function DisputesPage() {
     void apiRequest<unknown>("/api/v1/dispatch/disputes", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setDisputes(Array.isArray(rows) ? rows.filter(isDisputeView) : [])
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setDisputes(Array.isArray(payload) ? payload.filter(isDisputeView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

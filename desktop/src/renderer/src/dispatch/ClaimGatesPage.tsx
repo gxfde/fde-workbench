@@ -57,8 +57,8 @@ export function ClaimGatesPage() {
     void apiRequest<unknown>("/api/v1/dispatch/claim-gates", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setGates(Array.isArray(rows) ? rows.filter(isClaimGateView) : [])
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setGates(Array.isArray(payload) ? payload.filter(isClaimGateView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

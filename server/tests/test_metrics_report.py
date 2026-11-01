@@ -17,6 +17,7 @@ from test_document_drafts_api import _persist_project
 
 from fde_api.agents.models import AgentRegistry, AgentRun, SeatActionLedger
 from fde_api.auth.models import User
+from fde_api.workbench.models import OperationEvent
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.files.models import ProjectFile, ProjectFileVersion
@@ -97,15 +98,18 @@ def test_empty_report_flags_insufficient_and_zeroes(db_session, client, d4_setti
     p0 = _cards(report, "p0")
     p1 = _cards(report, "p1_pilot")
     ongoing = _cards(report, "ongoing")
-    # 缺事件埋点三类：显式 insufficient，value 为 None
-    for key, card in (
-        ("sow_first_pass_rate", p0["sow_first_pass_rate"]),
-        ("senior_intervention_hours", p0["senior_intervention_hours"]),
-        ("interception_rate", ongoing["interception_rate"]),
-    ):
-        assert card["status"] == "insufficient_data", (key, card)
-        assert card["value"] is None
-        assert card["sample_size"] == 0
+    # goal-d9 埋点三件转实：空库（样本 0）仍 insufficient；占比/比率卡
+    # value=0.0（真实计算结果，与确认率/lite 占比空库语义一致），
+    # 中位时长卡 value=None（无样本无中位数）
+    assert p0["sow_first_pass_rate"]["status"] == "insufficient_data"
+    assert p0["sow_first_pass_rate"]["value"] == 0.0
+    assert p0["sow_first_pass_rate"]["sample_size"] == 0
+    assert p0["senior_intervention_hours"]["status"] == "insufficient_data"
+    assert p0["senior_intervention_hours"]["value"] is None
+    assert p0["senior_intervention_hours"]["sample_size"] == 0
+    assert ongoing["interception_rate"]["status"] == "insufficient_data"
+    assert ongoing["interception_rate"]["value"] == 0.0
+    assert ongoing["interception_rate"]["sample_size"] == 0
     # 零样本占比：0.0 + ok 态（口径成立只是没样本）
     assert p0["presurvey_confirm_rate"]["value"] == 0.0
     assert p0["draft_generation_p50_ms"]["value"] is None
@@ -221,3 +225,89 @@ def test_lite_meeting_share_and_quota_month(db_session, client, d4_settings) -> 
     assert p1["lite_meeting_share"]["sample_size"] == 2
     assert ongoing["seat_actions_month"]["value"] == 2
     assert ongoing["seat_actions_month"]["detail"]["over_quota_rows"] == 1
+
+
+def _event(db_session, actor: User, project, event_type: str, changes: dict, *, created_at=None) -> None:
+    db_session.add(
+        OperationEvent(
+            actor_user_id=actor.id,
+            project_id=project.id,
+            target_type="project",
+            target_id=project.id,
+            event_type=event_type,
+            changes=changes,
+            created_at=created_at,
+        )
+    )
+
+
+def _completed_run(db_session, project, actor, agent) -> AgentRun:
+    run = AgentRun(
+        project_id=project.id, agent_id=agent.id, initiated_by_user_id=actor.id,
+        capability_used="agent.plan.generate", status="completed", context_ref="ctx",
+        idempotency_key=f"{uuid4()}:fp",
+    )
+    db_session.add(run)
+    return run
+
+
+def _metrics_agent(db_session, d4_settings):
+    existing = db_session.scalars(select(AgentRegistry).where(AgentRegistry.kind == "zcode")).first()
+    if existing is not None:
+        return existing
+    from test_agents_d4_harness import seed_agent
+    return seed_agent(db_session, d4_settings, credential_ref=f"zcode-{uuid4().hex[:8]}")
+
+
+def test_sow_first_pass_senior_hours_interception(db_session, client, d4_settings) -> None:
+    """goal-d9 埋点三件转实：拍板首事件 approved 占比 / 接管→拍板中位时长 / 拦截率。"""
+    user = _user("m9.reader")
+    db_session.add(user)
+    db_session.commit()
+    leader = _user("m9.lead")
+    db_session.add(leader)
+    db_session.commit()
+    project = _persist_project(db_session, leader, code=f"M9{uuid4().hex[:4]}")
+    agent = _metrics_agent(db_session, d4_settings)
+    _completed_run(db_session, project, leader, agent)
+    db_session.commit()
+    # 拍板事件序：方案 A 先驳回后通过（非一次通过）；方案 B 一次通过
+    _event(db_session, leader, project, "solution_signoff_resolved",
+           {"solution_id": "solA", "decision": "rejected", "attempt": 1, "run_id": None},
+           created_at=datetime(2026, 11, 1, 8, 0, tzinfo=timezone.utc))
+    _event(db_session, leader, project, "solution_signoff_resolved",
+           {"solution_id": "solA", "decision": "approved", "attempt": 2, "run_id": None},
+           created_at=datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc))
+    _event(db_session, leader, project, "solution_signoff_resolved",
+           {"solution_id": "solB", "decision": "approved", "attempt": 1, "run_id": "run-1"},
+           created_at=datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc))
+    # 介入时长配对：run-1 接管 10:00 → 拍板 12:00（=2.0h）；run-2 只接管未拍板（不成对）
+    _event(db_session, leader, project, "agent_run_handoff",
+           {"run_id": "run-1", "fallback_level": "L3"},
+           created_at=datetime(2026, 11, 1, 10, 0, tzinfo=timezone.utc))
+    _event(db_session, leader, project, "agent_run_handoff",
+           {"run_id": "run-2", "fallback_level": "L3"},
+           created_at=datetime(2026, 11, 1, 10, 30, tzinfo=timezone.utc))
+    # 拦截事件 ×1（分母 = completed 1 + 拦截 1 = 2）
+    _event(db_session, leader, project, "ai_output_intercepted",
+           {"run_id": "run-9", "intercepted_count": 1, "reasons": ["missing_source_refs"]},
+           created_at=datetime(2026, 11, 1, 11, 0, tzinfo=timezone.utc))
+    db_session.commit()
+
+    body = _get_report(client, user, d4_settings)
+    assert body.status_code == 200, body.json
+    report = body.json["data"]
+    p0 = _cards(report, "p0")
+    ongoing = _cards(report, "ongoing")
+    sow = p0["sow_first_pass_rate"]
+    assert sow["status"] == "ok"
+    assert sow["value"] == 0.5, sow  # solB 首事件 approved / A+B 两方案
+    assert sow["sample_size"] == 2
+    senior = p0["senior_intervention_hours"]
+    assert senior["status"] == "ok"
+    assert senior["value"] == 2.0, senior  # 仅 run-1 成对（run-2 无拍板事件）
+    assert senior["sample_size"] == 1
+    intercept = ongoing["interception_rate"]
+    assert intercept["status"] == "ok"
+    assert intercept["value"] == 0.5, intercept  # 1 拦截 / (1 completed + 1 拦截)
+    assert intercept["sample_size"] == 2

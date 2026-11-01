@@ -61,8 +61,8 @@ export function CapabilityProfilesPage() {
     void apiRequest<unknown>("/api/v1/dispatch/profiles", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setProfiles(Array.isArray(rows) ? rows.filter(isProfileView) : [])
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setProfiles(Array.isArray(payload) ? payload.filter(isProfileView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

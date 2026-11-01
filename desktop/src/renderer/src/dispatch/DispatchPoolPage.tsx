@@ -28,6 +28,15 @@ export interface DispatchPackageView {
   dispatch_mode: string
   response_window_hours: number
   published_at: string | null
+  agent_assisted: boolean
+  difficulty: string | null
+  accepted_user_id: string | null
+}
+
+export const DIFFICULTY_LABELS: Record<string, string> = {
+  low: "low（agent 独立出草稿 + 人工终审）",
+  medium: "medium（agent 草稿 + 强制终审）",
+  high: "high（不派发给智能体）",
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -58,13 +67,15 @@ export function formatSeatAmount(amount: number | null): string {
 }
 
 export function DispatchPoolPage() {
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
   const [packages, setPackages] = useState<DispatchPackageView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimError, setClaimError] = useState("")
+  const [declaringId, setDeclaringId] = useState<string | null>(null)
+  const [declareError, setDeclareError] = useState("")
   const requestSequence = useRef(0)
 
   const load = useCallback(() => {
@@ -74,8 +85,9 @@ export function DispatchPoolPage() {
     void apiRequest<unknown>("/api/v1/dispatch/packages", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setPackages(Array.isArray(rows) ? rows.filter(isPackageView) : [])
+        // goal-d9 修正：apiRequest 客户端已解包 {data,error} 信封（潜伏 bug——
+        // 旧代码对已解包值再取 .data 恒 undefined，派单池永远渲染为空）
+        setPackages(Array.isArray(payload) ? payload.filter(isPackageView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return
@@ -111,6 +123,28 @@ export function DispatchPoolPage() {
           )
         })
         .finally(() => setClaimingId(null))
+    },
+    [apiRequest, load]
+  )
+
+  /** goal-d9 桌面化（D2 裁决三）：接单人对 accepted 包显式声明/撤销智能体
+   *  协同。准入判定在服务端（声明权=接单人或 admin；high/未定档 409），
+   *  前端试错并透出可解释错误（§11 降级态 UX 同款纪律）。 */
+  const toggleAgentAssisted = useCallback(
+    (row: DispatchPackageView) => {
+      setDeclaringId(row.id)
+      setDeclareError("")
+      void apiRequest<unknown>(`/api/v1/dispatch/packages/${row.id}/agent-assisted`, {
+        method: "POST",
+        body: { enabled: !row.agent_assisted },
+      })
+        .then(() => load())
+        .catch((caught: unknown) => {
+          setDeclareError(
+            caught instanceof ApiClientError ? caught.message : "协同声明失败，请稍后重试。"
+          )
+        })
+        .finally(() => setDeclaringId(null))
     },
     [apiRequest, load]
   )
@@ -186,7 +220,37 @@ export function DispatchPoolPage() {
                 <dd>{row.response_window_hours} 小时</dd>
                 <dt>发布时刻</dt>
                 <dd>{row.published_at || "—"}</dd>
+                <dt>难度档位</dt>
+                <dd>
+                  {row.difficulty
+                    ? DIFFICULTY_LABELS[row.difficulty] || row.difficulty
+                    : "未定档"}
+                </dd>
+                <dt>智能体协同</dt>
+                <dd>{row.agent_assisted ? "已声明（启用评审门与溯源联动）" : "未声明（纯人工交付）"}</dd>
               </dl>
+            ) : null}
+            {expanded === row.package_code &&
+            row.dispatch_status === "accepted" &&
+            row.accepted_user_id !== null &&
+            row.accepted_user_id === user?.id ? (
+              <div className="dispatch-offer-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={declaringId !== null}
+                  onClick={() => toggleAgentAssisted(row)}
+                >
+                  {declaringId === row.id
+                    ? "处理中…"
+                    : row.agent_assisted
+                      ? "撤销协同声明"
+                      : "声明智能体协同"}
+                </button>
+                <span className="muted">
+                  声明后启用 T1–T6 评审强制门与溯源联动；难度 high 或未定档不可声明。
+                </span>
+              </div>
             ) : null}
             {expanded === row.package_code &&
             row.dispatch_mode === "claim" &&
@@ -209,6 +273,11 @@ export function DispatchPoolPage() {
       {claimError ? (
         <p className="error-text" role="alert">
           {claimError}
+        </p>
+      ) : null}
+      {declareError ? (
+        <p className="error-text" role="alert">
+          {declareError}
         </p>
       ) : null}
     </section>

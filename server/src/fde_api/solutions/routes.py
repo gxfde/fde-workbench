@@ -100,5 +100,13 @@ def generate_agent_solution(project_id, solution_id):
 @solutions_blueprint.get("/<solution_id>/review-trail")
 @require_auth
 def solution_review_trail(project_id, solution_id):
-    """终审台纪要回链（U5）：方案关联的全部会议与纪要（家族 ∪ 侧链）。"""
+    """终审台合并视图数据源（U5，goal-d9 扩 artifacts+signoff）：会议纪要（家族 ∪ 侧链）。"""
     return _data(service.solution_review_trail(actor=g.current_user, project_id=project_id, solution_id=solution_id))
+
+
+@solutions_blueprint.post("/<solution_id>/signoff")
+@require_auth
+def resolve_signoff(project_id, solution_id):
+    """终审台拍板收口（goal-d9）：approved/rejected；权限档闸 = checkpoint.required_level。
+    人工拍板动作——有意不进 api_catalog（红线：不收代拍板写路径）。"""
+    return _data(service.resolve_signoff(actor=g.current_user, project_id=project_id, solution_id=solution_id, payload=_payload()))

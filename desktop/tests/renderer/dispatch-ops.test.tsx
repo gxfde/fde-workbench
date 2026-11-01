@@ -55,15 +55,15 @@ function stubApi(options: {
       if (method !== "GET") {
         posts.push({ path, body: init?.body })
         if (path === "/api/v1/dispatch/simulator/replay") {
-          return Promise.resolve({ data: options.replay, error: null })
+          return Promise.resolve(options.replay)
         }
-        return Promise.resolve({ data: null, error: null })
+        return Promise.resolve(null)
       }
       if (path === "/api/v1/dispatch/disputes") {
-        return Promise.resolve({ data: options.disputes ?? [], error: null })
+        return Promise.resolve(options.disputes ?? [])
       }
       if (path === "/api/v1/dispatch/claim-gates") {
-        return Promise.resolve({ data: options.gates ?? [], error: null })
+        return Promise.resolve(options.gates ?? [])
       }
       return Promise.reject(new Error(`unexpected GET ${path}`))
     }

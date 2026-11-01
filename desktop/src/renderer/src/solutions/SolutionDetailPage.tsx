@@ -5,6 +5,7 @@ import { MemoMarkdown } from '../research/MemoMarkdown'
 import type { ResearchSubjectDto } from '../research/types'
 import { allowNextHashNavigation } from '../routing/navigationGuard'
 import { routeHash } from '../routing/useHashRoute'
+import { SignoffConsole } from './SignoffConsole'
 import { SolutionEditor } from './SolutionEditor'
 import { SolutionExport } from './SolutionExport'
 import type { SolutionExportResult } from './SolutionExport'
@@ -95,6 +96,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
       {SOLUTION_DETAIL_FIELDS.map(field => <section className={`solution-delivery-card${field.key === 'risks_dependencies' ? ' solution-delivery-card-full' : ''}`} key={field.key} aria-labelledby={`solution-delivery-${field.key}`}><h3 id={`solution-delivery-${field.key}`}>{field.label}</h3><div className="solution-markdown"><MemoMarkdown>{solution[field.key] || '待确认'}</MemoMarkdown></div></section>)}
     </div>
     {exported ? <SolutionExport key={exportRevision} projectId={projectId} result={exported} name={solution.name} requestError={error} retrying={exporting} onRetry={() => void exportSow()} onClose={() => setExported(null)} /> : null}
+    <SignoffConsole projectId={projectId} solutionId={solution.id} canManage={canManage && solution.status !== 'archived'} />
   </section>
 }
 

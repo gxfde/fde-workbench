@@ -69,6 +69,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)
+    # P3 翻译器门户（goal-d9）：引导式翻译 + AI 草稿落库
+    from fde_api.translator.routes import translator_blueprint
+    app.register_blueprint(translator_blueprint)
     # WP-E SES：SNS 退信/投诉回调端点（默认随模块关闭，端点校验失败一律 403）
     app.register_blueprint(mailing_blueprint)
     app.register_blueprint(control_blueprint)

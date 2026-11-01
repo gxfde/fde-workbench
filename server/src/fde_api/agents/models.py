@@ -239,3 +239,7 @@ class SolutionReviewCheckpoint(Base, TimestampMixin):
     reviewer_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     # 证据只存指针（红线：原件留项目工作目录）
     evidence_ref: Mapped[str | None] = mapped_column(String(255))
+    # goal-d9：L3 转人工（E-2）触发本 checkpoint 的 run 软链（无 FK，沿
+    # triggered_by_run_id/retry_of 偏离先例，允许 run 归档清理）。终审台
+    # 按此把「接管→拍板」配对成资深介入时长样本，拍板事件 payload 携带。
+    handoff_run_id: Mapped[str | None] = mapped_column(String(36))

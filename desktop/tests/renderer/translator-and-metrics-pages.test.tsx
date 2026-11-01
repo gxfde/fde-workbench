@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ apiRequest: vi.fn() }))
@@ -13,20 +14,71 @@ import { TranslatorPortalPage } from '../../src/renderer/src/translator/Translat
 beforeEach(() => { mocks.apiRequest.mockReset() })
 afterEach(cleanup)
 
-describe('翻译器门户骨架页（goal-d8）', () => {
-  it('渲染引导式表单与骨架徽标，提交入口显式禁用（不落库）', () => {
+describe('翻译器门户（goal-d9 P3 全量）', () => {
+  it('诉求为空时提交禁用（AI 只出草稿，提交需原话）', () => {
     render(<TranslatorPortalPage />)
-    expect(screen.getByRole('heading', { name: '客户诉求翻译（骨架版）' })).toBeInTheDocument()
-    expect(screen.getByText('P3 骨架 · 只读预览')).toBeInTheDocument()
-    const submit = screen.getByRole('button', { name: /提交翻译/ })
-    expect(submit).toBeDisabled()
+    expect(screen.getByRole('heading', { name: '客户诉求翻译' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /提交 AI 翻译/ })).toBeDisabled()
     expect(screen.getByText('暂无拟问题清单。')).toBeInTheDocument()
   })
 
-  it('预览徽标含 severity 预标与 module 待认领（只读口径可见）', () => {
+  it('本地预览徽标含 severity 预标与 module 待认领（打字期即时反馈保留）', () => {
     render(<TranslatorPortalPage />)
     expect(screen.queryAllByText('module=待认领')).toEqual([]) // 空表单无条目
     expect(screen.getByText(/填写客户诉求原话/)).toBeInTheDocument()
+  })
+
+  it('提交后轮询就绪：AI 草稿卡渲染问题清单与「待人工确认」徽标', async () => {
+    const user = userEvent.setup()
+    mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
+        return Promise.resolve({ data: { id: 't1', status: 'pending' } })
+      }
+      if (path === '/api/v1/translator/translations/t1') {
+        return Promise.resolve({
+          id: 't1', status: 'ready', ai_model: 'deepseek-v4-pro',
+          failure_code: null, failure_message: null,
+          result: {
+            executive_summary: '先采集后分析。',
+            key_business_problems: [
+              { text: '仓库出入库缺少系统留痕', severity: 'high', module: 'wms', classification: 'customer_stated' },
+            ],
+            open_questions: [{ text: '验收基线未给出' }],
+          },
+        })
+      }
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    await user.type(screen.getByLabelText(/客户诉求原话/), '仓库出入库必须过系统留痕')
+    await user.click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
+    expect(await screen.findByText('AI 草稿 · 待人工确认')).toBeInTheDocument()
+    expect(screen.getByText(/仓库出入库缺少系统留痕/)).toBeInTheDocument()
+    // 精确匹配：AI 结果徽标无（预标）后缀（本地预览卡另有 severity=high（预标））
+    expect(screen.getByText('severity=high')).toBeInTheDocument()
+    expect(screen.getByText('module=wms · 客户原话')).toBeInTheDocument()
+  })
+
+  it('轮询到失败态：失败码与消息透出（不静默）', async () => {
+    const user = userEvent.setup()
+    mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
+        return Promise.resolve({ data: { id: 't2', status: 'pending' } })
+      }
+      if (path === '/api/v1/translator/translations/t2') {
+        return Promise.resolve({
+          id: 't2', status: 'failed', ai_model: null,
+          failure_code: 'ai_output_invalid',
+          failure_message: 'AI 返回的项目指引格式不正确。（已自动重试 1 次仍失败，请重新发起翻译）',
+          result: null,
+        })
+      }
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    await user.type(screen.getByLabelText(/客户诉求原话/), '诉求')
+    await user.click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/ai_output_invalid/)
   })
 })
 

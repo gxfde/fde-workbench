@@ -63,8 +63,8 @@ export function MySettlementsPage() {
     void apiRequest<unknown>("/api/v1/dispatch/settlements/mine", { method: "GET" })
       .then((payload) => {
         if (sequence !== requestSequence.current) return
-        const rows = (payload as { data?: unknown } | null)?.data
-        setSettlements(Array.isArray(rows) ? rows.filter(isMySettlementView) : [])
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        setSettlements(Array.isArray(payload) ? payload.filter(isMySettlementView) : [])
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

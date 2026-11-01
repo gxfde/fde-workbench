@@ -7,6 +7,7 @@ import {
   formatSeatAmount,
   isPackageView,
   MODE_LABELS,
+  DIFFICULTY_LABELS,
   type DispatchPackageView,
 } from "./DispatchPoolPage"
 import { OFFER_STATUS_LABELS } from "./MyOffersPage"
@@ -90,7 +91,7 @@ export function statusActionLabel(status: string): string | null {
 }
 
 export function ConsolePage() {
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
   const [packages, setPackages] = useState<DispatchPackageView[]>([])
   const [profiles, setProfiles] = useState<CapabilityProfileView[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -118,8 +119,9 @@ export function ConsolePage() {
     ])
       .then(([pkgPayload, profilePayload]) => {
         if (sequence !== requestSequence.current) return
-        const pkgRows = (pkgPayload as { data?: unknown } | null)?.data
-        const profileRows = (profilePayload as { data?: unknown } | null)?.data
+        // goal-d9 修正：apiRequest 已解包信封（同 DispatchPoolPage 潜伏 bug）
+        const pkgRows = pkgPayload
+        const profileRows = profilePayload
         setPackages(Array.isArray(pkgRows) ? pkgRows.filter(isPackageView) : [])
         setProfiles(
           Array.isArray(profileRows) ? profileRows.filter(isProfileView) : []
@@ -146,10 +148,10 @@ export function ConsolePage() {
         method: "GET",
       })
         .then((payload) => {
-          const rows = (payload as { data?: unknown } | null)?.data
+          // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
           setTrail((prev) => ({
             ...prev,
-            [packageId]: Array.isArray(rows) ? rows.filter(isOfferTrailView) : [],
+            [packageId]: Array.isArray(payload) ? payload.filter(isOfferTrailView) : [],
           }))
         })
         .catch((caught: unknown) => {
@@ -197,15 +199,25 @@ export function ConsolePage() {
       })
     })
 
+  // goal-d9 桌面化（D2 裁决三）：admin 管理通道声明/撤销协同；声明权校验在
+  // 服务端（接单人或 admin；high/未定档 409），前端试错透出
+  const toggleAgentAssisted = (row: DispatchPackageView) =>
+    runAction(`assist:${row.id}`, async () => {
+      await apiRequest(`/api/v1/dispatch/packages/${row.id}/agent-assisted`, {
+        method: "POST",
+        body: { enabled: !row.agent_assisted },
+      })
+    })
+
   const runMatch = (row: DispatchPackageView) =>
     runAction(`match:${row.id}`, async () => {
       const payload = await apiRequest<unknown>(
         `/api/v1/dispatch/packages/${row.id}/match`,
         { method: "POST" }
       )
-      const data = (payload as { data?: unknown } | null)?.data
-      if (isMatchResultView(data)) {
-        setMatchResults((prev) => ({ ...prev, [row.id]: data }))
+      // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+      if (isMatchResultView(payload)) {
+        setMatchResults((prev) => ({ ...prev, [row.id]: payload }))
       }
     })
 
@@ -343,7 +355,33 @@ export function ConsolePage() {
                   <dd>{row.published_at || "—"}</dd>
                   <dt>响应窗</dt>
                   <dd>{row.response_window_hours} 小时</dd>
+                  <dt>难度档位</dt>
+                  <dd>
+                    {row.difficulty
+                      ? DIFFICULTY_LABELS[row.difficulty] || row.difficulty
+                      : "未定档"}
+                  </dd>
+                  <dt>智能体协同</dt>
+                  <dd>{row.agent_assisted ? "已声明（启用评审门与溯源联动）" : "未声明（纯人工交付）"}</dd>
                 </dl>
+
+                {row.dispatch_status === "accepted" && user?.role === "admin" ? (
+                  <div className="dispatch-offer-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={busyKey !== null}
+                      onClick={() => void toggleAgentAssisted(row)}
+                    >
+                      {busyKey === `assist:${row.id}`
+                        ? "处理中…"
+                        : row.agent_assisted
+                          ? "撤销协同声明"
+                          : "代为声明协同（管理通道）"}
+                    </button>
+                    <span className="muted">管理通道：声明权=接单人或 admin（D2 裁决三）。</span>
+                  </div>
+                ) : null}
 
                 <div className="dispatch-offer-actions">
                   {row.dispatch_status === "draft" ? (

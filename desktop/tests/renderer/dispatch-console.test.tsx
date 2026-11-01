@@ -100,19 +100,19 @@ function stubApi(options: {
       if (method !== "GET") {
         posts.push({ path, body: init?.body })
         if (path.endsWith("/match") && options.matchResult !== undefined) {
-          return Promise.resolve({ data: options.matchResult, error: null })
+          return Promise.resolve(options.matchResult)
         }
-        return Promise.resolve({ data: null, error: null })
+        return Promise.resolve(null)
       }
       if (path === "/api/v1/dispatch/packages") {
-        return Promise.resolve({ data: options.packages ?? [], error: null })
+        return Promise.resolve(options.packages ?? [])
       }
       if (path === "/api/v1/dispatch/profiles") {
-        return Promise.resolve({ data: options.profiles ?? [], error: null })
+        return Promise.resolve(options.profiles ?? [])
       }
       const trail = path.match(/\/api\/v1\/dispatch\/packages\/([^/]+)\/offers$/)
       if (trail) {
-        return Promise.resolve({ data: options.offers?.[trail[1]] ?? [], error: null })
+        return Promise.resolve(options.offers?.[trail[1]] ?? [])
       }
       return Promise.reject(new Error(`unexpected GET ${path}`))
     }

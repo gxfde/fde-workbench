@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { ApiClientError } from '../api/client'
+import { useAuth } from '../auth/AuthProvider'
 import {
   buildTranslationPreview,
   type TranslatorFormState,
 } from './preview'
 
-// 翻译器门户骨架（goal-d8，PRD §3.2 P3 预备）：引导式表单 + 实时只读预览。
-// 骨架边界：纯前端映射（preview.ts 启发式），不调 AI、不落库；提交入口
-// 显式禁用并说明——P3 全量轮接入 guidance 管道与终审台。
+// 翻译器门户（goal-d9，PRD §3.2 P3 全量）：引导式表单 + 实时本地预览 +
+// AI 翻译管道（POST /api/v1/translator/translations → job 轮询 → guidance
+// 全契约草稿）。AI 只出草稿（服务端契约 confirmed 一律 False）：结果卡
+// 常显「AI 草稿 · 待人工确认」徽标；失败码透出（§11 降级态 UX）。
 const INTERVIEW_MODES: { value: TranslatorFormState['interview_mode']; label: string }[] = [
   { value: 'onsite', label: '现场' },
   { value: 'remote', label: '远程' },
@@ -23,23 +26,122 @@ const EMPTY_FORM: TranslatorFormState = {
   phase_objective: '',
 }
 
+const POLL_INTERVAL_MS = 800
+const POLL_MAX_MS = 90_000
+
+interface TranslationDto {
+  id: string
+  status: 'pending' | 'running' | 'ready' | 'failed'
+  result: {
+    customer_vision?: string
+    current_phase_objective?: string
+    executive_summary?: string
+    key_business_problems?: { text: string; severity?: string; module?: string; classification: string }[]
+    open_questions?: { text: string }[]
+  } | null
+  failure_code: string | null
+  failure_message: string | null
+  ai_model: string | null
+}
+
+function isTranslationDto(value: unknown): value is TranslationDto {
+  if (typeof value !== 'object' || value === null) return false
+  const row = value as Record<string, unknown>
+  return typeof row.id === 'string' && typeof row.status === 'string'
+}
+
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  customer_stated: '客户原话',
+  ai_synthesized: 'AI 综合',
+  ai_inferred: 'AI 推断',
+  open_question: '待确认',
+}
+
 export function TranslatorPortalPage() {
+  const { apiRequest } = useAuth()
   const [form, setForm] = useState<TranslatorFormState>(EMPTY_FORM)
-  const preview = useMemo(() => buildTranslationPreview(form), [form])
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [translation, setTranslation] = useState<TranslationDto | null>(null)
+  const pollTimer = useRef<number | null>(null)
+  const preview = useMemoPreview(form)
+
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current !== null) {
+      window.clearTimeout(pollTimer.current)
+      pollTimer.current = null
+    }
+  }, [])
+  useEffect(() => stopPolling, [stopPolling])
+
+  const poll = useCallback((id: string) => {
+    stopPolling()
+    const startedAt = Date.now()
+    const tick = () => {
+      void apiRequest<unknown>(`/api/v1/translator/translations/${encodeURIComponent(id)}`, { method: 'GET' })
+        .then((value) => {
+          if (!isTranslationDto(value)) throw new Error('invalid translation')
+          setTranslation(value)
+          if (value.status === 'pending' || value.status === 'running') {
+            if (Date.now() - startedAt > POLL_MAX_MS) {
+              setSubmitError('翻译耗时过长，请稍后在列表查看结果。')
+              return
+            }
+            pollTimer.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+          }
+        })
+        .catch(() => {
+          if (Date.now() - startedAt > POLL_MAX_MS) {
+            setSubmitError('翻译状态查询失败，请稍后重试。')
+            return
+          }
+          pollTimer.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+        })
+    }
+    pollTimer.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+  }, [apiRequest, stopPolling])
 
   function update<K extends keyof TranslatorFormState>(key: K, value: TranslatorFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const canSubmit =
+    !submitting && form.customer_vision.trim().length > 0
+
+  async function submit() {
+    if (!canSubmit) return
+    setSubmitting(true); setSubmitError(''); setTranslation(null)
+    try {
+      const created = await apiRequest<unknown>('/api/v1/translator/translations', {
+        method: 'POST',
+        body: {
+          industry: form.industry.trim(),
+          scale: form.scale.trim(),
+          region: form.region.trim(),
+          interview_mode: form.interview_mode,
+          customer_vision: form.customer_vision.trim(),
+          phase_objective: form.phase_objective.trim(),
+        },
+      })
+      const id = extractTranslationId(created)
+      if (!id) throw new Error('invalid translation response')
+      poll(id)
+    } catch (caught) {
+      setSubmitError(caught instanceof ApiClientError ? caught.message : '提交失败，请稍后重试。')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <section className="page" aria-label="翻译器门户（骨架）">
+    <section className="page" aria-label="翻译器门户">
       <header className="page-header">
         <div>
           <p className="eyebrow">翻译器门户</p>
-          <h1>客户诉求翻译（骨架版）</h1>
+          <h1>客户诉求翻译</h1>
           <p>
-            把客户的模糊诉求引导式录入，右侧实时生成结构化预览（只读，不落库、不调 AI）。
-            <span className="badge warning translator-skeleton">P3 骨架 · 只读预览</span>
+            把客户的模糊诉求引导式录入：左侧实时预览（本地启发式），提交后由 AI
+            翻译管道生成结构化项目指引草稿（AI 只出草稿，人工确认）。
           </p>
         </div>
       </header>
@@ -91,7 +193,7 @@ export function TranslatorPortalPage() {
             </div>
           </div>
           <label>
-            客户诉求原话（按句读切分为拟问题清单）
+            客户诉求原话（AI 将逐句翻译为结构化问题清单）
             <textarea
               value={form.customer_vision}
               onChange={(event) => update('customer_vision', event.target.value)}
@@ -105,14 +207,21 @@ export function TranslatorPortalPage() {
               value={form.phase_objective}
               onChange={(event) => update('phase_objective', event.target.value)}
               rows={2}
-              placeholder="本期要达成什么（预览会提示是否缺失）"
+              placeholder="本期要达成什么（建议补齐，便于 AI 对齐本期范围）"
             />
           </label>
+          <div className="row-actions">
+            <button type="button" className="primary-button" disabled={!canSubmit} onClick={() => void submit()}>
+              {submitting ? '提交中…' : translation && (translation.status === 'pending' || translation.status === 'running') ? 'AI 翻译中…' : '提交 AI 翻译'}
+            </button>
+            <span className="muted">AI 只出草稿：结果经人工确认前不进入任何下游流程。</span>
+          </div>
+          {submitError ? <p className="form-error" role="alert">{submitError}</p> : null}
         </div>
         <div className="card translator-preview" aria-live="polite">
           <div className="card-heading">
             <div>
-              <h3>实时预览（只读）</h3>
+              <h3>实时预览（本地，未提交）</h3>
             </div>
           </div>
           <p className="muted">
@@ -136,11 +245,71 @@ export function TranslatorPortalPage() {
           {preview.hints.map((hint) => (
             <p key={hint} className="muted translator-hint">{hint}</p>
           ))}
-          <button type="button" disabled title="骨架版不落库：P3 全量轮接入 guidance 翻译管道与终审台后开放">
-            提交翻译（P3 开放）
-          </button>
         </div>
+        {translation ? <TranslationResultCard translation={translation} /> : null}
       </div>
     </section>
   )
+}
+
+function TranslationResultCard({ translation }: { translation: TranslationDto }) {
+  if (translation.status === 'pending' || translation.status === 'running') {
+    return <div className="card translator-result" aria-live="polite">
+      <div className="card-heading"><div><h3>AI 翻译草稿</h3></div></div>
+      <p role="status">AI 翻译管道处理中…</p>
+    </div>
+  }
+  if (translation.status === 'failed') {
+    return <div className="card translator-result" aria-live="polite">
+      <div className="card-heading"><div><h3>AI 翻译草稿</h3></div></div>
+      <p className="form-error" role="alert">
+        翻译失败（{translation.failure_code || 'unknown'}）：{translation.failure_message || '请重新发起翻译。'}
+      </p>
+    </div>
+  }
+  const problems = translation.result?.key_business_problems ?? []
+  const openQuestions = translation.result?.open_questions ?? []
+  return <div className="card translator-result" aria-live="polite">
+    <div className="card-heading">
+      <div>
+        <h3>AI 翻译草稿</h3>
+        <p className="muted">
+          <span className="badge warning">AI 草稿 · 待人工确认</span>
+          {' '}模型 {translation.ai_model || '—'} · 问题 {problems.length} 条 · 待确认 {openQuestions.length} 条
+        </p>
+      </div>
+    </div>
+    {translation.result?.executive_summary ? <p>{translation.result.executive_summary}</p> : null}
+    {problems.length === 0 ? (
+      <p className="muted">AI 未能从原话中提炼问题清单，建议补充诉求描述后重试。</p>
+    ) : (
+      <ol className="translator-problems">
+        {problems.map((problem, index) => (
+          <li key={`${index}-${problem.text}`}>
+            {problem.text}
+            <span className={`badge ${problem.severity === 'high' ? 'warning' : 'muted'} translator-severity`}>
+              severity={problem.severity || '待确认'}
+            </span>
+            <span className="badge muted translator-module">
+              module={problem.module || '待认领'} · {CLASSIFICATION_LABELS[problem.classification] || problem.classification}
+            </span>
+          </li>
+        ))}
+      </ol>
+    )}
+    {openQuestions.length > 0 ? <p className="muted translator-hint">待确认问题将在人工确认环节逐条消化。</p> : null}
+  </div>
+}
+
+function extractTranslationId(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null
+  const data = (value as Record<string, unknown>).data
+  if (typeof data !== 'object' || data === null) return null
+  const id = (data as Record<string, unknown>).id
+  return typeof id === 'string' ? id : null
+}
+
+// 本地启发式预览（骨架版能力保留——打字期间的即时反馈）
+function useMemoPreview(form: TranslatorFormState) {
+  return useMemo(() => buildTranslationPreview(form), [form])
 }

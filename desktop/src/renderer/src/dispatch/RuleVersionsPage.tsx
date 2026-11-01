@@ -58,12 +58,12 @@ export function RuleVersionsPage() {
     void apiRequest<unknown>("/api/v1/dispatch/rules", { method: "GET" })
       .then((data) => {
         if (sequence !== requestSequence.current) return
-        const inner = (data as { data?: unknown } | null)?.data
-        if (!isRulesPayload(inner)) {
+        // goal-d9 fix: apiRequest already unwraps the {data,error} envelope (latent bug family)
+        if (!isRulesPayload(data)) {
           setError("规则版本数据格式异常")
           return
         }
-        setPayload(inner)
+        setPayload(data)
       })
       .catch((caught: unknown) => {
         if (sequence !== requestSequence.current) return

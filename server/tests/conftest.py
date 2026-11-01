@@ -283,6 +283,8 @@ def db_session(app) -> Session:
         __import__("fde_api.meetings.models", fromlist=["ReviewMeeting"]).ReviewMeeting,
         # goal-d7：O-3 额度台账（ref_id 为软引用，只挂 projects/users RESTRICT）
         __import__("fde_api.agents.models", fromlist=["SeatActionLedger"]).SeatActionLedger,
+        # goal-d9：翻译器草稿（created_by 挂 users RESTRICT，先于 users 清）
+        __import__("fde_api.translator.models", fromlist=["TranslatorTranslation"]).TranslatorTranslation,
         # goal-d3：审核节点与产物引用 project_solutions（RESTRICT），先于方案；
         # tool_calls/artifacts 引用 runs，同样先清。
         __import__("fde_api.agents.models", fromlist=["SolutionReviewCheckpoint"]).SolutionReviewCheckpoint,

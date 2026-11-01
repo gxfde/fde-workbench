@@ -74,6 +74,11 @@ def ensure_default_handlers() -> None:
         from fde_api.dispatch.maintenance import register_dispatch_maintenance_handler
 
         register_dispatch_maintenance_handler()
+    # goal-d9：翻译器管道（outbox → worker，沿预调研分析重试语义）
+    if get_handler("translator.translate") is None:
+        from fde_api.translator.jobs import register_translator_handler
+
+        register_translator_handler()
 
     # 业务行收尾钩子：worker 死亡时把业务行推到终态（否则前端永远轮询）。
     from fde_api.control.automation_jobs import register_automation_failure_handler
@@ -89,6 +94,10 @@ def ensure_default_handlers() -> None:
         register_research_export_failure_handler()
     if get_job_failure_handler("automation.execute") is None:
         register_automation_failure_handler()
+    if get_job_failure_handler("translator.translate") is None:
+        from fde_api.translator.jobs import register_translator_failure_handler
+
+        register_translator_failure_handler()
 
 
 from fde_api.jobs.models import BackgroundJob  # noqa: E402  (late import to avoid cycle)

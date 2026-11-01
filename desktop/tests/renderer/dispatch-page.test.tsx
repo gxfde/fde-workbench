@@ -53,9 +53,9 @@ afterEach(() => {
 it("派单池页渲染白名单字段且不出现报价明细字段", async () => {
   mocks.apiRequest.mockImplementation(async (path: string) => {
     if (String(path) === "/api/v1/dispatch/packages") {
-      return { data: [packageRow()], error: null }
+      return [packageRow()]
     }
-    return { data: [], error: null }
+    return []
   })
   render(<DispatchPage tab="pool" onTabChange={() => {}} />)
   expect(await screen.findByText("PKG-AB12CD34-01")).toBeInTheDocument()
@@ -72,8 +72,8 @@ it("派单池页渲染白名单字段且不出现报价明细字段", async () =
 
 it("派单池空态与错误路径", async () => {
   mocks.apiRequest.mockImplementation(async (path: string) => {
-    if (String(path) === "/api/v1/dispatch/packages") return { data: [], error: null }
-    return { data: [], error: null }
+    if (String(path) === "/api/v1/dispatch/packages") return []
+    return []
   })
   const { rerender } = render(<DispatchPage tab="pool" onTabChange={() => {}} />)
   expect(await screen.findByText("暂无被授权的交付包。")).toBeInTheDocument()
@@ -87,8 +87,7 @@ it("派单池空态与错误路径", async () => {
 it("能力档案页渲染产能与负载", async () => {
   mocks.apiRequest.mockImplementation(async (path: string) => {
     if (String(path) === "/api/v1/dispatch/profiles") {
-      return {
-        data: [
+      return [
           {
             user_id: "u-1",
             username: "fde.one",
@@ -105,11 +104,9 @@ it("能力档案页渲染产能与负载", async () => {
             in_hand: 2,
             capacity_cap: 10,
           },
-        ],
-        error: null,
-      }
+        ]
     }
-    return { data: [], error: null }
+    return []
   })
   render(<DispatchPage tab="profiles" onTabChange={() => {}} />)
   expect(await screen.findByText("交付方一号")).toBeInTheDocument()
@@ -122,7 +119,6 @@ it("权重页渲染版本快照与只读常数", async () => {
   mocks.apiRequest.mockImplementation(async (path: string) => {
     if (String(path) === "/api/v1/dispatch/rules") {
       return {
-        data: {
           versions: [
             {
               id: "rv-1",
@@ -139,11 +135,9 @@ it("权重页渲染版本快照与只读常数", async () => {
             },
           ],
           constants: { response_window_hours: 24, top_n: 3 },
-        },
-        error: null,
-      }
+        }
     }
-    return { data: [], error: null }
+    return []
   })
   render(<DispatchPage tab="rules" onTabChange={() => {}} />)
   expect(await screen.findByText("v1")).toBeInTheDocument()
@@ -152,7 +146,7 @@ it("权重页渲染版本快照与只读常数", async () => {
 })
 
 it("tab 切换回调携带子页键", async () => {
-  mocks.apiRequest.mockImplementation(async () => ({ data: [], error: null }))
+  mocks.apiRequest.mockImplementation(async () => [])
   const onTabChange = vi.fn()
   render(<DispatchPage tab="pool" onTabChange={onTabChange} />)
   await userEvent.click(screen.getByRole("button", { name: "能力档案与产能" }))

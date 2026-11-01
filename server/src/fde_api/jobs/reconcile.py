@@ -71,6 +71,8 @@ ORPHAN_GRACE_SECONDS = 300
 #   file.scan / file.preview / document.generate — idempotent by construction
 #     (terminal file versions and already-generated documents are skipped).
 #   research.export — the export row is regenerated from the same request.
+#   translator.translate — goal-d9：handler 对 ready/failed 幂等跳过（预调研
+#     分析同款语义），重跑只发生在首次尝试中途死亡时。
 #
 # automation.execute is intentionally absent: it talks to the outside world.
 RECOVERABLE_JOB_TYPES = frozenset({
@@ -81,6 +83,7 @@ RECOVERABLE_JOB_TYPES = frozenset({
     "file.preview",
     "document.generate",
     "research.export",
+    "translator.translate",
 })
 
 # Written to `last_error` when a job is given up on, so an operator can tell
