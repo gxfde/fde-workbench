@@ -91,6 +91,9 @@ class ApiClient:
     def post(self, *args, **kwargs):
         return self.client.post(*args, headers=self.headers, **kwargs)
 
+    def patch(self, *args, **kwargs):
+        return self.client.patch(*args, headers=self.headers, **kwargs)
+
 
 def encrypt_credential(settings, value: str) -> str:
     """与 service._decrypt_credential 同源派生（jwt_secret → Fernet key）。"""

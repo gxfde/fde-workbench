@@ -1,8 +1,8 @@
-"""agents 蓝图：7 路由（goal-d4，技术实施方案 §3.1 agents 段）。
+"""agents 蓝图：10 路由（goal-d4 七路由 + goal-d6 演练/恢复/试点报告）。
 
 api_catalog 只收其中只读 GET（注册表/溯源/工具留痕/成本）；POST run /
-handoff / retry 属人工授权写路径——AI 不得代发起、代接管、代重试（沿门禁
-三路由不进目录的同一红线）。
+handoff / retry / rehearse / recover 属人工授权写路径——AI 不得代发起、
+代接管、代重试（沿门禁三路由不进目录的同一红线）。
 """
 
 from flask import Blueprint, g, jsonify, request
@@ -92,3 +92,24 @@ def get_cost():
             project_id=request.args.get("project_id"),
         )
     )
+
+
+@agents_blueprint.post("/<agent_id>/fallback-rehearsal")
+@require_auth
+def rehearse_fallback(agent_id):
+    """降级链演练（V4 手动触发面，admin）：L1/L2 演练 run，零计费。"""
+    return _data(service.rehearse_fallback(actor=g.current_user, agent_id=agent_id, payload=_payload()))
+
+
+@agents_blueprint.post("/runs/<run_id>/recover")
+@require_auth
+def recover_run(run_id):
+    """run 卡死恢复（d5 挂账）：发起人/管理员把卡死的 queued/running 恢复为 failed。"""
+    return _data(service.recover_run(actor=g.current_user, run_id=run_id))
+
+
+@agents_blueprint.get("/pilot-report")
+@require_auth
+def pilot_report():
+    """试点报告（UM-1，admin）：30 天/20 run 状态 + 拦截率/一次通过率/单会成本等。"""
+    return _data(service.get_pilot_report(actor=g.current_user))

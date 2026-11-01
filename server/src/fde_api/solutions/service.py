@@ -8,9 +8,10 @@ from typing import Any, NoReturn
 from uuid import uuid4
 
 from flask import current_app
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from fde_api.agents.models import AgentArtifact, AgentRun
 from fde_api.auth.models import User
 from fde_api.auth.passwords import verify_password
 from fde_api.control.access import authorize_ai_capability
@@ -22,6 +23,7 @@ from fde_api.extensions import db
 from fde_api.files.models import BUSINESS_CATEGORIES
 from fde_api.guidance.models import PresurveyIntake, ProjectGuidanceAnalysis
 from fde_api.jobs.outbox import enqueue_outbox
+from fde_api.meetings.models import ReviewMeeting, ReviewMeetingMinutes
 from fde_api.projects.events import record_event
 from fde_api.research.models import ProjectResearchForm, ProjectResearchFormRevision, ProjectResearchSubject
 from fde_api.solutions.models import ProjectSolution, ProjectSolutionExport, ProjectSolutionOpportunity
@@ -125,18 +127,28 @@ def _set_opportunities(solution: ProjectSolution, items: list[ProjectResearchSub
     solution.opportunities = links
 
 
-def serialize_solution(solution: ProjectSolution) -> dict[str, Any]:
-    return {
+def serialize_solution(solution: ProjectSolution, session: Session | None = None) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "id": solution.id, "project_id": solution.project_id,
         **{key: getattr(solution, key) for key in TEXT_FIELDS},
         "business_category": solution.business_category, "status": solution.status,
         "version": solution.version, "owner_user_id": solution.owner_user_id,
+        # 溯源列族（技术文档 §2 E3 / V9+V11）：generated_by + agent_run_id 常驻，
+        # 降级徽标字段在传入 session 时按 run 实况推导（V11 UI 半边数据源）
+        "generated_by": solution.generated_by,
+        "agent_run_id": solution.agent_run_id,
         "opportunity_ids": [link.opportunity_id for link in solution.opportunities],
         "opportunities": [deepcopy(link.snapshot_json) for link in solution.opportunities],
         "source": deepcopy(solution.source_json),
         "created_at": solution.created_at.isoformat() if solution.created_at else None,
         "updated_at": solution.updated_at.isoformat() if solution.updated_at else None,
     }
+    if session is not None and solution.agent_run_id:
+        run = session.get(AgentRun, solution.agent_run_id)
+        if run is not None:
+            data["agent_degraded"] = bool(run.degraded)
+            data["agent_fallback_level"] = run.fallback_level
+    return data
 
 
 def list_solutions(*, actor: User, project_id: str) -> list[dict[str, Any]]:
@@ -144,13 +156,123 @@ def list_solutions(*, actor: User, project_id: str) -> list[dict[str, Any]]:
         documents._load_project_for_view(session, actor, project_id)
         solutions = session.scalars(select(ProjectSolution).options(selectinload(ProjectSolution.opportunities)).where(
             ProjectSolution.project_id == project_id).order_by(ProjectSolution.updated_at.desc(), ProjectSolution.id)).all()
-        return [serialize_solution(item) for item in solutions]
+        return [serialize_solution(item, session) for item in solutions]
 
 
 def get_solution(*, actor: User, project_id: str, solution_id: str) -> dict[str, Any]:
     with db.session() as session:
         documents._load_project_for_view(session, actor, project_id)
-        return serialize_solution(_load(session, project_id, solution_id))
+        return serialize_solution(_load(session, project_id, solution_id), session)
+
+
+def generate_agent_solution(*, actor: User, project_id: str, solution_id: str, payload: Any) -> tuple[dict[str, Any], int]:
+    """AI 生成方案（goal-d6，技术文档 §10 ``POST /solutions/{id}/generate-agent``）。
+
+    权限双层：项目 can_manage（本函数）+ 发起能力实时鉴权（agents.start_run
+    内 authorize_ai_capability）。run 全链（三重白名单/幂等/预算/T2 门）复用
+    agents.start_run 不重写；仅 completed（过门或 L1 降级形态）的 run 才把
+    ``solution.agent_run_id`` 接线并标 ``generated_by='agent'``（E3 列语义；
+    接线幂等：重复调用同 run 不重复建事件）。L1 降级 run 照实接线——接线是
+    溯源事实（V9 反查链），不是终审放行；降级形态由 agent_trace/徽标显性。
+    """
+    from fde_api.agents import service as agents_service  # 延迟导入：避免 agents⇄solutions 环
+
+    if not isinstance(payload, dict) or set(payload) - {"agent_id", "idempotency_key"}:
+        _error("invalid_request", "请求字段无效。")
+    agent_id = payload.get("agent_id")
+    if not isinstance(agent_id, str) or not agent_id:
+        _error("invalid_request", "agent_id 必填。")
+    idempotency_key = payload.get("idempotency_key")
+    if idempotency_key is not None and (not isinstance(idempotency_key, str) or not idempotency_key or len(idempotency_key) > 160):
+        _error("invalid_request", "idempotency_key 必须为 ≤160 字符的字符串。")
+    with db.session() as session:
+        project = documents._load_project_for_update(session, project_id)
+        documents._require_project_manager(actor, project)
+        solution = _load(session, project.id, solution_id)
+        if solution.status != "active":
+            _error("solution_archived", "该方案已弃用，不能发起生成。", 409)
+    run_payload: dict[str, Any] = {"project_id": project_id, "solution_id": solution_id}
+    if idempotency_key is not None:
+        run_payload["idempotency_key"] = idempotency_key
+    data, _status = agents_service.start_run(actor=actor, agent_id=agent_id, payload=run_payload)
+    if data.get("status") != "completed":
+        # 在途复用（queued/running）或失败形态：不接线，run 明细原样返回
+        return {"solution_id": solution_id, "wired": False, "run": data}, 200
+    with db.session() as session, session.begin():
+        project = documents._load_project_for_update(session, project_id)
+        documents._require_project_manager(actor, project)
+        solution = _load(session, project.id, solution_id, update=True)
+        wired = solution.agent_run_id != data["id"]
+        if wired:
+            solution.agent_run_id = data["id"]
+            solution.generated_by = "agent"
+            record_event(session, actor, "solution_agent_wired", project, {
+                "solution_id": solution.id, "agent_run_id": data["id"], "agent_id": agent_id})
+        session.flush()
+        body = {
+            "solution_id": solution.id,
+            "agent_run_id": data["id"],
+            "wired": True,
+            "wired_now": wired,
+            "solution": serialize_solution(solution, session),
+        }
+        return body, (201 if wired else 200)
+
+
+def solution_review_trail(*, actor: User, project_id: str, solution_id: str) -> dict[str, Any]:
+    """终审台纪要回链（U5，总纲 §5）：方案关联的全部会议与纪要。
+
+    范围 = ``topic_refs.solution_id`` 侧链 ∪ ``triggered_by_run_id`` ∈
+    ``agent_run_id`` 幂等键家族；未封存会议只给状态不吐纪要内容。
+    """
+    with db.session() as session:
+        project = documents._load_project_for_view(session, actor, project_id)
+        solution = _load(session, project.id, solution_id)
+        family_ids = {solution.agent_run_id} if solution.agent_run_id else set()
+        if solution.agent_run_id:
+            anchor = session.get(AgentRun, solution.agent_run_id)
+            if anchor is not None and anchor.idempotency_key:
+                family_ids.update(session.scalars(
+                    select(AgentRun.id).where(AgentRun.idempotency_key == anchor.idempotency_key)))
+        rows = session.execute(
+            select(ReviewMeeting, ReviewMeetingMinutes)
+            .outerjoin(ReviewMeetingMinutes, ReviewMeetingMinutes.meeting_id == ReviewMeeting.id)
+            .where(or_(
+                ReviewMeeting.project_id == project.id,
+                ReviewMeeting.triggered_by_run_id.in_(family_ids),
+            ))
+            .order_by(ReviewMeeting.created_at, ReviewMeeting.id)
+        ).all()
+        meetings = []
+        for meeting, minutes in rows:
+            on_family = meeting.triggered_by_run_id in family_ids if family_ids else False
+            side_link = str((meeting.topic_refs or {}).get("solution_id") or "") == solution.id
+            if not (on_family or side_link):
+                continue
+            item: dict[str, Any] = {
+                "id": meeting.id,
+                "template_id": meeting.template_id,
+                "status": meeting.status,
+                "trigger": meeting.trigger,
+                "gate_tier": meeting.gate_tier,
+                "degraded": bool(meeting.degraded),
+                "triggered_by_run_id": meeting.triggered_by_run_id,
+                "convened_by_agent_id": meeting.convened_by_agent_id,
+                "sealed": minutes is not None,
+                "sealed_sha256": minutes.sealed_sha256 if minutes is not None else None,
+            }
+            if minutes is not None:
+                item["minutes"] = {
+                    "consensus": minutes.consensus,
+                    "disputes": minutes.disputes,
+                    "todos": minutes.todos,
+                }
+            meetings.append(item)
+        return {
+            "solution_id": solution.id,
+            "agent_run_id": solution.agent_run_id,
+            "meetings": meetings,
+        }
 
 
 def create_solution(*, actor: User, project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -354,6 +476,33 @@ def _sow_fields(solution: dict[str, Any]) -> dict[str, str]:
             "commercial_terms": "待确认：双方责任人、商务条款、费用与付款安排、变更审批和其他未在方案中明确约定的事项。"}
 
 
+def _agent_trace(session: Session, solution: ProjectSolution) -> dict[str, Any] | None:
+    """SOW 导出的 agent 溯源行段（V9 SOW→run→sha256 闭环 + V11 导出降级标注）。
+
+    降级 run（L1 等）照实入段：导出件显式标注降级生成，绝不「看起来一样但
+    质量不同」（自动交付 §3.3 纪律）。无接线 run → None（不产空段）。
+    """
+    if not solution.agent_run_id:
+        return None
+    run = session.get(AgentRun, solution.agent_run_id)
+    if run is None:
+        return None
+    return {
+        "agent_run_id": run.id,
+        "generated_by": solution.generated_by,
+        "degraded": bool(run.degraded),
+        "fallback_level": run.fallback_level,
+        "degraded_reason": run.degraded_reason,
+        "handoff": run.handoff_user_id is not None,
+        "artifacts": [
+            {"kind": item.kind, "sha256": item.sha256}
+            for item in session.scalars(
+                select(AgentArtifact).where(AgentArtifact.run_id == run.id).order_by(AgentArtifact.created_at)
+            )
+        ],
+    }
+
+
 def export_sow(*, actor: User, project_id: str, solution_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     if set(payload) != {"version"}:
         _error("invalid_request", "请仅提供要导出方案的版本号。")
@@ -414,6 +563,7 @@ def export_sow(*, actor: User, project_id: str, solution_id: str, payload: dict[
         content_snapshot["solution"] = deepcopy(frozen)
         content_snapshot["sow_format_version"] = 2
         content_snapshot["opportunity_scope"] = deepcopy(scope)
+        content_snapshot["agent_trace"] = _agent_trace(session, solution)
         version = ProjectDocumentVersion(
             document_id=document.id, version_number=version_number, parent_version_id=document.current_version_id,
             source="generated", status="draft", source_template_version_id=template.id,

@@ -1,5 +1,6 @@
 from flask import Blueprint, g, jsonify, request
 
+from fde_api.agents.service import AgentsServiceError
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
 from fde_api.solutions import service
@@ -10,6 +11,13 @@ solutions_blueprint = Blueprint("project_solutions", __name__, url_prefix="/api/
 @solutions_blueprint.errorhandler(service.SolutionServiceError)
 def service_error(error):
     return error_response(error.code, error.message, error.status)
+
+
+@solutions_blueprint.errorhandler(AgentsServiceError)
+def agents_error(error):
+    # generate-agent 复用 agents.start_run 全链，其失败码/明细（如
+    # review_gate_open 的 run_id）原样透传
+    return error_response(error.code, error.message, error.status, error.detail or None)
 
 
 def _payload():
@@ -77,3 +85,20 @@ def archive_solution(project_id, solution_id):
 @require_auth
 def export_sow(project_id, solution_id):
     return _data(service.export_sow(actor=g.current_user, project_id=project_id, solution_id=solution_id, payload=_payload()))
+
+
+@solutions_blueprint.post("/<solution_id>/generate-agent")
+@require_auth
+def generate_agent_solution(project_id, solution_id):
+    """AI 生成方案（goal-d6）：agents.start_run 全链复用，completed 才接线
+    solution.agent_run_id（generated_by='agent'）；T2 门未放行 409 原样透传。
+    """
+    body, status = service.generate_agent_solution(actor=g.current_user, project_id=project_id, solution_id=solution_id, payload=_payload())
+    return _data(body), status
+
+
+@solutions_blueprint.get("/<solution_id>/review-trail")
+@require_auth
+def solution_review_trail(project_id, solution_id):
+    """终审台纪要回链（U5）：方案关联的全部会议与纪要（家族 ∪ 侧链）。"""
+    return _data(service.solution_review_trail(actor=g.current_user, project_id=project_id, solution_id=solution_id))

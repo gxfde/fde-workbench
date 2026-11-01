@@ -6,8 +6,8 @@
 内容蒸馏（D10：SOP 九卡/报价卡/门禁验收表）随 d7 S2 全模板落地。
 
 三档门（总纲 UM-1 / PartyMode PM-5）：lite=2 / std=8 / full=12 轮。
-本轮只首发 T2-lite（守卫+1 模块智能体、2 话轮）；T1/T3/T4/T5 与 std/full
-随 d6/d7。
+T2-lite 随 d5 首发；goal-d6 增 T3-adhoc（智能体自主召集，U3：reason 必填、
+计入纪要回链）；T1/T4/T5 与 std/full 随 d7（PM-1 内容蒸馏待蔡工审定）。
 """
 
 from __future__ import annotations
@@ -40,7 +40,23 @@ _T2_LITE: dict[str, Any] = {
     "description": "S2-lite 产物评审：守卫 + 1 模块智能体，2 话轮；纪要三段式封存后 T2 门放行。",
 }
 
-MEETING_TEMPLATES: dict[str, dict[str, Any]] = {"T2-lite": _T2_LITE}
+_T3_ADHOC: dict[str, Any] = {
+    "template_id": "T3-adhoc",
+    "name": "自主评审会（adhoc）",
+    "gate": "T3",  # 自主召集门：不产门证据（trigger=adhoc 不入 t2_gate_satisfied）
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["quality_guard", "module_agent"],
+    "trigger": "adhoc",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    # U3（总纲 §5）：自主召集必须给 reason，缺失即拒；reason 落
+    # topic_refs["reason"]，经纪要回链（get_minutes → topic_refs）计入纪要
+    "requires_reason": True,
+    "description": "智能体自主召集的评审讨论会：须声明召集理由；adhoc 纪要不作强制门证据。",
+}
+
+MEETING_TEMPLATES: dict[str, dict[str, Any]] = {"T2-lite": _T2_LITE, "T3-adhoc": _T3_ADHOC}
 
 
 def get_template(template_id: str) -> dict[str, Any] | None:

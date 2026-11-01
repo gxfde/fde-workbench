@@ -70,5 +70,14 @@ def get_minutes(meeting_id):
 @meetings_blueprint.get("/meeting-templates")
 @require_auth
 def list_meeting_templates():
-    """评审会模板列表（gate_tier 三档；T2-lite 首发）。"""
+    """评审会模板列表（gate_tier 三档；T2-lite/T3-adhoc）。"""
     return _data(service.list_meeting_templates())
+
+
+@meetings_blueprint.get("/meeting-templates/<template_id>/checklist")
+@require_auth
+def get_template_checklist(template_id):
+    """强制门模板的静态人工执行单（U9）：智能体层不可用时门降级为 checklist
+    交人工执行，不阻塞交付（模板本就是门禁语义，checklist 是其人工形态）。
+    """
+    return _data(service.get_template_checklist(template_id))

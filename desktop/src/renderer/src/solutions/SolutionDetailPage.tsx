@@ -78,7 +78,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
   }
 
   return <section className="panel solution-panel solution-viewer" role="region" aria-label={`查看方案：${solution.name}`}>
-    <header className="solution-page-heading"><div><p className="eyebrow">方案设计 · 版本 {solution.version} · {solution.status === 'archived' ? '弃用' : '正常'}<SolutionHealthChip projectId={projectId} solutionId={solution.id} /></p><h2>{solution.name}</h2></div><div className="row-actions">{canManage && solution.status !== 'archived' ? <><a className="secondary-button button-link compact" href={solutionHref(projectId, solution.id, 'edit', opportunityId)}>编辑方案</a><button type="button" className="primary-button compact" disabled={exporting} onClick={() => void exportSow()}>{exporting ? '处理中…' : '导出 SOW'}</button></> : null}{navigation}</div></header>
+    <header className="solution-page-heading"><div><p className="eyebrow">方案设计 · 版本 {solution.version} · {solution.status === 'archived' ? '弃用' : '正常'}<SolutionProvenanceBadge solution={solution} /><SolutionHealthChip projectId={projectId} solutionId={solution.id} /></p><h2>{solution.name}</h2></div><div className="row-actions">{canManage && solution.status !== 'archived' ? <><a className="secondary-button button-link compact" href={solutionHref(projectId, solution.id, 'edit', opportunityId)}>编辑方案</a><button type="button" className="primary-button compact" disabled={exporting} onClick={() => void exportSow()}>{exporting ? '处理中…' : '导出 SOW'}</button></> : null}{navigation}</div></header>
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     {mode === 'edit' && solution.status === 'archived' ? <p className="notice">此方案已弃用，仅可查看内容。</p> : null}
     {solution.source?.kind === 'legacy_opportunity_delivery' ? <p className="solution-legacy-notice">{solution.source.reviewed ? '历史交付说明：已保留来源，内容经过编辑整理，不代表客户审核或验收。' : '历史交付说明 · 待整理：保留了原机会中的交付内容，请核对完善方案后再导出 SOW。'}</p> : null}
@@ -95,6 +95,16 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
     </div>
     {exported ? <SolutionExport key={exportRevision} projectId={projectId} result={exported} name={solution.name} requestError={error} retrying={exporting} onRetry={() => void exportSow()} onClose={() => setExported(null)} /> : null}
   </section>
+}
+
+// 溯源徽标（goal-d6 V11 UI 半边）：AI 生成常显；降级生成以 warning 档强化——
+// 「不允许看起来一样但质量不同」（自动交付 §3.3 纪律）
+export function SolutionProvenanceBadge({ solution }: { solution: SolutionDto }) {
+  if (solution.generated_by !== 'agent' || !solution.agent_run_id) return null
+  if (solution.agent_degraded) {
+    return <span className="badge warning solution-provenance" title={`降级生成（${solution.agent_fallback_level ?? 'L1'}）：产物须经人工终审后使用`}>智能体生成 · 已降级</span>
+  }
+  return <span className="badge muted solution-provenance" title="本方案由智能体生成，溯源见 agent 溯源链">智能体生成</span>
 }
 
 interface SolutionHealth {

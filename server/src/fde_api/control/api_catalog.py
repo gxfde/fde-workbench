@@ -104,6 +104,7 @@ ENTRIES = [
     ("meetings.templates", "GET", "/api/v1/meeting-templates", "评审会模板列表（三档门 lite/std/full；T2-lite=守卫+1 模块智能体、2 话轮）", ""),
     ("meetings.get", "GET", "/api/v1/meetings/{meeting_id}", "查询评审会状态与话轮流（只读）", ""),
     ("meetings.minutes", "GET", "/api/v1/meetings/{meeting_id}/minutes", "查询会议纪要三段式（共识/分歧/待办 + sealed_sha256 封存指纹 + triggered_by_run_id 溯源回链）", ""),
+    ("solutions.review_trail", "GET", "/api/v1/projects/{project_id}/solutions/{solution_id}/review-trail", "方案终审台纪要回链（U5）：方案关联的全部评审会议与已封存纪要（run 家族 ∪ solution 侧链）", ""),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

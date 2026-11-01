@@ -108,6 +108,17 @@ class Settings(BaseSettings):
     agent_workspace_root: str = "agent-workspaces"
     # 沙箱内 agent CLI 命令（zcode 适配器 spawn 段）
     agent_cli_command: str = "zcode"
+    # goal-d6 试点开关族（PRD §10 / 技术文档 S1-7 / 总纲 UM-1）：30 天 / 20 run
+    # 先到为准；窗口内超限 409 pilot_run_limit_exceeded，窗口走完不再拦（试点
+    # 结束由报告定升级）。started_at 留空 = 以最早 agent_run.created_at 推导
+    # （首个 run 即试点启动）；演练 run（rehearsal: 前缀幂等键）不计数。
+    agent_pilot_enabled: bool = False
+    agent_pilot_window_days: int = Field(default=30, ge=1)
+    agent_pilot_max_runs: int = Field(default=20, ge=1)
+    agent_pilot_started_at: str = ""
+    # run 卡死恢复新鲜窗口（分钟）：窗口内不许恢复（防误恢复在途 run）；
+    # 0 = 立即可恢复（测试口径）
+    agent_recover_stale_minutes: int = Field(default=15, ge=0)
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

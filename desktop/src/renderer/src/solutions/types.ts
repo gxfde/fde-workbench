@@ -20,6 +20,11 @@ export interface SolutionDto extends SolutionFields {
   opportunities: Array<{ id: string; name: string; tracking_code?: string | null; parent_id?: string | null }>
   updated_at: string
   source?: { kind?: string; reviewed?: boolean } | null
+  // 溯源列族（goal-d6 V9/V11）：服务端恒返前两键；降级徽标字段按 run 实况推导
+  generated_by?: 'human' | 'agent'
+  agent_run_id?: string | null
+  agent_degraded?: boolean
+  agent_fallback_level?: 'L1' | 'L2' | 'L3' | null
 }
 
 export const SOLUTION_DETAIL_FIELDS = [

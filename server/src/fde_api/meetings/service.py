@@ -105,6 +105,28 @@ def _validate_topic_refs(value: Any) -> dict[str, str]:
     return refs
 
 
+def _require_adhoc_reason(template: dict[str, Any], payload: dict[str, Any]) -> str | None:
+    """U3：自主召集模板（requires_reason）必须带 reason（1..160），缺失即拒；
+    非自主模板显式带 reason 同样拒（键集纪律）。reason 落 topic_refs 计入纪要。
+    """
+    reason = payload.get("reason")
+    if template.get("requires_reason"):
+        if not isinstance(reason, str) or not reason.strip():
+            raise _error(
+                "reason_required",
+                "自主召集必须声明召集理由（reason 必填）。",
+                400,
+                detail={"template_id": template.get("template_id")},
+            )
+        reason = reason.strip()
+        if len(reason) > 160:
+            raise _error("invalid_request", "reason 必须为 ≤160 字符字符串。")
+        return reason
+    if reason is not None:
+        raise _error("invalid_request", "该模板不接受 reason 字段。")
+    return None
+
+
 def _serialize_meeting(session: Any, meeting: ReviewMeeting, *, with_turns: bool = False) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": meeting.id,
@@ -248,7 +270,7 @@ def _billing_and_quota(session: Any, *, run: AgentRun, capability: str) -> None:
 
 def create_meeting(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
     """召集评审会（人工开会，或工具面经 agent_id 走三重白名单）。"""
-    allowed_keys = {"project_id", "template_id", "topic_refs", "solution_id", "triggered_by_run_id", "agent_id"}
+    allowed_keys = {"project_id", "template_id", "topic_refs", "solution_id", "triggered_by_run_id", "agent_id", "reason"}
     if set(payload) - allowed_keys:
         raise _error("invalid_request", "请求字段无效。")
     project_id = payload.get("project_id")
@@ -276,6 +298,9 @@ def create_meeting(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
             )
             _billing_and_quota(session, run=run, capability=agent.capability_tier)
         topic_refs = _validate_topic_refs(payload.get("topic_refs"))
+        adhoc_reason = _require_adhoc_reason(template, payload)
+        if adhoc_reason is not None:
+            topic_refs["reason"] = adhoc_reason
         solution_id = payload.get("solution_id")
         if solution_id is not None:
             if not isinstance(solution_id, str) or not solution_id:
@@ -566,6 +591,41 @@ def list_meeting_templates() -> dict[str, Any]:
     return {"items": list_templates()}
 
 
+def get_template_checklist(template_id: str) -> dict[str, Any]:
+    """U9：强制门模板降级为静态 checklist（智能体层不可用时不阻塞交付）。
+
+    模板的 attendees/sections 是门禁语义，checklist 是其人工执行形态：
+    逐条可勾选的步骤单，人按单执行并留证（门禁证据通道 source_uri+sha256）。
+    """
+    template = get_template(template_id)
+    if template is None:
+        raise _error("meeting_template_not_found", "评审会模板不存在。", 404)
+    section_labels = {"consensus": "共识", "disputes": "分歧", "todos": "待办"}
+    items: list[dict[str, Any]] = [
+        {"step": 1, "action": "确认评审范围与产物清单", "detail": "按 topic_refs 圈定产物（storage_ref + sha256）"},
+    ]
+    for offset, attendee in enumerate(template.get("attendees", []), start=2):
+        items.append({"step": offset, "action": f"由 {attendee} 角色逐项检查产物", "detail": "检查意见记入对应话轮/记录"})
+    step = len(items) + 1
+    for section in template.get("sections", []):
+        items.append(
+            {
+                "step": step,
+                "action": f"整理{section_labels.get(str(section), str(section))}段",
+                "detail": "分歧条目须 ≥2 方论点并标注冲突（M3）",
+            }
+        )
+        step += 1
+    items.append({"step": step, "action": "人工拍板并封存结论", "detail": "证据按 source_uri 指针 + sha256 指针留证，绝不入库原件"})
+    return {
+        "template_id": template["template_id"],
+        "gate": template["gate"],
+        "trigger": template["trigger"],
+        "mode": "manual_checklist",
+        "items": items,
+    }
+
+
 # ---------------------------------------------------------------------------
 # agent 工具面（技术文档 §3.2：meeting_convene / meeting_get_minutes）
 # ---------------------------------------------------------------------------
@@ -601,11 +661,15 @@ def dispatch_agent_tool(
             template = get_template(str(payload.get("template_id", "")))
             if template is None:
                 raise _error("meeting_template_not_found", "评审会模板不存在。", 404)
+            topic_refs = _validate_topic_refs(payload.get("topic_refs"))
+            adhoc_reason = _require_adhoc_reason(template, payload)
+            if adhoc_reason is not None:
+                topic_refs["reason"] = adhoc_reason
             meeting = ReviewMeeting(
                 project_id=project.id,
                 template_id=template["template_id"],
                 status="live",
-                topic_refs=_validate_topic_refs(payload.get("topic_refs")),
+                topic_refs=topic_refs,
                 turn_budget=int(template["turn_budget"]),
                 hosted_by_user_id=actor.id,
                 gate_tier=template["gate_tier"],
@@ -682,3 +746,23 @@ def t2_gate_satisfied(session: Any, *, run_id: str, solution_id: str | None) -> 
         if solution_id is not None and str((meeting.topic_refs or {}).get("solution_id") or "") == solution_id:
             return True
     return False
+
+
+def latest_sealed_mandatory_minutes(
+    session: Any, *, run_id: str, idempotency_key: str | None
+) -> ReviewMeetingMinutes | None:
+    """U4 修订回路：run 家族（直链 + 同幂等键）关联的**最新**已封存强制纪要；
+    无则 None。disputes 非空 = 存在未决分歧 → 修订升级人工。
+    """
+    family_ids = {run_id}
+    if idempotency_key:
+        family_ids.update(
+            session.scalars(select(AgentRun.id).where(AgentRun.idempotency_key == idempotency_key))
+        )
+    return session.scalar(
+        select(ReviewMeetingMinutes)
+        .join(ReviewMeeting, ReviewMeeting.id == ReviewMeetingMinutes.meeting_id)
+        .where(ReviewMeeting.trigger == "mandatory", ReviewMeeting.triggered_by_run_id.in_(family_ids))
+        .order_by(ReviewMeetingMinutes.created_at.desc(), ReviewMeetingMinutes.id.desc())
+        .limit(1)
+    )

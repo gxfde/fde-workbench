@@ -9,9 +9,20 @@
 - 熔断（V5/B-1/B-2）：单 run ``max_duration_ms``（默认 300000，D6）与
   ``max_cost_units`` 在适配器监听段强制；平台月度 ``agent_monthly_budget``
   （0 = 不限额，沿 E7 ``ai_monthly_token_budget`` 心智）在发起前拦截。
-- 降级（A-1）：沙箱任何 ``SandboxError`` → run 落 ``fallback_level=L2`` +
-  零计费 + ``agent_unavailable`` 503；L3 = ``ai_manual_handoff`` 转人工
-  （V7/E-2），接管后挂 pending signoff 终审检查点。
+- 降级链全链（goal-d6，自动交付 §3.3 / 判定 V4）：
+
+  - L0 正常态：沙箱 run，产物按门与校验规则进出终审。
+  - L1：降级 completed（D 类 ``tool_denied`` 后 run 继续）→
+    ``fallback_level=L1`` + 产物 ``linked_solution_id=None``
+    （**强制人工终审，不可自动放行**——决议①：同步栈下 L1 = 降级产物
+    形态，生成动作由降级 run 既有产物承载）；handoff 接受 L1 completed
+    转人工终审（signoff checkpoint 收口）。
+  - L2：沙箱不可用（A-1，d4）与一切非 completed 终态（timeout/
+    budget_exceeded/failed，B 类——无产物可降级审，走模板填空；决议②）。
+  - L3：``ai_manual_handoff`` 转人工（V7/E-2，d4），接管后挂 pending
+    signoff 终审检查点。
+  - V4 手动触发面：L0=start_run；L1/L2=``rehearse_fallback``（admin 演练，
+    与真实故障同一标注路径，零计费）；L3=handoff（本就是人工触发面）。
 - 责任主体：发起人即责任人（``initiated_by_user_id``），每次 run 实时鉴权。
 
 产物红线：storage_ref 指针 + sha256 指纹；C-1 校验失败（缺/未知
@@ -61,11 +72,13 @@ from fde_api.agents.sandbox import (
     SandboxHandle,
     SandboxProfile,
 )
+from fde_api.agents import pilot
+from fde_api.agents.tools import effective_run_tools, run_face_declared
 from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
-from fde_api.meetings.service import t2_gate_satisfied
+from fde_api.meetings.service import latest_sealed_mandatory_minutes, t2_gate_satisfied
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.solutions.models import ProjectSolution
@@ -156,7 +169,7 @@ class ManifestOutputScanner:
 # ---------------------------------------------------------------------------
 
 
-def _unavailability(session: Any, agent: AgentRegistry) -> str | None:
+def _unavailability(session: Any, agent: AgentRegistry, actor: User) -> str | None:
     if not agent.enabled:
         return "disabled"
     if agent.kind != "zcode" or agent.kind not in ADAPTER_KINDS:
@@ -167,6 +180,13 @@ def _unavailability(session: Any, agent: AgentRegistry) -> str | None:
     credential = session.scalar(select(AgentCredential).where(AgentCredential.name == agent.credential_ref))
     if credential is None:
         return "credential_missing"
+    # V12（自动交付 §2.4）：run 面声明工具经三重交集收紧后全部失效 → agent
+    # 明确报因不可用，而不是让新 run 拿着空白名单静默失败
+    # （仅会议面声明的 agent 不受影响——会议面由 meetings 工具面判定）
+    if run_face_declared(list(agent.allowed_tools or [])) and not effective_run_tools(
+        session, allowed_tools=list(agent.allowed_tools), actor=actor
+    ):
+        return "tools_unavailable"
     return None
 
 
@@ -174,7 +194,7 @@ def list_agents(*, actor: User) -> dict[str, Any]:
     with db.session() as session:
         items = []
         for agent in session.scalars(select(AgentRegistry).order_by(AgentRegistry.created_at, AgentRegistry.id)):
-            reason = _unavailability(session, agent)
+            reason = _unavailability(session, agent, actor)
             items.append(
                 {
                     "id": agent.id,
@@ -361,6 +381,9 @@ def _finalize(
     T2 门（goal-d5）：solution 绑定的 completed run =「artifact 提交终审」
     迁移点——无已封存强制评审纪要则迁移被拒：run failed +
     ``review_gate_open``，产物留痕但 linked_solution_id=None（不进终审通道）。
+    降级链层级（goal-d6）：降级 completed（D 类）= L1，产物即使过门也
+    ``linked_solution_id=None``——强制人工终审不可自动放行，T2 门对 L1 不
+    适用（终审通道入口本就是人工）；非 completed 终态 = L2。
     """
     validation_failures: list[dict[str, Any]] = []
     prepared: list[tuple[ArtifactFile, str]] = []
@@ -387,11 +410,13 @@ def _finalize(
 
     failed_validation = bool(validation_failures) and result.status == "completed"
     gate_open = False
+    l1_path = result.status == "completed" and result.degraded  # 决议①：降级 completed = L1
     with session_factory() as session, session.begin():
         run = session.get(AgentRun, run_id)
         gate_open = (
             solution_id is not None
             and result.status == "completed"
+            and not result.degraded  # L1 产物本就不自动进终审（强制人工终审），门不适用
             and not failed_validation
             and not t2_gate_satisfied(session, run_id=run_id, solution_id=solution_id)
         )
@@ -401,6 +426,11 @@ def _finalize(
         run.exit_code = result.exit_code
         if result.degraded or failed_validation or gate_open:
             run.degraded = True
+        if l1_path:
+            run.fallback_level = "L1"
+        elif result.status != "completed":
+            # 决议②：B 类无产物 → 降级去向 L2 模板填空（自动交付 §3.2「L1 或 L2」取 L2）
+            run.fallback_level = "L2"
         if failed_validation:
             run.degraded_reason = "artifact_validation_failed"
         elif gate_open:
@@ -420,7 +450,8 @@ def _finalize(
             )
         # 超时/熔断产物不入库（B-1）；completed 的产物含校验失败者一律留痕
         # reviewed=False（C-1：拒绝进终审但不丢证据）；T2 门开着时产物同样
-        # 留痕但不挂 solution（不进终审通道，review_gate_open 收口后重试）
+        # 留痕但不挂 solution（不进终审通道，review_gate_open 收口后重试）；
+        # L1 降级产物恒不挂 solution（强制人工终审，handoff 后人工收口）
         if result.status == "completed":
             for artifact, digest in prepared:
                 session.add(
@@ -430,7 +461,7 @@ def _finalize(
                         storage_ref=f"{run.id}/output/{artifact.path}"[:255],
                         sha256=digest,
                         reviewed=False,
-                        linked_solution_id=None if gate_open else solution_id,
+                        linked_solution_id=None if (gate_open or l1_path) else solution_id,
                     )
                 )
         session.flush()
@@ -448,8 +479,13 @@ def _execute_run(
     credentials_plaintext: str | None,
     context_text: str,
     problem_refs: tuple[str, ...],
+    effective_tools: frozenset[str],
 ) -> tuple[dict[str, Any], int]:
-    """run 执行主干（start/retry 共用）：落 queued → 沙箱 → 适配器 → 落账。"""
+    """run 执行主干（start/retry 共用）：落 queued → 沙箱 → 适配器 → 落账。
+
+    ``effective_tools`` 由调用方在发起时刻求三重交集（V3/V12，agents/tools）；
+    在跑 run 不中断（§2.4）——允许名单随 run 冻结，运行中不重算。
+    """
     settings = _settings()
     run_id = new_uuid()
     workspace_root = Path(settings.agent_workspace_root)
@@ -530,7 +566,7 @@ def _execute_run(
         project_code=project.project_code,
         capability=agent.capability_tier,
         workspace_host=str(workspace),
-        allowed_tools=frozenset(agent.allowed_tools or []),
+        allowed_tools=effective_tools,
         credentials=credentials,
         timeout_ms=agent.max_duration_ms or settings.agent_max_duration_ms,
         max_cost_units=agent.max_cost_units,
@@ -604,9 +640,10 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
         decision = authorize_ai_capability(user=actor, capability=agent.capability_tier, project=project)
         if not decision.allowed:
             raise _error(decision.reason, "当前账号无权发起该智能体能力。", 403)
-        reason = _unavailability(session, agent)
+        reason = _unavailability(session, agent, actor)
         if reason is not None:
             raise _error("agent_unavailable", "智能体当前不可用。", 409, detail={"reason": reason})
+        effective_tools = effective_run_tools(session, allowed_tools=list(agent.allowed_tools or []), actor=actor)
         solution = None
         if solution_id is not None:
             solution = session.get(ProjectSolution, solution_id)
@@ -639,6 +676,10 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
                 "本月智能体用量已达平台预算上限，请联系管理员或下月再试。",
                 409,
             )
+        pilot_error = pilot.pilot_capacity_error(session, settings)
+        if pilot_error is not None:
+            code, message, detail = pilot_error
+            raise _error(code, message, 409, detail=detail)
         credentials_plaintext = None
         if agent.credential_ref:
             credential = session.scalar(select(AgentCredential).where(AgentCredential.name == agent.credential_ref))
@@ -657,6 +698,7 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
         credentials_plaintext=credentials_plaintext,
         context_text=context_text,
         problem_refs=problem_refs,
+        effective_tools=effective_tools,
     )
 
 
@@ -701,14 +743,20 @@ def handoff_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> dict[st
         raise _error("invalid_request", "solution_id 无效。")
     with db.session() as session, session.begin():
         run, project = _require_run_access(session, actor, run_id)
-        if run.status not in FAILED_STATUSES:
-            raise _error("agent_handoff_not_allowed", "只有失败/超时/超预算的 run 才能转人工。", 409)
+        # goal-d6（L1 强制人工终审）：降级 completed（L1）的产物也可转人工收口
+        l1_completed = run.status == "completed" and run.fallback_level == "L1"
+        if run.status not in FAILED_STATUSES and not l1_completed:
+            raise _error("agent_handoff_not_allowed", "只有失败/超时/超预算或 L1 降级完成的 run 才能转人工。", 409)
         if run.handoff_user_id is not None:
             raise _error("agent_handoff_exists", "该 run 已完成人工接管。", 409)
         run.handoff_user_id = actor.id
         run.degraded = True
-        run.degraded_reason = "ai_manual_handoff"
-        run.fallback_level = "L3"
+        if not l1_completed:
+            # L1 产物的降级事实保留（自动交付 §3.5「接管后产物仍标 degraded」）：
+            # fallback_level=L1 与原 degraded_reason 不被 L3 覆写，接管事实由
+            # handoff_user_id + signoff checkpoint + 事件承载
+            run.degraded_reason = "ai_manual_handoff"
+            run.fallback_level = "L3"
         checkpoint = None
         if solution_id is not None:
             solution = session.get(ProjectSolution, solution_id)
@@ -767,6 +815,20 @@ def retry_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> tuple[dic
                 409,
                 detail={"attempts": len(family)},
             )
+        # U4 修订回路（技术文档 §6 第 4 条）：门拦截后的会外修订以纪要为准——
+        # 家族最新已封存强制纪要存在未决分歧（disputes 非空）时不再自动修订，
+        # 升级人工（ai_manual_handoff）
+        if original.degraded_reason == "review_gate_open":
+            minutes = latest_sealed_mandatory_minutes(
+                session, run_id=original.id, idempotency_key=original.idempotency_key
+            )
+            if minutes is not None and minutes.disputes:
+                raise _error(
+                    "revision_disputes_open",
+                    "评审纪要存在未决分歧，修订回路收口：请转人工处理。",
+                    409,
+                    detail={"run_id": original.id, "minutes_id": minutes.id},
+                )
         backoff_base = int(settings.agent_retry_backoff_base_seconds)
         # 即将创建的是第 retries_used+1 次尝试 → 等待 base*2^retries_used 秒
         # （第 1 次重试等 base，第 2 次等 2*base；上限由家族大小另行拦截）
@@ -790,6 +852,11 @@ def retry_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> tuple[dic
                 raise _error("agent_unavailable", "智能体凭据缺失。", 409, detail={"reason": "credential_missing"})
             credentials_plaintext = _decrypt_credential(credential.credential_ciphertext)
         context_text, problem_refs = _render_context(session, project=project, agent=agent, solution=solution)
+        effective_tools = effective_run_tools(session, allowed_tools=list(agent.allowed_tools or []), actor=actor)
+        pilot_error = pilot.pilot_capacity_error(session, settings)
+        if pilot_error is not None:
+            code, message, detail = pilot_error
+            raise _error(code, message, 409, detail=detail)
 
     return _execute_run(
         actor=actor,
@@ -801,7 +868,111 @@ def retry_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> tuple[dic
         credentials_plaintext=credentials_plaintext,
         context_text=context_text,
         problem_refs=problem_refs,
+        effective_tools=effective_tools,
     )
+
+
+# ---------------------------------------------------------------------------
+# V4 手动触发面 / run 卡死恢复 / 试点报告（goal-d6）
+# ---------------------------------------------------------------------------
+
+
+def rehearse_fallback(*, actor: User, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """降级链演练（V4「每级可手动触发」）：不跑沙箱不调用模型，创建与真实
+    故障同一标注形态的演练 run。零计费；幂等键 ``rehearsal:`` 前缀使试点
+    计数与报告可排除。L0=start_run、L3=handoff 既有手动面，此处只补 L1/L2。
+    """
+    if actor.role != "admin":
+        raise _error("rehearsal_forbidden", "降级演练仅系统运维员可执行。", 403)
+    if set(payload) - {"level", "project_id"}:
+        raise _error("invalid_request", "请求字段无效。")
+    level = payload.get("level")
+    project_id = payload.get("project_id")
+    if level not in {"L1", "L2"}:
+        raise _error("invalid_request", "level 仅支持 L1/L2（L0=正常发起、L3=handoff）。")
+    if not isinstance(project_id, str) or not project_id:
+        raise _error("invalid_request", "project_id 必填。")
+    with db.session() as session, session.begin():
+        agent = session.get(AgentRegistry, agent_id)
+        if agent is None:
+            raise _error("agent_not_found", "智能体不存在。", 404)
+        project = session.get(Project, project_id)
+        if project is None:
+            raise _error("project_not_found", "项目不存在。", 404)
+        run_id = new_uuid()
+        # 形态与真实故障一致：L1=降级 completed（D 类收口形态）；L2=failed（A-1 形态）
+        run = AgentRun(
+            id=run_id,
+            project_id=project.id,
+            agent_id=agent.id,
+            initiated_by_user_id=actor.id,
+            capability_used=agent.capability_tier,
+            status="completed" if level == "L1" else "failed",
+            context_ref=f"rehearsal://{run_id}",
+            token_cost=0,  # 演练零计费
+            duration_ms=0,
+            exit_code=0 if level == "L1" else None,
+            degraded=True,
+            degraded_reason="fallback_rehearsal",
+            fallback_level=level,
+            idempotency_key=(pilot.REHEARSAL_KEY_PREFIX + run_id)[:160],
+            cost_owner_type="project",
+            cost_owner_id=project.id,
+        )
+        session.add(run)
+        record_event(
+            session,
+            actor,
+            "agent_fallback_rehearsed",
+            project,
+            {"run_id": run_id, "agent_id": agent.id, "fallback_level": level},
+        )
+        session.flush()
+        return _serialize_run(session, run, detail=True)
+
+
+def recover_run(*, actor: User, run_id: str) -> dict[str, Any]:
+    """run 卡死恢复（d5 挂账）：同步栈 crash 留 queued/running 态 → 发起人或
+    管理员显式恢复为 failed（``stuck_recovered``），恢复后 retry/handoff 两路
+    既有语义即可走。新鲜窗口闸（``agent_recover_stale_minutes``）防止恢复
+    仍在正常执行的 run。
+    """
+    with db.session() as session, session.begin():
+        run, project = _require_run_access(session, actor, run_id)
+        if run.status not in IN_FLIGHT_STATUSES:
+            raise _error("agent_recover_not_allowed", "只有排队中/执行中的 run 才能恢复。", 409)
+        if actor.role != "admin" and run.initiated_by_user_id != actor.id:
+            raise _error("agent_recover_forbidden", "只有发起人或系统运维员可以恢复卡死的 run。", 403)
+        stale_minutes = int(_settings().agent_recover_stale_minutes or 0)
+        if run.updated_at is not None and stale_minutes > 0:
+            elapsed = (datetime.now(timezone.utc) - run.updated_at).total_seconds()
+            if elapsed < stale_minutes * 60:
+                raise _error(
+                    "agent_recover_not_stale",
+                    "run 仍在新鲜窗口内，不能恢复；请等待超过阈值后再试。",
+                    409,
+                    detail={"age_seconds": int(elapsed), "stale_minutes": stale_minutes},
+                )
+        run.status = "failed"
+        run.degraded = True
+        run.degraded_reason = "stuck_recovered"
+        record_event(
+            session,
+            actor,
+            "agent_run_recovered",
+            project,
+            {"run_id": run.id, "stale_minutes": stale_minutes},
+        )
+        session.flush()
+        return _serialize_run(session, run, detail=True)
+
+
+def get_pilot_report(*, actor: User) -> dict[str, Any]:
+    """试点报告（UM-1）：状态 + 六指标；只出数，O-8/UM-5 阈值人工评（D15）。"""
+    if actor.role != "admin":
+        raise _error("pilot_report_forbidden", "试点报告仅系统运维员可查。", 403)
+    with db.session() as session:
+        return pilot.build_report(session, _settings())
 
 
 def get_cost(*, actor: User, scope: str | None, project_id: str | None) -> dict[str, Any]:
