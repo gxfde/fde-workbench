@@ -191,7 +191,7 @@ class SeatActionLedger(Base, TimestampMixin):
     __tablename__ = "seat_action_ledger"
     __table_args__ = (
         CheckConstraint(
-            "action_type IN ('agent_run', 'meeting_convene', 'ai_chat')",
+            "action_type IN ('agent_run', 'meeting_convene', 'ai_chat', 'translation')",
             name="ck_seat_action_ledger_action_type",
         ),
         CheckConstraint("units >= 0", name="ck_seat_action_ledger_units"),

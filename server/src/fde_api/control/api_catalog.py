@@ -117,6 +117,7 @@ ENTRIES = [
     # 一律 False），无拍板语义；人工拍板类路径（solutions signoff）永不收编
     ("translator.translate", "POST", "/api/v1/translator/translations", "翻译器：引导式表单（客户画像/诉求原话/阶段目标）→ AI 翻译管道 → guidance 全契约草稿落库（AI 只出草稿，confirmed 一律 False）", "industry/scale/region/interview_mode/customer_vision/phase_objective"),
     ("translator.translations", "GET", "/api/v1/translator/translations", "本人翻译草稿列表与详情（创建人或 admin；轮询 pending/running/ready/failed）", ""),
+    ("translator.adopt", "POST", "/api/v1/translator/translations/{translation_id}/adopt", "翻译草稿采纳流（goal-d10）：ready 草稿升格为项目指引新版本（status=draft 待人工确认；O-3 额度随路落）——创作类写先例，确认动作仍在项目侧人工", "project_id"),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

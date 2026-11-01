@@ -298,14 +298,86 @@ function TranslationResultCard({ translation }: { translation: TranslationDto })
       </ol>
     )}
     {openQuestions.length > 0 ? <p className="muted translator-hint">待确认问题将在人工确认环节逐条消化。</p> : null}
+    <AdoptionSection translationId={translation.id} />
+  </div>
+}
+
+const ADOPT_ERROR_LABELS: Record<string, string> = {
+  already_adopted: '该草稿已采纳到本项目，请到项目指引页编辑确认。',
+  translation_not_ready: '草稿尚未就绪，暂不能采纳。',
+  translation_not_found: '翻译记录不存在。',
+  forbidden: '只有项目负责人或管理员可以采纳到该项目。',
+  project_not_found: '项目不存在或无权访问。',
+}
+
+// 采纳流（goal-d10）：ready 草稿升格为项目指引新版本（status=draft 待人工
+// 确认）；编辑与逐条确认统一在项目指引页（GuidanceReview）完成——一份指引
+// 一处编辑权。O-3 额度由服务端随采纳落账。
+function AdoptionSection({ translationId }: { translationId: string }) {
+  const { apiRequest } = useAuth()
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [projectId, setProjectId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    void apiRequest<unknown>('/api/v1/projects?page=1&page_size=50', { method: 'GET' })
+      .then((value) => {
+        if (!active) return
+        const items = Array.isArray((value as { items?: unknown })?.items)
+          ? (value as { items: unknown[] }).items
+          : []
+        setProjects(items.flatMap((item) => {
+          const row = item as { id?: unknown; name?: unknown }
+          return typeof row.id === 'string' && typeof row.name === 'string'
+            ? [{ id: row.id, name: row.name }]
+            : []
+        }))
+      })
+      .catch(() => { /* 项目列表拉取失败不阻塞草稿展示。 */ })
+    return () => { active = false }
+  }, [apiRequest])
+  async function adopt() {
+    if (!projectId || busy) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await apiRequest<unknown>(
+        `/api/v1/translator/translations/${encodeURIComponent(translationId)}/adopt`,
+        { method: 'POST', body: { project_id: projectId } },
+      )
+      const name = projects.find((item) => item.id === projectId)?.name ?? projectId
+      setNotice(`已采纳到项目「${name}」，请到项目指引页编辑并逐条确认后正式生效。`)
+    } catch (caught) {
+      setError(caught instanceof ApiClientError
+        ? (ADOPT_ERROR_LABELS[caught.code] ?? caught.message)
+        : '采纳失败，请稍后重试。')
+    } finally { setBusy(false) }
+  }
+  return <div className="translator-adopt">
+    <h4>采纳到项目</h4>
+    <p className="muted">采纳后草稿成为项目指引新版本（待确认），编辑与逐条确认在项目指引页完成。</p>
+    {notice ? <p role="status" className="notice">{notice} <a href={`#/projects/${projectId}`}>打开项目</a></p> : null}
+    {error ? <p role="alert" className="form-error">{error}</p> : null}
+    <label>
+      项目
+      <select aria-label="采纳到项目" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+        <option value="">选择项目…</option>
+        {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select>
+    </label>
+    <button type="button" className="primary-button" disabled={!projectId || busy} onClick={() => void adopt()}>
+      {busy ? '采纳中…' : '采纳到项目'}
+    </button>
   </div>
 }
 
 function extractTranslationId(value: unknown): string | null {
+  // goal-d10 fix: apiRequest already unwraps the {data,error} envelope, so the
+  // created payload is the translation DTO itself (same latent bug family as
+  // the dispatch pages fixed in goal-d9; tests used to feed the envelope).
   if (typeof value !== 'object' || value === null) return null
-  const data = (value as Record<string, unknown>).data
-  if (typeof data !== 'object' || data === null) return null
-  const id = (data as Record<string, unknown>).id
+  const id = (value as Record<string, unknown>).id
   return typeof id === 'string' ? id : null
 }
 

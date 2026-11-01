@@ -39,7 +39,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # goal-d3 交付工作台：agent 五表 + solution_review_checkpoints +
 # project_solutions 生成来源四列（template_id 回填自 source_json 骨架指针）
 # goal-d8 交付工作台：delivery_packages.agent_assisted + difficulty（D2 合成裁决）
-HEAD_REVISION = "c5e9b3d7a1f5"
+HEAD_REVISION = "a1d3f5b7c9e2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

@@ -84,6 +84,11 @@ class ProjectGuidanceAnalysis(Base, TimestampMixin, VersionedMixin):
             "analysis_state IN ('queued', 'extracting', 'analyzing', 'ready', 'failed', 'cancelled')",
             name="ck_project_guidance_analysis_state",
         ),
+        CheckConstraint(
+            "source_kind IN ('presurvey_docx', 'translator_draft')",
+            name="ck_project_guidance_source_kind",
+        ),
+        UniqueConstraint("project_id", "translation_id", name="uq_project_guidance_project_translation"),
         Index("ix_project_guidance_project_status", "project_id", "status"),
         Index("ix_project_guidance_source_version", "source_file_version_id"),
     )
@@ -91,8 +96,13 @@ class ProjectGuidanceAnalysis(Base, TimestampMixin, VersionedMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    source_file_id: Mapped[str] = mapped_column(ForeignKey("project_files.id", ondelete="RESTRICT"), nullable=False)
-    source_file_version_id: Mapped[str] = mapped_column(ForeignKey("project_file_versions.id", ondelete="RESTRICT"), nullable=False)
+    # goal-d10 采纳流：翻译器草稿来源无源文件——source_file 双列放宽
+    # nullable，source_kind 区分来源；source_filename 存
+    # translator:<translation_id> 保持可读可追溯（NOT NULL 不放宽）。
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False, default="presurvey_docx")
+    translation_id: Mapped[str | None] = mapped_column(String(36))
+    source_file_id: Mapped[str | None] = mapped_column(ForeignKey("project_files.id", ondelete="RESTRICT"))
+    source_file_version_id: Mapped[str | None] = mapped_column(ForeignKey("project_file_versions.id", ondelete="RESTRICT"))
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")

@@ -4,9 +4,12 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Mapping
 
+from flask import current_app
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from fde_api.agents.quota import record_action
 from fde_api.auth.models import User
 from fde_api.extensions import db
 from fde_api.files.models import ProjectFileVersion
@@ -20,6 +23,7 @@ from fde_api.guidance.models import (
 from fde_api.jobs.outbox import enqueue_outbox
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
+from fde_api.translator.models import TranslatorTranslation
 from fde_api.workbench.models import Gate, Project
 
 
@@ -198,32 +202,132 @@ def confirm_analysis(*, actor: User, project_id: str, analysis_id: str, expected
             row.reviewed_at = datetime.now(UTC)
             row.version += 1
             source = session.get(ProjectPresurveySource, project_id)
-            old_version_id = source.current_file_version_id if source else None
-            if source is None:
-                source = ProjectPresurveySource(
-                    project_id=project_id, project_file_id=row.source_file_id,
-                    current_file_version_id=row.source_file_version_id,
-                )
-                session.add(source)
-            else:
-                source.project_file_id = row.source_file_id
-                source.current_file_version_id = row.source_file_version_id
-                source.version += 1
-            if old_version_id and old_version_id != row.source_file_version_id:
-                old_version = session.get(ProjectFileVersion, old_version_id)
-                if old_version is not None and old_version.status == "available":
-                    old_version.status = "deprecated"
-                    old_version.deprecated_by_user_id = actor.id
-                    old_version.deprecated_at = datetime.now(UTC)
-                    old_version.deprecation_reason = "预调研表新版本已确认"
+            if row.source_kind != "translator_draft":
+                # goal-d10 决议③：只有预调研 DOCX 来源才回写源指针——翻译器
+                # 草稿没有源文件，若把 ProjectPresurveySource 指到空引用会
+                # 击穿 NOT NULL 且污染预调研源（旧源也不得被假源 deprecate）。
+                # 建模不变量（source_file 双列 nullable 后仍成立）：非 translator
+                # 来源必有源文件；显式守卫同时完成 mypy 类型收窄。
+                if row.source_file_id is None or row.source_file_version_id is None:
+                    raise GuidanceServiceError(
+                        "guidance_source_missing",
+                        "预调研来源的项目指引缺少源文件引用，无法确认。",
+                        409,
+                    )
+                old_version_id = source.current_file_version_id if source else None
+                if source is None:
+                    source = ProjectPresurveySource(
+                        project_id=project_id, project_file_id=row.source_file_id,
+                        current_file_version_id=row.source_file_version_id,
+                    )
+                    session.add(source)
+                else:
+                    source.project_file_id = row.source_file_id
+                    source.current_file_version_id = row.source_file_version_id
+                    source.version += 1
+                if old_version_id and old_version_id != row.source_file_version_id:
+                    old_version = session.get(ProjectFileVersion, old_version_id)
+                    if old_version is not None and old_version.status == "available":
+                        old_version.status = "deprecated"
+                        old_version.deprecated_by_user_id = actor.id
+                        old_version.deprecated_at = datetime.now(UTC)
+                        old_version.deprecation_reason = "预调研表新版本已确认"
             # goal-d2 P0 指标①埋点：售前「独立完成录入+确认」的确认侧事件
             # （录入侧为 presurvey_intake_saved）。纯增量审计，不影响返回值。
             record_event(session, actor, "guidance_analysis_confirmed", project, {
                 "analysis_id": row.id, "version_number": row.version_number,
                 "source_file_version_id": row.source_file_version_id,
+                "source_kind": row.source_kind,
             })
             session.flush()
             return serialize_analysis(row, source)
+    finally:
+        session.close()
+
+
+def adopt_translator_draft(*, actor: User, project_id: str, translation_id: str) -> dict[str, Any]:
+    """翻译草稿「采纳流」（goal-d10，PRD §3.2 P3 收口）：ready 草稿升格为
+    项目指引新版本（version_number 递增，status=draft——确认仍走人工）。
+
+    决议①：草稿是个人席位资产，可采纳到多个项目；同项目由
+    (project_id, translation_id) 唯一约束防重复（查询友好报错 + IntegrityError
+    兜底并发双击）。决议②：O-3 额度随采纳落账（action_type='translation'，
+    seat=采纳发起人；翻译时无项目维度不计，采纳时刻项目上下文齐备随路落）。
+    决议③：产出的版本 source_kind='translator_draft'，确认时预调研源指针
+    不被回写（见 confirm_analysis）。
+    """
+    session = db.session()
+    try:
+        with session.begin():
+            # 闸序与读侧 GET /translations/{id} 一致：先翻译记录闸（owner/admin，
+            # 404 不泄露草稿存在性），再项目闸。
+            translation = session.get(TranslatorTranslation, translation_id)
+            if translation is None or (
+                translation.created_by_user_id != actor.id and actor.role != "admin"
+            ):
+                raise GuidanceServiceError("translation_not_found", "翻译记录不存在。", 404)
+            project = _project(session, actor, project_id, manage=True)
+            if translation.status != "ready" or not isinstance(translation.result_json, dict):
+                raise GuidanceServiceError(
+                    "translation_not_ready", "只有翻译完成的草稿可以采纳。", 409
+                )
+            existing = session.scalar(
+                select(ProjectGuidanceAnalysis.id).where(
+                    ProjectGuidanceAnalysis.project_id == project.id,
+                    ProjectGuidanceAnalysis.translation_id == translation.id,
+                )
+            )
+            if existing is not None:
+                raise GuidanceServiceError(
+                    "already_adopted", "该草稿已采纳到本项目，请直接编辑或确认。", 409
+                )
+            draft = translation.result_json
+            number = int(session.scalar(
+                select(func.coalesce(func.max(ProjectGuidanceAnalysis.version_number), 0))
+                .where(ProjectGuidanceAnalysis.project_id == project.id)
+            ) or 0) + 1
+            row = ProjectGuidanceAnalysis(
+                project_id=project.id,
+                version_number=number,
+                source_kind="translator_draft",
+                translation_id=translation.id,
+                source_file_id=None,
+                source_file_version_id=None,
+                source_filename=f"translator:{translation.id}",
+                source_sha256="",
+                status="draft",
+                analysis_state="ready",
+                customer_vision=str(draft.get("customer_vision") or ""),
+                current_phase_objective=str(draft.get("current_phase_objective") or ""),
+                executive_summary=str(draft.get("executive_summary") or ""),
+                evidence_json=deepcopy(draft.get("evidence") or {}),
+                ai_model=translation.ai_model or "",
+                ai_generated_at=translation.ai_generated_at,
+                created_by_user_id=actor.id,
+            )
+            for field in LIST_FIELDS:
+                setattr(row, f"{field}_json", deepcopy(draft.get(field) or []))
+            session.add(row)
+            session.flush()
+            record_action(
+                session,
+                project_id=project.id,
+                user_id=actor.id,
+                action_type="translation",
+                ref_id=translation.id,
+                quota_monthly=int(getattr(current_app.config["SETTINGS"], "seat_action_quota_monthly", 100) or 0),
+            )
+            record_event(session, actor, "translator_draft_adopted", project, {
+                "translation_id": translation.id, "analysis_id": row.id,
+                "version_number": row.version_number,
+            })
+            session.flush()
+            return serialize_analysis(row, session.get(ProjectPresurveySource, project.id))
+    except IntegrityError:
+        # 并发双击走到唯一约束：与预检查同语义（409，不泄露约束名）。
+        raise GuidanceServiceError(
+            "already_adopted", "该草稿已采纳到本项目，请直接编辑或确认。", 409
+        ) from None
     finally:
         session.close()
 
@@ -243,6 +347,7 @@ def serialize_analysis(row: ProjectGuidanceAnalysis, source: ProjectPresurveySou
     data = {
         "id": row.id, "project_id": row.project_id, "version_number": row.version_number,
         "source_file_id": row.source_file_id, "source_file_version_id": row.source_file_version_id,
+        "source_kind": row.source_kind, "translation_id": row.translation_id,
         "source_filename": row.source_filename, "status": row.status, "analysis_state": row.analysis_state,
         "customer_vision": row.customer_vision, "current_phase_objective": row.current_phase_objective,
         "executive_summary": row.executive_summary, "evidence": row.evidence_json,
@@ -252,7 +357,11 @@ def serialize_analysis(row: ProjectGuidanceAnalysis, source: ProjectPresurveySou
     }
     for field in LIST_FIELDS:
         data[field] = getattr(row, f"{field}_json")
-    data["source_is_stale"] = source is None or source.current_file_version_id != row.source_file_version_id
+    if row.source_kind == "translator_draft":
+        # 翻译器来源没有「源文件」概念，无从过期（决议③）。
+        data["source_is_stale"] = False
+    else:
+        data["source_is_stale"] = source is None or source.current_file_version_id != row.source_file_version_id
     return data
 
 

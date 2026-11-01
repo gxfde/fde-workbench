@@ -31,6 +31,7 @@ from fde_api.dispatch.models import (
     FdeProfile,
 )
 from fde_api.dispatch.profiles import promote_user
+from fde_api.meetings.models import ReviewMeeting, ReviewMeetingMinutes
 from fde_api.dispatch.rules import (
     activate_due_versions,
     active_rule_snapshot,
@@ -944,3 +945,84 @@ def test_rule_version_switch_keeps_old_offer_on_old_version(db_session):
     db_session.refresh(offer)
     assert offer.match_breakdown["rule_version"] == v1.id
     assert offer.match_breakdown["version_no"] == 1
+
+
+# --- goal-d10 M10：评审会产出作为 Stage A/B 闸门证据引用（PartyMode §8 M10）---
+
+
+def _sealed_minutes(db_session, project, host, *, sha: str) -> ReviewMeetingMinutes:
+    meeting = ReviewMeeting(
+        project_id=project.id, template_id="T2-lite", hosted_by_user_id=host.id,
+    )
+    db_session.add(meeting)
+    db_session.flush()
+    minutes = ReviewMeetingMinutes(
+        meeting_id=meeting.id, consensus=[], disputes=[], todos=[], sealed_sha256=sha,
+    )
+    db_session.add(minutes)
+    db_session.commit()
+    return minutes
+
+
+def test_m10_promotion_with_workbench_minutes_evidence(db_session):
+    """等级证据链引用工作台封存纪要 → 落库 + 事件标注 evidence_form。"""
+    admin, fde, _profile, project, _template = _l1_context(db_session)
+    minutes = _sealed_minutes(db_session, project, admin, sha=SHA256)
+
+    evidence = promote_user(
+        db_session,
+        actor=admin,
+        user_id=fde.id,
+        to_level="L1",
+        source_uri=f"workbench-minutes:{minutes.meeting_id}",
+        source_sha256=minutes.sealed_sha256,
+    )
+    db_session.flush()
+
+    assert evidence.to_level == "L1"
+    assert evidence.source_uri == f"workbench-minutes:{minutes.meeting_id}"
+    assert evidence.source_sha256 == minutes.sealed_sha256
+    event = db_session.scalar(
+        select(OperationEvent).where(
+            OperationEvent.event_type == "fde_level_promoted",
+            OperationEvent.target_id == fde.id,
+        )
+    )
+    assert event is not None
+    assert event.changes["evidence_form"] == "workbench_minutes"
+    assert event.changes["minutes_id"] == minutes.meeting_id
+
+
+def test_m10_minutes_fingerprint_mismatch_rejected(db_session):
+    """引用纪要必须携带真实封存指纹——伪造 sha256 422。"""
+    admin, fde, _profile, project, _template = _l1_context(db_session)
+    minutes = _sealed_minutes(db_session, project, admin, sha=SHA256)
+
+    with pytest.raises(DispatchServiceError) as excinfo:
+        promote_user(
+            db_session,
+            actor=admin,
+            user_id=fde.id,
+            to_level="L1",
+            source_uri=f"workbench-minutes:{minutes.meeting_id}",
+            source_sha256=hashlib.sha256(b"forged").hexdigest(),
+        )
+    assert excinfo.value.code == "minutes_fingerprint_mismatch"
+    # check 异常属性存在（routes 转错误响应用）
+    assert excinfo.value.status == 422
+
+
+def test_m10_minutes_not_found_rejected(db_session):
+    """引用不存在的纪要（或未封存会话）→ 422 minutes_not_found。"""
+    admin, fde, _profile, _project, _template = _l1_context(db_session)
+
+    with pytest.raises(DispatchServiceError) as excinfo:
+        promote_user(
+            db_session,
+            actor=admin,
+            user_id=fde.id,
+            to_level="L1",
+            source_uri=f"workbench-minutes:{uuid4()}",
+            source_sha256=SHA256,
+        )
+    assert excinfo.value.code == "minutes_not_found"

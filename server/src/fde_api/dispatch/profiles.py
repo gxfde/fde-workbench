@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from fde_api.auth.models import ROLE_ADMIN, ROLE_PROJECT_LEAD, User
 from fde_api.dispatch.errors import DispatchServiceError
 from fde_api.dispatch.models import DeliveryPackage, FdeLevelEvidence, FdeProfile
+from fde_api.meetings.models import ReviewMeetingMinutes
 from fde_api.projects.events import record_event
 from fde_api.workbench.models import Gate, Payment, Project, Quote
 
@@ -278,6 +279,36 @@ def promote_user(
     if to_level not in LEVELS:
         raise DispatchServiceError("invalid_level", "to_level 必须是 L1/L2/L3/L4。")
 
+    # goal-d10 M10（PartyMode §8：评审会产出可作为 Stage A/B 闸门证据引用）：
+    # 等级是 Stage A A1 门的数据源——证据链允许引用工作台评审会纪要，由服务端
+    # 钉住真实性：纪要必须存在（模型层 sealed_sha256 NOT NULL + len=64 check
+    # 钉死「行存在即已封存」），且指纹必须等于纪要封存摘要（引用不可伪造）。
+    minutes_ref: ReviewMeetingMinutes | None = None
+    if source_uri.startswith("workbench-minutes:"):
+        meeting_id = source_uri[len("workbench-minutes:"):].strip()
+        # 纪要按 meeting_id 定位（一会一纪要唯一约束；主键 id 是纪要行自身 id）。
+        minutes_ref = (
+            session.scalar(
+                select(ReviewMeetingMinutes).where(
+                    ReviewMeetingMinutes.meeting_id == meeting_id
+                )
+            )
+            if meeting_id
+            else None
+        )
+        if minutes_ref is None:
+            raise DispatchServiceError(
+                "minutes_not_found",
+                "workbench-minutes 引用的评审会纪要不存在（或尚未封存）。",
+                422,
+            )
+        if source_sha256.lower() != minutes_ref.sealed_sha256:
+            raise DispatchServiceError(
+                "minutes_fingerprint_mismatch",
+                "source_sha256 必须等于所引纪要的 sealed_sha256（指纹一致性）。",
+                422,
+            )
+
     profile = session.get(FdeProfile, user_id)
     if profile is None:
         raise DispatchServiceError("profile_not_found", "该用户尚无供给池档案。", 404)
@@ -324,6 +355,8 @@ def promote_user(
             "from_level": evidence.from_level,
             "to_level": to_level,
             "evidence_id": evidence.id,
+            "evidence_form": "workbench_minutes" if minutes_ref is not None else "external_document",
+            "minutes_id": minutes_ref.meeting_id if minutes_ref is not None else None,
             "deficits": [],
         },
     )

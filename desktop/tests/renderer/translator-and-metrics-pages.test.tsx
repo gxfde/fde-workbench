@@ -32,7 +32,7 @@ describe('翻译器门户（goal-d9 P3 全量）', () => {
     const user = userEvent.setup()
     mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
       if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
-        return Promise.resolve({ data: { id: 't1', status: 'pending' } })
+        return Promise.resolve({ id: 't1', status: 'pending' })
       }
       if (path === '/api/v1/translator/translations/t1') {
         return Promise.resolve({
@@ -63,7 +63,7 @@ describe('翻译器门户（goal-d9 P3 全量）', () => {
     const user = userEvent.setup()
     mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
       if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
-        return Promise.resolve({ data: { id: 't2', status: 'pending' } })
+        return Promise.resolve({ id: 't2', status: 'pending' })
       }
       if (path === '/api/v1/translator/translations/t2') {
         return Promise.resolve({
@@ -79,6 +79,50 @@ describe('翻译器门户（goal-d9 P3 全量）', () => {
     await user.type(screen.getByLabelText(/客户诉求原话/), '诉求')
     await user.click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/ai_output_invalid/)
+  })
+
+  it('采纳流（goal-d10）：ready 草稿选项目采纳 → POST adopt → 成功提示跳项目', async () => {
+    const user = userEvent.setup()
+    const adoptCalls: Array<{ path: string; body: unknown }> = []
+    mocks.apiRequest.mockImplementation((path: string, options?: { method?: string; body?: unknown }) => {
+      if (path === '/api/v1/projects?page=1&page_size=50') {
+        return Promise.resolve({ items: [{ id: 'p1', name: 'somwyn 交付' }], page: 1, page_size: 50, total: 1 })
+      }
+      if (path === '/api/v1/translator/translations' && options?.method === 'POST') {
+        return Promise.resolve({ id: 't9', status: 'pending' })
+      }
+      if (path === '/api/v1/translator/translations/t9') {
+        return Promise.resolve({
+          id: 't9', status: 'ready', ai_model: 'deepseek-v4-pro',
+          failure_code: null, failure_message: null,
+          result: {
+            executive_summary: '先采集后分析。',
+            key_business_problems: [
+              { text: '仓库出入库缺少系统留痕', severity: 'high', module: 'wms', classification: 'customer_stated' },
+            ],
+            open_questions: [],
+          },
+        })
+      }
+      if (path === '/api/v1/translator/translations/t9/adopt' && options?.method === 'POST') {
+        adoptCalls.push({ path, body: options.body })
+        return Promise.resolve({ id: 'g1', project_id: 'p1', status: 'draft', analysis_state: 'ready' })
+      }
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    await user.type(screen.getByLabelText(/客户诉求原话/), '仓库出入库必须过系统留痕')
+    await user.click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
+    expect(await screen.findByText('AI 草稿 · 待人工确认')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '采纳到项目' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '采纳到项目' })).toBeDisabled() // 未选项目时禁用
+    await screen.findByRole('option', { name: 'somwyn 交付' }) // 项目列表异步就绪
+    await user.selectOptions(screen.getByLabelText('采纳到项目'), 'p1')
+    await user.click(screen.getByRole('button', { name: '采纳到项目' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(/已采纳到项目「somwyn 交付」/)
+    expect(screen.getByRole('link', { name: '打开项目' })).toHaveAttribute('href', '#/projects/p1')
+    expect(adoptCalls).toHaveLength(1)
+    expect(adoptCalls[0].body).toEqual({ project_id: 'p1' })
   })
 })
 

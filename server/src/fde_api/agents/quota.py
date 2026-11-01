@@ -19,7 +19,9 @@ from fde_api.agents.models import SeatActionLedger
 # 透明化硬规则（自动交付 §6）：余量 ≤20% 提醒
 WARN_REMAINING_PCT = 20
 
-ACTION_TYPES = ("agent_run", "meeting_convene", "ai_chat")
+# translation = 翻译器草稿采纳（goal-d10 O-3 随路落账：翻译时无项目维度不计，
+# 采纳时刻项目上下文齐备随路落，计 1 unit，ref_id=translation_id）。
+ACTION_TYPES = ("agent_run", "meeting_convene", "ai_chat", "translation")
 
 
 def _month_start(now: datetime) -> datetime:

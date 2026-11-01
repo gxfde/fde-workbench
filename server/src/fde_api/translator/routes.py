@@ -10,6 +10,7 @@ from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
+from fde_api.guidance.service import GuidanceServiceError, adopt_translator_draft
 from fde_api.translator import service
 from fde_api.translator.service import TranslatorServiceError
 
@@ -18,6 +19,12 @@ translator_blueprint = Blueprint("translator", __name__, url_prefix="/api/v1/tra
 
 @translator_blueprint.errorhandler(TranslatorServiceError)
 def service_error(error: TranslatorServiceError):
+    return error_response(error.code, error.message, error.status)
+
+
+@translator_blueprint.errorhandler(GuidanceServiceError)
+def guidance_error(error: GuidanceServiceError):
+    # adopt 的闸（项目权限/ready/重复采纳）在 guidance 域，错误口径一致透出。
     return error_response(error.code, error.message, error.status)
 
 
@@ -51,3 +58,20 @@ def list_translations():
 def get_translation(translation_id: str):
     """翻译草稿详情（轮询就绪/失败态；创建人或 admin）。"""
     return _data(service.get_translation(actor=g.current_user, translation_id=translation_id))
+
+
+@translator_blueprint.post("/translations/<translation_id>/adopt")
+@require_auth
+def adopt_translation(translation_id: str):
+    """采纳翻译草稿为项目指引新版本（goal-d10 采纳流；O-3 额度随路落）。
+
+    编辑/逐条确认/确认（PATCH/confirm）统一在项目侧 guidance 既有端点——
+    一份指引一处编辑权；本端点只负责「进项目」这一步。
+    """
+    payload = _payload()
+    project_id = payload.get("project_id")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise TranslatorServiceError("invalid_request", "project_id 必须是非空字符串。", 400)
+    return _data(adopt_translator_draft(
+        actor=g.current_user, project_id=project_id.strip(), translation_id=translation_id,
+    ))
