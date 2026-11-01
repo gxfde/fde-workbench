@@ -99,6 +99,11 @@ ENTRIES = [
     ("agents.run_get", "GET", A + "/runs/{run_id}", "查询 agent run 溯源（状态/成本/降级链/产物 sha256 指纹）", ""),
     ("agents.tool_calls", "GET", A + "/runs/{run_id}/tool-calls", "查询 run 工具调用留痕（denied 明细可过滤）", "decision=allowed|denied 可选"),
     ("agents.cost", "GET", A + "/cost", "查询 agent 成本明细与月度汇总（project 需 project_id；seat/platform 仅系统运维员）", "scope=project|seat|platform，scope=project 时必带 project_id"),
+    # 评审会（goal-d5）：只读三条；召集/发言/收敛属人工收敛写路径不收——
+    # 评审结论永远经人工收敛封存，AI 不代拍板（沿门禁与 agents 先例）
+    ("meetings.templates", "GET", "/api/v1/meeting-templates", "评审会模板列表（三档门 lite/std/full；T2-lite=守卫+1 模块智能体、2 话轮）", ""),
+    ("meetings.get", "GET", "/api/v1/meetings/{meeting_id}", "查询评审会状态与话轮流（只读）", ""),
+    ("meetings.minutes", "GET", "/api/v1/meetings/{meeting_id}/minutes", "查询会议纪要三段式（共识/分歧/待办 + sealed_sha256 封存指纹 + triggered_by_run_id 溯源回链）", ""),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

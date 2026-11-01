@@ -276,6 +276,11 @@ def db_session(app) -> Session:
         __import__("fde_api.dispatch.models", fromlist=["DispatchRuleVersion"]).DispatchRuleVersion,
         __import__("fde_api.dispatch.models", fromlist=["FdeLevelEvidence"]).FdeLevelEvidence,
         __import__("fde_api.dispatch.models", fromlist=["FdeProfile"]).FdeProfile,
+        # goal-d5：纪要/话轮/会议（minutes→turns→meetings 子表先清；话轮
+        # 引用 agent_registry RESTRICT，会议引用 projects/users RESTRICT）。
+        __import__("fde_api.meetings.models", fromlist=["ReviewMeetingMinutes"]).ReviewMeetingMinutes,
+        __import__("fde_api.meetings.models", fromlist=["ReviewMeetingTurn"]).ReviewMeetingTurn,
+        __import__("fde_api.meetings.models", fromlist=["ReviewMeeting"]).ReviewMeeting,
         # goal-d3：审核节点与产物引用 project_solutions（RESTRICT），先于方案；
         # tool_calls/artifacts 引用 runs，同样先清。
         __import__("fde_api.agents.models", fromlist=["SolutionReviewCheckpoint"]).SolutionReviewCheckpoint,

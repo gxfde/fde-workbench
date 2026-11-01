@@ -38,7 +38,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # goal-r7 派单引擎：business_line 'FDE_DISPATCH' 放行（P2-3）
 # goal-d3 交付工作台：agent 五表 + solution_review_checkpoints +
 # project_solutions 生成来源四列（template_id 回填自 source_json 骨架指针）
-HEAD_REVISION = "d9c3e7f1a5b8"
+HEAD_REVISION = "f6a9c3e1d7b4"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

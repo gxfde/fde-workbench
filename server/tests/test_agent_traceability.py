@@ -49,6 +49,18 @@ def test_t1_reverse_chain_from_solution_to_problem_refs(db_session, d4_client, d
     db_session.add(solution)
     db_session.commit()
     agent = seed_agent(db_session, d4_settings)
+    # goal-d5 T2 强制门：solution 绑定的 run 须先有已封存强制纪要（d3→d4
+    # allowlist 断言升级同款演进；空引用三段式 = 守卫复核平凡闭合）
+    convened = leader.post(
+        "/api/v1/meetings",
+        json={"project_id": project.id, "template_id": "T2-lite", "solution_id": solution.id},
+    )
+    assert convened.status_code == 201, convened.json
+    sealed = leader.post(
+        f"/api/v1/meetings/{convened.json['data']['id']}/close",
+        json={"consensus": [{"text": "产物评审通过", "source_refs": []}], "disputes": [], "todos": []},
+    )
+    assert sealed.status_code == 200, sealed.json
     prime_run(
         d4_app,
         events=ScriptedEvents([[{"type": "tool_call", "tool": "read_file"}], [{"type": "done", "exit_code": 0}]]),

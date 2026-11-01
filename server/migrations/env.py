@@ -13,6 +13,7 @@ from fde_api.jobs import models as job_models  # noqa: F401
 from fde_api.documents import models as document_models  # noqa: F401
 from fde_api.solutions import models as solution_models  # noqa: F401
 from fde_api.agents import models as agent_models  # noqa: F401  (goal-d3)
+from fde_api.meetings import models as meeting_models  # noqa: F401  (goal-d5)
 from fde_api.guidance import models as guidance_models  # noqa: F401
 from fde_api.control import models as control_models  # noqa: F401
 from fde_api.mailing import models as mailing_models  # noqa: F401

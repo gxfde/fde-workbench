@@ -65,6 +65,7 @@ from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
+from fde_api.meetings.service import t2_gate_satisfied
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.solutions.models import ProjectSolution
@@ -352,11 +353,14 @@ def _finalize(
     known_refs: set[str],
     workspace: Path,
     solution_id: str | None,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """执行终态落账：状态/成本 + 工具留痕 + 产物校验（C-1）。
+) -> tuple[dict[str, Any], list[dict[str, Any]], bool]:
+    """执行终态落账：状态/成本 + 工具留痕 + 产物校验（C-1）+ T2 强制门（U2）。
 
     校验失败 ≠ 丢证据：能取指纹的产物一律留痕（reviewed=False 永不进终审）；
     文件缺失的产物无指纹（红线：storage_ref + sha256 必须成对完整）只记失败。
+    T2 门（goal-d5）：solution 绑定的 completed run =「artifact 提交终审」
+    迁移点——无已封存强制评审纪要则迁移被拒：run failed +
+    ``review_gate_open``，产物留痕但 linked_solution_id=None（不进终审通道）。
     """
     validation_failures: list[dict[str, Any]] = []
     prepared: list[tuple[ArtifactFile, str]] = []
@@ -382,16 +386,25 @@ def _finalize(
                 validation_failures.append({"path": relative, "reasons": problems})
 
     failed_validation = bool(validation_failures) and result.status == "completed"
+    gate_open = False
     with session_factory() as session, session.begin():
         run = session.get(AgentRun, run_id)
-        run.status = "failed" if failed_validation else result.status
+        gate_open = (
+            solution_id is not None
+            and result.status == "completed"
+            and not failed_validation
+            and not t2_gate_satisfied(session, run_id=run_id, solution_id=solution_id)
+        )
+        run.status = "failed" if (failed_validation or gate_open) else result.status
         run.token_cost = result.token_cost
         run.duration_ms = result.duration_ms
         run.exit_code = result.exit_code
-        if result.degraded or failed_validation:
+        if result.degraded or failed_validation or gate_open:
             run.degraded = True
         if failed_validation:
             run.degraded_reason = "artifact_validation_failed"
+        elif gate_open:
+            run.degraded_reason = "review_gate_open"
         elif result.degraded_reason:
             run.degraded_reason = result.degraded_reason
         for record in result.tool_calls:
@@ -406,7 +419,8 @@ def _finalize(
                 )
             )
         # 超时/熔断产物不入库（B-1）；completed 的产物含校验失败者一律留痕
-        # reviewed=False（C-1：拒绝进终审但不丢证据）
+        # reviewed=False（C-1：拒绝进终审但不丢证据）；T2 门开着时产物同样
+        # 留痕但不挂 solution（不进终审通道，review_gate_open 收口后重试）
         if result.status == "completed":
             for artifact, digest in prepared:
                 session.add(
@@ -416,11 +430,11 @@ def _finalize(
                         storage_ref=f"{run.id}/output/{artifact.path}"[:255],
                         sha256=digest,
                         reviewed=False,
-                        linked_solution_id=solution_id,
+                        linked_solution_id=None if gate_open else solution_id,
                     )
                 )
         session.flush()
-        return _serialize_run(session, run, detail=True), validation_failures
+        return _serialize_run(session, run, detail=True), validation_failures, gate_open
 
 
 def _execute_run(
@@ -539,7 +553,7 @@ def _execute_run(
             detail={"run_id": run_id, "fallback_level": "L2", "reason": str(error)},
         ) from error
 
-    data, failures = _finalize(
+    data, failures, gate_open = _finalize(
         db.session,
         run_id=run_id,
         result=result,
@@ -554,6 +568,14 @@ def _execute_run(
             "产物校验未通过，已拒绝进入终审；请回退补录后重试。",
             422,
             detail={"run_id": run_id, "failures": failures},
+        )
+    if gate_open:
+        # U2：T2 强制门——无已封存强制评审纪要，产物提交终审被状态机拒绝
+        raise _error(
+            "review_gate_open",
+            "T2 评审门未放行：请先召开产物评审会并封存纪要，再重试提交。",
+            409,
+            detail={"run_id": run_id, "gate": "T2", "required": "sealed_mandatory_minutes"},
         )
     return data, 201
 

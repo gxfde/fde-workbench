@@ -63,6 +63,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # S1 编程工作台（goal-d4）：agent 注册表 + run 生命周期（适配器/溯源/成本）
     from fde_api.agents.routes import agents_blueprint
     app.register_blueprint(agents_blueprint)
+    # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
+    from fde_api.meetings.routes import meetings_blueprint
+    app.register_blueprint(meetings_blueprint)
     # WP-E SES：SNS 退信/投诉回调端点（默认随模块关闭，端点校验失败一律 403）
     app.register_blueprint(mailing_blueprint)
     app.register_blueprint(control_blueprint)
