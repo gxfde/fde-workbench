@@ -26,7 +26,7 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 
 ## 当前状态（2026-11-01，goal-d11 后）
 
-- v0.2.0：门禁 G1–G9、报价/收款/合同、集成桥（宿主 4h 采集 + 手动采集按钮）、内嵌使用帮助；本地 main == fork/main。
+- v0.2.0：门禁 G1–G9、报价/收款/合同、集成桥（宿主 4h 采集 + 手动采集按钮）、内嵌使用帮助；本地 main 允许落后——**权威=fork/main**（开新轮先 fetch 对齐）。
 - 版本号按发布列车同步 `desktop/package.json` 与 `server/pyproject.toml`，tag 打在 fork。
 - 待办台账：`docs/后续需求台账-F5与D11.md`；历史审计存档：`docs/goal-audit-2026-10-26.md`；派单引擎 goal 循环报告：`docs/goal-r<N>-派单引擎.md`。
 - 口径数字（实测 2026-11-02，goal-d12 试点前工程收尾轮 / d11 口径顺延）：服务端 **96 张业务表**（不含 alembic_version；d12 零迁移零服务端改动）、迁移头 `c3e7a9b1d5f4`（**22 个 revision**，链条 …→ c5e9b3d7a1f5 → a1d3f5b7c9e2 → c3e7a9b1d5f4）、蓝图路由 **269**、api_catalog ENTRIES **94**、服务端 pytest **1698 收集 = 1692 passed + 6 skipped**（d12 零改动顺延）、桌面端 vitest **730/730**（d12 +5，串行口径 --no-file-parallelism）。goal-d12：**pilot 路由归一化**（authorizedRoute 补 #/pilot admin 专属规则——d11 漏加致非 admin 直输渲染页面吃裸 403；挂账④销号）+ **翻译器门户历史一览**（消费 d11 的 GET /translations 列表：最近 20 条状态徽标+已采纳计数+「查看」载入结果卡再采纳）+ **试点执行手册**（`docs/试点执行手册-runbook.md`：开关族/T6 评审流/采纳流/六指标口径，待拍板项显式标注）——详见 `docs/goal-d12-交付工作台.md`。goal-d11（压缩）：T6 高成本 run 前评审（t6_review_cost_threshold 0=关默认+max_cost_units 档判据+项目级关闭+T6-lite+t6_gate_satisfied 侧链）+ 试点包三件（#/pilot 页/插件种子/checkpoint=SignoffConsole 销号）+ d10 挂账清尾——详见 `docs/goal-d11-交付工作台.md`。
