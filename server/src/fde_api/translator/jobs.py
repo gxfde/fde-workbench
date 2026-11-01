@@ -117,12 +117,15 @@ def _client(settings) -> DeepSeekClient:
     injected = current_app.extensions.get("fde_api_translator_ai")
     if injected is not None:
         return injected
-    # goal-d13 拍板：翻译管道走 kimi 槽位（Moonshot OpenAI 兼容端点）。
+    # goal-d13 拍板：翻译管道走独立 kimi 槽位（Moonshot OpenAI 兼容端点）。
     # DeepSeekClient 本体是通用 OpenAI 兼容 JSON 客户端（model/json_object/
     # max_tokens 三参数无厂商专有字段），换 base_url/key/model 即换供应商；
     # 不配 fallback（kimi 槽位无备用模型，失败走本模块重试语义）。
+    # base_url 取翻译槽位自己的（goal-d13 补正）：部署 env 可能把共享
+    # kimi_base_url 指向另一家 OpenAI 兼容端点，共用会把 kimi-k3 打到
+    # 没有该模型的端点上。
     return DeepSeekClient(
-        base_url=settings.kimi_base_url,
+        base_url=settings.kimi_translator_base_url,
         api_key=settings.kimi_translator_api_key,
         model=settings.kimi_translator_model,
         timeout_seconds=settings.kimi_timeout_seconds,

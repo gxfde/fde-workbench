@@ -18,6 +18,7 @@ from fde_api.ai.deepseek import DeepSeekError
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
+from fde_api.config import Settings
 from fde_api.guidance.ai_schema import LIST_FIELDS
 from fde_api.jobs.models import BackgroundJob, OutboxEvent
 from fde_api.jobs.reconcile import RECOVERABLE_JOB_TYPES
@@ -228,6 +229,45 @@ def test_kimi_slot_unconfigured_fails_classified(db_session, d4_app, d4_client, 
     assert row.status == "failed"
     assert row.failure_code == "ai_service_not_configured"
     assert row.ai_model == ""  # ai_model 只在 ready 分支落账，失败不虚标模型
+
+
+def test_translator_uses_own_base_url_slot(d4_app, d4_settings, monkeypatch) -> None:
+    """goal-d13 补正：翻译管道用**翻译槽位自己的** base_url。
+    部署 env 可能把共享 FDE_KIMI_BASE_URL 指向另一家 OpenAI 兼容端点（如
+    minimaxi），若翻译共用该地址，就会拿 kimi-k3 去打没有该模型的端点。
+    断言只钉「槽位独立 + 取值来源」，不依赖 .env 实际值（CI 与本机不同）。"""
+    captured: dict[str, object] = {}
+
+    class _CapturingClient:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(translator_jobs, "DeepSeekClient", _CapturingClient)
+    d4_app.extensions.pop("fde_api_translator_ai", None)  # 走真实构造路径
+    settings = d4_settings.model_copy(
+        update={
+            "kimi_base_url": "https://api.minimaxi.com/v1",  # 共享槽位指向别家
+            "kimi_translator_base_url": "https://api.moonshot.cn/v1",
+            "kimi_translator_model": "kimi-k3",
+        }
+    )
+    with d4_app.app_context():
+        translator_jobs._client(settings)
+    assert captured["base_url"] == "https://api.moonshot.cn/v1"
+    assert captured["base_url"] != settings.kimi_base_url  # 槽位独立，不被共享槽位牵连
+    assert captured["model"] == "kimi-k3"
+
+
+def test_translator_base_url_default_matches_kimi_model(d4_settings) -> None:
+    """goal-d13 补正：翻译槽位 base_url 默认与默认模型 kimi-k3 自洽（Moonshot）；
+    且它是**独立一条配置**——改翻译槽位不动共享 kimi 槽位（断言 env 无关，
+    只比「改一个不动另一个」）。"""
+    fields = Settings.model_fields
+    assert fields["kimi_translator_base_url"].default == "https://api.moonshot.cn/v1"
+    assert fields["kimi_translator_model"].default == "kimi-k3"
+    moved = d4_settings.model_copy(update={"kimi_translator_base_url": "https://other.example.com/v1"})
+    assert moved.kimi_translator_base_url == "https://other.example.com/v1"
+    assert moved.kimi_base_url == d4_settings.kimi_base_url  # 共享槽位不受翻译槽位牵连
 
 
 def test_replay_skips_terminal_rows(db_session, d4_app, d4_client, d4_settings) -> None:

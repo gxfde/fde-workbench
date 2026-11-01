@@ -35,8 +35,8 @@ class SystemConfiguration(Base, TimestampMixin, VersionedMixin):
 PUBLIC_FIELDS = {
     "deepseek_base_url", "deepseek_industry_template_model", "deepseek_project_presurvey_model",
     "deepseek_ai_opportunity_model", "deepseek_research_export_model", "deepseek_document_generation_model",
-    "deepseek_timeout_seconds", "kimi_base_url", "kimi_project_presurvey_model", "kimi_translator_model",
-    "kimi_timeout_seconds",
+    "deepseek_timeout_seconds", "kimi_base_url", "kimi_project_presurvey_model", "kimi_translator_base_url",
+    "kimi_translator_model", "kimi_timeout_seconds",
     "dsh_enabled", "dsh_base_url", "dsh_runtime_version", "dsh_protocol_version", "dsh_timeout_seconds",
     "ai_internal_api_url", "weixin_enabled", "dsh_market_enabled", "dsh_market_registry_url",
     "dsh_market_timeout_seconds", "dsh_market_max_catalog_bytes", "clawbot_enabled", "storage_backend",
@@ -54,7 +54,7 @@ INT_RANGES = {
     "dsh_market_max_catalog_bytes": (100_000, 100_000_000), "clamav_port": (1, 65535),
     "clamav_timeout_seconds": (1, 300), "clamav_socket_timeout_seconds": (1, 300),
 }
-URL_FIELDS = {"deepseek_base_url", "kimi_base_url", "dsh_base_url", "ai_internal_api_url", "dsh_market_registry_url", "oss_endpoint"}
+URL_FIELDS = {"deepseek_base_url", "kimi_base_url", "kimi_translator_base_url", "dsh_base_url", "ai_internal_api_url", "dsh_market_registry_url", "oss_endpoint"}
 
 # 派单引擎时间常数与费率（设计 §6.2 唯一权威表 + §4.3 Top-N + §7.1 席位分配）。
 # P0-7：**锁定不可运行时改**——不进 PUBLIC_FIELDS（那是 PUT 可写集），只在 GET

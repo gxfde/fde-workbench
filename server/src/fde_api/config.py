@@ -49,8 +49,12 @@ class Settings(BaseSettings):
     kimi_base_url: str = "https://api.moonshot.cn/v1"
     kimi_project_presurvey_api_key: SecretStr | None = Field(default=None, repr=False)
     kimi_project_presurvey_model: str = "kimi-k3"
-    # goal-d13 拍板：翻译管道独立 kimi 槽位（key 与预调研分开配，换档不互相牵连）。
+    # goal-d13 拍板：翻译管道独立 kimi 槽位（key/base_url/model 与预调研分开配，
+    # 换档不互相牵连）。base_url 也独立的原因：部署 env 可能把共享 kimi_base_url
+    # 指向另一家 OpenAI 兼容供应商（如 minimaxi），若翻译共用该地址，就会拿
+    # kimi-k3 去打没有该模型的端点。独立后默认与 kimi-k3 自洽（Moonshot）。
     kimi_translator_api_key: SecretStr | None = Field(default=None, repr=False)
+    kimi_translator_base_url: str = "https://api.moonshot.cn/v1"
     kimi_translator_model: str = "kimi-k3"
     kimi_timeout_seconds: int = Field(default=180, ge=10, le=600)
     # Kimi 槽位切到非 Moonshot 供应商（如 MiniMax）时的两个协议开关：
