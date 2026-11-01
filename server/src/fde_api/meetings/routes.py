@@ -1,8 +1,8 @@
-"""meetings 蓝图：6 路由（goal-d5，PartyMode §6 REST 增量）。
+"""meetings 蓝图：9 路由（goal-d5 六路由 + goal-d7 pause/resume/cost）。
 
-api_catalog 只收只读三条（模板/会议状态/纪要）；POST 召集/发言/收敛属
-人工授权写路径，继续不收（沿门禁三路由与 d4 agents 先例）——评审结论
-永远经人工收敛，AI 不代拍板。
+api_catalog 只收只读四条（模板/会议状态/纪要/会议成本）；POST 召集/发言/
+收敛/暂停/恢复属人工授权写路径，继续不收（沿门禁三路由与 d4 agents 先例）
+——评审结论永远经人工收敛，AI 不代拍板。
 """
 
 from flask import Blueprint, g, jsonify, request
@@ -81,3 +81,24 @@ def get_template_checklist(template_id):
     交人工执行，不阻塞交付（模板本就是门禁语义，checklist 是其人工形态）。
     """
     return _data(service.get_template_checklist(template_id))
+
+
+@meetings_blueprint.post("/meetings/<meeting_id>/pause")
+@require_auth
+def pause_meeting(meeting_id):
+    """M7 中断恢复：主持人暂停会议（恢复窗口 = 24h，超窗自动收场）。"""
+    return _data(service.pause_meeting(actor=g.current_user, meeting_id=meeting_id))
+
+
+@meetings_blueprint.post("/meetings/<meeting_id>/resume")
+@require_auth
+def resume_meeting(meeting_id):
+    """M7 中断恢复：恢复暂停会议；≤24h 复活，超窗自动收场出未完成纪要并 409。"""
+    return _data(service.resume_meeting(actor=g.current_user, meeting_id=meeting_id))
+
+
+@meetings_blueprint.get("/meetings/<meeting_id>/cost")
+@require_auth
+def get_meeting_cost(meeting_id):
+    """M9 成本按会议归集：召集计费 + 触发 run 累计（只读，进 api_catalog）。"""
+    return _data(service.get_meeting_cost(actor=g.current_user, meeting_id=meeting_id))

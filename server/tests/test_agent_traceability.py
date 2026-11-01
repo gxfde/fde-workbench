@@ -49,6 +49,18 @@ def test_t1_reverse_chain_from_solution_to_problem_refs(db_session, d4_client, d
     db_session.add(solution)
     db_session.commit()
     agent = seed_agent(db_session, d4_settings)
+    # goal-d7 T1 前置闸适配：产物生成 run 前须有已封存 T1 纪要侧链 solution
+    # （T1 纪要与 T2 门语义分离，不替代下方 T2 纪要）
+    t1_convened = leader.post(
+        "/api/v1/meetings",
+        json={"project_id": project.id, "template_id": "T1-lite", "solution_id": solution.id},
+    )
+    assert t1_convened.status_code == 201, t1_convened.json
+    t1_sealed = leader.post(
+        f"/api/v1/meetings/{t1_convened.json['data']['id']}/close",
+        json={"consensus": [{"text": "计划评审通过", "source_refs": []}], "disputes": [], "todos": []},
+    )
+    assert t1_sealed.status_code == 200, t1_sealed.json
     # goal-d5 T2 强制门：solution 绑定的 run 须先有已封存强制纪要（d3→d4
     # allowlist 断言升级同款演进；空引用三段式 = 守卫复核平凡闭合）
     convened = leader.post(
@@ -108,8 +120,9 @@ def test_t1_reverse_chain_from_solution_to_problem_refs(db_session, d4_client, d
 
 
 def test_agents_catalog_exposes_readonly_four_only() -> None:
-    """api_catalog 只收 agents 只读四条；写路径（run/handoff/retry）不收。"""
-    readonly = {"agents.list", "agents.run_get", "agents.tool_calls", "agents.cost"}
+    """api_catalog 只收 agents 只读（goal-d7 起 5 条：+agents.quota O-3 配额）；
+    写路径（run/handoff/retry/rehearse/recover）不收。"""
+    readonly = {"agents.list", "agents.run_get", "agents.tool_calls", "agents.cost", "agents.quota"}
     assert readonly <= set(CATALOG)
     for key in readonly:
         assert CATALOG[key]["method"] == "GET"

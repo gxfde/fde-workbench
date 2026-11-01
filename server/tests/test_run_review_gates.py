@@ -35,6 +35,18 @@ _MINUTES_OK = {
 }
 
 
+def _seed_t1(leader, project, solution) -> None:
+    """goal-d7 T1 前置闸适配（最小侵入）：产物生成 run 前须有已封存 T1
+    纪要侧链 solution——本文件全部用例经 _setup 铺一次，断言逻辑零改动。"""
+    convened = leader.post(
+        "/api/v1/meetings",
+        json={"project_id": project.id, "template_id": "T1-lite", "solution_id": solution.id},
+    )
+    assert convened.status_code == 201, convened.json
+    sealed = leader.post(f"/api/v1/meetings/{convened.json['data']['id']}/close", json=_MINUTES_OK)
+    assert sealed.status_code == 200, sealed.json
+
+
 def _setup(db_session, d4_client, d4_settings):
     leader = api_client(d4_client, db_session, d4_settings, "project_lead")
     project = _persist_project(db_session, leader.user, code=f"D5G{uuid4().hex[:6]}")
@@ -42,6 +54,7 @@ def _setup(db_session, d4_client, d4_settings):
     db_session.add(solution)
     db_session.commit()
     agent = seed_agent(db_session, d4_settings)
+    _seed_t1(leader, project, solution)
     return leader, project, solution, agent
 
 

@@ -119,6 +119,24 @@ class Settings(BaseSettings):
     # run 卡死恢复新鲜窗口（分钟）：窗口内不许恢复（防误恢复在途 run）；
     # 0 = 立即可恢复（测试口径）
     agent_recover_stale_minutes: int = Field(default=15, ge=0)
+    # goal-d7 O-3 额度族（自动交付 §6）：¥3,980/年含 100 次「工作台动作」/月，
+    # seat 归集；0 = 不限额。超额**只标注不拦截**（over_quota=true + 加油包
+    # 入口）——「交付中途绝不静默断供」，只限速不限质。
+    seat_action_quota_monthly: int = Field(default=100, ge=0)
+    # 加油包计价（透明计价，价格前置公示）：¥0.5–2/次量级，此处为公示价签
+    seat_action_pack_price_yuan: float = Field(default=1.0, ge=0)
+    seat_action_pack_note: str = "加油包按次计价（¥0.5–2/次量级，价格前置公示），只限速不限质；用尽次月自动恢复。"
+    # 30 天重校钩子（自动交付 §6 重校条款）：窗口起点留空 = 以最早
+    # seat_action_ledger.created_at 推导；到期后配额响应标 review_due（回写人工）
+    seat_quota_review_days: int = Field(default=30, ge=1)
+    seat_quota_started_at: str = ""
+    # goal-d7 PM-2 内容层（PartyMode §4.2）：角色卡处方话术禁令（逗号分隔
+    # denylist；persona 发言命中即 422 persona_prescription_blocked，质量守卫
+    # 抽查的系统级落点）
+    persona_forbidden_patterns: str = "你应该签,你不该签,必须签,建议签署,不应该签"
+    # goal-d7 M7 中断恢复：live/paused 会议超时自动收场阈值（小时，懒收场——
+    # 会议访问点触发 reap）；恢复窗口同此值（≤24h）
+    meeting_stale_close_hours: int = Field(default=24, ge=1)
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

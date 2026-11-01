@@ -105,6 +105,10 @@ ENTRIES = [
     ("meetings.get", "GET", "/api/v1/meetings/{meeting_id}", "查询评审会状态与话轮流（只读）", ""),
     ("meetings.minutes", "GET", "/api/v1/meetings/{meeting_id}/minutes", "查询会议纪要三段式（共识/分歧/待办 + sealed_sha256 封存指纹 + triggered_by_run_id 溯源回链）", ""),
     ("solutions.review_trail", "GET", "/api/v1/projects/{project_id}/solutions/{solution_id}/review-trail", "方案终审台纪要回链（U5）：方案关联的全部评审会议与已封存纪要（run 家族 ∪ solution 侧链）", ""),
+    # 评审会/额度（goal-d7）：只读增量两条——会议成本按会归集（M9）与 O-3
+    # 配额快照（消耗/提醒/加油包/重校窗口，透明只读无拦截）
+    ("meetings.cost", "GET", "/api/v1/meetings/{meeting_id}/cost", "查询会议成本归集（M9）：召集计费 + 触发 run 累计（沿用 M-1 成本口径）", ""),
+    ("agents.quota", "GET", A + "/quota", "O-3 配额快照（本席）：当月动作消耗/余量 ≤20% 提醒/超额标注/加油包计价入口/30 天重校窗口（透明只读，绝不断供）", "user_id 可选（他席仅系统运维员）"),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

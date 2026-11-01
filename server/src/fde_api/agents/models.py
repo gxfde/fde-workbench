@@ -74,6 +74,10 @@ class AgentRun(Base, TimestampMixin):
             "cost_owner_type IN ('project', 'seat', 'platform')",
             name="ck_agent_runs_cost_owner_type",
         ),
+        CheckConstraint(
+            "difficulty IN ('standard', 'high')",
+            name="ck_agent_runs_difficulty",
+        ),
         CheckConstraint("token_cost >= 0", name="ck_agent_runs_token_cost"),
         CheckConstraint("duration_ms >= 0", name="ck_agent_runs_duration"),
         Index("ix_agent_runs_project_status", "project_id", "status"),
@@ -103,13 +107,18 @@ class AgentRun(Base, TimestampMixin):
     retry_of: Mapped[str | None] = mapped_column(String(36))
     # 幂等键 = solution_id + 上下文指纹（自动交付 §5.1）
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
-    # 成本归属（O-3 待 d7 拍板口径，先落枚举骨架；seat 归集随 d7 额度落地）
+    # 成本归属（O-3 d7 定稿：沙箱 run 按 project 归集——自动交付 §6 归属分层）
     cost_owner_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="project", server_default="project"
     )
     cost_owner_id: Mapped[str | None] = mapped_column(String(64))
     # L3 转人工接管人（自动交付 §3.5 收口）
     handoff_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    # T4 高难度加座的 run 侧事实（总纲 §2.2 T4）：发起人声明，责任人人工承担；
+    # 派单订单难度自动带入随 d8（goal-d7 报告 §二 决议 2）
+    difficulty: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="standard", server_default="standard"
+    )
 
 
 class AgentArtifact(Base, TimestampMixin):
@@ -167,6 +176,37 @@ class AgentCredential(Base, TimestampMixin):
     credential_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     # system_operator 才能配置（§6.4 凭证分层）；可空留系统级种子凭据
     created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class SeatActionLedger(Base, TimestampMixin):
+    """O-3 额度台账（goal-d7）：一次工作台动作 = 一条行，seat 归集。
+
+    一次动作 = 一次完整管道（自动交付 §6）：agent_run=一次方案生成 /
+    meeting_convene=一场评审会（工具面；人工开会不占额度）/
+    ai_chat=一次预调研分析（worker 成功就绪时计）。超额只标注不拦截
+    （over_quota=透明计价加油包的标注位）——「交付中途绝不静默断供」。
+    演练 run（idempotency_key rehearsal: 前缀）零计量。
+    """
+
+    __tablename__ = "seat_action_ledger"
+    __table_args__ = (
+        CheckConstraint(
+            "action_type IN ('agent_run', 'meeting_convene', 'ai_chat')",
+            name="ck_seat_action_ledger_action_type",
+        ),
+        CheckConstraint("units >= 0", name="ck_seat_action_ledger_units"),
+        Index("ix_seat_action_ledger_user_created", "user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    # seat 归集键：动作发起人（run 发起人 / 召集触发 run 的发起人 / 分析创建人）
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    # 溯源指针：run id / meeting id / analysis id（软引用不设 FK，沿
+    # agent_runs.retry_of 偏离先例——被引用行允许归档清理）
+    ref_id: Mapped[str | None] = mapped_column(String(64))
+    units: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    over_quota: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class SolutionReviewCheckpoint(Base, TimestampMixin):

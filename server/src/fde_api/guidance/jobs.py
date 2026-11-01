@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from flask import current_app
 
+from fde_api.agents.quota import record_action as record_seat_action
 from fde_api.ai.kimi import KimiError, KimiFileClient
 from fde_api.extensions import db, object_storage
 from fde_api.files.models import ProjectFileVersion
@@ -123,6 +124,16 @@ def handle_presurvey_analysis(job) -> None:
         analysis.failure_code = ""
         analysis.failure_message = ""
         analysis.version += 1
+        # O-3（goal-d7）：一次预调研分析 = 一次 ai_chat 动作，成功就绪时计
+        # （失败/重试不计）；seat 归集 = 分析创建人；超额只标注不拦截
+        record_seat_action(
+            session,
+            project_id=analysis.project_id,
+            user_id=analysis.created_by_user_id,
+            action_type="ai_chat",
+            ref_id=analysis.id,
+            quota_monthly=int(getattr(settings, "seat_action_quota_monthly", 100) or 0),
+        )
         session.commit()
     except Exception as error:  # noqa: BLE001 - 分析绝不能卡在 analyzing 态
         # 只记录异常类型：异常串可能携带用户文档内容，不进日志。

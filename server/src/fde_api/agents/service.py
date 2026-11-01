@@ -72,13 +72,13 @@ from fde_api.agents.sandbox import (
     SandboxHandle,
     SandboxProfile,
 )
-from fde_api.agents import pilot
+from fde_api.agents import pilot, quota as seat_quota
 from fde_api.agents.tools import effective_run_tools, run_face_declared
 from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
-from fde_api.meetings.service import latest_sealed_mandatory_minutes, t2_gate_satisfied
+from fde_api.meetings.service import latest_sealed_mandatory_minutes, t1_gate_satisfied, t2_gate_satisfied
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.solutions.models import ProjectSolution
@@ -192,6 +192,12 @@ def _unavailability(session: Any, agent: AgentRegistry, actor: User) -> str | No
 
 def list_agents(*, actor: User) -> dict[str, Any]:
     with db.session() as session:
+        # S2 编排种子懒初始化（goal-d7，沿 gates.json 首访装载先例）：
+        # 守卫 + 六模块智能体 + 三角色卡幂等落库
+        from fde_api.agents.seeds import ensure_agent_seeds
+
+        ensure_agent_seeds(session)
+        session.commit()
         items = []
         for agent in session.scalars(select(AgentRegistry).order_by(AgentRegistry.created_at, AgentRegistry.id)):
             reason = _unavailability(session, agent, actor)
@@ -291,6 +297,7 @@ def _serialize_run(session: Any, run: AgentRun, *, detail: bool = False) -> dict
         "cost_owner_type": run.cost_owner_type,
         "cost_owner_id": run.cost_owner_id,
         "handoff_user_id": run.handoff_user_id,
+        "difficulty": run.difficulty,
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "updated_at": run.updated_at.isoformat() if run.updated_at else None,
     }
@@ -480,6 +487,7 @@ def _execute_run(
     context_text: str,
     problem_refs: tuple[str, ...],
     effective_tools: frozenset[str],
+    difficulty: str = "standard",
 ) -> tuple[dict[str, Any], int]:
     """run 执行主干（start/retry 共用）：落 queued → 沙箱 → 适配器 → 落账。
 
@@ -505,8 +513,20 @@ def _execute_run(
             cost_owner_type="project",
             cost_owner_id=project.id,
             retry_of=retry_of,
+            difficulty=difficulty,
         )
         session.add(run)
+        # O-3（goal-d7）：一次方案生成 run = 一次「工作台动作」，发起时刻
+        # 计（seat 归集 = 发起人；超额只标注不拦截——绝不断供；演练 run
+        # 不经本函数，天然零计量）
+        seat_quota.record_action(
+            session,
+            project_id=project.id,
+            user_id=actor.id,
+            action_type="agent_run",
+            ref_id=run_id,
+            quota_monthly=int(settings.seat_action_quota_monthly or 0),
+        )
         record_event(
             session,
             actor,
@@ -618,7 +638,7 @@ def _execute_run(
 
 def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
     settings = _settings()
-    if set(payload) - {"project_id", "solution_id", "idempotency_key"}:
+    if set(payload) - {"project_id", "solution_id", "idempotency_key", "difficulty"}:
         raise _error("invalid_request", "请求字段无效。")
     project_id = payload.get("project_id")
     if not isinstance(project_id, str) or not project_id:
@@ -629,11 +649,23 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
     client_key = payload.get("idempotency_key")
     if client_key is not None and (not isinstance(client_key, str) or not client_key or len(client_key) > 160):
         raise _error("invalid_request", "idempotency_key 必须为 ≤160 字符的字符串。")
+    difficulty = payload.get("difficulty") or "standard"
+    if difficulty not in ("standard", "high"):
+        raise _error("invalid_request", "difficulty 仅支持 standard/high。")
 
     with db.session() as session:
         agent = session.get(AgentRegistry, agent_id)
         if agent is None:
             raise _error("agent_not_found", "智能体不存在。", 404)
+        if agent.kind == "persona":
+            # 角色卡不是可执行智能体（PartyMode §4.2：静态 persona 配置）——
+            # 只在评审会发言（编排中枢到场表），无沙箱 run 通道
+            raise _error(
+                "persona_not_executable",
+                "角色卡（persona）不能发起 run：它只在评审会中提供模拟视角。",
+                409,
+                detail={"agent_id": agent.id, "kind": agent.kind},
+            )
         project = session.get(Project, project_id)
         if project is None:
             raise _error("project_not_found", "项目不存在或无权访问。", 404)
@@ -649,6 +681,16 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
             solution = session.get(ProjectSolution, solution_id)
             if solution is None or solution.project_id != project.id:
                 raise _error("solution_not_found", "方案不存在或不属于该项目。", 404)
+            # T1 计划评审强制门（总纲 §2.2 T1，U2 同族状态机级）：带
+            # solution 的 run = 进入产物生成——无已封存 T1 纪要侧链该
+            # solution 则不放行（retry 不复闸：家族首 run 已被闸）
+            if not t1_gate_satisfied(session, solution_id=solution.id):
+                raise _error(
+                    "t1_gate_open",
+                    "T1 计划评审门未放行：请先召开计划评审会（T1 模板）并封存纪要，再发起产物生成。",
+                    409,
+                    detail={"gate": "T1", "solution_id": solution.id, "required": "sealed_t1_minutes"},
+                )
 
         idempotency_key = client_key or _derived_idempotency_key(agent.id, project.id, solution_id)
         existing = session.scalar(
@@ -699,6 +741,7 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
         context_text=context_text,
         problem_refs=problem_refs,
         effective_tools=effective_tools,
+        difficulty=difficulty,
     )
 
 
@@ -869,6 +912,7 @@ def retry_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> tuple[dic
         context_text=context_text,
         problem_refs=problem_refs,
         effective_tools=effective_tools,
+        difficulty=original.difficulty,
     )
 
 
@@ -973,6 +1017,18 @@ def get_pilot_report(*, actor: User) -> dict[str, Any]:
         raise _error("pilot_report_forbidden", "试点报告仅系统运维员可查。", 403)
     with db.session() as session:
         return pilot.build_report(session, _settings())
+
+
+def get_seat_quota(*, actor: User, user_id: str | None) -> dict[str, Any]:
+    """O-3 配额快照（goal-d7）：本席默认（self），他席 admin-only。透明只读
+    ——消耗显示/≤20% 提醒/超额标注/加油包计价入口/30 天重校窗口。"""
+    target = actor.id
+    if user_id and user_id != actor.id:
+        if actor.role != "admin":
+            raise _error("quota_scope_forbidden", "他席配额仅系统运维员可查。", 403)
+        target = user_id
+    with db.session() as session:
+        return seat_quota.quota_snapshot(session, _settings(), user_id=target)
 
 
 def get_cost(*, actor: User, scope: str | None, project_id: str | None) -> dict[str, Any]:

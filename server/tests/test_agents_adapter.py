@@ -168,7 +168,8 @@ def test_get_agents_lists_registry_with_availability_reasons(db_session, d4_clie
     body = leader.get("/api/v1/agents")
     assert body.status_code == 200
     items = {item["name"]: item for item in body.json["data"]["items"]}
-    assert len(items) == 4
+    # goal-d7：list_agents 懒装载编排种子（守卫+六模块智能体+三角色卡）+10
+    assert len(items) == 4 + 10
     assert items["ZCode 沙箱智能体"]["available"] is True
     assert items["ZCode 沙箱智能体"]["id"] == available.id
     assert items["停用智能体"]["unavailable_reason"] == "disabled"

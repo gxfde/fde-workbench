@@ -1,0 +1,116 @@
+{
+  "kind": "agent_registry_seeds",
+  "version": 1,
+  "agents": [
+    {
+      "kind": "zcode",
+      "name": "质量守卫",
+      "capability_tier": "agent.quality_guard",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "评审会质量守卫：只读校验/评分/拦截（PartyMode §4 四类角色之一）"
+    },
+    {
+      "kind": "zcode",
+      "name": "售前智能体",
+      "capability_tier": "agent.module.presales",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：售前结构化输入与问题清单提炼"
+    },
+    {
+      "kind": "zcode",
+      "name": "方案智能体",
+      "capability_tier": "agent.module.solution",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：方案草稿与不可变 SOW 组装"
+    },
+    {
+      "kind": "zcode",
+      "name": "报价智能体",
+      "capability_tier": "agent.module.pricing",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：报价草稿（数值禁区：报价卡系数不进模板，D10 待拍板 ③）"
+    },
+    {
+      "kind": "zcode",
+      "name": "部署智能体",
+      "capability_tier": "agent.module.deployment",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：部署实施与入场条件核对"
+    },
+    {
+      "kind": "zcode",
+      "name": "验收智能体",
+      "capability_tier": "agent.module.acceptance",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：门禁证据 G1–G9 核对与差距项"
+    },
+    {
+      "kind": "zcode",
+      "name": "知识库智能体",
+      "capability_tier": "agent.module.knowledge",
+      "sandbox_profile": "default",
+      "allowed_tools": ["read_file"],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "模块智能体：知识片段检索与惯例引用（只讲惯例不开处方）"
+    },
+    {
+      "kind": "persona",
+      "name": "模拟财务视角",
+      "capability_tier": "agent.persona.finance",
+      "sandbox_profile": "none",
+      "allowed_tools": [],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "评审角色卡：财务口径（PM-2 三层防火墙：徽标常驻/只讲惯例不开处方/专业结论只进待办段）"
+    },
+    {
+      "kind": "persona",
+      "name": "模拟法务视角",
+      "capability_tier": "agent.persona.legal",
+      "sandbox_profile": "none",
+      "allowed_tools": [],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "评审角色卡：法务口径（PM-2 三层防火墙约束，模拟岗位 ≠ 专业意见）"
+    },
+    {
+      "kind": "persona",
+      "name": "模拟客户方IT视角",
+      "capability_tier": "agent.persona.customer_it",
+      "sandbox_profile": "none",
+      "allowed_tools": [],
+      "credential_ref": null,
+      "max_cost_units": 0,
+      "max_duration_ms": 0,
+      "description": "评审角色卡：客户方 IT/生产代表视角（PM-2 三层防火墙约束）"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-"""agents 蓝图：10 路由（goal-d4 七路由 + goal-d6 演练/恢复/试点报告）。
+"""agents 蓝图：11 路由（goal-d4 七路由 + goal-d6 演练/恢复/试点报告 + goal-d7 配额）。
 
-api_catalog 只收其中只读 GET（注册表/溯源/工具留痕/成本）；POST run /
+api_catalog 只收其中只读 GET（注册表/溯源/工具留痕/成本/配额）；POST run /
 handoff / retry / rehearse / recover 属人工授权写路径——AI 不得代发起、
 代接管、代重试（沿门禁三路由不进目录的同一红线）。
 """
@@ -113,3 +113,11 @@ def recover_run(run_id):
 def pilot_report():
     """试点报告（UM-1，admin）：30 天/20 run 状态 + 拦截率/一次通过率/单会成本等。"""
     return _data(service.get_pilot_report(actor=g.current_user))
+
+
+@agents_blueprint.get("/quota")
+@require_auth
+def seat_quota():
+    """O-3 配额快照（goal-d7，只读）：本席消耗/≤20% 提醒/超额标注/加油包入口/
+    30 天重校窗口；他席 admin 传 ?user_id=。透明只读，无拦截语义（绝不断供）。"""
+    return _data(service.get_seat_quota(actor=g.current_user, user_id=request.args.get("user_id")))

@@ -53,8 +53,25 @@ def _scanner_factory(run_id, workspace):
     return FakeScanner([ArtifactFile(path="plan.md", kind="doc", source_refs=("src-1",))])
 
 
+def _seed_t1(leader, project, solution_id: str) -> None:
+    """goal-d7 T1 前置闸适配（最小侵入）：产物生成 run 前须有已封存 T1
+    纪要侧链 solution；断言逻辑零改动。"""
+    convened = leader.post(
+        "/api/v1/meetings",
+        json={"project_id": project.id, "template_id": "T1-lite", "solution_id": solution_id},
+    )
+    assert convened.status_code == 201, convened.json
+    sealed = leader.post(
+        f"/api/v1/meetings/{convened.json['data']['id']}/close",
+        json={"consensus": [{"text": "计划评审通过", "source_refs": []}], "disputes": [], "todos": []},
+    )
+    assert sealed.status_code == 200, sealed.json
+
+
 def _seal_t2(leader, project, solution_id: str, *, disputes: list | None = None) -> str:
-    """召集+封存；返回**会议 id**（close 响应体是纪要序列化，其 id 非会议 id）。"""
+    """召集+封存；返回**会议 id**（close 响应体是纪要序列化，其 id 非会议 id）。
+    goal-d7：先铺 T1 纪要（T1 闸适配；T1 纪要经门语义分离不满足 T2）。"""
+    _seed_t1(leader, project, solution_id)
     convened = leader.post(
         "/api/v1/meetings",
         json={"project_id": project.id, "template_id": "T2-lite", "solution_id": solution_id},
@@ -102,6 +119,7 @@ def test_generate_agent_wires_solution(db_session, d4_client, d4_app, d4_setting
 def test_generate_agent_gate_open_not_wired(db_session, d4_client, d4_app, d4_settings) -> None:
     """无封存纪要 → 409 review_gate_open 透传；solution 不接线。"""
     leader, project, solution, agent = _project_with_solution(db_session, d4_client, d4_settings)
+    _seed_t1(leader, project, solution.id)  # T1 已过、T2 未过——精确到达 T2 门
     prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 0}]]), scanner_factory=_scanner_factory)
     body = leader.post(
         f"/api/v1/projects/{project.id}/solutions/{solution.id}/generate-agent",
@@ -283,6 +301,7 @@ def test_u3_adhoc_minutes_not_gate_evidence(db_session, d4_client, d4_app, d4_se
     assert closed.status_code == 200
     minutes = leader.get(f"/api/v1/meetings/{meeting['meeting']['id']}/minutes").json["data"]
     assert minutes["topic_refs"]["reason"] == "复核"  # 计入纪要回链（U3）
+    _seed_t1(leader, project, solution.id)  # T1 已过、T2 未过——精确到达 T2 门
     prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 0}]]), scanner_factory=_scanner_factory)
     body = leader.post(
         f"/api/v1/projects/{project.id}/solutions/{solution.id}/generate-agent",
@@ -330,6 +349,7 @@ def _seal_family_meeting(leader, project, run_id: str, *, disputes: list | None 
 def test_u4_open_disputes_block_revision_retry(db_session, d4_client, d4_app, d4_settings) -> None:
     """门拦截 → 封存含未决分歧的家族纪要 → retry 409 revision_disputes_open。"""
     leader, project, solution, agent = _project_with_solution(db_session, d4_client, d4_settings)
+    _seed_t1(leader, project, solution.id)  # T1 闸适配
     prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 0}]]), scanner_factory=_scanner_factory)
     key = f"u4:{uuid4().hex}"
     blocked = leader.post(
@@ -349,6 +369,7 @@ def test_u4_open_disputes_block_revision_retry(db_session, d4_client, d4_app, d4
 def test_u4_clean_minutes_retry_passes(db_session, d4_client, d4_app, d4_settings) -> None:
     """无分歧封存 → 家族放行（d5 家族语义 × U4 零回归）。"""
     leader, project, solution, agent = _project_with_solution(db_session, d4_client, d4_settings)
+    _seed_t1(leader, project, solution.id)  # T1 闸适配
     prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 0}]]), scanner_factory=_scanner_factory)
     key = f"u4c:{uuid4().hex}"
     blocked = leader.post(

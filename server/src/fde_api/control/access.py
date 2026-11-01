@@ -51,6 +51,17 @@ CAPABILITY_REQUIREMENTS = {
     "agent.code.write": "project_manager",
     "agent.meeting.convene": "project_operator",
     "agent.system.tool": "system_operator",
+    # goal-d7（S2 编排）：质量守卫 + 六模块智能体能力腿（编排中枢到场表按
+    # capability_tier 匹配，meetings/service._speaker_roster_ok）；角色卡
+    # （agent.persona.*）不进本表——persona 不可执行（start_run 直接拒），
+    # 只在会中发言，能力腿匹配由到场表 persona:<key> 承载。
+    "agent.quality_guard": "project_operator",
+    "agent.module.presales": "project_operator",
+    "agent.module.solution": "project_operator",
+    "agent.module.pricing": "project_operator",
+    "agent.module.deployment": "project_operator",
+    "agent.module.acceptance": "project_operator",
+    "agent.module.knowledge": "project_operator",
 }
 
 

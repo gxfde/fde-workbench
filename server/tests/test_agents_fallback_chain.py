@@ -102,6 +102,17 @@ def test_tool_denied_run_lands_l1_forced_manual_review(db_session, d4_client, d4
     db_session.add(solution)
     db_session.commit()
     agent = seed_agent(db_session, d4_settings)
+    # goal-d7 T1 前置闸适配：产物生成 run 前须有已封存 T1 纪要侧链 solution
+    t1 = leader.post(
+        "/api/v1/meetings",
+        json={"project_id": project.id, "template_id": "T1-lite", "solution_id": solution.id},
+    )
+    assert t1.status_code == 201, t1.json
+    sealed_t1 = leader.post(
+        f"/api/v1/meetings/{t1.json['data']['id']}/close",
+        json={"consensus": [{"text": "计划评审通过", "source_refs": []}], "disputes": [], "todos": []},
+    )
+    assert sealed_t1.status_code == 200, sealed_t1.json
     _sealed_meeting(leader, project, solution.id)  # 门已放行——但 L1 仍不得自动进终审
     prime_run(
         d4_app,

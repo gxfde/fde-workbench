@@ -35,9 +35,40 @@ _T2_LITE: dict[str, Any] = {
     "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
     "attendees": ["quality_guard", "module_agent"],  # 守卫 + 1 模块智能体
     "trigger": "mandatory",
-    "min_difficulty": None,
+    "min_difficulty": "high",  # T4：高难度 run 召集本模板时自动升 full 档 + 加座
+    "persona_addons": ["persona:finance", "persona:legal", "persona:customer_it"],
     "sections": ["consensus", "disputes", "todos"],  # 三段式
     "description": "S2-lite 产物评审：守卫 + 1 模块智能体，2 话轮；纪要三段式封存后 T2 门放行。",
+}
+
+_T1_LITE: dict[str, Any] = {
+    "template_id": "T1-lite",
+    "name": "计划评审会（lite）",
+    "gate": "T1",  # 计划评审强制门（总纲 §2.2 T1）：start_run 带 solution_id
+    # 的前置闸——无已封存 T1 纪要侧链该 solution 则 409 t1_gate_open（状态机级）
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["quality_guard", "module_agent"],
+    "trigger": "mandatory",
+    "min_difficulty": "high",
+    "persona_addons": ["persona:finance", "persona:legal", "persona:customer_it"],
+    "sections": ["consensus", "disputes", "todos"],
+    "description": "T1 计划评审（S2 模板等价，UM-1 试点 lite 档）：方案骨架/任务书过审后才进入产物生成。",
+}
+
+_T5_LITE: dict[str, Any] = {
+    "template_id": "T5-lite",
+    "name": "降级恢复补审会（lite）",
+    "gate": "T5",  # 降级恢复补审强制门（总纲 §2.2 T5）：家族含 L1 run 时
+    # T2 门只认 T5 纪要——降级期间产物不自动放行（自动交付 §3.3 纪律）
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["quality_guard", "module_agent"],
+    "trigger": "mandatory",
+    "min_difficulty": "high",
+    "persona_addons": ["persona:finance", "persona:legal", "persona:customer_it"],
+    "sections": ["consensus", "disputes", "todos"],
+    "description": "T5 降级恢复补审：L1 恢复后的产物补审会，补审纪要封存后恢复通道放行。",
 }
 
 _T3_ADHOC: dict[str, Any] = {
@@ -56,7 +87,121 @@ _T3_ADHOC: dict[str, Any] = {
     "description": "智能体自主召集的评审讨论会：须声明召集理由；adhoc 纪要不作强制门证据。",
 }
 
-MEETING_TEMPLATES: dict[str, dict[str, Any]] = {"T2-lite": _T2_LITE, "T3-adhoc": _T3_ADHOC}
+# ---------------------------------------------------------------------------
+# 场景模板 S1–S6（goal-d7，PartyMode §2.1 场景矩阵；M1 判定源）。
+# trigger=manual：场景会对齐交付阶段，不作强制门证据（门语义独占 T 系模板，
+# goal-d7 报告 §二 决议 1）；班底与议题是预设模板（蔡工可改），D10 蒸馏源
+# 标注进 distill_source（内容审定交接随轮交付，D10 五项待拍板清单同附）。
+# 到场表键：quality_guard / module:<key> / persona:<key>；S6 空表=自由席。
+# ---------------------------------------------------------------------------
+
+_S1_DIAGNOSIS: dict[str, Any] = {
+    "template_id": "S1-diagnosis",
+    "name": "需求诊断会",
+    "gate": None,
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["module:presales", "module:solution", "quality_guard", "module:knowledge"],
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：九卡·S1 预调研卡（进入条件→守卫清单）",
+    "description": "售前访谈后：问题清单是否完整、source_refs 是否闭合、severity 定级是否合理。",
+}
+
+_S2_SOLUTION_REVIEW: dict[str, Any] = {
+    "template_id": "S2-solution-review",
+    "name": "方案评审会",
+    "gate": None,
+    "gate_tier": "std",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["std"],
+    "attendees": [
+        "module:solution",
+        "module:pricing",
+        "module:deployment",
+        "module:acceptance",
+        "quality_guard",
+    ],
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：九卡·S4 方案卡 + 方案健康度字段",
+    "description": "方案草稿后：模板覆盖率、报价档位合法性、SOP 偏离度、实施可行性。",
+}
+
+_S3_BUSINESS: dict[str, Any] = {
+    "template_id": "S3-business-alignment",
+    "name": "商务对齐会",
+    "gate": None,
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["lite"],
+    "attendees": ["module:pricing", "module:solution", "persona:finance", "persona:legal"],
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：报价卡核对要点（只收核对要点不收数值——数值禁区待拍板 ③）",
+    "description": "报价确认前：付款里程碑、发票/合同主体、红线条款（角色卡视角受 PM-2 三层防火墙约束）。",
+}
+
+_S4_KICKOFF: dict[str, Any] = {
+    "template_id": "S4-kickoff",
+    "name": "交付启动会（Kickoff）",
+    "gate": None,
+    "gate_tier": "std",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["std"],
+    "attendees": ["module:deployment", "module:acceptance", "module:presales", "persona:customer_it"],
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：九卡·S6/S7 实施卡（里程碑/责任人/入场条件）",
+    "description": "交付启动前：里程碑、双方责任人、验收标准、入场条件。",
+}
+
+_S5_PREACCEPTANCE: dict[str, Any] = {
+    "template_id": "S5-preacceptance",
+    "name": "预验收会",
+    "gate": None,
+    "gate_tier": "std",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["std"],
+    "attendees": ["module:acceptance", "quality_guard", "module:deployment"],
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：门禁验收表 G8/G9 行 + 验收单（证据核对段）",
+    "description": "验收前：门禁证据 G1–G9 是否齐、差距项、补证待办。",
+}
+
+_S6_FREE: dict[str, Any] = {
+    "template_id": "S6-free",
+    "name": "自由评审会",
+    "gate": None,
+    "gate_tier": "lite",
+    "turn_budget": GATE_TIER_TURN_BUDGETS["std"],
+    "attendees": [],  # 空到场表 = 创业者自定义班底（自由席）
+    "trigger": "manual",
+    "min_difficulty": None,
+    "sections": ["consensus", "disputes", "todos"],
+    "distill_source": "D10：无固定来源（自由议题）",
+    "description": "任意阶段：创业者自定义班底与议题的自由评审（不占用 agent 限额）。",
+}
+
+MEETING_TEMPLATES: dict[str, dict[str, Any]] = {
+    "T1-lite": _T1_LITE,
+    "T2-lite": _T2_LITE,
+    "T3-adhoc": _T3_ADHOC,
+    "T5-lite": _T5_LITE,
+    "S1-diagnosis": _S1_DIAGNOSIS,
+    "S2-solution-review": _S2_SOLUTION_REVIEW,
+    "S3-business-alignment": _S3_BUSINESS,
+    "S4-kickoff": _S4_KICKOFF,
+    "S5-preacceptance": _S5_PREACCEPTANCE,
+    "S6-free": _S6_FREE,
+}
+
+# 强制门模板键集（gate 语义独占面）：T4 升档/门判定只认这些模板
+MANDATORY_GATE_TEMPLATE_IDS: frozenset[str] = frozenset(
+    template_id for template_id, tpl in MEETING_TEMPLATES.items() if tpl["trigger"] == "mandatory"
+)
 
 
 def get_template(template_id: str) -> dict[str, Any] | None:
