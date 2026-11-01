@@ -139,7 +139,7 @@ def _onsite_package(
     project = Project(
         project_code=f"R5-{uuid4().hex[:6].upper()}",
         name="r5 撮合项目",
-        enterprise_code="r5 企业·制造·苏州",
+        enterprise_code="r5 企业·制造·广州",
         business_line="FDE_DISPATCH",  # P2-4 H3：交付包只建在派单线项目
         planned_start_date=datetime(2026, 10, 31).date(),
         leader_user_id=admin.id,
@@ -295,19 +295,19 @@ def test_stage_a_gates_reject_individually(db_session):
     # A1：等级不足
     weak = _user("r5.weak", role="fde_engineer")
     _profile(db_session, weak, level="L1", module_tags=module_key_ok,
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     # A2：缺模块
     no_module = _user("r5.nomodule", role="fde_engineer")
     _profile(db_session, no_module, level="L2", module_tags=["other"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     # A3：缺行业
     no_industry = _user("r5.noindustry", role="fde_engineer")
     _profile(db_session, no_industry, level="L2", module_tags=module_key_ok,
-             industry_tags=["零售"], home_city="苏州")
+             industry_tags=["零售"], home_city="广州")
     # A4：满负荷（在途 2 ≥ cap 2）
     busy = _user("r5.busy", role="fde_engineer")
     _profile(db_session, busy, level="L2", module_tags=module_key_ok,
-             industry_tags=["制造业"], home_city="苏州", capacity=20, avg_hours=10)
+             industry_tags=["制造业"], home_city="广州", capacity=20, avg_hours=10)
     for round_no in (97, 98):  # 远端轮次构造两条在途（不占撮合轮，避开同轮唯一约束）
         db_session.add(
             DispatchOffer(
@@ -321,7 +321,7 @@ def test_stage_a_gates_reject_individually(db_session):
     # 全部合格对照
     good = _user("r5.good", role="fde_engineer")
     _profile(db_session, good, level="L2", module_tags=module_key_ok,
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     db_session.flush()
 
     result = match_package(db_session, actor=admin, package_id=package.id)
@@ -337,7 +337,7 @@ def test_stage_a5_geo_fence_onsite_only(db_session):
     publish_package(db_session, actor=admin, package_id=package.id)
     other_city = _user("r5.nanjing", role="fde_engineer")
     _profile(db_session, other_city, level="L2", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     result = match_package(db_session, actor=admin, package_id=package.id)
     assert result["scenario"] == "C"  # 唯一候选被围栏淘汰 → 场景 C
     assert result["offers"] == []
@@ -374,7 +374,7 @@ def test_stage_a5_geo_fence_onsite_only(db_session):
 
 
 def test_scenario_a_lexicographic_geo_beats_ability(db_session):
-    """场景 A 字典序：同城 L1 胜过南京 L4——地理一级键不被能力分稀释
+    """场景 A 字典序：同城 L1 胜过深圳 L4——地理一级键不被能力分稀释
     （负面清单 #4 反例的结构性防护）。"""
     admin, package = _onsite_package(db_session, round_no=2)
     package.required_level = "L1"
@@ -383,10 +383,10 @@ def test_scenario_a_lexicographic_geo_beats_ability(db_session):
     publish_package(db_session, actor=admin, package_id=package.id)
     near_weak = _user("r5.near.weak", role="fde_engineer")
     _profile(db_session, near_weak, level="L1", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     far_strong = _user("r5.far.strong", role="fde_engineer")
     _profile(db_session, far_strong, level="L4", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     for round_no in (71, 72, 73, 74, 75):  # 老手（脱离新人保护；字典序测试不受 C10 干扰）
         db_session.add(
             DeliveryPackage(
@@ -424,10 +424,10 @@ def test_scenario_b_weighted_and_reproducible(db_session):
     publish_package(db_session, actor=admin, package_id=package.id)
     low = _user("r5.remote.l", role="fde_engineer")
     _profile(db_session, low, level="L1", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     high = _user("r5.remote.h", role="fde_engineer")
     _profile(db_session, high, level="L4", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     for round_no in (61, 62, 63, 64, 65):  # 老手（远程加权序不受 C10 干扰）
         db_session.add(
             DeliveryPackage(
@@ -478,10 +478,10 @@ def test_scenario_b_weighted_and_reproducible(db_session):
     publish_package(db_session, actor=admin2, package_id=package2.id)
     low2 = _user("r5.remote2.l", role="fde_engineer")
     _profile(db_session, low2, level="L1", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     high2 = _user("r5.remote2.h", role="fde_engineer")
     _profile(db_session, high2, level="L4", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="南京")
+             industry_tags=["制造业"], home_city="深圳")
     db_session.flush()
     second = match_package(db_session, actor=admin2, package_id=package2.id)
     assert [o["candidate_user_id"] for o in second["offers"]][0] == low2.id
@@ -510,7 +510,7 @@ def test_match_requires_published_rule_version(db_session):
     publish_package(db_session, actor=admin, package_id=package.id)
     good = _user("r5.noversion", role="fde_engineer")
     _profile(db_session, good, level="L2", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     db_session.flush()
     with pytest.raises(DispatchServiceError) as excinfo:
         match_package(db_session, actor=admin, package_id=package.id)
@@ -532,7 +532,7 @@ def test_top3_cap_and_breakdown_schema(db_session):
     for index in range(5):
         candidate = _user(f"r5.top{index}", role="fde_engineer")
         _profile(db_session, candidate, level="L2", module_tags=["pre_diagnosis"],
-                 industry_tags=["制造业"], home_city="苏州")
+                 industry_tags=["制造业"], home_city="广州")
     db_session.flush()
 
     result = match_package(db_session, actor=admin, package_id=package.id)
@@ -578,7 +578,7 @@ def test_negative_list_protections(db_session):
     veteran = _user("r5.nl2.veteran", role="fde_engineer")
     for u in (fresh, veteran):
         _profile(db_session, u, level="L2", module_tags=["pre_diagnosis"],
-                 industry_tags=["制造业"], home_city="苏州")
+                 industry_tags=["制造业"], home_city="广州")
     # veteran 有 3 条历史 offer（declined 终态），fresh 零——排序不受影响
     for round_no in (91, 92, 93):  # 远端轮次（同包同轮同候选唯一约束）
         db_session.add(
@@ -623,7 +623,7 @@ def test_negative_list_protections(db_session):
     publish_package(db_session, actor=admin2, package_id=package2.id)
     declined_before = _user("r5.nl6.declined", role="fde_engineer")
     _profile(db_session, declined_before, level="L2", module_tags=["pre_diagnosis"],
-             industry_tags=["制造业"], home_city="苏州")
+             industry_tags=["制造业"], home_city="广州")
     db_session.add(
         DispatchOffer(
             package_id=package2.id, dispatch_round=package2.dispatch_round,
@@ -678,11 +678,11 @@ def test_city_index_from_seed():
         row["city"]: (row.get("province"), row.get("metro_group"))
         for row in load_dispatch_cities()
     }
-    assert scoring.geo_tier("苏州", "苏州", index) == 0
-    assert scoring.geo_tier("无锡", "苏州", index) == 1  # 同省（江苏）
-    assert scoring.geo_tier("南通", "苏州", index) == 1  # 同省（上海大都市圈≠苏锡常，但省同）
-    assert scoring.geo_tier("宁波", "苏州", index) == 3  # 跨省且不同都市圈
-    # tier 2 = 同都市圈跨省：六城种子内无此对（上海不在白名单），合成 index 钉规则
+    assert scoring.geo_tier("上海", "上海", index) == 0
+    assert scoring.geo_tier("深圳", "广州", index) == 1  # 同省（广东）
+    assert scoring.geo_tier("武汉", "广州", index) == 3  # 鄂≠粤跨省且不同都市圈
+    assert scoring.geo_tier("杭州", "上海", index) == 3  # 跨省且不同都市圈
+    # tier 2 = 同都市圈跨省：沪广深杭蓉汉种子内无此对，合成 index 钉规则
     synthetic = {"南通": ("江苏", "上海大都市圈"), "上海": ("上海", "上海大都市圈")}
     assert scoring.geo_tier("上海", "南通", synthetic) == 2
-    assert scoring.geo_tier("未知城", "苏州", index) == 3
+    assert scoring.geo_tier("未知城", "上海", index) == 3

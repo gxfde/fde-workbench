@@ -418,7 +418,7 @@ def test_seeds_load_idempotent_and_valid():
             "city", "province", "metro_group", "city_tier", "claim_enabled", "subsidy_scheme",
         }
         assert row["claim_enabled"] is False  # §12：种子默认 false
-    assert {row["city"] for row in city_rows} == {"苏州", "无锡", "常州", "南京", "南通", "宁波"}
+    assert {row["city"] for row in city_rows} == {"上海", "广州", "深圳", "杭州", "成都", "武汉"}  # B-④ 终版拍板（r12）
 
     metrics = cities_mod.load_acceptance_metrics()
     assert cities_mod.load_acceptance_metrics() is metrics
