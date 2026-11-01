@@ -79,6 +79,8 @@ from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
 from fde_api.meetings.service import latest_sealed_mandatory_minutes, t1_gate_satisfied, t2_gate_satisfied
+from fde_api.dispatch.agent_assisted import ORDER_DIFFICULTY_RUN_MAP
+from fde_api.dispatch.models import DeliveryPackage
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.solutions.models import ProjectSolution
@@ -681,6 +683,55 @@ def start_run(*, actor: User, agent_id: str, payload: dict[str, Any]) -> tuple[d
             solution = session.get(ProjectSolution, solution_id)
             if solution is None or solution.project_id != project.id:
                 raise _error("solution_not_found", "方案不存在或不属于该项目。", 404)
+            # D2 合成裁决三（goal-d8，PRD §6.3）：交付包与方案一对一（包 id =
+            # solution.id）——已接单且未声明「智能体协同」= 纯人工交付，智能体
+            # 不得在该包上发起 run（准入闸，先于 T1 流程门）。未建包（售前段）
+            # 与非 accepted 态不受影响（v0.2.0 行为）。
+            package = session.get(DeliveryPackage, solution.id)
+            if (
+                package is not None
+                and package.dispatch_status == "accepted"
+                and not package.agent_assisted
+            ):
+                raise _error(
+                    "agent_assisted_required",
+                    "该方案已有已接单交付包且未声明智能体协同（纯人工交付）："
+                    "接单人经 POST /api/v1/dispatch/packages/{id}/agent-assisted "
+                    "显式声明后方可启用评审门与溯源联动。",
+                    409,
+                    detail={"package_id": package.id, "required": "agent_assisted_declaration"},
+                )
+            if package is not None and package.agent_assisted:
+                # O-4 防御兜底：high 档订单不进智能体栈（声明侧已禁，双保险）
+                if package.difficulty == "high":
+                    raise _error(
+                        "difficulty_excludes_agents",
+                        "订单难度为 high：按 O-4 三档处理不派发给智能体。",
+                        409,
+                    )
+                # T4 免手报：订单难度映射自动带入 run.difficulty（low→standard /
+                # medium→high）；显式手报与订单档位冲突 400（透明化，不静默覆盖）
+                order_run_difficulty = (
+                    ORDER_DIFFICULTY_RUN_MAP.get(package.difficulty)
+                    if package.difficulty is not None
+                    else None
+                )
+                if order_run_difficulty is not None:
+                    if (
+                        payload.get("difficulty") is not None
+                        and payload["difficulty"] != order_run_difficulty
+                    ):
+                        raise _error(
+                            "difficulty_order_conflict",
+                            f"订单难度为 {package.difficulty}，run 档位自动带入 "
+                            f"{order_run_difficulty}，请勿手报冲突档位（T4 免手报）。",
+                            400,
+                            detail={
+                                "order_difficulty": package.difficulty,
+                                "run_difficulty": order_run_difficulty,
+                            },
+                        )
+                    difficulty = order_run_difficulty
             # T1 计划评审强制门（总纲 §2.2 T1，U2 同族状态机级）：带
             # solution 的 run = 进入产物生成——无已封存 T1 纪要侧链该
             # solution 则不放行（retry 不复闸：家族首 run 已被闸）

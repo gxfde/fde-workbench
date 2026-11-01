@@ -452,6 +452,9 @@ def test_package_response_field_whitelist(api_context):
         "dispatch_mode",
         "response_window_hours",
         "published_at",
+        # goal-d8（D2 裁决三/O-4）：协同声明态 + 订单难度三档入白名单
+        "agent_assisted",
+        "difficulty",
     }
     # 金额字段只允许 delivery_seat_amount（=final_amount×40%，发布物化）
     assert payload["delivery_seat_amount"] == 8000.0

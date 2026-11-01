@@ -19,6 +19,7 @@ from fde_api.dispatch.access import (
     require_package_access,
     serialize_package_whitelist,
 )
+from fde_api.dispatch.agent_assisted import declare_agent_assisted
 from fde_api.dispatch.disputes import open_dispute, resolve_dispute
 from fde_api.dispatch.errors import DispatchServiceError
 from fde_api.dispatch.models import DeliveryPackage
@@ -134,6 +135,11 @@ def publish_package_route(package_id: str):
         return error_response(
             "invalid_request", "candidate_user_ids 必须是字符串数组。", 400
         )
+    difficulty = payload.get("difficulty")
+    if difficulty is not None and difficulty not in ("low", "medium", "high"):
+        return error_response(
+            "invalid_request", "difficulty 必须是 low/medium/high。", 400
+        )
     session = db.session()
     try:
         with session.begin():
@@ -142,6 +148,36 @@ def publish_package_route(package_id: str):
                 actor=g.current_user,
                 package_id=package_id,
                 candidate_user_ids=tuple(candidates_raw),
+                difficulty=difficulty,
+            )
+            result = _whitelist_payload(session, package)
+        return jsonify({"data": result, "error": None})
+    except DispatchServiceError as error:
+        return _dispatch_error(error)
+    finally:
+        session.close()
+
+
+@blueprint.post("/packages/<package_id>/agent-assisted")
+@require_auth
+def declare_agent_assisted_route(package_id: str):
+    """D2 裁决三（PRD §6.3）：接单人显式声明/撤销「智能体协同」。
+
+    8 态机零改动——声明只落列 + OperationEvent 留痕，不是状态迁移。
+    """
+    payload = _json_body()
+    if not payload or not isinstance(payload.get("enabled"), bool) or set(payload) - {
+        "enabled"
+    }:
+        return error_response("invalid_request", "enabled 布尔必填（唯一字段）。", 400)
+    session = db.session()
+    try:
+        with session.begin():
+            package = declare_agent_assisted(
+                session,
+                actor=g.current_user,
+                package_id=package_id,
+                enabled=payload["enabled"],
             )
             result = _whitelist_payload(session, package)
         return jsonify({"data": result, "error": None})

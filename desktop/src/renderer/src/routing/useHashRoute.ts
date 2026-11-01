@@ -14,6 +14,8 @@ export type AppRoute =
   | { kind: "users" }
   | { kind: "system-configuration" }
   | { kind: "task-center" }
+  | { kind: "translator" }
+  | { kind: "metrics" }
   | {
       kind: "dispatch"
       tab?:
@@ -59,6 +61,8 @@ export function parseHashRoute(hash: string): AppRoute {
   if (hash === "#users") return { kind: "users" }
   if (hash === "#system-configuration") return { kind: "system-configuration" }
   if (hash === "#task-center") return { kind: "task-center" }
+  if (hash === "#translator") return { kind: "translator" }
+  if (hash === "#metrics") return { kind: "metrics" }
   if (hash === "#dispatch") return { kind: "dispatch" }
   if (hash === "#dispatch/pool") return { kind: "dispatch", tab: "pool" }
   if (hash === "#dispatch/mine") return { kind: "dispatch", tab: "mine" }
@@ -138,6 +142,8 @@ export function routeHash(route: AppRoute): string {
     case "users": return "#users"
     case "system-configuration": return "#system-configuration"
     case "task-center": return "#task-center"
+    case "translator": return "#translator"
+    case "metrics": return "#metrics"
     case "dispatch":
       return route.tab && route.tab !== "pool" ? `#dispatch/${route.tab}` : "#dispatch"
     case "help": return "#help"
@@ -156,6 +162,11 @@ export function authorizedRoute(route: AppRoute, role: UserRole): AppRoute {
     return role === "admin" ? route : projectsRoute
   }
   if (route.kind === "new-project") {
+    return role === "admin" || role === "project_lead" ? route : projectsRoute
+  }
+  // P0/P1 指标报表（goal-d8）：运营口径——平台侧（admin/project_lead）专属，
+  // 其他角色回落项目列表（服务端 require_auth 是最终防线，这里减少暴露面）。
+  if (route.kind === "metrics") {
     return role === "admin" || role === "project_lead" ? route : projectsRoute
   }
   return route

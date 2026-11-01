@@ -28,6 +28,8 @@ import { ExtensionsPage } from "./extensions/ExtensionsPage"
 import { LcscToolPage } from "./extensions/LcscToolPage"
 import { LcscComparePage } from "./extensions/LcscComparePage"
 import { SystemConfigurationPage } from "./system/SystemConfigurationPage"
+import { TranslatorPortalPage } from "./translator/TranslatorPortalPage"
+import { MetricsReportPage } from "./metrics/MetricsReportPage"
 
 export function App() {
   return (
@@ -75,6 +77,8 @@ function RoutePage({ route }: { route: AppRoute }) {
       />
     )
   if (route.kind === "help") return <HelpPage />
+  if (route.kind === "translator") return <TranslatorPortalPage />
+  if (route.kind === "metrics") return <MetricsReportPage />
   if (route.kind === "extensions") return route.tool === 'lcsc-compare' ? <LcscComparePage /> : route.tool ? <LcscToolPage key={route.tool} variant={route.tool} /> : <ExtensionsPage initialTab={route.tab} />
   if (route.kind === "users") return <UsersPage />
   if (route.kind === "system-configuration") return <SystemConfigurationPage />

@@ -238,16 +238,23 @@ def publish_package(
     actor: User,
     package_id: str,
     candidate_user_ids: tuple[str, ...] = (),
+    difficulty: str | None = None,
 ) -> DeliveryPackage:
     """draft/withdrawn/rejected/expired → published：算快照哈希（一次冻结）+
     物化席位金额 + 授候选只读授权（§9.2：发布即对候选授 delivery 只读）。
-    非 draft 来源 = round+1 新版本对（新 package_code + 新 snapshot_hash）。"""
+    非 draft 来源 = round+1 新版本对（新 package_code + 新 snapshot_hash）。
+    goal-d8：发布时平台侧定档订单难度（O-4 low/medium/high——start_run 按
+    low→standard/medium→high 映射自动带入 run.difficulty，T4 免手报）。"""
     package = session.get(DeliveryPackage, package_id)
     if package is None:
         raise DispatchServiceError("package_not_found", "交付包不存在。", 404)
     if actor.role not in ("admin", "project_lead"):
         raise DispatchServiceError(
             "verifier_role_required", "只有平台侧可发布交付包。", 403
+        )
+    if difficulty is not None and difficulty not in ("low", "medium", "high"):
+        raise DispatchServiceError(
+            "invalid_request", "difficulty 必须是 low/medium/high。"
         )
     _assert_transition(package, "publish")
 
@@ -293,6 +300,8 @@ def publish_package(
             Decimal("0.01")
         )
     package.dispatch_status = "published"
+    if difficulty is not None:
+        package.difficulty = difficulty
     session.flush()
 
     for candidate_id in dict.fromkeys(candidate_user_ids):

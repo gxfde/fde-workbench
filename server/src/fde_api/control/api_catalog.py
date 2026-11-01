@@ -109,6 +109,10 @@ ENTRIES = [
     # 配额快照（消耗/提醒/加油包/重校窗口，透明只读无拦截）
     ("meetings.cost", "GET", "/api/v1/meetings/{meeting_id}/cost", "查询会议成本归集（M9）：召集计费 + 触发 run 累计（沿用 M-1 成本口径）", ""),
     ("agents.quota", "GET", A + "/quota", "O-3 配额快照（本席）：当月动作消耗/余量 ≤20% 提醒/超额标注/加油包计价入口/30 天重校窗口（透明只读，绝不断供）", "user_id 可选（他席仅系统运维员）"),
+    # 派单×智能体合成（goal-d8）：协同声明 = 接单人显式行为（D2 裁决三，
+    # 同 packages_publish 配置类写路径先例）；指标报表 = P0/P1 观测只读聚合
+    ("dispatch.agent_assisted_declare", "POST", "/api/v1/dispatch/packages/{package_id}/agent-assisted", "接单人显式声明/撤销智能体协同（D2 裁决三：声明后启用 T1–T6 评审门与溯源联动；难度 high 禁声明；8 态机零改动）", "enabled（布尔必填）"),
+    ("metrics.report", "GET", "/api/v1/metrics/report", "P0/P1 指标报表（PRD §10 只读聚合：售前确认率/草稿耗时/lite 占比/一次通过率/降级率/成本中位数/额度动作；样本不足显式标注）", ""),
 ]
 
 CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,

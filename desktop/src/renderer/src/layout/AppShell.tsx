@@ -17,6 +17,8 @@ export function AppShell({
 }) {
   const { logout, user } = useAuth()
   const isAdmin = user?.role === "admin"
+  // 平台侧口径（goal-d8）：指标报表页对 admin/project_lead 开放
+  const isPlatform = user?.role === "admin" || user?.role === "project_lead"
   const [collapsed, setCollapsed] = useState(() => readCollapsed())
   const [appVersion, setAppVersion] = useState("")
 
@@ -52,7 +54,11 @@ export function AppShell({
           <NavLink route={route} target={{ kind: "projects" }} label="项目工作台" icon={<GridIcon />} />
           <NavLink route={route} target={{ kind: "bridge" }} label="集成桥" icon={<BridgeIcon />} />
           <NavLink route={route} target={{ kind: "task-center" }} label="任务中心" icon={<TaskIcon />} />
+          <NavLink route={route} target={{ kind: "translator" }} label="翻译器" icon={<DocumentIcon />} />
           <NavLink route={route} target={{ kind: "dispatch" }} label="派单池" icon={<GridIcon />} />
+          {isPlatform ? (
+            <NavLink route={route} target={{ kind: "metrics" }} label="指标报表" icon={<BoxesIcon />} />
+          ) : null}
           <NavLink route={route} target={{ kind: "extensions" }} label="AI 与扩展" icon={<ExtensionIcon />} />
           <NavLink route={route} target={{ kind: "help" }} label="使用帮助" icon={<HelpIcon />} />
           {isAdmin ? <>

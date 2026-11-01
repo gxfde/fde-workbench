@@ -180,4 +180,8 @@ def serialize_package_whitelist(
         "published_at": package.published_at.isoformat()
         if package.published_at
         else None,
+        # goal-d8（D2 裁决三/O-4）：协同声明态 + 订单难度三档——接单人据此
+        # 知道「是否已声明协同 / 难度映射后的 run 档位」，透明化口径
+        "agent_assisted": package.agent_assisted,
+        "difficulty": package.difficulty,
     }

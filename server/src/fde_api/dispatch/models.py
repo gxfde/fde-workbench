@@ -69,6 +69,10 @@ class DeliveryPackage(Base, TimestampMixin):
             "required_level IS NULL OR required_level IN ('L1', 'L2', 'L3', 'L4')",
             name="ck_delivery_packages_required_level",
         ),
+        CheckConstraint(
+            "difficulty IS NULL OR difficulty IN ('low', 'medium', 'high')",
+            name="ck_delivery_packages_difficulty",
+        ),
         # §6.4 开闸统计口径按 published 包数计数，状态列单查
         Index("ix_delivery_packages_status", "dispatch_status"),
     )
@@ -139,6 +143,16 @@ class DeliveryPackage(Base, TimestampMixin):
     seat_qa: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+    # D2 裁决三（PRD §6.3）：接单人显式声明「智能体协同」——声明后才启用
+    # T1–T6 评审强制门与溯源联动；不声明 = 纯人工交付（v0.2.0 行为）。
+    # 不是状态机的态：声明只落本列 + OperationEvent 留痕，TRANSITIONS 零改动。
+    agent_assisted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # O-4 订单难度三档（PRD §6.4）：发布时平台侧定档冻结；start_run 按
+    # low→standard / medium→high 映射自动带入 run.difficulty（T4 免手报）；
+    # high=不派发给智能体（协同声明前置禁入）。
+    difficulty: Mapped[str | None] = mapped_column(String(8))
 
 
 class DispatchOffer(Base, TimestampMixin, VersionedMixin):

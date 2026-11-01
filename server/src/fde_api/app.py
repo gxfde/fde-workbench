@@ -66,6 +66,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
     from fde_api.meetings.routes import meetings_blueprint
     app.register_blueprint(meetings_blueprint)
+    # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
+    from fde_api.metrics.routes import metrics_blueprint
+    app.register_blueprint(metrics_blueprint)
     # WP-E SES：SNS 退信/投诉回调端点（默认随模块关闭，端点校验失败一律 403）
     app.register_blueprint(mailing_blueprint)
     app.register_blueprint(control_blueprint)
