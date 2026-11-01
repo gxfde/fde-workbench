@@ -24,12 +24,13 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 - 本机 Windows/Git Bash；docker 经 `wsl -d Ubuntu-24.04 -- docker …`（配 `MSYS_NO_PATHCONV=1`）。
 - 代码检索优先用 CodeGraph：本仓库已索引（`.codegraph/` 是本地 SQLite，已 gitignore，勿提交）；`codegraph explore "<问题或符号>"`，大规模改码后 `codegraph sync` 重建增量。
 
-## 当前状态（2026-11-01，goal-d11 后）
+## 当前状态（2026-11-02，goal-d13 后）
 
 - v0.2.0：门禁 G1–G9、报价/收款/合同、集成桥（宿主 4h 采集 + 手动采集按钮）、内嵌使用帮助；本地 main 允许落后——**权威=fork/main**（开新轮先 fetch 对齐）。
 - 版本号按发布列车同步 `desktop/package.json` 与 `server/pyproject.toml`，tag 打在 fork。
 - 待办台账：`docs/后续需求台账-F5与D11.md`；历史审计存档：`docs/goal-audit-2026-10-26.md`；派单引擎 goal 循环报告：`docs/goal-r<N>-派单引擎.md`。
-- 口径数字（实测 2026-11-02，goal-d12 试点前工程收尾轮 / d11 口径顺延）：服务端 **96 张业务表**（不含 alembic_version；d12 零迁移零服务端改动）、迁移头 `c3e7a9b1d5f4`（**22 个 revision**，链条 …→ c5e9b3d7a1f5 → a1d3f5b7c9e2 → c3e7a9b1d5f4）、蓝图路由 **269**、api_catalog ENTRIES **94**、服务端 pytest **1698 收集 = 1692 passed + 6 skipped**（d12 零改动顺延）、桌面端 vitest **730/730**（d12 +5，串行口径 --no-file-parallelism）。goal-d12：**pilot 路由归一化**（authorizedRoute 补 #/pilot admin 专属规则——d11 漏加致非 admin 直输渲染页面吃裸 403；挂账④销号）+ **翻译器门户历史一览**（消费 d11 的 GET /translations 列表：最近 20 条状态徽标+已采纳计数+「查看」载入结果卡再采纳）+ **试点执行手册**（`docs/试点执行手册-runbook.md`：开关族/T6 评审流/采纳流/六指标口径，待拍板项显式标注）——详见 `docs/goal-d12-交付工作台.md`。goal-d11（压缩）：T6 高成本 run 前评审（t6_review_cost_threshold 0=关默认+max_cost_units 档判据+项目级关闭+T6-lite+t6_gate_satisfied 侧链）+ 试点包三件（#/pilot 页/插件种子/checkpoint=SignoffConsole 销号）+ d10 挂账清尾——详见 `docs/goal-d11-交付工作台.md`。
+- 口径数字（实测 2026-11-02，goal-d13 拍板轮 / d12 口径顺延）：服务端 **96 张业务表**（不含 alembic_version；d13 零迁移）、迁移头 `c3e7a9b1d5f4`（**22 个 revision**，链条 …→ c5e9b3d7a1f5 → a1d3f5b7c9e2 → c3e7a9b1d5f4）、蓝图路由 **269**、api_catalog ENTRIES **94**、服务端 pytest **1704 收集 = 1698 passed + 6 skipped**（d13 +6：kimi 无 key 1 + 翻转 2 + 导出闸 3）、桌面端 vitest **730/730**（d13 零改动顺延，串行口径 --no-file-parallelism）。goal-d13：**拍板轮**——交互式拍板 11 项全定案并实施三件：**翻译管道切 kimi-k3**（kimi_translator_api_key/model 独立槽位，通用 OpenAI 兼容客户端承载；无 key 分类失败不裸 500）+ **export-sow 仅 agent_assisted 强制 signoff**（未 approved 409 solution_signoff_required，闸在复用路径之前；纯人工方案不受影响）+ **signoff approved 自动翻转 reviewed**（终审通道内 linked 产物 False→True，拦截留痕不翻；事件携 artifacts_reviewed_flipped 计数）；其余八件零代码销号/记录（撤销声明不回溯 / T6-lite 审定通过 / T6 阈值维持 0=关等数据回流 / D10 五项全定案）——详见 `docs/goal-d13-交付工作台.md`。goal-d12（压缩）：pilot 路由归一化（挂账④销号）+ 门户翻译历史一览 + 试点执行手册——详见 `docs/goal-d12-交付工作台.md`。goal-d11（压缩）：T6 高成本 run 前评审 + 试点包三件 + d10 挂账清尾——详见 `docs/goal-d11-交付工作台.md`。
+- goal-d12 口径存档（2026-11-02）：96 表 / head `c3e7a9b1d5f4`（22 revision 零迁移）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 730。
 - goal-d11 口径存档（2026-11-01）：96 表 / head `c3e7a9b1d5f4`（22 revision 零新表）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 725。
 - goal-d10 口径存档（2026-11-01）：96 表 / head `a1d3f5b7c9e2`（21 revision 零新表）/ 路由 269 / ENTRIES 94 / pytest 1684 收集（1678 passed + 6 skipped）/ vitest 722。
 - goal-d9 口径存档（2026-11-01）：96 表 / head `c5e9b3d7a1f5`（20 revision）/ 路由 268 / ENTRIES 93 / pytest 1666 收集（1660 passed + 6 skipped）/ vitest 721。

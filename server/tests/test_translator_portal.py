@@ -141,13 +141,13 @@ def test_job_success_persists_draft_with_contract(db_session, d4_app, d4_client,
     user = _persist_user(db_session)
     data = _create(d4_client, user, d4_settings).json["data"]
     fake = _FakeDeepSeek([_valid_contract_payload()])
-    d4_app.extensions["fde_api_translator_deepseek"] = fake
+    d4_app.extensions["fde_api_translator_ai"] = fake
     job = _job_for(db_session, data["id"])
     with d4_app.app_context():
         handle_translator_translate(job)
     row = db_session.get(TranslatorTranslation, data["id"])
     assert row.status == "ready"
-    assert row.ai_model == d4_settings.deepseek_translator_model
+    assert row.ai_model == d4_settings.kimi_translator_model == "kimi-k3"
     assert row.ai_generated_at is not None
     result = row.result_json
     assert result["customer_vision"]
@@ -171,7 +171,7 @@ def test_contract_violation_retries_once_then_fails(db_session, d4_app, d4_clien
     bad = _valid_contract_payload()
     del bad["customer_vision"]  # 顶层字段缺失 → invalid_guidance
     fake = _FakeDeepSeek([bad, dict(bad)])
-    d4_app.extensions["fde_api_translator_deepseek"] = fake
+    d4_app.extensions["fde_api_translator_ai"] = fake
     job = _job_for(db_session, data["id"])
     with d4_app.app_context():
         handle_translator_translate(job)
@@ -190,7 +190,7 @@ def test_transient_error_backs_off_and_fails_classified(db_session, d4_app, d4_c
     data = _create(d4_client, user, d4_settings).json["data"]
     error = DeepSeekError("ai_rate_limited", "AI 请求过于频繁，请稍后重试。", retryable=True)
     fake = _FakeDeepSeek([error, error])
-    d4_app.extensions["fde_api_translator_deepseek"] = fake
+    d4_app.extensions["fde_api_translator_ai"] = fake
     job = _job_for(db_session, data["id"])
     with d4_app.app_context():
         handle_translator_translate(job)
@@ -205,7 +205,7 @@ def test_non_retryable_fails_without_retry(db_session, d4_app, d4_client, d4_set
     data = _create(d4_client, user, d4_settings).json["data"]
     error = DeepSeekError("ai_service_not_configured", "AI 服务未配置，请联系系统运维员。", retryable=False)
     fake = _FakeDeepSeek([error])
-    d4_app.extensions["fde_api_translator_deepseek"] = fake
+    d4_app.extensions["fde_api_translator_ai"] = fake
     job = _job_for(db_session, data["id"])
     with d4_app.app_context():
         handle_translator_translate(job)
@@ -216,11 +216,25 @@ def test_non_retryable_fails_without_retry(db_session, d4_app, d4_client, d4_set
     assert len(fake.calls) == 1
 
 
+def test_kimi_slot_unconfigured_fails_classified(db_session, d4_app, d4_client, d4_settings) -> None:
+    """goal-d13 拍板：翻译管道走 kimi 槽位——key 未配置时走真实客户端构造路径，
+    请求发出前即分类失败（ai_service_not_configured），绝不裸 500 或卡 running。"""
+    user = _persist_user(db_session)
+    data = _create(d4_client, user, d4_settings).json["data"]
+    job = _job_for(db_session, data["id"])  # 不注入假客户端：走 _client 真实构造
+    with d4_app.app_context():
+        handle_translator_translate(job)
+    row = db_session.get(TranslatorTranslation, data["id"])
+    assert row.status == "failed"
+    assert row.failure_code == "ai_service_not_configured"
+    assert row.ai_model == ""  # ai_model 只在 ready 分支落账，失败不虚标模型
+
+
 def test_replay_skips_terminal_rows(db_session, d4_app, d4_client, d4_settings) -> None:
     user = _persist_user(db_session)
     data = _create(d4_client, user, d4_settings).json["data"]
     fake = _FakeDeepSeek([_valid_contract_payload()])
-    d4_app.extensions["fde_api_translator_deepseek"] = fake
+    d4_app.extensions["fde_api_translator_ai"] = fake
     job = _job_for(db_session, data["id"])
     with d4_app.app_context():
         handle_translator_translate(job)

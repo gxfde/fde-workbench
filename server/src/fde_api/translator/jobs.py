@@ -3,8 +3,9 @@
 沿预调研分析（guidance/jobs.py）的 job 重试语义：瞬时错误退避重试、契约
 违反立即重试、重试耗尽落 failed（绝不卡在 running 让前端无限轮询）；worker
 进程死亡由对账收尾钩子推终态。与预调研的差异：无文件流（原文=表单三段），
-AI 客户端走文本 JSON 栈（DeepSeekClient.complete_json，可注入），成功就绪
-点记 O-3 席位动作（action_type="ai_chat"——PRD §7：翻译器在订阅额度内）。
+AI 客户端走文本 JSON 栈（goal-d13 拍板：kimi-k3 槽位，通用 OpenAI 兼容
+complete_json 客户端承载，可注入），成功就绪点记 O-3 席位动作
+（action_type="ai_chat"——PRD §7：翻译器在订阅额度内）。
 """
 from __future__ import annotations
 
@@ -91,7 +92,7 @@ def handle_translator_translate(job) -> None:
                     return
                 # 契约失败是概率性问题，立即重试。
         row.result_json = draft
-        row.ai_model = settings.deepseek_translator_model
+        row.ai_model = settings.kimi_translator_model
         row.ai_generated_at = datetime.now(UTC)
         row.status = "ready"
         row.failure_code = ""
@@ -113,15 +114,18 @@ SOURCE_REFS = {"translator:vision", "translator:objective", "translator:profile"
 
 
 def _client(settings) -> DeepSeekClient:
-    injected = current_app.extensions.get("fde_api_translator_deepseek")
+    injected = current_app.extensions.get("fde_api_translator_ai")
     if injected is not None:
         return injected
+    # goal-d13 拍板：翻译管道走 kimi 槽位（Moonshot OpenAI 兼容端点）。
+    # DeepSeekClient 本体是通用 OpenAI 兼容 JSON 客户端（model/json_object/
+    # max_tokens 三参数无厂商专有字段），换 base_url/key/model 即换供应商；
+    # 不配 fallback（kimi 槽位无备用模型，失败走本模块重试语义）。
     return DeepSeekClient(
-        base_url=settings.deepseek_base_url,
-        api_key=settings.deepseek_api_key,
-        model=settings.deepseek_translator_model,
-        timeout_seconds=settings.deepseek_timeout_seconds,
-        fallback_model=settings.deepseek_fallback_model,
+        base_url=settings.kimi_base_url,
+        api_key=settings.kimi_translator_api_key,
+        model=settings.kimi_translator_model,
+        timeout_seconds=settings.kimi_timeout_seconds,
     )
 
 

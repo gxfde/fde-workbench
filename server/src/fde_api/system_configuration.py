@@ -35,7 +35,8 @@ class SystemConfiguration(Base, TimestampMixin, VersionedMixin):
 PUBLIC_FIELDS = {
     "deepseek_base_url", "deepseek_industry_template_model", "deepseek_project_presurvey_model",
     "deepseek_ai_opportunity_model", "deepseek_research_export_model", "deepseek_document_generation_model",
-    "deepseek_timeout_seconds", "kimi_base_url", "kimi_project_presurvey_model", "kimi_timeout_seconds",
+    "deepseek_timeout_seconds", "kimi_base_url", "kimi_project_presurvey_model", "kimi_translator_model",
+    "kimi_timeout_seconds",
     "dsh_enabled", "dsh_base_url", "dsh_runtime_version", "dsh_protocol_version", "dsh_timeout_seconds",
     "ai_internal_api_url", "weixin_enabled", "dsh_market_enabled", "dsh_market_registry_url",
     "dsh_market_timeout_seconds", "dsh_market_max_catalog_bytes", "clawbot_enabled", "storage_backend",
@@ -43,8 +44,8 @@ PUBLIC_FIELDS = {
     "clamav_timeout_seconds", "clamav_socket_timeout_seconds",
 }
 SECRET_FIELDS = {
-    "deepseek_api_key", "kimi_project_presurvey_api_key", "dsh_service_token", "weixin_credential_key",
-    "clawbot_gateway_token", "oss_access_key_id", "oss_access_key_secret",
+    "deepseek_api_key", "kimi_project_presurvey_api_key", "kimi_translator_api_key", "dsh_service_token",
+    "weixin_credential_key", "clawbot_gateway_token", "oss_access_key_id", "oss_access_key_secret",
 }
 BOOL_FIELDS = {"dsh_enabled", "weixin_enabled", "dsh_market_enabled", "clawbot_enabled"}
 INT_RANGES = {

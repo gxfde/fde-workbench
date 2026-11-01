@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     deepseek_ai_opportunity_model: str = "deepseek-v4-pro"
     deepseek_research_export_model: str = "deepseek-v4-pro"
     deepseek_document_generation_model: str = "deepseek-v4-pro"
-    # goal-d9：翻译器管道（文本 JSON 提炼，与 research_form/project_draft 同栈）。
-    deepseek_translator_model: str = "deepseek-v4-pro"
+    # goal-d9：翻译器管道（文本 JSON 提炼）。goal-d13 拍板：provider 切 kimi
+    # 槽位（kimi-k3，Moonshot OpenAI 兼容端点），客户端仍走通用文本 JSON 栈。
     # T6 高成本 run 前评审（goal-d11，总纲 §2.2 T6）：拟用 agent 的
     # max_cost_units 超过该阈值（或为 0=单 run 不限额，即最高成本档）时，
     # start_run 前置 T6 评审闸；0 = 全局关闭（试点期默认）。项目级关闭见
@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     kimi_base_url: str = "https://api.moonshot.cn/v1"
     kimi_project_presurvey_api_key: SecretStr | None = Field(default=None, repr=False)
     kimi_project_presurvey_model: str = "kimi-k3"
+    # goal-d13 拍板：翻译管道独立 kimi 槽位（key 与预调研分开配，换档不互相牵连）。
+    kimi_translator_api_key: SecretStr | None = Field(default=None, repr=False)
+    kimi_translator_model: str = "kimi-k3"
     kimi_timeout_seconds: int = Field(default=180, ge=10, le=600)
     # Kimi 槽位切到非 Moonshot 供应商（如 MiniMax）时的两个协议开关：
     # - kimi_local_docx_extract=True：供应商不提供 file-extract 文件接口，

@@ -36,7 +36,7 @@
 - 放行方式（二选一）：
   1. **纪要侧链**：召集 `T6-lite` 评审会（mandatory、守卫+模块智能体+finance persona）→ 会议纪要**封存** → `t6_gate_satisfied` 按 `topic_refs.project_id` 侧链该项目，后续高成本 run 直接放行（评审对象是项目内高成本 run 的性价比结论，一次评审放行后续 run）。**auto 纪要不算数**。
   2. **项目级关闭**：`PATCH /api/v1/projects/<id>` 置 `t6_review_disabled=true`（严格布尔）。适用于已在会下人工评审过的项目。
-- ⚠️ `t6_review_cost_threshold` 定值与 `T6-lite` 模板内容审定 = **待蔡工拍板**（D10 五项同族），本手册不预设数值。
+- ⚠️ `T6-lite` 模板内容**已审定通过**（goal-d13 交互式拍板，2026-11-02）；`t6_review_cost_threshold` 定值仍**待试点数据回流后拍板**，本手册不预设数值。
 
 ## 5. 翻译器门户操作流（goal-d9/d10/d12）
 

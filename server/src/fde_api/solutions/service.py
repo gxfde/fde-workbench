@@ -8,13 +8,14 @@ from typing import Any, NoReturn
 from uuid import uuid4
 
 from flask import current_app
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from fde_api.agents.models import AgentArtifact, AgentRun, SolutionReviewCheckpoint
 from fde_api.auth.models import User
 from fde_api.auth.passwords import verify_password
 from fde_api.control.access import ACCESS_RANK, authorize_ai_capability, effective_ai_access
+from fde_api.dispatch.models import DeliveryPackage
 from fde_api.documents import draft_service as documents
 from fde_api.documents.ai_content import _client
 from fde_api.documents.models import DocumentGenerationJob, ProjectDocument, ProjectDocumentDraft, ProjectDocumentVersion
@@ -356,6 +357,24 @@ def resolve_signoff(*, actor: User, project_id: str, solution_id: str, payload: 
         checkpoint.reviewer_user_id = actor.id
         if evidence_ref is not None:
             checkpoint.evidence_ref = evidence_ref.strip()
+        # goal-d13 拍板：approved = 人工终审通过 → 该方案终审通道内产物
+        # （linked_solution_id 绑定本方案）reviewed=False → True。reviewed 此前
+        # 无任何置 True 路径（服务端只有 C-1 拦截置 False），本闸即人工核验的
+        # 正式入口；拦截/降级留痕（linked=None）与 rejected 均不翻转。
+        flipped = 0
+        if decision == "approved":
+            artifact_ids = set(session.scalars(
+                select(AgentArtifact.id)
+                .where(AgentArtifact.reviewed.is_(False))
+                .where(AgentArtifact.linked_solution_id == solution.id)
+            ))
+            if artifact_ids:
+                session.execute(
+                    update(AgentArtifact)
+                    .where(AgentArtifact.id.in_(artifact_ids))
+                    .values(reviewed=True)
+                )
+            flipped = len(artifact_ids)
         session.flush()
         # updated_at 走 onupdate=func.now()（server 端生成）：flush 后回读再序列化
         session.refresh(checkpoint)
@@ -366,6 +385,7 @@ def resolve_signoff(*, actor: User, project_id: str, solution_id: str, payload: 
             "attempt": rejected_prior + 1,
             "run_id": checkpoint.handoff_run_id,
             "required_level": checkpoint.required_level,
+            "artifacts_reviewed_flipped": flipped,
         })
         project.version += 1
         return {
@@ -617,6 +637,26 @@ def export_sow(*, actor: User, project_id: str, solution_id: str, payload: dict[
         documents._require_project_manager(actor, project)
         solution = _load(session, project.id, solution_id, update=True)
         _require_editable(solution, expected_version)
+        # goal-d13 拍板：AI 协同参与（agent_assisted 交付包绑定本方案）的方案，
+        # 导出 SOW 前必须终审台拍板通过——含既有导出的重取（闸在复用路径之前，
+        # 严格口径：未 approved 的 AI 协同方案一个字节都不出系统）。纯人工方案
+        # 不受影响。只读 DeliveryPackage（派单 8 态机零触碰），无任何派单写路径。
+        agent_assisted = session.scalar(
+            select(DeliveryPackage.id).where(
+                DeliveryPackage.solution_id == solution.id,
+                DeliveryPackage.agent_assisted.is_(True),
+            ).limit(1)
+        )
+        if agent_assisted is not None:
+            approved = session.scalar(
+                select(SolutionReviewCheckpoint.id).where(
+                    SolutionReviewCheckpoint.solution_id == solution.id,
+                    SolutionReviewCheckpoint.checkpoint_type == "signoff",
+                    SolutionReviewCheckpoint.status == "approved",
+                ).limit(1)
+            )
+            if approved is None:
+                _error("solution_signoff_required", "该方案由 AI 协同参与交付，导出 SOW 前需在终审台拍板通过。", 409)
         existing = session.scalar(select(ProjectSolutionExport).where(
             ProjectSolutionExport.solution_id == solution.id, ProjectSolutionExport.solution_version == solution.version))
         if existing is not None:
