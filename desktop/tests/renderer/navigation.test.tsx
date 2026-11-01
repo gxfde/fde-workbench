@@ -147,6 +147,24 @@ describe("role-aware project workbench navigation", () => {
     expect(location.hash).toBe("#projects")
   })
 
+  it("redirects non-admin away from the pilot report (goal-d12, d11 挂账④)", async () => {
+    // UM-1 试点报告 admin 专属：d11 落地时 authorizedRoute 漏了 #/pilot 归一化，
+    // project_lead 直输 #/pilot 会渲染页面并吃到服务端 403（pilot_report_forbidden）。
+    location.hash = "#pilot"
+    renderAuthenticatedApp("project_lead")
+
+    expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
+    expect(location.hash).toBe("#projects")
+  })
+
+  it("keeps the pilot report for admin", async () => {
+    location.hash = "#pilot"
+    renderAuthenticatedApp("admin")
+
+    expect(await screen.findByRole("heading", { name: "UM-1 试点观测（30 天 / 20 run）" })).toBeVisible()
+    expect(location.hash).toBe("#pilot")
+  })
+
   it.each(["fde_engineer", "viewer"] as const)("redirects %s away from project creation", async (role) => {
     location.hash = "#projects/new"
     renderAuthenticatedApp(role)

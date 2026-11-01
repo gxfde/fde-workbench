@@ -172,6 +172,12 @@ export function authorizedRoute(route: AppRoute, role: UserRole): AppRoute {
   if (route.kind === "metrics") {
     return role === "admin" || role === "project_lead" ? route : projectsRoute
   }
+  // UM-1 试点报告（goal-d11）：admin 专属——d11 挂账④：非 admin 直输 #/pilot
+  // 此前会渲染页面并吃到服务端 403（pilot_report_forbidden），现在与导航
+  // isAdmin 门对齐，直接回落项目列表（服务端仍是最终防线，这里减少暴露面）。
+  if (route.kind === "pilot") {
+    return role === "admin" ? route : projectsRoute
+  }
   return route
 }
 

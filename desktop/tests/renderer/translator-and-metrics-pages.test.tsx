@@ -12,7 +12,11 @@ import { MetricsReportPage } from '../../src/renderer/src/metrics/MetricsReportP
 import { PilotReportPage } from '../../src/renderer/src/pilot/PilotReportPage'
 import { TranslatorPortalPage } from '../../src/renderer/src/translator/TranslatorPortalPage'
 
-beforeEach(() => { mocks.apiRequest.mockReset() })
+beforeEach(() => {
+  mocks.apiRequest.mockReset()
+  // goal-d12：门户页挂载即拉历史一览；未显式 mock 的用例默认给空列表。
+  mocks.apiRequest.mockResolvedValue([])
+})
 afterEach(cleanup)
 
 describe('翻译器门户（goal-d9 P3 全量）', () => {
@@ -151,6 +155,72 @@ describe('翻译器门户（goal-d9 P3 全量）', () => {
     await userEvent.setup().type(screen.getByLabelText(/客户诉求原话/), '诉求')
     await userEvent.setup().click(screen.getByRole('button', { name: /提交 AI 翻译/ }))
     expect(await screen.findAllByRole('link', { name: '项目' })).toHaveLength(1)
+  })
+})
+
+describe('翻译历史一览（goal-d12）', () => {
+  const historyRows = [
+    {
+      id: 'h1', status: 'ready', customer_vision: '仓库出入库必须过系统留痕，管理层看不到实时良率',
+      adopted_into: [{ project_id: 'p1', analysis_id: 'g1' }],
+      ai_model: 'deepseek-v4-pro', failure_code: null, failure_message: null,
+      result: {
+        executive_summary: '先采集后分析。',
+        key_business_problems: [
+          { text: '仓库出入库缺少系统留痕', severity: 'high', module: 'wms', classification: 'customer_stated' },
+        ],
+        open_questions: [],
+      },
+    },
+    {
+      id: 'h2', status: 'failed', customer_vision: '另一条诉求',
+      ai_model: null, failure_code: 'ai_output_invalid', failure_message: 'AI 返回格式不正确。',
+      result: null,
+    },
+    {
+      id: 'h3', status: 'running', customer_vision: '翻译中的一条',
+      ai_model: null, failure_code: null, failure_message: null, result: null,
+    },
+  ]
+
+  it('列表渲染状态徽标、原话摘要与已采纳计数；仅 ready/failed 行有查看按钮', async () => {
+    mocks.apiRequest.mockImplementation((path: string) => {
+      if (path === '/api/v1/translator/translations') return Promise.resolve(historyRows)
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    expect(await screen.findByRole('heading', { name: '最近翻译' })).toBeInTheDocument()
+    expect(screen.getByText('就绪')).toBeInTheDocument()
+    expect(screen.getByText('失败')).toBeInTheDocument()
+    expect(screen.getByText('翻译中')).toBeInTheDocument()
+    expect(screen.getByText(/仓库出入库必须过系统留痕，管理层看不到实时良率/)).toBeInTheDocument()
+    expect(screen.getByText('已采纳 1 项目')).toBeInTheDocument()
+    const viewButtons = screen.getAllByRole('button', { name: '查看' })
+    expect(viewButtons).toHaveLength(2) // ready + failed；running 行无查看
+  })
+
+  it('点击查看把历史行载入结果卡（可再次采纳到其他项目）', async () => {
+    const user = userEvent.setup()
+    mocks.apiRequest.mockImplementation((path: string) => {
+      if (path === '/api/v1/translator/translations') return Promise.resolve(historyRows)
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    await screen.findByRole('heading', { name: '最近翻译' })
+    await user.click(screen.getAllByRole('button', { name: '查看' })[0])
+    expect(await screen.findByText('AI 草稿 · 待人工确认')).toBeInTheDocument()
+    expect(screen.getByText('先采集后分析。')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '采纳到项目' })).toBeInTheDocument()
+  })
+
+  it('空历史显示空态；加载失败静默降级不阻塞表单', async () => {
+    mocks.apiRequest.mockImplementation((path: string) => {
+      if (path === '/api/v1/translator/translations') return Promise.reject(new Error('down'))
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    render(<TranslatorPortalPage />)
+    expect(await screen.findByText('翻译记录加载失败。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /提交 AI 翻译/ })).toBeInTheDocument()
   })
 })
 

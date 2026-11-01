@@ -33,6 +33,8 @@ interface TranslationDto {
   id: string
   status: 'pending' | 'running' | 'ready' | 'failed'
   adopted_into?: { project_id: string; analysis_id: string }[]
+  customer_vision?: string | null
+  created_at?: string | null
   result: {
     customer_vision?: string
     current_phase_objective?: string
@@ -64,8 +66,25 @@ export function TranslatorPortalPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [translation, setTranslation] = useState<TranslationDto | null>(null)
+  const [history, setHistory] = useState<TranslationDto[]>([])
+  const [historyError, setHistoryError] = useState(false)
   const pollTimer = useRef<number | null>(null)
   const preview = useMemoPreview(form)
+
+  // 历史一览（goal-d12）：GET /translations 列表（服务端：本人最近 20 条，
+  // 带 adopted_into）。加载失败静默降级为 muted 行——不阻塞表单主流程
+  //（沿 AdoptionSection 项目列表拉取失败的同一先例）。
+  const loadHistory = useCallback(() => {
+    void apiRequest<unknown>('/api/v1/translator/translations', { method: 'GET' })
+      .then((value) => {
+        const rows = Array.isArray(value) ? value : []
+        setHistory(rows.filter(isTranslationDto))
+        setHistoryError(false)
+      })
+      .catch(() => { setHistoryError(true) })
+  }, [apiRequest])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current !== null) {
@@ -89,6 +108,8 @@ export function TranslatorPortalPage() {
               return
             }
             pollTimer.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+          } else {
+            loadHistory() // 终态（ready/failed）刷新历史一览
           }
         })
         .catch(() => {
@@ -100,7 +121,7 @@ export function TranslatorPortalPage() {
         })
     }
     pollTimer.current = window.setTimeout(tick, POLL_INTERVAL_MS)
-  }, [apiRequest, stopPolling])
+  }, [apiRequest, stopPolling, loadHistory])
 
   function update<K extends keyof TranslatorFormState>(key: K, value: TranslatorFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -248,6 +269,13 @@ export function TranslatorPortalPage() {
           ))}
         </div>
         {translation ? <TranslationResultCard translation={translation} /> : null}
+        <HistorySection
+          items={history}
+          error={historyError}
+          activeId={translation?.id ?? null}
+          onReload={loadHistory}
+          onOpen={(row) => setTranslation(row)}
+        />
       </div>
     </section>
   )
@@ -310,6 +338,57 @@ function TranslationResultCard({ translation }: { translation: TranslationDto })
     )}
     {openQuestions.length > 0 ? <p className="muted translator-hint">待确认问题将在人工确认环节逐条消化。</p> : null}
     <AdoptionSection translationId={translation.id} />
+  </div>
+}
+
+const STATUS_BADGES: Record<TranslationDto['status'], { label: string; tone: string }> = {
+  pending: { label: '排队中', tone: 'muted' },
+  running: { label: '翻译中', tone: 'muted' },
+  ready: { label: '就绪', tone: 'ok' },
+  failed: { label: '失败', tone: 'warning' },
+}
+
+// 历史一览（goal-d12）：本人最近 20 条草稿。ready/failed 行可点「查看」载入
+// 结果卡——ready 草稿可再次采纳到其他项目（同一草稿可采多项目=个人资产，
+// goal-d10 决议①）；已采纳行透出计数徽标。
+function HistorySection({ items, error, activeId, onReload, onOpen }: {
+  items: TranslationDto[]
+  error: boolean
+  activeId: string | null
+  onReload: () => void
+  onOpen: (row: TranslationDto) => void
+}) {
+  return <div className="card translator-history">
+    <div className="card-heading">
+      <div><h3>最近翻译</h3></div>
+      <button type="button" className="text-button" onClick={onReload}>重新加载</button>
+    </div>
+    {error ? <p className="muted">翻译记录加载失败。</p> : null}
+    {!error && items.length === 0 ? <p className="muted">暂无翻译记录。</p> : null}
+    {items.length > 0 ? (
+      <ul className="translator-history-list">
+        {items.map((row) => {
+          const badge = STATUS_BADGES[row.status] ?? { label: row.status, tone: 'muted' }
+          const adoptedCount = row.adopted_into?.length ?? 0
+          const vision = (row.customer_vision ?? '').trim()
+          const viewable = row.status === 'ready' || row.status === 'failed'
+          return (
+            <li key={row.id} className={row.id === activeId ? 'translator-history-item active' : 'translator-history-item'}>
+              <span className={`badge ${badge.tone}`}>{badge.label}</span>
+              <span className="translator-history-vision">
+                {vision ? (vision.length > 40 ? `${vision.slice(0, 40)}…` : vision) : '（无原话）'}
+              </span>
+              {adoptedCount > 0 ? <span className="badge ok">已采纳 {adoptedCount} 项目</span> : null}
+              {viewable ? (
+                <button type="button" className="text-button" onClick={() => onOpen(row)}>
+                  {row.id === activeId ? '查看中' : '查看'}
+                </button>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+    ) : null}
   </div>
 }
 
