@@ -110,8 +110,18 @@
   - 事件：新增目标 `workflow_run`（workflow_run_created / succeeded / failed / cancelled / resumed）。
   - 测试：test_workflow_executor.py **19 例**（用例 4/5/6/7/8/11 + 路由权限/平台模板/断链/when 跳过/缺占位符/outbox→worker 全链/reconcile 钩子）；test_migrations HEAD 不变（零 DDL）。
 
-### T-W4 executor：agent+human_approval 节点
+### T-W4 executor：agent+human_approval 节点 — **DONE（2026-11-03）**
 - 前置：T-W3。审批复用 automation_approvals。测试：§6 用例 9-10。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **审批复用落地形态**：automation_approvals 加**可空** `workflow_node_run_id` 反链 + `run_id` 放开可空（迁移 `d5b8e2f4a7c9`，head 变更 25→26 rev；本任务唯一 DDL）。审批行=节点等待态的投影：反链 FK **CASCADE**（沿 node_runs.run_id 的 CASCADE 语义，审计事实由 operation_events 承载）；`uq_automation_approvals_run_request` 对 NULL run_id 不生效 ⇒ request_key 约定 `wfnode:{节点行id}`（全局唯一）+ 分派前 pending 查重双保险（崩溃恢复不重复建单，审批 id 挂节点幂等键作恢复锚点）。
+  - **拍板入口 = 既有任务中心 `decide_automation_approval`（零新路由）**：decide 按 run_id 是否为空分支——automation 审批照旧写 task_run；workflow 审批经 `_settle_workflow_node` → `executor.settle_approval_node` **同事务**落节点终态（approve→succeeded，output 携 approval_id/拍板人/理由；reject/expired→failed）并重投 workflow.run。落点在公共字段（拍板人/理由）赋值**之后**调用，节点产物才带真实理由（首轮实现踩过：settle 在 reason 赋值前读到空串）。
+  - **等待语义**：无 ready 且剩 waiting 节点 → run=`waiting_approval`（handler 正常返回、job 完成；**有 failed 先断链收敛** FV-F1）；拍板重投续跑，`_recover_interrupted` 把 waiting_approval 放回 running、`_settle_run` 对非终态不盖 finished_at。无人拍板则挂起（可取消）；**过期判定沿用「拍板时惰性判定」既有语义**（T-P1-5 清扫器落地前不做主动清扫）。取消：waiting 节点 cancelled、pending 审批行不动（迟到拍板只落审批行、不再驱动节点——settle 落点要求节点仍 waiting）。resume_run 保持 failed-only（waiting_approval 提示先拍板或取消）。
+  - **审批材料**：`{kind, workflow_run_id, node_key, input_snapshot}` + sha256 指纹 + **敏感键扫描**（`_contains_sensitive_argument` 提升为 `control/access.contains_sensitive_argument` 公共函数，DSH 审批与 workflow 审批同闸）+ 64KB 上限（同 create_dsh_approval_request 口径）；risk_level 固定 4（人工门=保守高险标注）；`dsh_approval_status` 惰性过期与 `execute_approved_dsh_tool` 同步加 workflow 分支守卫（审批无执行段，409 approval_not_executable）。
+  - **定义期**：human_approval.capability 白名单 = `CAPABILITY_REQUIREMENTS` 去 `system.*`（`APPROVAL_CAPABILITIES`）；validate_dag 注入参数 `capabilities`（None 跳过=纯函数单测兼容，生产路径 `validate_dag_against_registry` 注入）；risk_level/expires_minutes 既有校验不变。
+  - **agent 节点 = `agents.service.start_run` 同闸全链**（实时鉴权/预算/试点/T1/T6/沙箱/产物校验，绝不旁路），幂等键 `wfnode-{节点行id}:{attempt}`——agents 对失败终态 run 拒绝同键重跑（V8），工作流以 **attempt 代际**表达「显式重试」（resume/可重试崩溃恢复各开新代际；同 attempt 重复投递命中 completed 复用）；分派失败一律 retryable=False（agents 自带重试族，工作流不叠加）；分派未预期异常对 agent 节点也**非重试**（避免同图二次拉起沙箱 run）。`params.solution_id` 占位符解析后透传（agent_assisted/T1 方案闸随之生效）；`difficulty`/`max_cost_units` 节点字段未开放（后者属 agent 注册表授权成本档，T6 闸按注册表判）。
+  - start_run 422 守卫保留为防御（四类全支持后实际不可达；未知类型用例靠绕过定义期校验手工构造「发布后白名单漂移」场景）。
+  - 事件：`workflow_run_waiting_approval`（run 挂起）/ `workflow_run_approval_decided`（拍板落点）。
+  - 测试：test_workflow_executor.py **19→26**（审批批准/拒绝/过期/等待中取消+迟到拍板中和/幂等重入 + agent 全闸/能力拒绝不重试/run 失败不叠加工作流重试；unsupported 用例改未知类型）+ test_workflow_definition.py +1（capability 白名单，system.* 排除）；test_migrations HEAD 钉 `d5b8e2f4a7c9`（往返含 downgrade 先清 workflow 审批行再恢复 NOT NULL）。
 
 ### T-W5 cancel/resume + reconcile 收敛
 - 前置：T-W3。API：POST …/workflow-runs/{rid}/cancel。测试：§6 用例 8。复杂度：**M**。

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import choice
@@ -16,7 +15,13 @@ from sqlalchemy.orm import joinedload
 
 from fde_api.auth.models import User
 from fde_api.auth.service import AuthServiceError, verify_current_password
-from fde_api.control.access import CAPABILITY_REQUIREMENTS, authorize_ai_capability, capabilities_for_level, effective_ai_access
+from fde_api.control.access import (
+    CAPABILITY_REQUIREMENTS,
+    authorize_ai_capability,
+    capabilities_for_level,
+    contains_sensitive_argument as _contains_sensitive_argument,
+    effective_ai_access,
+)
 from fde_api.control.models import AutomationApproval, AutomationTask, AutomationTaskRun, ChannelBinding
 from fde_api.control.knowledge import snapshot_for_run
 from fde_api.extensions import db
@@ -36,10 +41,6 @@ class ControlServiceError(Exception):
 
 
 DEFAULT_AUTOMATION_CAPABILITIES = ["project.read", "project.summarize", "file.search"]
-_SENSITIVE_ARGUMENT_KEY = re.compile(
-    r"password|passwd|pwd|token|secret|credential|authorization|bearer|api[_-]?key",
-    re.IGNORECASE,
-)
 
 
 def account_summary(user: User) -> dict[str, Any]:
@@ -647,6 +648,23 @@ def create_dsh_approval_request(*, run_id: str, payload: dict[str, Any]) -> dict
         session.close()
 
 
+def _settle_workflow_node(
+    session: Any, approval: AutomationApproval, *, approved: bool | None, reviewer: User
+) -> None:
+    """workflow human_approval 节点的审批落点（V3 T-W4）。
+
+    ``run_id`` 为空 = workflow 节点审批：节点终态与本事务原子提交，并重投
+    workflow.run 让执行器续跑（approved=True → succeeded；False=拒绝 / None=过期
+    → failed，断链语义）。节点已不在 waiting（被取消/恢复重派）时不动。
+    lazy import 防模块级环（workflows.executor 反向依赖 control 各闸）。
+    """
+    if approval.workflow_node_run_id is None:
+        return
+    from fde_api.workflows.executor import settle_approval_node
+
+    settle_approval_node(session, approval, approved=approved, reviewer=reviewer)
+
+
 def list_automation_approvals(*, user: User) -> dict[str, Any]:
     session = db.session()
     try:
@@ -707,10 +725,13 @@ def decide_automation_approval(
             now = datetime.now(UTC)
             if approval.expires_at <= now:
                 approval.status = "expired"
-                approval.run.status = "failed"
-                approval.run.error_code = "approval_expired"
-                approval.run.error_message = "操作审批已过期。"
-                approval.run.finished_at = now
+                if approval.run_id is not None:
+                    approval.run.status = "failed"
+                    approval.run.error_code = "approval_expired"
+                    approval.run.error_message = "操作审批已过期。"
+                    approval.run.finished_at = now
+                else:
+                    _settle_workflow_node(session, approval, approved=None, reviewer=user)
                 approval.version += 1
                 session.flush()
                 result = _serialize_approval(approval, can_review=False)
@@ -733,16 +754,24 @@ def decide_automation_approval(
                     if not password_valid:
                         raise ControlServiceError("invalid_password", "当前密码不正确。", 400)
                     approval.status = "approved"
-                    approval.run.status = "running"
+                    if approval.run_id is not None:
+                        approval.run.status = "running"
                 else:
                     approval.status = "rejected"
-                    approval.run.status = "cancelled"
-                    approval.run.error_code = "approval_rejected"
-                    approval.run.error_message = "操作审批被拒绝。"
-                    approval.run.finished_at = now
+                    if approval.run_id is not None:
+                        approval.run.status = "cancelled"
+                        approval.run.error_code = "approval_rejected"
+                        approval.run.error_message = "操作审批被拒绝。"
+                        approval.run.finished_at = now
                 approval.reviewed_by_user_id = user.id
                 approval.reviewed_at = now
                 approval.decision_reason = reason.strip()
+                if approval.run_id is None:
+                    # workflow 审批落点在公共字段（拍板人/理由）赋值之后，节点产物
+                    # 才能携带真实理由（V3 T-W4）
+                    _settle_workflow_node(
+                        session, approval, approved=(decision_value == "approve"), reviewer=user
+                    )
                 approval.version += 1
                 session.flush()
                 result = _serialize_approval(approval, can_review=False)
@@ -769,10 +798,13 @@ def dsh_approval_status(*, approval_id: str) -> dict[str, Any]:
                 raise ControlServiceError("approval_not_found", "审批请求不存在。", 404)
             if approval.status == "pending" and approval.expires_at <= datetime.now(UTC):
                 approval.status = "expired"
-                approval.run.status = "failed"
-                approval.run.error_code = "approval_expired"
-                approval.run.error_message = "操作审批已过期。"
-                approval.run.finished_at = datetime.now(UTC)
+                if approval.run_id is not None:
+                    approval.run.status = "failed"
+                    approval.run.error_code = "approval_expired"
+                    approval.run.error_message = "操作审批已过期。"
+                    approval.run.finished_at = datetime.now(UTC)
+                else:
+                    _settle_workflow_node(session, approval, approved=None, reviewer=None)
             return _serialize_approval(approval, can_review=False, include_arguments=False)
     finally:
         session.close()
@@ -800,6 +832,11 @@ def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
                 return _serialize_approval(approval, can_review=False, include_arguments=False)
             if approval.status != "approved":
                 raise ControlServiceError("approval_not_approved", "该操作尚未获批。", 409)
+            if approval.workflow_node_run_id is not None:
+                # workflow 审批（T-W4）：批准即驱动节点，无 DSH 工具执行段
+                raise ControlServiceError(
+                    "approval_not_executable", "工作流审批在拍板时即生效，无需执行步骤。", 409
+                )
 
             canonical_arguments = json.dumps(
                 approval.arguments_json,
@@ -982,15 +1019,3 @@ def _serialize_approval(
     if include_arguments:
         data["arguments"] = approval.arguments_json
     return data
-
-
-def _contains_sensitive_argument(value: Any) -> bool:
-    if isinstance(value, dict):
-        return any(
-            _SENSITIVE_ARGUMENT_KEY.search(str(key))
-            or _contains_sensitive_argument(child)
-            for key, child in value.items()
-        )
-    if isinstance(value, list):
-        return any(_contains_sensitive_argument(item) for item in value)
-    return False

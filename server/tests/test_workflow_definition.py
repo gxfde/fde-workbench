@@ -112,6 +112,25 @@ def test_refs_whitelists_call_skill_agent():
     assert "unexpected_ref" in _codes(validate_dag(_dag({"key": "x", "type": "human_approval", "capability": "c", "ref": CALL}), **REFS))
 
 
+def test_human_approval_capability_must_be_registered(db_session):
+    """T-W4：生产路径（against_registry）注入能力登记表白名单；system.* 不开放。"""
+    from fde_api.workflows.definition_service import (
+        APPROVAL_CAPABILITIES,
+        validate_dag_against_registry,
+    )
+
+    assert "workbench.write" in APPROVAL_CAPABILITIES
+    assert not any(capability.startswith("system.") for capability in APPROVAL_CAPABILITIES)
+    bad = validate_dag_against_registry(
+        db_session, _dag({"key": "x", "type": "human_approval", "capability": "made.up.capability"})
+    )
+    assert "approval_capability_unknown" in _codes(bad)
+    good = validate_dag_against_registry(
+        db_session, _dag({"key": "x", "type": "human_approval", "capability": "workbench.write"})
+    )
+    assert good.ok
+
+
 def test_placeholders_require_upstream_output():
     """占位符规则：上下文键永远可用；output 须为**传递上游**产物；兄弟节点/未知名 → 422。"""
     dag = _dag(

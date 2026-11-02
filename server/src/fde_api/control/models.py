@@ -169,10 +169,17 @@ class AutomationApproval(Base, TimestampMixin, VersionedMixin):
         UniqueConstraint("run_id", "request_key", name="uq_automation_approvals_run_request"),
         Index("ix_automation_approvals_project_status", "project_id", "status"),
         Index("ix_automation_approvals_expires", "status", "expires_at"),
+        Index("ix_automation_approvals_workflow_node", "workflow_node_run_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    run_id: Mapped[str] = mapped_column(ForeignKey("automation_task_runs.id", ondelete="RESTRICT"), nullable=False)
+    # T-W4 起可空：workflow human_approval 节点审批没有 automation_task_run 可挂
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("automation_task_runs.id", ondelete="RESTRICT"))
+    # workflow 审批的反链节点行（run_id 为空时非空）；CASCADE 沿 node_runs.run_id
+    # 的 CASCADE 语义（审批是节点等待态的投影，审计事实由 operation_events 承载）
+    workflow_node_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workflow_node_runs.id", ondelete="CASCADE")
+    )
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
     requested_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
@@ -189,7 +196,7 @@ class AutomationApproval(Base, TimestampMixin, VersionedMixin):
     decision_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     result_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
-    run: Mapped[AutomationTaskRun] = relationship(foreign_keys=[run_id])
+    run: Mapped[AutomationTaskRun | None] = relationship(foreign_keys=[run_id])
     project: Mapped[Project] = relationship(foreign_keys=[project_id])
     requested_by: Mapped[User] = relationship(foreign_keys=[requested_by_user_id])
     reviewed_by: Mapped[User | None] = relationship(foreign_keys=[reviewed_by_user_id])

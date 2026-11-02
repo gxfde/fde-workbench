@@ -2,9 +2,9 @@
  "route_count": 276,
  "blueprint_count": 35,
  "table_count": 101,
- "revision_count": 25,
+ "revision_count": 26,
  "heads": [
-  "b7d9f1a3c5e2"
+  "d5b8e2f4a7c9"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -134,6 +134,14 @@
    ],
    "add_column_tables": [
     "gates"
+   ]
+  },
+  "d5b8e2f4a7c9": {
+   "file": "d5b8e2f4a7c9_v3_workflow_approval_link.py",
+   "down_revision": "b7d9f1a3c5e2",
+   "create_tables": [],
+   "add_column_tables": [
+    "automation_approvals"
    ]
   },
   "d7a3e8c5f1b9": {

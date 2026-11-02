@@ -1,42 +1,55 @@
-"""V3 T-W3：workflow 执行器——call/skill 节点、节点独立事务、断链不静默、幂等恢复。
+"""V3 T-W3/T-W4：workflow 执行器——四类节点、节点独立事务、断链不静默、幂等恢复。
 
 覆盖设计 workflow-dag-v1 §6 用例 4-8、11（§5 路由与权限随本文件一起钉住）：
-- run 生命周期：published 闸 / 未支持节点 422 / 幂等键同 run 返回（用例 5）/ 取消（用例 8）；
+- run 生命周期：published 闸 / 未知节点 422 / 幂等键同 run 返回（用例 5）/ 取消（用例 8）；
 - 执行循环：占位符解析（缺键→failed 不填空串）/ 版本钉住（用例 7）/ 断链 failed+skipped
   不静默 done（用例 11）/ 重试后成功与耗尽恢复复用产物（用例 4）；
 - 外副作用幂等：写类 call 节点 idempotency_key 与 api_actions 同构、跨重试/恢复稳定
-  （用例 6）；outbox→worker 全链与 reconcile 放弃钩子。
+  （用例 6）；outbox→worker 全链与 reconcile 放弃钩子；
+- T-W4：agent 节点走 agents.start_run 全闸（拒绝不重试 / run 失败不叠加工作流重试）、
+  human_approval 复用 automation_approvals（waiting→拍板→重投；拒绝/过期断链；
+  等待中取消；幂等重入不重复建审批）。
 """
 from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from test_agents_d4_harness import make_user
+from test_agents_d4_harness import (  # noqa: F401  (pytest fixture 再导出)
+    ScriptedEvents,
+    d4_app,
+    d4_settings,
+    make_user,
+    prime_run,
+    seed_agent,
+)
 from test_document_drafts_api import _add_viewer_member, _persist_project
 from test_gates_api import AuthorizedClient
 from test_workflow_definition import _dag
 
 from conftest import INITIAL_PASSWORD
+from fde_api.agents.models import AgentRun
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.control.api_catalog import CATALOG
 from fde_api.control.dsh_runtime import DSHRuntimeError
-from fde_api.control.models import SkillDefinition, SkillVersion
-from fde_api.control.service import ControlServiceError
+from fde_api.control.models import AutomationApproval, SkillDefinition, SkillVersion
+from fde_api.control.service import ControlServiceError, decide_automation_approval
 from fde_api.jobs.handlers import get_handler
 from fde_api.jobs.models import BackgroundJob
-from fde_api.jobs.outbox import dispatch_pending
+from fde_api.jobs.outbox import dispatch_pending, utcnow
 from fde_api.jobs.reconcile import RECOVERABLE_JOB_TYPES, reconcile_jobs
 from fde_api.jobs.worker import run_job
 from fde_api.workbench.models import OperationEvent
 from fde_api.workflows.definition_service import (
     create_definition,
+    dag_sha256,
     publish_definition,
     update_definition_dag,
 )
@@ -207,27 +220,43 @@ def test_start_run_requires_published_definition(db_session, settings):
     assert created and run.status == "queued" and run.definition_version == 1
 
 
-def test_start_run_rejects_unsupported_node_types(db_session, settings):
-    """agent/human_approval 在 start_run 即 422（不留必死 run；T-W4 开放）。"""
+def test_start_run_rejects_unknown_node_types(db_session, settings):
+    """执行器侧防御守卫：四类之外的类型在 start_run 即 422（不留必死 run）。
+
+    定义期校验本就会拦未知类型（T-W1 规则 3），此守卫防的是发布后白名单漂移
+    （校验器放行了一个执行器尚未实现的类型）——手工绕过定义期校验构造该场景。
+    """
+    from fde_api.jobs.outbox import utcnow
+    from fde_api.workflows.models import WorkflowDefinition, WorkflowDefinitionVersion
+
     leader = make_user(db_session, "project_lead")
     project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
-    definition = _make_definition(
-        db_session,
-        leader,
-        project,
-        _node("gather", output="subjects"),
-        {
-            "key": "approve",
-            "type": "human_approval",
-            "depends_on": ["gather"],
-            "capability": "workbench.write",
-        },
-        publish=True,
+    dag = {"nodes": [{"key": "wait", "type": "wait", "depends_on": []}]}
+    definition = WorkflowDefinition(
+        project_id=project.id,
+        name=f"漂移{uuid4().hex[:4]}",
+        dag_json=dag,
+        status="published",
+        version=1,
+        created_by_user_id=leader.id,
     )
+    db_session.add(definition)
+    db_session.flush()
+    db_session.add(
+        WorkflowDefinitionVersion(
+            definition_id=definition.id,
+            version=1,
+            dag_json=dag,
+            content_sha256=dag_sha256(dag),
+            published_by_user_id=leader.id,
+            published_at=utcnow(),
+        )
+    )
+    db_session.commit()
     with pytest.raises(WorkflowRunError) as raised:
         _start(db_session, leader, project, definition)
     assert raised.value.status == 422 and raised.value.code == "unsupported_node_type"
-    assert raised.value.detail["node_types"] == ["human_approval"]
+    assert raised.value.detail["node_types"] == ["wait"]
 
 
 def test_start_run_idempotency_key_returns_same_run(db_session, settings):
@@ -839,3 +868,323 @@ def test_reconcile_treats_workflow_run_as_recoverable_and_fails_run_when_exhaust
     assert settled.status == "failed" and "worker_lost" in (settled.error or "")
     node = _node_map(db_session, run.id)["gather"]
     assert node.status == "failed" and node.error == "worker_lost"
+
+
+# ---------------------------------------------------------------------------
+# T-W4：human_approval 节点（复用 automation_approvals）
+# ---------------------------------------------------------------------------
+
+
+def _approval_definition(db_session, leader, project):
+    return _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("gather", output="subjects"),
+        {
+            "key": "approve",
+            "type": "human_approval",
+            "depends_on": ["gather"],
+            "capability": "workbench.write",
+            "output": "signoff",
+        },
+        _node("ship", ["approve"], params={"note": "{{signoff.decision}}"}),
+        publish=True,
+    )
+
+
+def _waiting_approval(db_session, run_id, node_key="approve"):
+    node = _node_map(db_session, run_id)[node_key]
+    approval = db_session.scalar(
+        select(AutomationApproval).where(AutomationApproval.workflow_node_run_id == node.id)
+    )
+    assert approval is not None
+    return node, approval
+
+
+def test_human_approval_wait_approve_then_resume(db_session, settings, monkeypatch):
+    """§6 用例 10 前半：waiting_approval 挂起 → 任务中心批准 → 节点 succeeded → 重投收敛。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _approval_definition(db_session, leader, project)
+    run, _ = _start(db_session, leader, project, definition)
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "waiting_approval"
+    node, approval = _waiting_approval(db_session, run.id)
+    assert node.status == "waiting" and node.idempotency_key == approval.id
+    assert approval.run_id is None and approval.status == "pending"
+    assert approval.request_key == f"wfnode:{node.id}"
+    assert approval.capability == "workbench.write" and approval.risk_level == 4
+    assert approval.tool_name == "workflow.human_approval"
+    assert approval.arguments_json["workflow_run_id"] == run.id
+    assert approval.arguments_json["node_key"] == "approve"
+    assert len(approval.arguments_sha256) == 64
+    assert _node_map(db_session, run.id)["ship"].status == "pending"
+
+    # 幂等重入：handler 重跑不建第二条审批
+    run_workflow_run(run.id)
+    count = db_session.scalar(
+        select(func.count())
+        .select_from(AutomationApproval)
+        .where(AutomationApproval.workflow_node_run_id == node.id)
+    )
+    assert count == 1
+
+    # 拍板批准（与任务中心同一入口 decide_automation_approval）：节点 succeeded
+    decide_automation_approval(
+        user=leader,
+        approval_id=approval.id,
+        decision_value="approve",
+        password=INITIAL_PASSWORD,
+        reason="放行",
+    )
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    assert approval.status == "approved" and node.status == "succeeded"
+    assert node.output_json["decision"] == "approved"
+    assert node.output_json["approval_id"] == approval.id
+
+    run_workflow_run(run.id)  # 拍板重投后的 handler
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["ship"].status == "succeeded"
+    assert nodes["ship"].input_snapshot == {"note": "approved"}
+    assert len(calls) == 2
+    events = {
+        event.event_type
+        for event in db_session.scalars(
+            select(OperationEvent).where(
+                OperationEvent.target_type == "workflow_run", OperationEvent.target_id == run.id
+            )
+        ).all()
+    }
+    assert "workflow_run_waiting_approval" in events
+    assert "workflow_run_approval_decided" in events
+
+
+def test_human_approval_rejected_fails_chain(db_session, settings, monkeypatch):
+    """拒绝 → 节点 failed（断链语义）→ 重投后 run failed + 下游 skipped（FV-F1）。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _approval_definition(db_session, leader, project)
+    run, _ = _start(db_session, leader, project, definition)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+
+    decide_automation_approval(
+        user=leader,
+        approval_id=approval.id,
+        decision_value="reject",
+        password="",
+        reason="不同意",
+    )
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    assert approval.status == "rejected"
+    assert node.status == "failed" and node.error == "approval_rejected:不同意"
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["ship"].status == "skipped" and nodes["ship"].error == "upstream_not_succeeded"
+
+
+def test_human_approval_expiry_lazily_fails_node_on_decide(db_session, settings, monkeypatch):
+    """§6 用例 10 后半：过审批复「拍板时惰性判定」语义 → 409 + 节点 failed → 断链。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _approval_definition(db_session, leader, project)
+    run, _ = _start(db_session, leader, project, definition)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    approval.expires_at = utcnow() - timedelta(seconds=1)
+    db_session.commit()
+
+    with pytest.raises(ControlServiceError) as raised:
+        decide_automation_approval(
+            user=leader,
+            approval_id=approval.id,
+            decision_value="approve",
+            password=INITIAL_PASSWORD,
+            reason="迟到的拍板",
+        )
+    assert raised.value.status == 409 and raised.value.code == "approval_expired"
+
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    assert approval.status == "expired"
+    assert node.status == "failed" and node.error == "approval_expired:操作审批已过期。"
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    assert _node_map(db_session, run.id)["ship"].status == "skipped"
+
+
+def test_cancel_waiting_run_late_decision_is_neutralized(db_session, settings, monkeypatch):
+    """等待中取消：waiting 节点 cancelled；迟到的批准只落审批行，不再驱动节点。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _approval_definition(db_session, leader, project)
+    run, _ = _start(db_session, leader, project, definition)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+
+    result = cancel_run(actor=leader, project_id=project.id, run_id=run.id)
+    assert result["cancelled"] is True
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    assert node.status == "cancelled" and run.status == "cancelled"
+
+    decide_automation_approval(
+        user=leader,
+        approval_id=approval.id,
+        decision_value="approve",
+        password=INITIAL_PASSWORD,
+        reason="取消后才拍",
+    )
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    assert approval.status == "approved"  # 决定如实落审批行
+    assert node.status == "cancelled"  # 节点不再被审批驱动
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# T-W4：agent 节点（agents.start_run 同闸；沙箱适配器按 d4 harness 注入假件）
+# ---------------------------------------------------------------------------
+
+
+def test_agent_node_runs_full_start_run_gates(db_session, d4_settings, d4_app, monkeypatch):
+    """agent 节点走 agents.start_run 全闸；输出携 agent_run_id 供下游占位符引用。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    agent = seed_agent(
+        db_session,
+        d4_settings,
+        capability="project.read",
+        allowed_tools=(),
+        credential_ref=f"zcode-{uuid4().hex[:6]}",
+    )
+    prime_run(d4_app)  # 假沙箱 + 脚本事件 done(exit 0)
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("gather", output="subjects"),
+        {
+            "key": "classify",
+            "type": "agent",
+            "ref": agent.id,
+            "depends_on": ["gather"],
+            "output": "verdict",
+        },
+        _node("report", ["classify"], params={"v": "{{verdict.agent_run_id}}"}),
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    with d4_app.app_context():
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["classify"].status == "succeeded" and nodes["classify"].attempt == 1
+    output = nodes["classify"].output_json
+    assert output["agent_run_status"] == "completed" and output["agent_run_id"]
+    agent_run = db_session.get(AgentRun, output["agent_run_id"])
+    assert agent_run.idempotency_key == f"wfnode-{nodes['classify'].id}:1"
+    assert agent_run.project_id == project.id
+    assert agent_run.initiated_by_user_id == leader.id
+    assert agent_run.capability_used == "project.read"
+    assert nodes["report"].input_snapshot == {"v": agent_run.id}
+    assert len(calls) == 2  # gather + report 都走 api_execute 同闸
+
+
+def test_agent_node_gate_refusal_fails_node_without_retry(db_session, d4_settings, d4_app):
+    """实时能力闸（每节点）：发起人不具备 agent 能力档 → 节点 failed，max_retries 不叠加。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    agent = seed_agent(
+        db_session,
+        d4_settings,
+        capability="agent.system.tool",  # system_operator 档：project_lead 不具备
+        allowed_tools=(),
+        credential_ref=f"zcode-{uuid4().hex[:6]}",
+    )
+    prime_run(d4_app)  # 闸在分派前：假沙箱不应被触达
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "classify", "type": "agent", "ref": agent.id, "max_retries": 3},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    with d4_app.app_context():
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    node = _node_map(db_session, run.id)["classify"]
+    assert node.status == "failed" and node.attempt == 1
+    assert "无权" in (node.error or "")
+
+
+def test_agent_node_run_failure_fails_node_without_workflow_retry(
+    db_session, d4_settings, d4_app
+):
+    """沙箱 run 终态 failed → 节点 failed（agents 自带重试族，工作流不叠加自动重试）。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    agent = seed_agent(
+        db_session,
+        d4_settings,
+        capability="project.read",
+        allowed_tools=(),
+        credential_ref=f"zcode-{uuid4().hex[:6]}",
+    )
+    prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 1}]]))
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "classify", "type": "agent", "ref": agent.id, "max_retries": 3},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    with d4_app.app_context():
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    node = _node_map(db_session, run.id)["classify"]
+    assert node.status == "failed" and node.attempt == 1
+    assert (node.error or "").startswith("agent_run_failed:")

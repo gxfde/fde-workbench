@@ -1,6 +1,6 @@
 # Workflow DAG v1 设计（P1）
 
-> 状态：**大半 IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器（call+skill 节点，2026-11-03 T-W3）与 §5 路由五条均已实施**（cancel/resume 路由随 T-W5；偏差见 backlog 实施记录）。agent/human_approval 执行与 §5 cancel/resume 路由仍 PROPOSED（T-W4/T-W5）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
+> 状态：**大半 IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`；automation_approvals 审批反链 2026-11-03 T-W4 迁移 `d5b8e2f4a7c9`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器四类节点全部实施（call/skill=2026-11-03 T-W3；agent/human_approval=2026-11-03 T-W4）与 §5 路由五条均已实施**（cancel/resume 路由随 T-W5；偏差见 backlog 实施记录）。§5 cancel/resume 路由仍 PROPOSED（T-W5）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
 > 核心决策（任务书"决策 3"）：**不复制队列**。workflow 是 background_jobs 的一个新 job_type（`workflow.run`），编排 handler 在一个 job 内驱动节点循环，复用 lease/token/续租/reconcile/failure-hook 全套机制。
 
 ## 1. 与现有体系的边界（决策 3 落实）
@@ -78,7 +78,7 @@
 校验规则（`definition_service.validate_dag`，全部可单测）：
 1. key 唯一、非空；2. depends_on 引用存在（**环检测=Kahn 拓扑排序，环→422**，修 fde-v2 FV-F1）；3. type ∈ 四类；4. call.ref 必须 ∈ api_catalog ENTRIES（白名单，封 SSRF 面）；5. skill.ref 必须是 published 版本（显式版本号）；6. agent.ref 必须存在且可用；7. output 名不重复；8. {{placeholder}} 引用的 output 必须在上游声明；9. effect=external 的 call 节点必须含 human_approval 后继或自身挂审批（规则引擎式校验，P1 可先告警 P2 强制）。
 
-## 3. 执行器（IMPLEMENTED 2026-11-03，server/src/fde_api/workflows/executor.py——T-W3；agent/human_approval 分派随 T-W4）
+## 3. 执行器（IMPLEMENTED 2026-11-03，server/src/fde_api/workflows/executor.py——T-W3 call/skill + T-W4 agent/human_approval 四类全落地）
 
 ```
 run_workflow(run_id):                      # 注册为 jobs handler "workflow.run"
@@ -90,12 +90,14 @@ run_workflow(run_id):                      # 注册为 jobs handler "workflow.ru
     分派：
       call   → mcp_gateway.call_tool("api_execute", …同一鉴权/确认闸)   # 绝不旁路
       skill  → mcp_gateway.skill 语义（published 固定版本）
-      agent  → agents.start_run（同全部闸：预算/pilot/T1/T6/沙箱/上下文脱敏）
-      human_approval → 建 automation_approvals（复用 run+request_key/15min/sha256/一次性），node=waiting
+      agent  → agents.start_run（同全部闸：预算/pilot/T1/T6/沙箱/上下文脱敏）✅ T-W4
+      human_approval → 建 automation_approvals（复用 run+request_key/15min/sha256/一次性），node=waiting ✅ T-W4
     失败：attempt<max_retries → 指数退避重试（复用 jobs 重试策略，域 14）；否则节点 failed
     每步独立事务提交（节点产物先落表再前进——崩溃恢复的锚点）
   取消：POST cancel → run=cancelled，未启动节点=cancelled，running 节点由 token 守卫自然收敛
 ```
+
+T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 automation_approvals（`run_id` 可空 + `workflow_node_run_id` 反链，迁移 `d5b8e2f4a7c9`）；拍板走既有任务中心 `decide_automation_approval`（零新路由），approve→节点 succeeded+重投 workflow.run，reject/expired→节点 failed（断链）；无人拍板则 run 停在 `waiting_approval`（可取消，过期=拍板时惰性判定）。agent 节点幂等键 `wfnode-{行id}:{attempt}`（agents V8 对失败终态拒绝同键重跑 ⇒ attempt 代际=显式重试），分派失败不叠加工作流自动重试。
 
 权限（每节点实时校验，非 run 级冻结）：call→发起人 capability∩project scope（api_execute 同闸）；agent→start_run 同闸；审批人→automation_approvals 同闸。**工作流无法绕过任何既有闸**（任务书决策 4/5 落实；对照 fde-v2 flow 绕 HITL 的 FV-F2，此为设计红线）。
 
@@ -118,7 +120,7 @@ run_workflow(run_id):                      # 注册为 jobs handler "workflow.ru
 
 错误码：422 dag_invalid / 409 idempotency_conflict / 409 already_terminal / 403 permission_revoked（节点执行时）。
 
-## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py，PROPOSED）
+## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py——用例 1-11 均已随 T-W1/T-W3/T-W4 落地；用例 12 证据候选随 T-G1）
 
 1. 环 DAG → 422 且指明环节点；2. depends_on/ref 未知 → 422；3. call.ref 不在 catalog → 422（白名单生效）；4. 节点失败重试 n 次→paused→resume 只跑剩余节点（已完成节点 output 复用，断言不重复执行）；5. 幂等键：同 key 二次 run → 409 或返回同一 run；6. 效果幂等：外副作用节点崩溃后恢复不二次执行（断言 node 幂等键）；7. definition_version 固定：发布 v2 后旧 run 仍按 v1 定义展示与恢复；8. 取消：未启动节点 cancelled、已成功节点保留；9. 权限撤销：run 中途撤销 capability → 后续 call 节点 403 permission_revoked；10. 审批过期：waiting 节点 15min 后 failed（复用审批语义）；11. 断链不静默 done（修 FV-F1 的回归用例）；12. workflow 产物→gate 证据候选：claim_status 仍为 None，人工采纳后才 claimed/accepted。
 

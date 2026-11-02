@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import select
 
@@ -9,6 +11,26 @@ from fde_api.control.models import UserAIAccessGrant
 from fde_api.extensions import db
 from fde_api.projects.permissions import project_access
 from fde_api.workbench.models import Project
+
+
+# 审批/操作材料里的敏感键（DSH 审批请求与 workflow 审批共用一道闸）
+SENSITIVE_ARGUMENT_KEY = re.compile(
+    r"password|passwd|pwd|token|secret|credential|authorization|bearer|api[_-]?key",
+    re.IGNORECASE,
+)
+
+
+def contains_sensitive_argument(value: Any) -> bool:
+    """递归扫描 dict/list 的键名，命中敏感模式即拒绝进入审批材料。"""
+    if isinstance(value, dict):
+        return any(
+            SENSITIVE_ARGUMENT_KEY.search(str(key))
+            or contains_sensitive_argument(child)
+            for key, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(contains_sensitive_argument(item) for item in value)
+    return False
 
 
 ACCESS_RANK = {

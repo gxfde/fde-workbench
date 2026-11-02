@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W4：Workflow 执行器 agent/human_approval 节点（审批复用 automation_approvals，2026-11-03）
+
+### 服务端（1 个迁移（唯一 DDL）/ 零新路由 / 执行器+control 审批链扩展 / 零桌面改动）
+
+- **human_approval 节点 = 复用 automation_approvals（设计 §3 落实）**：迁移 **`d5b8e2f4a7c9`**——`run_id` 放开可空 + 新增可空 `workflow_node_run_id` 反链（审批行=节点等待态的投影，FK CASCADE 随节点走，审计事实由 operation_events 承载）。分派即建审批：request_key=`wfnode:{节点行id}`、arguments_sha256 绑定输入快照、敏感键扫描（`contains_sensitive_argument` 提升为 control/access 公共函数，与 DSH 审批同闸）+ 64KB 上限、risk_level=4、15min 过期（`expires_minutes` 节点字段 1–1440 可调）；审批 id 挂节点幂等键 + pending 查重 ⇒ 崩溃恢复不重复建单。
+- **拍板走既有任务中心入口（零新路由）**：`decide_automation_approval` 按 run_id 分支——workflow 审批经 `executor.settle_approval_node` **同事务**落节点终态（批准→succeeded 且 output 携 approval_id/拍板人/理由；拒绝/过期→failed）并**重投 workflow.run** 续跑；`dsh_approval_status` 惰性过期与 `execute_approved_dsh_tool` 同步加 workflow 守卫（审批无执行段）。
+- **等待语义**：无 ready 且剩 waiting 节点 → run=`waiting_approval`（handler 正常返回；**有 failed 先断链收敛** FV-F1）；无人拍板则挂起（可取消），过期=拍板时惰性判定（主动清扫随 T-P1-5）；取消时 waiting 节点 cancelled、迟到拍板只落审批行不再驱动节点；resume 保持 failed-only。
+- **agent 节点 = agents.start_run 同闸全链**（实时鉴权/月度预算/试点配额/T1/T6/沙箱/产物校验，绝不旁路）：幂等键 `wfnode-{节点行id}:{attempt}`——agents 对失败终态 run 拒绝同键重跑（V8），工作流以 **attempt 代际**表达「显式重试」（resume_run）；分派失败一律不叠加工作流自动重试（agents 自带重试族）；`params.solution_id` 透传使 agent_assisted/T1 方案闸随之生效。
+- **定义期**：human_approval.capability 白名单 = 能力登记表去 `system.*`（validate_dag 注入参数，纯函数单测兼容）；四类之外未知类型的 start_run 422 守卫保留为防御（发布后白名单漂移场景）。
+- **事件**：新增 `workflow_run_waiting_approval` / `workflow_run_approval_decided`。
+- **测试**：`test_workflow_executor.py` **19→26**（审批批准/拒绝/过期/等待中取消+迟到拍板中和/幂等重入不重复建审批 + agent 全闸/能力拒绝不重试/run 失败不叠加重试）+ `test_workflow_definition.py` +1（capability 白名单）；`test_migrations.HEAD_REVISION` → `d5b8e2f4a7c9`。
+- **口径**：业务表 **101 不变** / 迁移头 **`d5b8e2f4a7c9`（26 revision，+1）** / 路由 **276 不变**（零新路由）/ pytest **1772 收集 = 1766 passed + 6 skipped**（1764 + 8；实跑口径见 AGENTS.md）/ vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（automation_approvals 两列变更；**api/worker/scheduler 三个镜像都要 build**）。
+
 ## [未发布] — V3 实施 T-W3：Workflow 执行器（call/skill 节点 + §5 路由 + jobs handler，2026-11-03）
 
 ### 服务端（零新表零迁移 / 5 条新路由 / 新执行器模块 / 零桌面改动）

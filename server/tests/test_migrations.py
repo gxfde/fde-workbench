@@ -42,7 +42,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-E1：project_evidence 一等证据表（单表增量，零改既有表）
 # V3 T-W1：workflow_definitions + workflow_definition_versions 两表
 # V3 T-W2：workflow_runs + workflow_node_runs 两表（run 固定版本 + 幂等键）
-HEAD_REVISION = "b7d9f1a3c5e2"
+# V3 T-W4：automation_approvals 审批复用——run_id 放开可空 + workflow_node_run_id 反链
+HEAD_REVISION = "d5b8e2f4a7c9"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

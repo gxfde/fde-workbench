@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.agents.models import AgentRegistry
 from fde_api.auth.models import User
+from fde_api.control.access import CAPABILITY_REQUIREMENTS
 from fde_api.control.api_catalog import CATALOG
 from fde_api.control.models import SkillDefinition, SkillVersion
 from fde_api.projects.events import record_event
@@ -40,6 +41,13 @@ PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
 DEFAULT_CONTEXT_KEYS = frozenset({"project_id", "run_id", "initiated_by_user_id"})
 MAX_RETRIES_LIMIT = 10
 APPROVAL_EXPIRES_RANGE = (1, 24 * 60)
+# human_approval.capability 白名单 = 能力登记表（system.* 不开放给工作流审批门，
+# 与 create_automation_task 的 requested_capabilities 同规则）
+APPROVAL_CAPABILITIES = frozenset(
+    capability
+    for capability in CAPABILITY_REQUIREMENTS
+    if not capability.startswith("system.")
+)
 
 
 class WorkflowDefinitionError(Exception):
@@ -114,8 +122,13 @@ def validate_dag(
     skill_refs: Collection[str],
     agent_refs: Collection[str],
     context_keys: Collection[str] = DEFAULT_CONTEXT_KEYS,
+    capabilities: Collection[str] | None = None,
 ) -> DagValidation:
-    """dag_json 校验纯函数：返回 (errors, warnings, 拓扑序)；白名单由调用方注入。"""
+    """dag_json 校验纯函数：返回 (errors, warnings, 拓扑序)；白名单由调用方注入。
+
+    ``capabilities``（T-W4）= human_approval.capability 白名单；None = 跳过该检查
+    （纯函数单测兼容），生产路径经 validate_dag_against_registry 注入登记表白名单。
+    """
     if not isinstance(dag, dict):
         return DagValidation((DagIssue("dag_not_object", "dag_json 必须是对象。"),), (), ())
     errors: list[DagIssue] = []
@@ -270,6 +283,15 @@ def validate_dag(
             capability = node.get("capability")
             if not isinstance(capability, str) or not capability.strip():
                 errors.append(DagIssue("approval_capability_required", f"human_approval 节点 {key} 必填 capability。", key))
+            elif capabilities is not None and capability not in capabilities:
+                errors.append(
+                    DagIssue(
+                        "approval_capability_unknown",
+                        f"节点 {key} 的 capability 不在能力登记表：{capability}。",
+                        key,
+                        {"capability": capability},
+                    )
+                )
             expires = node.get("expires_minutes", 15)
             low, high = APPROVAL_EXPIRES_RANGE
             if isinstance(expires, bool) or not isinstance(expires, int) or not low <= expires <= high:
@@ -418,6 +440,7 @@ def validate_dag_against_registry(session: Session, dag: Any) -> DagValidation:
         call_refs=catalog_call_refs(),
         skill_refs=published_skill_refs(session),
         agent_refs=available_agent_refs(session),
+        capabilities=APPROVAL_CAPABILITIES,
     )
 
 

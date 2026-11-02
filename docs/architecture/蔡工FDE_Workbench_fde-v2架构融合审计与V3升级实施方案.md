@@ -197,6 +197,7 @@ flowchart TB
 3. **T-W1 DAG 校验器（纯函数）先行入 CI**（M）——零执行器依赖即可锁定定义质量，为 P1 铺路且无运行时风险。**→ 已完成（2026-11-02，feat/v3-t-w1-workflow-definitions；两表 + 纯函数 1–8 阻断 / 9 告警；零路由——偏差见 backlog T-W1 实施记录）**
 4. **T-W2 runs/node_runs 两表**（S）——执行器的地基，纯增量。**→ 已完成（2026-11-03，feat/v3-t-w2-workflow-runs；迁移 `b7d9f1a3c5e2`，run 幂等键全局唯一修 FV-F3、definition RESTRICT / project CASCADE、节点 depends_on 冗余快照——见 backlog T-W2 实施记录）**
 5. **T-W3 执行器（call+skill 节点）+ §5 路由**（M）——Workflow 线业务价值的第一块闭环。**→ 已完成（2026-11-03，feat/v3-t-w3-workflow-executor；`workflow.run` handler 复用 jobs 全套、节点独立事务、call=api_execute 同闸+写类节点同构幂等键、skill=pinned 版本确定性 AI 调用、§5 五条路由（cancel/resume HTTP 随 T-W5）、agent/human_approval start_run 即 422 随 T-W4；skill published 语义按 T-W1 先例待 T-S1 收敛——偏差见 backlog T-W3 实施记录；下一步 T-W4 / T-W5 或 T-S1）**
+6. **T-W4 执行器 agent/human_approval 节点**（M）——四类节点闭环；human_approval 复用 automation_approvals（迁移 `d5b8e2f4a7c9`：run_id 可空 + workflow_node_run_id 反链），拍板走既有任务中心零新路由，agent 走 agents.start_run 同闸（attempt 代际幂等键）。**→ 已完成（2026-11-03，feat/v3-t-w4-agent-approval-nodes；偏差——审批反链 FK CASCADE/迟到拍板中和/attempt 代际幂等/分派失败不叠加重试/capability 白名单=登记表去 system.*——见 backlog T-W4 实施记录；下一步 T-W5 / T-S1 / T-E3 / T-O1）**
 
 ---
 
