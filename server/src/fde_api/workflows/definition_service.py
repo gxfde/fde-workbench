@@ -549,3 +549,22 @@ def list_versions(session: Session, definition_id: str) -> list[WorkflowDefiniti
             .order_by(WorkflowDefinitionVersion.version.asc())
         )
     )
+
+
+def serialize_definition(definition: WorkflowDefinition) -> dict[str, Any]:
+    """定义行序列化（路由面共用；dag_json 原样输出——校验明细在创建时已 422 过）。"""
+    return {
+        "id": definition.id,
+        "project_id": definition.project_id,
+        "name": definition.name,
+        "description": definition.description,
+        "status": definition.status,
+        "version": definition.version,
+        "content_sha256": definition.content_sha256,
+        "dag_json": definition.dag_json,
+        "created_by_user_id": definition.created_by_user_id,
+        "published_by_user_id": definition.published_by_user_id,
+        "published_at": definition.published_at.isoformat() if definition.published_at else None,
+        "created_at": definition.created_at.isoformat() if definition.created_at else None,
+        "updated_at": definition.updated_at.isoformat() if definition.updated_at else None,
+    }

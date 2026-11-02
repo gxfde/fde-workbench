@@ -79,6 +79,12 @@ def ensure_default_handlers() -> None:
         from fde_api.translator.jobs import register_translator_handler
 
         register_translator_handler()
+    # V3 T-W3：workflow 执行器（call/skill 节点；agent/human_approval 随 T-W4）。
+    # handler 内部同时注册 worker-loss 收尾钩子（run/悬挂节点推终态）。
+    if get_handler("workflow.run") is None:
+        from fde_api.workflows.executor import register_workflow_handler
+
+        register_workflow_handler()
 
     # 业务行收尾钩子：worker 死亡时把业务行推到终态（否则前端永远轮询）。
     from fde_api.control.automation_jobs import register_automation_failure_handler

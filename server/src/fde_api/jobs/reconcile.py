@@ -73,6 +73,8 @@ ORPHAN_GRACE_SECONDS = 300
 #   research.export — the export row is regenerated from the same request.
 #   translator.translate — goal-d9：handler 对 ready/failed 幂等跳过（预调研
 #     分析同款语义），重跑只发生在首次尝试中途死亡时。
+#   workflow.run — V3 T-W3：节点产物先行落表（succeeded 即恢复锚点），重跑只
+#     处理未完成节点；写类 call 节点带 api_execute 同构幂等键，恢复不二次外呼。
 #
 # automation.execute is intentionally absent: it talks to the outside world.
 RECOVERABLE_JOB_TYPES = frozenset({
@@ -84,6 +86,7 @@ RECOVERABLE_JOB_TYPES = frozenset({
     "document.generate",
     "research.export",
     "translator.translate",
+    "workflow.run",
 })
 
 # Written to `last_error` when a job is given up on, so an operator can tell

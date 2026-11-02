@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W3：Workflow 执行器（call/skill 节点 + §5 路由 + jobs handler，2026-11-03）
+
+### 服务端（零新表零迁移 / 5 条新路由 / 新执行器模块 / 零桌面改动）
+
+- **执行器**（NEW `workflows/executor.py`，设计 workflow-dag-v1 §3）：`workflow.run` 作为 background_jobs 新 job_type（决策 3：复用既有 outbox/lease/续租/reconcile/failure-hook 全套，绝不复制第二套队列）。主循环 = ready 调度（依赖全 succeeded，或 when 真值裁决放行）→ 节点独立事务执行 → 无 ready 全终态收敛 run；**每节点状态迁移独立事务、分派（HTTP/AI）一律在事务外**（产物先落表再前进=崩溃恢复锚点，2026-10-30 事故教训）。
+- **call 节点 = api_execute 同闸绝不旁路**：鉴权/确认/项目 scope 每节点实时校验（发起人当下 AI 档位，run 级不冻结）；写类节点命中确认闸 → 节点 failed 携 action_id（诚实呈现未执行，T-W4 接审批前置）。**外副作用幂等（修 fde-v2 FV-F3 执行侧）**：写类（api_catalog write=True）节点分派前强制落节点级 `idempotency_key`（与 api_actions 完全同构 sha256 `[user_id, "wfnode-{节点行id}", data]`）——重试/崩溃恢复同键，api_execute 按 action 去重不二次外呼。
+- **skill 节点 = pinned 版本确定性 AI 调用**：`key@版本` 固定版本 `instructions_text` 作 system_prompt、节点输入 JSON 作 prompt、`use_tools=False`（不签发 MCP token，工具面留在 call 节点）；T-S1 前沿用 active 语义（与 T-W1 校验口径一致）。
+- **诚实语义**：占位符缺键 → 节点 failed `placeholder_missing`（绝不填空串，fde-v2 缺陷回归用例钉住）；断链 → run **failed** + 下游 skipped（修 FV-F1 不静默 done）；`when` 仅支持整串单占位符真值（表达式引擎待真实需求）；agent/human_approval 节点在 start_run 即 422 `unsupported_node_type`（不留必死 run，T-W4 开放）。
+- **§5 路由五条（271→276）**：POST projects/{id}/workflows（can_manage）、POST …/{wid}/publish（admin 锁版）、POST …/{wid}/runs（can_manage，幂等键同 run 返回 200/新建 201，跨项目同键 409）、GET …/workflow-runs/{rid}（can_view 节点按拓扑序）、GET /api/v1/workflows（admin 平台模板）；**cancel/resume 的 HTTP 面随 T-W5**（服务层 cancel_run/resume_run 已可用）。
+- **run 生命周期服务**：start_run（published 闸+幂等键先于定义查找） / cancel_run（停未执行节点、已执行外呼不回收、幂等） / resume_run（failed→重置 failed/skipped 节点复用产物）；事件目标新增 `workflow_run`（created/succeeded/failed/cancelled/resumed）。
+- **jobs 接线**：`workflow.run` handler + worker-loss 收尾钩子（reconcile 放弃时 run 与悬挂节点推终态）+ RECOVERABLE_JOB_TYPES 增补（节点产物先落表=succeeded 即恢复锚点，重跑只处理未完成节点）；handler 入口恢复 queued→running 与死亡遗留 running 节点。
+- **测试**：`test_workflow_executor.py` 新 **19 例**（§6 用例 4/5/6/7/8/11：链路与占位符原类型替换 / 版本钉住跨发布 / skill 钉版本指令 / 重试后成功与耗尽恢复复用产物 / 幂等键同构公式+跨重试恢复稳定 / 取消保留已成功节点 / 断链 failed+skipped / when 假值跳过 / 缺占位符不填空串 / 平台模板路由与项目内实例化 / outbox→worker 全链 / reconcile 钩子）。
+- **口径**：业务表 **101 不变** / 迁移头 **`b7d9f1a3c5e2`（25 revision）不变**（零 DDL）/ 路由 **276**（+5）/ pytest **1764 收集 = 1758 passed + 6 skipped**（1745 + 19；实跑口径见 AGENTS.md）/ vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d`（server 代码烤进镜像；无迁移，alembic head 不动）。
+
 ## [未发布] — V3 实施 T-W2：Workflow 运行层（runs / node_runs 两表，2026-11-03）
 
 ### 服务端（2 张新表 / 1 个迁移 / **零新路由、零执行器、零服务逻辑改动** / 零桌面改动）

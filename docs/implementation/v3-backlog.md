@@ -92,10 +92,23 @@
 - 前置：T-W1。DB：workflow_runs、workflow_node_runs。复杂度：**S**。
 - **实施记录**：迁移 `b7d9f1a3c5e2`（两表，含 downgrade）。run 固定 (definition_id, definition_version)；run 级 `idempotency_key` **全局唯一**（FV-F3 表级保证，跨定义/项目也拒）；`definition_id` FK **RESTRICT**（执行史在则定义不可静默删，与版本行 CASCADE=定义内部快照语义区分）+ `project_id` FK CASCADE（项目隔离；平台模板定义 project_id=NULL 不阻拦项目删除）。node_runs：UNIQUE(run_id, node_key)、node_type/status CHECK、attempt 计数、`depends_on` 冗余快照、节点级 `idempotency_key` 表级可空（**外副作用节点必填由 T-W3 执行器强制**，T-R2 effect 结构化前先由类型推断）、input_snapshot/output_json。状态机七态/八态按 workflow-dag-v1 §2（ready=依赖全绿待调度，T-W3 消费）。**零路由零执行器零服务改动**。
 
-### T-W3 executor：call+skill 节点
+### T-W3 executor：call+skill 节点 — **DONE（2026-11-03）**
 - 目标：`workflow.run` handler 注册进 jobs/handlers.py；call=api_execute 同闸、skill=published 固定版本；节点独立事务；ready 调度循环。
 - 前置：T-W1/T-W2/T-S1（skill published 语义）。修改文件：NEW workflows/executor.py；EXTEND jobs/handlers.py、jobs/reconcile.py（RECOVERABLE 增 workflow.run）。
 - 测试：test_workflow_executor.py（§6 用例 4-8,11）。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **T-S1 前置按 T-W1 先例悬置**：skill 节点执行沿用 active 版本语义（与 T-W1 校验白名单同口径），T-S1 落地后收敛 published；skill 执行 = pinned 版本 `instructions_text` 作 system_prompt 的确定性 AI 调用（`execute_ai_prompt(use_tools=False)`，不签发 MCP token——skill 只做文本变换，工具面属于 call 节点），`execution_id=wfnode-{node 行 id}` 跨重试/恢复稳定可审计。
+  - **§5 路由开五条**（271→276）：POST projects/{id}/workflows（can_manage，建草稿）、POST …/{wid}/publish（admin，锁版）、POST …/{wid}/runs（can_manage，201/200 按幂等命中）、GET projects/{id}/workflow-runs/{rid}（can_view，节点按拓扑序）、GET /api/v1/workflows（admin 平台模板）；**POST …/workflow-runs/{rid}/cancel 与 resume 的 HTTP 面随 T-W5**（服务层 cancel_run/resume_run 本轮已可用并有测试钉住）。
+  - **用例 4 的「paused→resume」精确化为 failed + resume_run**（§3 终态语义优先：有 failed → run failed，修 FV-F1 不静默 done）；resume 把 failed/skipped 节点放回 pending（attempt 归零=计数按每轮恢复重置），已完成节点产物原样复用。
+  - **agent/human_approval 节点在 start_run 即 422 `unsupported_node_type`**（不留必死 run；T-W4 开放时移除）。
+  - **外副作用幂等（用例 6）**：写类（api_catalog write=True）call 节点由执行器在分派前强制落节点级 `idempotency_key`——与 `api_actions.execute_api` 完全同构的 sha256（`[user_id, "wfnode-{node行id}", {operation,parameters,body,query}]`），节点行跨重试/恢复稳定 ⇒ api_execute 层按 action id 去重，不二次外呼；effect 结构化仍待 T-R2，当前按 catalog write 字段推断。
+  - **写类 call 节点撞 confirmation 闸 → 节点 failed**（error 携 action_id，诚实呈现"未执行"）；T-W4 human_approval 落地后接审批前置。
+  - call 参数约定：params 中匹配 ref 路径模板的键 → path 参数（字符串）；保留键 `body`（对象）→ 请求体；其余 → query。
+  - **when 的 T-W3 最小语义**：仅支持整串单占位符，取 JSON 值 Python 真值；缺键/其它形态一律假值（诚实不猜）→ 依赖断链时 skip 而非执行；表达式引擎待真实需求。
+  - 运行上下文：run.context_json = 默认三键（project_id/run_id/initiated_by_user_id）+ 调用方自定义键（仅落库；定义期占位符白名单仍只有默认键，T-W1 校验未动）。
+  - 恢复语义：RECOVERABLE 增 workflow.run（节点产物先落表=succeeded 即锚点）；handler 入口把 worker 死亡遗留的 running 节点放回 pending；reconcile 放弃（尝试耗尽）时钩子把 run 置 failed + 悬挂节点置 failed。
+  - 事件：新增目标 `workflow_run`（workflow_run_created / succeeded / failed / cancelled / resumed）。
+  - 测试：test_workflow_executor.py **19 例**（用例 4/5/6/7/8/11 + 路由权限/平台模板/断链/when 跳过/缺占位符/outbox→worker 全链/reconcile 钩子）；test_migrations HEAD 不变（零 DDL）。
 
 ### T-W4 executor：agent+human_approval 节点
 - 前置：T-W3。审批复用 automation_approvals。测试：§6 用例 9-10。复杂度：**M**。

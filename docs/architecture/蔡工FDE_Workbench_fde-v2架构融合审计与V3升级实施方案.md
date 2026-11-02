@@ -195,7 +195,8 @@ flowchart TB
 1. **T-P0-1 signoff 死锁修复**（S，独立 PR，先红后绿端到端用例）——现网功能阻断，收益立现。**→ 已完成（2026-11-02，fix/v3-t-p0-1-signoff-deadlock；实现偏差——统一开闸模块 `agents/signoff.py`、L1 排除、export 兜底开闸先提交再 409、`remedy=resolve_pending_signoff`——已回写 backlog T-P0-1「实施记录」）**
 2. **T-E1 一等证据表 + T-E2 门禁挂接**（M）——全部 V3 数据治理的地基，且立即改善门禁证据审计（历史指针不再覆写）。**→ 已完成（2026-11-02，fix/v3-t-e1-e2-evidence；偏差——POST 201/200 按 created、referenced_by 仅 gate:Gx、新事件 evidence_registered、延迟导入——见 backlog T-E1/T-E2 实施记录）**
 3. **T-W1 DAG 校验器（纯函数）先行入 CI**（M）——零执行器依赖即可锁定定义质量，为 P1 铺路且无运行时风险。**→ 已完成（2026-11-02，feat/v3-t-w1-workflow-definitions；两表 + 纯函数 1–8 阻断 / 9 告警；零路由——偏差见 backlog T-W1 实施记录）**
-4. **T-W2 runs/node_runs 两表**（S）——执行器的地基，纯增量。**→ 已完成（2026-11-03，feat/v3-t-w2-workflow-runs；迁移 `b7d9f1a3c5e2`，run 幂等键全局唯一修 FV-F3、definition RESTRICT / project CASCADE、节点 depends_on 冗余快照——见 backlog T-W2 实施记录；下一步 T-W3 执行器）**
+4. **T-W2 runs/node_runs 两表**（S）——执行器的地基，纯增量。**→ 已完成（2026-11-03，feat/v3-t-w2-workflow-runs；迁移 `b7d9f1a3c5e2`，run 幂等键全局唯一修 FV-F3、definition RESTRICT / project CASCADE、节点 depends_on 冗余快照——见 backlog T-W2 实施记录）**
+5. **T-W3 执行器（call+skill 节点）+ §5 路由**（M）——Workflow 线业务价值的第一块闭环。**→ 已完成（2026-11-03，feat/v3-t-w3-workflow-executor；`workflow.run` handler 复用 jobs 全套、节点独立事务、call=api_execute 同闸+写类节点同构幂等键、skill=pinned 版本确定性 AI 调用、§5 五条路由（cancel/resume HTTP 随 T-W5）、agent/human_approval start_run 即 422 随 T-W4；skill published 语义按 T-W1 先例待 T-S1 收敛——偏差见 backlog T-W3 实施记录；下一步 T-W4 / T-W5 或 T-S1）**
 
 ---
 
