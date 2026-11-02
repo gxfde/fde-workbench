@@ -272,6 +272,10 @@ psql -U postgres -c "CREATE DATABASE fde_workbench_test OWNER fde"
 FDE_TEST_DATABASE_URL='postgresql+psycopg://fde:PASSWORD@127.0.0.1:15432/fde_workbench_test' npm run test:server
 ```
 
+未设置 `FDE_TEST_DATABASE_URL` 时，`server/tests/conftest.py` 会用仓库根 `.env` 里的 `FDE_DB_PASSWORD` 自动拼出 `127.0.0.1:15432/fde_workbench_test`（本机已把 PostgreSQL 转发到 15432 时可直接 `npm run test:server`）；任何库名不以 `_test` 结尾的 URL 都会被安全断言拒绝。`npm run test:desktop` 已固定串行（`--no-file-parallelism`），并行裸跑 vitest 会引入抖动。全量服务端测试约 15–25 分钟，pre-commit 钩子也会跑一遍，提交时请耐心等待而不是中断。
+
+CI（`.github/workflows/ci.yml`）对 push 与 PR 运行四个 job：`server-tests`（隔离 PostgreSQL 测试库）、`pseudonymization`（代号化扫描，`scripts/check-pseudonymization.sh --self-test` 先验证扫描器灵敏度）、`desktop`（typecheck + vitest）、`secrets-scan`（gitleaks）；PR 合并前四个必须全绿。
+
 ## 打包桌面端
 
 Windows x64 NSIS 安装包：
@@ -320,7 +324,7 @@ npm run package:mac
 ```text
 desktop/     Electron 主进程、预加载层、React UI（含内嵌使用帮助）与桌面测试
 server/      Flask API、Alembic 迁移、种子数据、后台任务与服务端测试
-docs/        工作台操作使用手册、审计与需求台账
+docs/        工作台操作使用手册、系统意图文档、goal 循环报告、V3 架构审计（docs/audit、docs/architecture）与实施 backlog、需求台账
 resources/   通用、无客户数据的文档模板
 scripts/     本地开发、测试和打包脚本
 tests/       端到端与运维契约测试

@@ -12,27 +12,27 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 
 ## 常用命令
 
-- 桌面端：`npm run typecheck`、`npm run test:desktop`（620+ 用例）；服务端：`npm run test:server`。
+- 桌面端：`npm run typecheck`、`npm run test:desktop`（730 用例）；服务端：`npm run test:server`。
 - 服务端代码烤进镜像：改 `server/` 后必须 `docker compose build && docker compose up -d`，再执行 `alembic upgrade head`（只跑 up -d 无效）。
 - 集成桥手动采集：`schtasks //Run //TN "FDE-Bridge-Poll"`（Git Bash 下双斜杠），或桌面端集成桥页「立即采集」按钮（同一代码路径）。
 - 桌面改动交付：重打包便携版并做 asar 字节验证（README「打包桌面端」节）。
 
 ## 工作流与陷阱
 
-- 变更走 feature 分支 → push fork → PR → 4 个 CI job 全绿（desktop / server-tests / gitleaks / pseudonymization）→ 合并 → ff 本地 main → 删分支。
+- 变更走 feature 分支 → push fork → PR → 4 个 CI job 全绿（desktop / server-tests / secrets-scan[gitleaks] / pseudonymization）→ 合并 → ff 本地 main → 删分支。
 - CI 跑 Ubuntu：Windows-only 代码路径（schtasks、wsl、盘符）必须做成可注入/可 mock，测试显式传 platform。
 - 本机 Windows/Git Bash；docker 经 `wsl -d Ubuntu-24.04 -- docker …`（配 `MSYS_NO_PATHCONV=1`）。
 - 代码检索优先用 CodeGraph：本仓库已索引（`.codegraph/` 是本地 SQLite，已 gitignore，勿提交）；`codegraph explore "<问题或符号>"`，大规模改码后 `codegraph sync` 重建增量。
 
-## 当前状态（2026-11-02，goal-d14 后）
+## 当前状态（2026-11-02，V3 T-W1 后）
 
 - v0.2.0：门禁 G1–G9、报价/收款/合同、集成桥（宿主 4h 采集 + 手动采集按钮）、内嵌使用帮助；本地 main 允许落后——**权威=fork/main**（开新轮先 fetch 对齐）。
 - 版本号按发布列车同步 `desktop/package.json` 与 `server/pyproject.toml`，tag 打在 fork。
 - 待办台账：`docs/后续需求台账-F5与D11.md`；历史审计存档：`docs/goal-audit-2026-10-26.md`；派单引擎 goal 循环报告：`docs/goal-r<N>-派单引擎.md`。
 - V3 融合审计（2026-11-02，零代码轮）：主报告 `docs/architecture/蔡工FDE_Workbench_fde-v2架构融合审计与V3升级实施方案.md`，证据在 `docs/audit/`（含 `appendix/` 六份行号级报告），实施从 `docs/implementation/v3-backlog.md` 的 T-P0-1（signoff 死锁）起；裁决=不引入 fde-v2 实现只吸收思想，新增表/接口全标 PROPOSED，实现偏差须回写该报告。
-- V3 实施 T-P0-1（2026-11-02）：**signoff 死锁修复**（审计 WB-DEF-1）——`agents/signoff.py::ensure_pending_signoff` 是唯一幂等开闸入口（同方案至多一个 pending，只补空 run 软链）；`_finalize` 对非降级 completed 且绑定 solution 的 run 即开 pending（L1 仍走 handoff 人工接管后开闸）；`export_sow` 的 agent_assisted 闸拆成独立事务，拦下且无 pending 时兜底开闸**先提交再 409**，`details.remedy=resolve_pending_signoff` + `signoff_checkpoint_id`；`SolutionServiceError` 新增可选 `detail`。零迁移零路由零桌面改动；实现偏差已回写 backlog T-P0-1「实施记录」。下一步 T-E1 → T-W1。
+- V3 实施 T-P0-1（2026-11-02）：**signoff 死锁修复**（审计 WB-DEF-1）——`agents/signoff.py::ensure_pending_signoff` 是唯一幂等开闸入口（同方案至多一个 pending，只补空 run 软链）；`_finalize` 对非降级 completed 且绑定 solution 的 run 即开 pending（L1 仍走 handoff 人工接管后开闸）；`export_sow` 的 agent_assisted 闸拆成独立事务，拦下且无 pending 时兜底开闸**先提交再 409**，`details.remedy=resolve_pending_signoff` + `signoff_checkpoint_id`；`SolutionServiceError` 新增可选 `detail`。零迁移零路由零桌面改动；实现偏差已回写 backlog T-P0-1「实施记录」。
 - V3 实施 T-W1（2026-11-02）：**Workflow 定义层**——`workflows/models.py` 两表（definitions + **不可变** definition_versions，迁移 `f2a4c6e8b1d3`）+ `definition_service.validate_dag` 纯函数（环检测 Kahn 点名 / call.ref ∈ api_catalog 白名单 / skill 显式版本 / agent 可用 / 占位符须传递上游 / 外部副作用无审批只告警），违规 422 `dag_invalid` 携 issues；**零路由零执行器**（§5 路由随 T-W3 开）。事件目标注册表新增 `workflow_definition`。下一步 T-W2 runs 表 → T-W3 executor。
-- V3 实施 T-E1 + T-E2（2026-11-02）：**一等证据表** `project_evidence`（`fde_api/evidence/`，迁移 `e1f3a5c7b9d2`；(project, source_uri, sha256) 指纹幂等且不可变，只存指针+指纹）+ `POST/GET /projects/{id}/evidence`（can_manage 写 / can_view 读，`referenced_by=gate:Gx` 反查，**有意不进 api_catalog**）+ 门禁清单项挂 `evidence_id`（JSON 内字段零 DDL，旧行读时合并 null；提交即 upsert，同指纹幂等）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**。下一步 T-W1 → T-E3 / T-O1。
+- V3 实施 T-E1 + T-E2（2026-11-02）：**一等证据表** `project_evidence`（`fde_api/evidence/`，迁移 `e1f3a5c7b9d2`；(project, source_uri, sha256) 指纹幂等且不可变，只存指针+指纹）+ `POST/GET /projects/{id}/evidence`（can_manage 写 / can_view 读，`referenced_by=gate:Gx` 反查，**有意不进 api_catalog**）+ 门禁清单项挂 `evidence_id`（JSON 内字段零 DDL，旧行读时合并 null；提交即 upsert，同指纹幂等）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**。
 - 口径数字（实测 2026-11-02，V3 T-W1 轮 / T-E1-E2、T-P0-1、goal-d14 顺延）：服务端 **99 张业务表**（不含 alembic_version；T-W1 +workflow_definitions/+workflow_definition_versions）、迁移头 `f2a4c6e8b1d3`（**24 个 revision**，链条 …→ c3e7a9b1d5f4 → e1f3a5c7b9d2 → f2a4c6e8b1d3）、蓝图路由 **271**（T-E1 +2：证据登记簿 GET/POST；T-W1 零路由）、api_catalog ENTRIES **94**、服务端 pytest **1733 收集 = 1727 passed + 6 skipped**（T-W1 +8：定义层 7 + 迁移往返 1；T-E1/E2 +8；T-P0-1 +5；d14 +6）、桌面端 vitest **730/730**（d14 零用例新增，串行口径 --no-file-parallelism）。goal-d14：**翻译模型来源改挂「AI 聊天」同源**（蔡工无 kimi key ⇒ d13 的 kimi 专用槽位走不通；实测本机 AI Server(DSH) 未启用，AI 聊天走直连降级 + 系统默认槽位 = minimax/MiniMax-M3.1-Flash 已配好 ⇒ 翻译改为**同源解析**：env 覆盖 → 模型偏好表 → 系统默认槽位兜底；DSH 启用后 DeepSeekClient 内部自动改走 AI Server；`ai_actor_id` = 提交人且 finally 复位）——详见 `docs/goal-d14-交付工作台.md`。goal-d13（压缩）：拍板轮 11 项全定案（待拍板类清零）+ 三件实施（kimi-k3 切换 / export-sow 仅 agent_assisted 强制 signoff / approved 自动翻转 reviewed）+ 补正轮（翻译槽位独立 base_url）——详见 `docs/goal-d13-交付工作台.md`。goal-d12（压缩）：pilot 路由归一化 + 门户翻译历史一览 + 试点执行手册——详见 `docs/goal-d12-交付工作台.md`。goal-d11（压缩）：T6 高成本 run 前评审 + 试点包三件 + d10 挂账清尾——详见 `docs/goal-d11-交付工作台.md`。
 - goal-d12 口径存档（2026-11-02）：96 表 / head `c3e7a9b1d5f4`（22 revision 零迁移）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 730。
 - goal-d11 口径存档（2026-11-01）：96 表 / head `c3e7a9b1d5f4`（22 revision 零新表）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 725。
