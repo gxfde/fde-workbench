@@ -9,6 +9,7 @@ from fde_api.control.dsh_runtime import dsh_runtime
 from fde_api.documents.template_routes import document_templates_blueprint
 from fde_api.documents.project_routes import project_documents_blueprint
 from fde_api.dispatch.routes import blueprint as dispatch_blueprint
+from fde_api.evidence.routes import evidence_blueprint
 from fde_api.solutions.routes import solutions_blueprint
 from fde_api.errors import register_error_handlers
 from fde_api.extensions import db, object_storage, redis_client
@@ -58,6 +59,8 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(document_templates_blueprint)
     app.register_blueprint(project_documents_blueprint)
     app.register_blueprint(solutions_blueprint)
+    # V3 T-E1：一等证据登记簿（只存指针+指纹；人工写路径有意不进 api_catalog）
+    app.register_blueprint(evidence_blueprint)
     app.register_blueprint(dispatch_blueprint)
     app.register_blueprint(guidance_blueprint)
     # S1 编程工作台（goal-d4）：agent 注册表 + run 生命周期（适配器/溯源/成本）

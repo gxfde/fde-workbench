@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-E1 + T-E2：一等证据表 project_evidence + 门禁证据挂接（2026-11-02）
+
+### 服务端（1 张新表 / 1 个迁移 / 2 条路由 / 零桌面改动）
+
+- **T-E1 一等证据表**：新模块 `fde_api/evidence/`（models / service / routes）+ 迁移 **`e1f3a5c7b9d2`**（`project_evidence`：UNIQUE(project_id, source_uri, content_sha256) 指纹即幂等键，kind 七类 CHECK，sha256 长度 CHECK，INDEX(project_id, kind)；project FK CASCADE、创建人 FK SET NULL；含 downgrade）。只存指针 + 指纹，不存原件（红线）。
+- **API**：`POST /api/v1/projects/{id}/evidence`（can_manage；首次 201 `created=true`，同指纹 200 `created=false`——证据不可变，命中不改写 origin/captured_from）、`GET …/evidence?kind=&referenced_by=gate:Gx`（can_view；referenced_by 反查门禁清单项挂接）。错误码 `invalid_sha256` / `invalid_request` / `forbidden` / `project_not_found`。**有意不进 api_catalog**（AI 不可写证据，用例钉住）。
+- **T-E2 门禁挂接**：`submit_gate_evidence` 每项先 `upsert_evidence`（kind=gate、origin=`gate:Gx/<清单项>`、captured_from=human），清单项 JSON 内挂 `evidence_id`，事件 `gate_evidence_submitted.items[]` 携 evidence_id；`_serialize_gate` 读时合并（历史清单项 `evidence_id=null`），**零 DDL**。同指纹二次提交幂等（行数不增、id 不变）。
+- **并发安全**：`upsert_evidence` 在保存点内插入，撞唯一指纹回退后读回赢家，不向调用方抛 IntegrityError。
+- **配套**：`migrations/env.py`、`conftest` 清理序、`test_migrations.HEAD_REVISION`、审计抽取脚本的 blueprint/模型清单均已登记新模块；`gate_service` 对 `evidence.service` 延迟导入（避免 projects⇄evidence 环）。
+- **测试**：`test_evidence_registry.py`（新，6 例：指纹幂等与不可变 / 校验 / 权限与跨项目隔离 / kind 与 referenced_by 过滤 / 服务层入口 / 不进 catalog）+ `test_gates_api.py` +1（T-E2 挂接全链）+ `test_migrations.py` +1（迁移往返保留 projects）。
+- **口径**：业务表 **97**（+project_evidence）/ 迁移头 **`e1f3a5c7b9d2`（23 revision）** / 蓝图路由 **271**（+2）/ blueprint 34 / api_catalog ENTRIES **94 不变** / pytest **1725 收集 = 1719 passed + 6 skipped**（+8，921.98s 全量实跑） / vitest 730 沿用。
+- **部署**：`docker compose build && up -d` 后**须 `alembic upgrade head`**（新表）。
+
 ## [未发布] — V3 实施 T-P0-1：signoff 死锁修复（审计 WB-DEF-1，2026-11-02）
 
 ### 服务端修复（零迁移、零新路由、零桌面改动）

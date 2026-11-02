@@ -348,6 +348,8 @@ def db_session(app) -> Session:
         TemplateResearchField,
         TemplateResearchSection,
         TemplateResearchForm,
+        # V3 T-E1：一等证据引用 projects（CASCADE）/users（SET NULL），显式先清
+        __import__("fde_api.evidence.models", fromlist=["ProjectEvidence"]).ProjectEvidence,
         OperationEvent,
         ProjectTaskDependency,
         ProjectTaskCollaborator,

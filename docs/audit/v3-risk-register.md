@@ -14,7 +14,7 @@
 | WB-DEF-5 | 低 | gates.template_hash 存量（f52afe88…）与现行 gates.json（180c4809…）漂移，无比对呈现 | 附录 F 风险 2 | T-G2：门禁序列化时比对并在响应中标注 outdated_template | 待办 |
 | WB-DEF-6 | 中 | ai_call_audits.request_id 不落 project_document_versions → 文档血缘断链 | ai_content.py:98 | T-D1 | 待办 |
 | WB-DEF-7 | 低 | 文档快照 confirmed_research_values 不存 revision_id | snapshots.py:78-117 | T-D1 | 待办 |
-| WB-DEF-8 | 低 | 任务级证据（ProjectTask.gate/evidence_uri）与门禁清单双口径脱钩 | 附录 F 风险 5 | T-G1：任务完成→证据候选 | 待办 |
+| WB-DEF-8 | 低 | 任务级证据（ProjectTask.gate/evidence_uri）与门禁清单双口径脱钩 | 附录 F 风险 5 | T-G1：任务完成→证据候选 | 待办（**部分**：T-E2 已让门禁清单项持一等证据 `evidence_id`，`project_evidence` 底座就位 2026-11-02；任务侧统一入口待 T-E3、候选闭环待 T-G1） |
 | WB-DEF-9 | 低 | outbox_events 无 completed/failed 写入点，状态不闭环 | outbox.py:77-81 | T-J1 | 待办 |
 | WB-DEF-10 | 低 | api_catalog 未给 export_sow/documents.generate 标 confirmation：AI 可无确认排队文档生成（触发 worker 内模型调用） | api_catalog.py:57,61,123-126 | T-R2：结构化 effect/confirmation 元数据 | 待办 |
 | WB-DEF-11 | 低 | 预算审计设施故障 fail-open（显式取舍） | 附录 C R7 | 维持（记录）；文档化 | 已记录 |

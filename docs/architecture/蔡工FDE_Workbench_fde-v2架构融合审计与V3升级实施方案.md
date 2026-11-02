@@ -193,7 +193,7 @@ flowchart TB
 
 **下一步 3 件事**（建议顺序）：
 1. **T-P0-1 signoff 死锁修复**（S，独立 PR，先红后绿端到端用例）——现网功能阻断，收益立现。**→ 已完成（2026-11-02，fix/v3-t-p0-1-signoff-deadlock；实现偏差——统一开闸模块 `agents/signoff.py`、L1 排除、export 兜底开闸先提交再 409、`remedy=resolve_pending_signoff`——已回写 backlog T-P0-1「实施记录」）**
-2. **T-E1 一等证据表 + T-E2 门禁挂接**（M）——全部 V3 数据治理的地基，且立即改善门禁证据审计（历史指针不再覆写）。
+2. **T-E1 一等证据表 + T-E2 门禁挂接**（M）——全部 V3 数据治理的地基，且立即改善门禁证据审计（历史指针不再覆写）。**→ 已完成（2026-11-02，fix/v3-t-e1-e2-evidence；偏差——POST 201/200 按 created、referenced_by 仅 gate:Gx、新事件 evidence_registered、延迟导入——见 backlog T-E1/T-E2 实施记录）**
 3. **T-W1 DAG 校验器（纯函数）先行入 CI**（M）——零执行器依赖即可锁定定义质量，为 P1 铺路且无运行时风险。
 
 ---

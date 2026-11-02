@@ -228,6 +228,10 @@ def submit_gate_evidence(
 ) -> dict[str, Any]:
     items = _normalize_submission_items(payload)
     note = _optional_note(payload)
+    # 延迟导入：evidence.service 依赖 projects.events/permissions，模块级互导会成
+    # projects⇄evidence 环（沿 solutions.generate_agent_solution → agents 的先例）
+    from fde_api.evidence.service import upsert_evidence
+
     session = db.session()
     try:
         with session.begin():
@@ -249,10 +253,25 @@ def submit_gate_evidence(
                     400,
                 )
             for item in items:
+                # V3 T-E2：证据先登记为一等实体（同指纹幂等，见 evidence/service.py），
+                # 清单项只持 evidence_id；origin 记「门禁/清单项」出处粒度。旧行无
+                # evidence_id，读时合并为 null（_serialize_gate），零迁移。
+                evidence, _created = upsert_evidence(
+                    session,
+                    project_id=project.id,
+                    kind="gate",
+                    source_uri=item["source_uri"],
+                    content_sha256=item["content_hash"],
+                    origin=f"gate:{gate.gate_key}/{item['label']}",
+                    captured_from="human",
+                    created_by_user_id=actor.id,
+                )
+                item["evidence_id"] = evidence.id
                 checklist[item["label"]].update(
                     claim_status="claimed",
                     source_uri=item["source_uri"],
                     content_hash=item["content_hash"],
+                    evidence_id=evidence.id,
                 )
             previous_status = gate.status
             gate.evidence_checklist = list(checklist.values())
@@ -286,6 +305,7 @@ def submit_gate_evidence(
                             "label": item["label"],
                             "source_uri": item["source_uri"],
                             "content_hash": item["content_hash"],
+                            "evidence_id": item["evidence_id"],
                         }
                         for item in items
                     ],
@@ -634,6 +654,8 @@ def _serialize_gate(
                 "claim_status": item.get("claim_status"),
                 "source_uri": item.get("source_uri"),
                 "content_hash": item.get("content_hash"),
+                # V3 T-E2：一等证据引用；T-E2 之前提交的清单项无此键 → null（读时合并）
+                "evidence_id": item.get("evidence_id"),
             }
             for item in gate.evidence_checklist
         ],

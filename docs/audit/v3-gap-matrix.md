@@ -84,7 +84,7 @@
 | 数据模型 | 新增（PROPOSED）project_evidence：id/project_id/kind(gate|task|guidance|research|bridge|workflow)/source_uri/content_sha256/origin(文本出处)/captured_from(auto|human|agent_run_id|job_id)/created_by/created_at；唯一 (project_id, source_uri, content_sha256)。既有 gates.evidence_checklist 项加 evidence_id 可空列 |
 | 接口 | 拟新增（PROPOSED）：POST /api/v1/projects/{id}/evidence（去重幂等 by sha256）、GET …/evidence?referenced_by=gates.G5 |
 | 安全影响 | 证据仍只存指针+sha256（红线不变）；不落原件；跨项目 evidence 引用被 project_id 复合 FK 拒绝 |
-| 实施任务 | T-E1~T-E3（backlog） |
+| 实施任务 | T-E1~T-E3（backlog）——**T-E1/T-E2 已实施 2026-11-02**（`fde_api/evidence/` + 迁移 `e1f3a5c7b9d2` + 门禁清单项挂接），T-E3 待办 |
 | 测试与验收 | 同 sha256 重复提交幂等；删除/替换 evidence 不改 gates 历史决策行（operation_events 仍完整）；bridge 投影写入走 evidence 去重 |
 | 优先级 | **P0** |
 | 依赖 | 无（最底层） |

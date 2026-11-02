@@ -10,12 +10,13 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
-from fde_api.workbench.models import IndustryTemplate, IndustryTemplateVersion
+from fde_api.evidence.models import ProjectEvidence
+from fde_api.workbench.models import IndustryTemplate, IndustryTemplateVersion, OperationEvent
 from fde_api.workbench.seed import GENERIC_TEMPLATE_KEY, seed_workbench
 
 from conftest import INITIAL_PASSWORD
@@ -193,3 +194,44 @@ def test_non_g8_gate_rejects_conditional_pass(admin_client, gate_project):
 
     assert response.status_code == 400
     assert response.json["error"]["code"] == "gate_result_not_allowed"
+
+
+def test_submit_evidence_registers_first_class_evidence(admin_client, gate_project, db_session):
+    """V3 T-E2：提交门禁证据 → 每项登记 project_evidence（kind=gate、origin=gate:Gx/<label>、
+    captured_from=human）→ 清单项挂 evidence_id → 事件 items 携 evidence_id；未提交的清单项
+    evidence_id=null（旧行读时合并，零迁移）；二次提交同指纹幂等（行数不增、id 不变）。"""
+    project, gates_url, _leader_client = gate_project
+    before = next(g for g in admin_client.get(gates_url).json["data"]["gates"] if g["gate_key"] == "G1")
+    assert before["checklist"] and all(item["evidence_id"] is None for item in before["checklist"])
+
+    _submit_all_evidence(admin_client, gates_url, "G1")
+    after = next(g for g in admin_client.get(gates_url).json["data"]["gates"] if g["gate_key"] == "G1")
+    ids = [item["evidence_id"] for item in after["checklist"]]
+    assert all(ids) and len(set(ids)) == len(ids)
+    rows = db_session.scalars(
+        select(ProjectEvidence).where(ProjectEvidence.project_id == project["id"])
+    ).all()
+    assert {row.id for row in rows} == set(ids)
+    assert all(
+        row.kind == "gate" and row.captured_from == "human" and row.created_by_user_id == admin_client.user.id
+        for row in rows
+    )
+    assert {row.origin for row in rows} == {f"gate:G1/{item['label']}" for item in after["checklist"]}
+    assert {(row.source_uri, row.content_sha256) for row in rows} == {
+        (item["source_uri"], item["content_hash"]) for item in after["checklist"]
+    }
+    event = db_session.scalars(
+        select(OperationEvent)
+        .where(OperationEvent.project_id == project["id"], OperationEvent.event_type == "gate_evidence_submitted")
+        .order_by(OperationEvent.occurred_at.desc())
+    ).first()
+    assert [item["evidence_id"] for item in event.changes["items"]] == ids
+
+    # 二次提交同指纹：幂等——清单项 evidence_id 不变、证据行数不增
+    _submit_all_evidence(admin_client, gates_url, "G1")
+    again = next(g for g in admin_client.get(gates_url).json["data"]["gates"] if g["gate_key"] == "G1")
+    assert [item["evidence_id"] for item in again["checklist"]] == ids
+    db_session.expire_all()
+    assert db_session.scalar(
+        select(func.count()).select_from(ProjectEvidence).where(ProjectEvidence.project_id == project["id"])
+    ) == len(ids)

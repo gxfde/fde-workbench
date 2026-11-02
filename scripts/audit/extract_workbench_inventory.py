@@ -65,6 +65,7 @@ from fde_api.control.lcsc_desktop import desktop_lcsc_blueprint
 from fde_api.control.lcsc_skills import lcsc_blueprint
 from fde_api.control.mcp_gateway import mcp_blueprint
 from fde_api.control.task_board import task_board_blueprint
+from fde_api.evidence.routes import evidence_blueprint
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
 from fde_api.translator.routes import translator_blueprint
@@ -88,6 +89,7 @@ BLUEPRINTS = [
     document_templates_blueprint,
     project_documents_blueprint,
     solutions_blueprint,
+    evidence_blueprint,
     dispatch_blueprint,
     guidance_blueprint,
     agents_blueprint,
@@ -316,6 +318,7 @@ MODEL_MODULES = [
     "fde_api.control.weixin_models",
     "fde_api.dispatch.models",
     "fde_api.documents.models",
+    "fde_api.evidence.models",
     "fde_api.files.models",
     "fde_api.guidance.models",
     "fde_api.jobs.models",

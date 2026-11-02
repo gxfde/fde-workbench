@@ -39,7 +39,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # goal-d3 交付工作台：agent 五表 + solution_review_checkpoints +
 # project_solutions 生成来源四列（template_id 回填自 source_json 骨架指针）
 # goal-d8 交付工作台：delivery_packages.agent_assisted + difficulty（D2 合成裁决）
-HEAD_REVISION = "c3e7a9b1d5f4"
+# V3 T-E1：project_evidence 一等证据表（单表增量，零改既有表）
+HEAD_REVISION = "e1f3a5c7b9d2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -533,3 +534,36 @@ def test_research_revision_status_check_constraint_rejects_legacy_status(
                 {"id": str(uuid4()), "form_id": str(uuid4())},
             )
     db_session.rollback()
+
+
+def test_v3_project_evidence_roundtrip_preserves_projects(alembic_config, engine):
+    """V3 T-E1：project_evidence 单表增量——downgrade 一步即消失、upgrade 回 head
+    即重建；两向都不碰 projects 行（新表零外键依赖方，回滚安全）。"""
+    command.downgrade(alembic_config, "c3e7a9b1d5f4")
+    assert "project_evidence" not in table_names(engine)
+    ids = seed_user_and_template(engine, username="migration.v3-evidence-keep")
+    seed_project(engine, ids, project_code="FDE-V3-EVID-KEEP")
+
+    command.upgrade(alembic_config, "head")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-EVID-KEEP'",
+        )
+        == "FDE-V3-EVID-KEEP"
+    )
+    assert "project_evidence" in table_names(engine)
+
+    command.downgrade(alembic_config, "c3e7a9b1d5f4")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-EVID-KEEP'",
+        )
+        == "FDE-V3-EVID-KEEP"
+    )
+    assert "project_evidence" not in table_names(engine)
+
+    command.upgrade(alembic_config, "head")
