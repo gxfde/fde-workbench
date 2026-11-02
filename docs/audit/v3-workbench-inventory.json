@@ -1,0 +1,284 @@
+{
+ "route_count": 269,
+ "blueprint_count": 33,
+ "table_count": 96,
+ "revision_count": 22,
+ "heads": [
+  "c3e7a9b1d5f4"
+ ],
+ "roots": [
+  "ebb003a5c3a8"
+ ],
+ "tables_without_create_revision": [],
+ "revisions": {
+  "a1d3f5b7c9e2": {
+   "file": "a1d3f5b7c9e2_p3_adoption_and_m10_evidence.py",
+   "down_revision": "c5e9b3d7a1f5",
+   "create_tables": [],
+   "add_column_tables": [
+    "project_guidance_analyses"
+   ]
+  },
+  "a7b4d9e2c6f1": {
+   "file": "a7b4d9e2c6f1_o3_seat_quota.py",
+   "down_revision": "f6a9c3e1d7b4",
+   "create_tables": [
+    "seat_action_ledger"
+   ],
+   "add_column_tables": [
+    "agent_runs"
+   ]
+  },
+  "a7f3c1e9d5b2": {
+   "file": "a7f3c1e9d5b2_presurvey_intake.py",
+   "down_revision": "f4b8c2d6e3a1",
+   "create_tables": [
+    "presurvey_intakes"
+   ],
+   "add_column_tables": []
+  },
+  "a9c3f1d8e2b4": {
+   "file": "a9c3f1d8e2b4_mailing_tables.py",
+   "down_revision": "f3c8d2b7a1e5",
+   "create_tables": [
+    "mailing_sends",
+    "mailing_events"
+   ],
+   "add_column_tables": []
+  },
+  "b2c4d6e8f1a3": {
+   "file": "b2c4d6e8f1a3_dispatch_p1_closeout.py",
+   "down_revision": "a7f3c1e9d5b2",
+   "create_tables": [
+    "disputes"
+   ],
+   "add_column_tables": [
+    "quotes"
+   ]
+  },
+  "b4e8c1a7d2f6": {
+   "file": "b4e8c1a7d2f6_p1_sop_schema.py",
+   "down_revision": "ebb003a5c3a8",
+   "create_tables": [
+    "sop_nodes",
+    "gates"
+   ],
+   "add_column_tables": [
+    "project_tasks",
+    "projects"
+   ]
+  },
+  "b8c2d6f0a4e7": {
+   "file": "b8c2d6f0a4e7_o8_agent_assisted.py",
+   "down_revision": "a7b4d9e2c6f1",
+   "create_tables": [],
+   "add_column_tables": [
+    "delivery_packages"
+   ]
+  },
+  "b8d4f2a6c0e8": {
+   "file": "b8d4f2a6c0e8_circular_current_version_fks.py",
+   "down_revision": "f7a2c9e4b1d3",
+   "create_tables": [],
+   "add_column_tables": []
+  },
+  "c3e7a9b1d5f4": {
+   "file": "c3e7a9b1d5f4_t6_review_project_toggle.py",
+   "down_revision": "a1d3f5b7c9e2",
+   "create_tables": [],
+   "add_column_tables": [
+    "projects"
+   ]
+  },
+  "c5d7e9f1a3b7": {
+   "file": "c5d7e9f1a3b7_dispatch_p2_business_line.py",
+   "down_revision": "b2c4d6e8f1a3",
+   "create_tables": [],
+   "add_column_tables": []
+  },
+  "c5e9b3d7a1f5": {
+   "file": "c5e9b3d7a1f5_p3_translator_and_signoff.py",
+   "down_revision": "b8c2d6f0a4e7",
+   "create_tables": [
+    "translator_translations"
+   ],
+   "add_column_tables": [
+    "solution_review_checkpoints"
+   ]
+  },
+  "c9f2d4e8a1b7": {
+   "file": "c9f2d4e8a1b7_p4_commercial_tables.py",
+   "down_revision": "d7a3e8c5f1b9",
+   "create_tables": [
+    "quotes",
+    "payments",
+    "contracts"
+   ],
+   "add_column_tables": []
+  },
+  "d2f6b4c8a1e9": {
+   "file": "d2f6b4c8a1e9_dispatch_p0_gate_separation.py",
+   "down_revision": "a9c3f1d8e2b4",
+   "create_tables": [
+    "delivery_packages",
+    "dispatch_offers"
+   ],
+   "add_column_tables": [
+    "gates"
+   ]
+  },
+  "d7a3e8c5f1b9": {
+   "file": "d7a3e8c5f1b9_p2_bridge_tables.py",
+   "down_revision": "b4e8c1a7d2f6",
+   "create_tables": [
+    "bridge_engagements",
+    "bridge_sync_runs"
+   ],
+   "add_column_tables": []
+  },
+  "d9c3e7f1a5b8": {
+   "file": "d9c3e7f1a5b8_s1_agent_tables.py",
+   "down_revision": "c5d7e9f1a3b7",
+   "create_tables": [
+    "agent_registry",
+    "agent_runs",
+    "agent_artifacts",
+    "agent_tool_calls",
+    "agent_credentials",
+    "solution_review_checkpoints"
+   ],
+   "add_column_tables": [
+    "project_solutions"
+   ]
+  },
+  "e3a7c5d9f2b8": {
+   "file": "e3a7c5d9f2b8_dispatch_p0_r2_profiles_rules_settlements.py",
+   "down_revision": "d2f6b4c8a1e9",
+   "create_tables": [
+    "fde_level_evidence",
+    "fde_profiles",
+    "dispatch_rule_versions",
+    "delivery_settlements"
+   ],
+   "add_column_tables": [
+    "payments"
+   ]
+  },
+  "e5b8a1c9d3f7": {
+   "file": "e5b8a1c9d3f7_ai_call_audits.py",
+   "down_revision": "b8d4f2a6c0e8",
+   "create_tables": [
+    "ai_call_audits"
+   ],
+   "add_column_tables": []
+  },
+  "ebb003a5c3a8": {
+   "file": "ebb003a5c3a8_baseline_pg.py",
+   "down_revision": null,
+   "create_tables": [
+    "background_jobs",
+    "document_templates",
+    "industry_templates",
+    "module_catalog",
+    "outbox_events",
+    "plugin_catalog_syncs",
+    "system_configuration",
+    "users",
+    "ai_model_preferences",
+    "ai_provider_configs",
+    "industry_template_versions",
+    "lcsc_skill_runs",
+    "plugin_packages",
+    "refresh_sessions",
+    "skill_definitions",
+    "user_ai_access_grants",
+    "ai_model_configs",
+    "plugin_change_requests",
+    "plugin_installations",
+    "projects",
+    "skill_versions",
+    "template_modules",
+    "template_research_forms",
+    "ai_conversations",
+    "automation_tasks",
+    "channel_bindings",
+    "knowledge_snapshots",
+    "operation_events",
+    "plugin_installation_revisions",
+    "project_files",
+    "project_members",
+    "project_modules",
+    "project_research_import_batches",
+    "project_research_subjects",
+    "project_solutions",
+    "template_research_sections",
+    "template_tasks",
+    "ai_chat_turns",
+    "automation_task_runs",
+    "project_ai_opportunity_profiles",
+    "project_file_versions",
+    "project_research_forms",
+    "project_research_personal_memos",
+    "project_research_subject_links",
+    "project_solution_opportunities",
+    "project_tasks",
+    "template_research_fields",
+    "template_task_dependencies",
+    "upload_sessions",
+    "weixin_accounts",
+    "automation_approvals",
+    "document_template_versions",
+    "project_guidance_analyses",
+    "project_presurvey_sources",
+    "project_research_exports",
+    "project_research_form_revisions",
+    "project_task_collaborators",
+    "project_task_dependencies",
+    "weixin_inbox",
+    "project_documents",
+    "project_research_answers",
+    "project_document_drafts",
+    "project_document_versions",
+    "document_generation_jobs",
+    "project_solution_exports"
+   ],
+   "add_column_tables": []
+  },
+  "f3c8d2b7a1e5": {
+   "file": "f3c8d2b7a1e5_document_delivery_records.py",
+   "down_revision": "e5b8a1c9d3f7",
+   "create_tables": [
+    "document_delivery_records"
+   ],
+   "add_column_tables": []
+  },
+  "f4b8c2d6e3a1": {
+   "file": "f4b8c2d6e3a1_dispatch_p0_package_access.py",
+   "down_revision": "e3a7c5d9f2b8",
+   "create_tables": [
+    "package_access"
+   ],
+   "add_column_tables": [
+    "delivery_packages"
+   ]
+  },
+  "f6a9c3e1d7b4": {
+   "file": "f6a9c3e1d7b4_review_meetings.py",
+   "down_revision": "d9c3e7f1a5b8",
+   "create_tables": [
+    "review_meetings",
+    "review_meeting_turns",
+    "review_meeting_minutes"
+   ],
+   "add_column_tables": []
+  },
+  "f7a2c9e4b1d3": {
+   "file": "f7a2c9e4b1d3_gate_template_hash.py",
+   "down_revision": "c9f2d4e8a1b7",
+   "create_tables": [],
+   "add_column_tables": [
+    "gates"
+   ]
+  }
+ }
+}

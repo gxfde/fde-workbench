@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 融合审计：Workbench × fde-v2 深度代码审计与 V3 升级实施方案（2026-11-02）
+
+### 纯文档 + 审计脚本轮（零业务代码、零迁移、零部署）
+
+- **主报告** `docs/architecture/蔡工FDE_Workbench_fde-v2架构融合审计与V3升级实施方案.md`（20 节 + Mermaid 五层架构图）：对 Workbench @0570384 与外部项目 fde-v2（快照≈上游 master@39e0e62，零执行只读审计）逐模块对照；核心裁决=**不引入 fde-v2 实现，只吸收四件经验证思想**（YAML DAG 形态 / 候选→人工确认闭环 / 证据"出处+源块"粒度 / BR 三要素机器可读纪律），七项 fde-v2 设计明确不搬（flow 执行器、运行时 DDL reconcile、隐式页面授权、exec 角色装配、user=None 全通、全量内省工具面、agentscope 团队）。
+- **审计产物** `docs/audit/`：双仓基线、模块清单、路由清单 CSV（385 行=WB 269 url_map 枚举 + fde-v2 116 AST）、数据表清单 CSV（121 行=WB 96 表全字段+首建迁移归属 + fde-v2 17 DDL）、测试盘点与实跑终录、**17 能力域差距矩阵**（REUSE/EXTEND/NEW/DEFER 逐域裁决，含 Workbench 自身 14 项现状缺陷——WB-DEF-1 signoff 死锁为 P0 功能阻断）、风险登记册；`appendix/` 六份行号级原始证据报告。
+- **架构设计** `docs/architecture/`：ontology-registry-v1（3 新表 terms+aliases / relation_types / change_sets + project_evidence 底座；6 个候选表经查重不建）、workflow-dag-v1（作为 background_jobs 新 job_type，不建第二套队列；四类节点；校验器纯函数先入 CI）、agent-policy-v1（权限五原则现状 VERIFIED 保持 + ToolGroup 只收窄 + Skill 以既有双表扩治理态）。
+- **实施台账** `docs/implementation/`：v3-backlog（24 任务含文件/表/API/测试/回滚/复杂度）、v3-test-plan（本体/Workflow/权限安全/门禁交付物四族验收用例）。建议起手：T-P0-1 死锁修复 → T-E1/E2 一等证据表 → T-W1 DAG 校验器。
+- **可复现抽取脚本** `scripts/audit/extract_{workbench,fde_v2}_inventory.py`（裸 Flask 注册全部 blueprint 枚举 url_map + Base.metadata，不调 create_app 零副作用；外部快照 `python -I` + AST/regex 零 import）。
+- 实跑基线（本轮真实执行）：pytest 1700 passed + 6 skipped（1706 收集，与 d13 口径一致）/ vitest 730/730 / operations 14/14；fde-v2 verify 套件按不受信零执行纪律未跑（UNKNOWN 如实记录）。口径数字不变：96 表 / head `c3e7a9b1d5f4` / 路由 269 / ENTRIES 94。
+
 ## [未发布] — 派单 r12 签字执行：14 条留注归档 + B-③ 销号 + B-① 律师包定稿（2026-11-01）
 
 ### 纯文档销号轮（零代码）

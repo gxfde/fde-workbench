@@ -1,0 +1,655 @@
+{
+ "route_decorator_count": 116,
+ "unparsed_route_decorators": 0,
+ "create_table_count": 25,
+ "distinct_tables": 22,
+ "app_groups": [
+  "e2e",
+  "nasa_pms",
+  "psc"
+ ],
+ "object_count": 36,
+ "design_plus_md_count": 25,
+ "verify_script_count": 71,
+ "design_plus": [
+  {
+   "file": "design-plus/BUG修复.md",
+   "lines": 90
+  },
+  {
+   "file": "design-plus/CONVENTION.md",
+   "lines": 433
+  },
+  {
+   "file": "design-plus/view-convention/architecture.md",
+   "lines": 120
+  },
+  {
+   "file": "design-plus/view-convention/design-system.md",
+   "lines": 69
+  },
+  {
+   "file": "design-plus/view-convention/patterns.md",
+   "lines": 357
+  },
+  {
+   "file": "design-plus/view-convention/pitfalls.md",
+   "lines": 292
+  },
+  {
+   "file": "design-plus/VIEW_CONVENTION.md",
+   "lines": 202
+  },
+  {
+   "file": "design-plus/一键生成.md",
+   "lines": 111
+  },
+  {
+   "file": "design-plus/从材料到BRD.md",
+   "lines": 308
+  },
+  {
+   "file": "design-plus/前端测试.md",
+   "lines": 203
+  },
+  {
+   "file": "design-plus/前端测试执行.md",
+   "lines": 230
+  },
+  {
+   "file": "design-plus/前端编码.md",
+   "lines": 105
+  },
+  {
+   "file": "design-plus/前端设计.md",
+   "lines": 278
+  },
+  {
+   "file": "design-plus/多智能体方案.md",
+   "lines": 252
+  },
+  {
+   "file": "design-plus/工具链使用说明.md",
+   "lines": 495
+  },
+  {
+   "file": "design-plus/应用测试.md",
+   "lines": 198
+  },
+  {
+   "file": "design-plus/应用编码.md",
+   "lines": 91
+  },
+  {
+   "file": "design-plus/应用设计.md",
+   "lines": 1091
+  },
+  {
+   "file": "design-plus/接口适配器开发.md",
+   "lines": 132
+  },
+  {
+   "file": "design-plus/智能体角色声明.md",
+   "lines": 102
+  },
+  {
+   "file": "design-plus/架构设计.md",
+   "lines": 443
+  },
+  {
+   "file": "design-plus/流程编排方案.md",
+   "lines": 193
+  },
+  {
+   "file": "design-plus/测试执行.md",
+   "lines": 271
+  },
+  {
+   "file": "design-plus/迭代执行.md",
+   "lines": 64
+  },
+  {
+   "file": "design-plus/验证门禁.md",
+   "lines": 634
+  }
+ ],
+ "verify_scripts": [
+  "app/e2e/tests/verify_chain_e2e.py",
+  "app/e2e/tests/verify_view_e2e.py",
+  "app/e2e/tests/verify_view_e2e_member.py",
+  "app/e2e/tests/verify_view_e2e_task.py",
+  "app/nasa_pms/demo/verify_demo.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_activity.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_change_request.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_configuration_item.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_decision.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_interface.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_requirement.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_review.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_risk.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_stakeholder.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_tech_plan.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_technical_measure.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_verification.py",
+  "app/nasa_pms/tests/verify_chain_nasa_pms_wbs.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_activity.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_change_request.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_configuration_item.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_decision.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_interface.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_requirement.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_review.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_risk.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_stakeholder.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_tech_plan.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_technical_measure.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_verification.py",
+  "app/nasa_pms/tests/verify_view_nasa_pms_wbs.py",
+  "app/psc/tests/verify_chain_psc.py",
+  "app/psc/tests/verify_chain_psc_part1.py",
+  "app/psc/tests/verify_chain_psc_part2.py",
+  "app/psc/tests/verify_chain_psc_part3.py",
+  "app/psc/tests/verify_view_psc.py",
+  "app/psc/tests/verify_view_psc_attainment.py",
+  "app/psc/tests/verify_view_psc_demand.py",
+  "app/psc/tests/verify_view_psc_demand_pool.py",
+  "app/psc/tests/verify_view_psc_inventory_projection.py",
+  "app/psc/tests/verify_view_psc_inventory_strategy.py",
+  "app/psc/tests/verify_view_psc_master_plan.py",
+  "app/psc/tests/verify_view_psc_material360.py",
+  "app/psc/tests/verify_view_psc_md_breakpoint.py",
+  "app/psc/tests/verify_view_psc_md_customer.py",
+  "app/psc/tests/verify_view_psc_md_material.py",
+  "app/psc/tests/verify_view_psc_md_monthly_version.py",
+  "app/psc/tests/verify_view_psc_md_part_replace.py",
+  "app/psc/tests/verify_view_psc_md_project.py",
+  "app/psc/tests/verify_view_psc_md_project_part.py",
+  "app/psc/tests/verify_view_psc_outbound_plan.py",
+  "app/psc/tests/verify_view_psc_sales_forecast.py",
+  "app/psc/tests/verify_view_psc_sales_history.py",
+  "app/psc/tests/verify_view_psc_strategy_fitting.py",
+  "design-plus/前端验收样板/verify_view_e2e.py",
+  "design-plus/后端验收样板/verify_chain_sample.py",
+  "scripts/verify_agent_quality.py",
+  "scripts/verify_agent_rail.py",
+  "scripts/verify_agent_tools.py",
+  "scripts/verify_app_edges.py",
+  "scripts/verify_ddl_reconcile.py",
+  "scripts/verify_dialect_render.py",
+  "scripts/verify_group_isolation.py",
+  "scripts/verify_mcp_http.py",
+  "scripts/verify_pg_live.py",
+  "scripts/verify_pg_translate.py",
+  "scripts/verify_psc_oracles.py",
+  "scripts/verify_shadow_isolation.py",
+  "scripts/verify_test_script_encoding.py"
+ ],
+ "config_files": [
+  "config/.env.example",
+  "config/rules/README.md"
+ ],
+ "objects": [
+  {
+   "group": "e2e",
+   "object": "member",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "e2e",
+   "object": "task",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "e2e",
+   "object": "前端详设",
+   "files": {
+    "md": 1
+   }
+  },
+  {
+   "group": "e2e",
+   "object": "(group-level)",
+   "files": {
+    "_note": [
+     "_contracts.md",
+     "_roles.py",
+     "architecture.md",
+     "architecture_review.md",
+     "dashboard.html",
+     "dashboard.js",
+     "process.html",
+     "process.js",
+     "前端测试用例.md",
+     "前端测试用例覆盖度报告.md",
+     "前端编码覆盖度检查.md",
+     "前端详设覆盖度检查.md",
+     "应用编码覆盖度检查.md",
+     "应用详设覆盖度检查.md",
+     "测试用例.md",
+     "测试用例覆盖度报告.md"
+    ]
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "activity",
+   "files": {
+    "py": 1,
+    "md": 4,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "change_request",
+   "files": {
+    "py": 1,
+    "md": 5,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "configuration_item",
+   "files": {
+    "py": 1,
+    "md": 4,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "decision",
+   "files": {
+    "py": 1,
+    "md": 5,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "demo",
+   "files": {
+    "py": 3,
+    "md": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "interface",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "requirement",
+   "files": {
+    "md": 4,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "review",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "risk",
+   "files": {
+    "md": 4,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "stakeholder",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "tech_plan",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "technical_measure",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "verification",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "wbs",
+   "files": {
+    "md": 4,
+    "sql": 1,
+    "html": 1,
+    "js": 1,
+    "py": 1
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "前端详设",
+   "files": {
+    "md": 2
+   }
+  },
+  {
+   "group": "nasa_pms",
+   "object": "(group-level)",
+   "files": {
+    "_note": [
+     "_agent_tools.py",
+     "_contracts.md",
+     "_flow_cr_to_release.yaml",
+     "_flow_req_to_verify.yaml",
+     "_flow_schedule_baseline.yaml",
+     "_flow_tpm_alert_heal.yaml",
+     "_flow_wbs_baseline.yaml",
+     "_roles.py",
+     "architecture.md",
+     "architecture_review.md",
+     "dashboard.html",
+     "dashboard.js",
+     "kg_config.json",
+     "process.html",
+     "process.js",
+     "前端测试用例.md",
+     "本体对象.md",
+     "术语表.md",
+     "测试用例.md"
+    ]
+   }
+  },
+  {
+   "group": "psc",
+   "object": "attainment",
+   "files": {
+    "py": 1,
+    "md": 5,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "demand",
+   "files": {
+    "py": 1,
+    "md": 5,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "demand_pool",
+   "files": {
+    "py": 1,
+    "md": 5,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "inventory_projection",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "inventory_strategy",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "master_plan",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_breakpoint",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_customer",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_material",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_monthly_version",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_part_replace",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_project",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "md_project_part",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "outbound_plan",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "sales_forecast",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "sales_history",
+   "files": {
+    "md": 5,
+    "py": 1,
+    "sql": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "strategy_fitting",
+   "files": {
+    "md": 5,
+    "sql": 1,
+    "py": 1,
+    "html": 1,
+    "js": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "前端详设",
+   "files": {
+    "md": 1
+   }
+  },
+  {
+   "group": "psc",
+   "object": "(group-level)",
+   "files": {
+    "_note": [
+     "_agent_tools.py",
+     "_contracts.md",
+     "_flow_alert_heal.yaml",
+     "_flow_forecast_to_plan.yaml",
+     "_roles.py",
+     "architecture.md",
+     "architecture_review.md",
+     "BUGS_psc_2026-09-15.md",
+     "BUGS_psc_2026-09-19.md",
+     "BUGS_psc_2026-09-20.md",
+     "dashboard.html",
+     "dashboard.js",
+     "material360.html",
+     "material360.js",
+     "process.html",
+     "process.js",
+     "前端测试用例.md",
+     "前端测试用例覆盖度报告.md",
+     "前端编码覆盖度检查.md",
+     "前端详设覆盖度检查.md"
+    ]
+   }
+  }
+ ]
+}
