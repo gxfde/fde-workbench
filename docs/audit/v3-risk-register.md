@@ -7,7 +7,7 @@
 
 | 编号 | 严重度 | 风险 | 证据 | 缓解/处置 | 状态 |
 |---|---|---|---|---|---|
-| WB-DEF-1 | 高 | signoff 死锁：agent_assisted 方案经 generate-agent 正常 completed（无 handoff）时无 pending checkpoint，signoff 与 export-sow 双 409，SOW 永久导不出 | agents/service.py:907-916 唯一创建点；test_solution_signoff.py:35-42 用直插库绕过 | T-P0-1：_finalize 成功路径补建 checkpoint（或 export 前兜底）+ 端到端测试 | 待办（P0） |
+| WB-DEF-1 | 高 | signoff 死锁：agent_assisted 方案经 generate-agent 正常 completed（无 handoff）时无 pending checkpoint，signoff 与 export-sow 双 409，SOW 永久导不出 | agents/service.py:907-916 唯一创建点；test_solution_signoff.py:35-42 用直插库绕过 | T-P0-1：_finalize 成功路径补建 checkpoint（或 export 前兜底）+ 端到端测试 | **已修复**（2026-11-02，T-P0-1：`agents/signoff.py` 统一幂等开闸 + `_finalize` 即开 + `export_sow` 兜底先提交再 409；+5 用例先红后绿） |
 | WB-DEF-2 | 中 | signoff 拍板权=AI 访问档位而非项目角色（项目侧仅 can_view）：viewer 成员持高 AI 档可拍板方案终审 | solutions/service.py:319-400 | T-P1-4：can_manage + 档位双闸 | 待办 |
 | WB-DEF-3 | 低 | 过期审批懒翻转，无后台清扫（无越权窗口，run 已停等且 execute 拒） | control/service.py:708/770 | T-P1-5：scheduler 每轮清扫 | 待办 |
 | WB-DEF-4 | 中 | DSH 降级直连 chat 用量只进 metrics_json 不落 ai_call_audits → 月度 token 预算失真 | 附录 C R4 | T-OBS1：统一走 auditing.record | 待办 |

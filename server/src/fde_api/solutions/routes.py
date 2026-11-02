@@ -10,7 +10,8 @@ solutions_blueprint = Blueprint("project_solutions", __name__, url_prefix="/api/
 
 @solutions_blueprint.errorhandler(service.SolutionServiceError)
 def service_error(error):
-    return error_response(error.code, error.message, error.status)
+    # T-P0-1：409 solution_signoff_required 携 details（pending checkpoint 指路）
+    return error_response(error.code, error.message, error.status, error.detail or None)
 
 
 @solutions_blueprint.errorhandler(AgentsServiceError)

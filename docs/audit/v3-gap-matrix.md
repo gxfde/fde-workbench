@@ -367,7 +367,7 @@
 
 | 编号 | 严重度 | 缺陷 | 证据 | 处置 |
 |---|---|---|---|---|
-| WB-DEF-1 | 高（功能阻断） | signoff 死锁：agent_assisted 方案正常 completed 无 handoff → 无 pending checkpoint → signoff 409 / export 409 永久卡死 | F 风险 1；agents/service.py:907-916 唯一创建点 | T-P0-1（P0） |
+| WB-DEF-1 | 高（功能阻断） | signoff 死锁：agent_assisted 方案正常 completed 无 handoff → 无 pending checkpoint → signoff 409 / export 409 永久卡死 | F 风险 1；agents/service.py:907-916 唯一创建点 | T-P0-1（P0）**已实施 2026-11-02**（`agents/signoff.py` 统一开闸 + `_finalize` 即开 + export 兜底） |
 | WB-DEF-2 | 中（权限口径） | resolve_signoff 项目侧仅 can_view，拍板权=AI 档位，viewer+高 AI 档可拍板 | F 风险 9 | T-P1-4 |
 | WB-DEF-3 | 低（卫生） | 过期审批懒翻转无后台清扫 | C R3 | T-P1-5 |
 | WB-DEF-4 | 中（观测失真） | DSH 降级直连 chat 不落 ai_call_audits，月预算失真 | C R4 | T-OBS1 |

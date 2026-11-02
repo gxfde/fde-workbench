@@ -8,20 +8,24 @@
 - 拍板是人工动作——本路径不进 api_catalog（红线），用例钉住。
 - goal-d13 拍板：approved 翻转终审通道内产物 reviewed=True（拦截留痕不翻）；
   agent_assisted 交付包绑定的方案导出 SOW 前 409 solution_signoff_required。
+- V3 T-P0-1（审计 WB-DEF-1）：signoff 死锁修复——正常 completed run 由 _finalize
+  即开 pending；export 闸拦下且无 pending 时兜底开闸并在 details 指路；L1 仍走 handoff。
 """
 from __future__ import annotations
 
 from uuid import uuid4
 
-from test_agents_d4_harness import api_client, d4_app, d4_client, d4_settings  # noqa: F401  (pytest fixture)
-from test_document_drafts_api import _persist_project
+from test_agents_d4_harness import ScriptedEvents, api_client, d4_app, d4_client, d4_settings, prime_run  # noqa: F401  (pytest fixture)
+from test_document_drafts_api import _persist_doc_template, _persist_project
+from test_project_solutions import _opportunity
+from test_solution_agent_wiring import _project_with_solution, _scanner_factory, _seal_t2
 
 from test_agents_d4_harness import seed_agent
 
 from fde_api.agents.models import AgentArtifact, AgentRun, SolutionReviewCheckpoint
 from fde_api.control.api_catalog import CATALOG
 from fde_api.dispatch.models import DeliveryPackage
-from fde_api.solutions.models import ProjectSolution
+from fde_api.solutions.models import ProjectSolution, ProjectSolutionOpportunity
 from fde_api.workbench.models import OperationEvent
 
 
@@ -309,3 +313,179 @@ def test_export_sow_gate_opens_after_approval(d4_client, db_session, d4_settings
 
 def _agent(db_session, settings):
     return seed_agent(db_session, settings, name="终审沙箱智能体", credential_ref=f"zcode-{uuid4().hex[:8]}")
+
+
+# ---------------------------------------------------------------------------
+# V3 T-P0-1（审计 WB-DEF-1）：signoff 死锁修复
+#   completed run 即开 pending（_finalize）/ export 闸拦下兜底开闸 / L1 既有语义零回归
+
+
+def _checkpoints(db_session, solution) -> list[SolutionReviewCheckpoint]:
+    return db_session.query(SolutionReviewCheckpoint).filter(
+        SolutionReviewCheckpoint.solution_id == solution.id
+    ).order_by(SolutionReviewCheckpoint.created_at.asc(), SolutionReviewCheckpoint.id.asc()).all()
+
+
+def _agent_assisted_generated(db_session, d4_client, d4_app, d4_settings):
+    """goal-d6 接线夹具 + agent_assisted 包 + SOW 导出前置（模板/机会）。
+    返回 (leader, project, solution, run_id)；run 为正常 completed（非降级、过 T2 门）。"""
+    leader, project, solution, agent = _project_with_solution(db_session, d4_client, d4_settings)
+    _package(db_session, project, solution, agent_assisted=True)
+    opportunity = _opportunity(db_session, project)
+    db_session.add(ProjectSolutionOpportunity(
+        solution_id=solution.id, opportunity_id=opportunity.id, sort_order=0, snapshot_json={}
+    ))
+    db_session.commit()
+    _persist_doc_template(db_session, leader.user)
+    _seal_t2(leader, project, solution.id)
+    prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 0}]]), scanner_factory=_scanner_factory)
+    wired = leader.post(
+        f"/api/v1/projects/{project.id}/solutions/{solution.id}/generate-agent",
+        json={"agent_id": agent.id, "idempotency_key": f"p01:{uuid4().hex}"},
+    )
+    assert wired.status_code == 201, wired.json
+    return leader, project, solution, wired.json["data"]["agent_run_id"]
+
+
+def test_t_p0_1_completed_run_opens_pending_signoff_and_unblocks_export(db_session, d4_client, d4_app, d4_settings) -> None:
+    """WB-DEF-1 复现→修复：正常 completed 的 agent_assisted 方案此前既不能 handoff
+    （只收失败/L1）又无其它开闸点 → export-sow 与 signoff 双 409 永久死锁。修复后：
+    _finalize 即开 pending（软链 run）→ export 409 携 checkpoint_id/remedy →
+    终审台拍板 approved → export 200；全程方案只有一个 checkpoint（幂等）。"""
+    leader, project, solution, run_id = _agent_assisted_generated(db_session, d4_client, d4_app, d4_settings)
+    # 死锁的另一半语义不变：正常 completed 仍不可 handoff
+    denied = leader.post(f"/api/v1/agents/runs/{run_id}/handoff", json={"solution_id": solution.id})
+    assert denied.status_code == 409 and denied.json["error"]["code"] == "agent_handoff_not_allowed"
+    rows = _checkpoints(db_session, solution)
+    assert len(rows) == 1
+    assert rows[0].status == "pending" and rows[0].checkpoint_type == "signoff"
+    assert rows[0].required_level == "project_manager" and rows[0].handoff_run_id == run_id
+    db_session.expire_all()
+    version = db_session.get(ProjectSolution, solution.id).version
+    url = f"/api/v1/projects/{project.id}/solutions/{solution.id}/export-sow"
+    blocked = leader.post(url, json={"version": version})
+    assert blocked.status_code == 409, blocked.json
+    assert blocked.json["error"]["code"] == "solution_signoff_required"
+    details = blocked.json["error"]["details"]
+    assert details["signoff_checkpoint_id"] == rows[0].id and details["signoff_status"] == "pending"
+    assert details["remedy"] == "resolve_pending_signoff"
+    assert details["remedy_path"].endswith(f"/solutions/{solution.id}/signoff")
+    assert len(_checkpoints(db_session, solution)) == 1  # 兜底不重复开闸
+    trail = leader.get(f"/api/v1/projects/{project.id}/solutions/{solution.id}/review-trail")
+    assert trail.status_code == 200 and trail.json["data"]["signoff"]["status"] == "pending"
+    approved = _signoff(leader, project, solution, {"decision": "approved"})
+    assert approved.status_code == 200, approved.json
+    assert approved.json["data"]["handoff_run_id"] == run_id
+    patched = leader.patch(
+        f"/api/v1/projects/{project.id}/solutions/{solution.id}",
+        json={"version": version, "design_markdown": "导出用方案设计正文"},
+    )
+    assert patched.status_code == 200, patched.json
+    db_session.expire_all()
+    version = db_session.get(ProjectSolution, solution.id).version
+    exported = leader.post(url, json={"version": version})
+    assert exported.status_code == 200, exported.json
+    assert exported.json["data"]["document_version_id"]
+
+
+def test_t_p0_1_export_gate_opens_pending_signoff_when_none_exists(d4_client, db_session, d4_settings) -> None:
+    """无 run 形态（包声明 agent_assisted、方案从未跑过 run → 无 handoff 可走）与存量
+    形态同构：export 409 时兜底开出 pending（handoff_run_id=None）并在 details 指路；
+    重复导出不重复开闸；approved 后闸开（落下一道业务校验）。闸本身不放宽。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"SG{uuid4().hex[:4]}")
+    solution = _solution(db_session, project, leader.user)
+    _package(db_session, project, solution, agent_assisted=True)
+    url = f"/api/v1/projects/{project.id}/solutions/{solution.id}/export-sow"
+    blocked = leader.post(url, json={"version": 1})
+    assert blocked.status_code == 409, blocked.json
+    assert blocked.json["error"]["code"] == "solution_signoff_required"
+    checkpoint_id = blocked.json["error"]["details"]["signoff_checkpoint_id"]
+    checkpoint = db_session.get(SolutionReviewCheckpoint, checkpoint_id)
+    assert checkpoint.solution_id == solution.id and checkpoint.status == "pending"
+    assert checkpoint.handoff_run_id is None and checkpoint.required_level == "project_manager"
+    again = leader.post(url, json={"version": 1})
+    assert again.status_code == 409
+    assert again.json["error"]["details"]["signoff_checkpoint_id"] == checkpoint_id
+    assert len(_checkpoints(db_session, solution)) == 1
+    assert _signoff(leader, project, solution, {"decision": "approved"}).status_code == 200
+    opened = leader.post(url, json={"version": 1})
+    assert opened.status_code == 400, opened.json
+    assert opened.json["error"]["code"] == "solution_design_required"
+
+
+def test_t_p0_1_export_after_rejection_reopens_pending(d4_client, db_session, d4_settings) -> None:
+    """驳回后再导出：无 approved 也无 pending → 兜底开出新一轮 pending（不复用
+    rejected 行），方案留痕 rejected + pending 两行；拍板 attempt 口径随之为 2。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"SG{uuid4().hex[:4]}")
+    solution = _solution(db_session, project, leader.user)
+    _package(db_session, project, solution, agent_assisted=True)
+    first = _checkpoint(db_session, solution)
+    assert _signoff(leader, project, solution, {"decision": "rejected"}).status_code == 200
+    url = f"/api/v1/projects/{project.id}/solutions/{solution.id}/export-sow"
+    blocked = leader.post(url, json={"version": 1})
+    assert blocked.status_code == 409, blocked.json
+    reopened_id = blocked.json["error"]["details"]["signoff_checkpoint_id"]
+    assert reopened_id != first.id
+    db_session.expire_all()  # first 在测试会话里仍是 pending 快照，拍板发生在服务端会话
+    assert sorted(row.status for row in _checkpoints(db_session, solution)) == ["pending", "rejected"]
+    approved = _signoff(leader, project, solution, {"decision": "approved"})
+    assert approved.status_code == 200, approved.json
+    assert approved.json["data"]["checkpoint_id"] == reopened_id
+    events = db_session.query(OperationEvent).filter(
+        OperationEvent.event_type == "solution_signoff_resolved",
+        OperationEvent.project_id == project.id,
+    ).order_by(OperationEvent.created_at.asc(), OperationEvent.id.asc()).all()
+    assert [row.changes["attempt"] for row in events] == [1, 2]
+
+
+def test_t_p0_1_l1_degraded_completed_does_not_auto_open_signoff(db_session, d4_client, d4_app, d4_settings) -> None:
+    """L1（降级 completed）产物不进终审通道，_finalize 不开闸——仍由人工接管
+    handoff 开出 pending（既有语义零回归），且接管后同方案仍只有一个 checkpoint。"""
+    leader, project, solution, agent = _project_with_solution(db_session, d4_client, d4_settings)  # 工具面只有 read_file
+    _seal_t2(leader, project, solution.id)
+    prime_run(
+        d4_app,
+        events=ScriptedEvents([[{"type": "tool_call", "tool": "write_file"}], [{"type": "done", "exit_code": 0}]]),
+        scanner_factory=_scanner_factory,
+    )
+    body = leader.post(
+        f"/api/v1/agents/{agent.id}/run",
+        json={"project_id": project.id, "solution_id": solution.id, "idempotency_key": f"l1:{uuid4().hex}"},
+    )
+    assert body.status_code == 201, body.json
+    run = body.json["data"]
+    assert run["status"] == "completed" and run["fallback_level"] == "L1"
+    assert _checkpoints(db_session, solution) == []
+    handed = leader.post(f"/api/v1/agents/runs/{run['id']}/handoff", json={"solution_id": solution.id})
+    assert handed.status_code == 200, handed.json
+    rows = _checkpoints(db_session, solution)
+    assert len(rows) == 1 and rows[0].id == handed.json["data"]["signoff_checkpoint_id"]
+    assert rows[0].status == "pending" and rows[0].handoff_run_id == run["id"]
+
+
+def test_ensure_pending_signoff_idempotent_and_backfills_run_link(d4_client, db_session, d4_settings) -> None:
+    """统一开闸入口：同方案至多一个 pending；已有 pending 只补空的 run 软链、不覆写；
+    approved/rejected 不算 pending（新一轮可再开）。"""
+    from fde_api.agents.signoff import ensure_pending_signoff  # 局部导入：本文件其余用例可对旧代码先红
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"SG{uuid4().hex[:4]}")
+    solution = _solution(db_session, project, leader.user)
+    first = ensure_pending_signoff(db_session, solution_id=solution.id, run_id=None)
+    db_session.commit()
+    assert first.status == "pending" and first.handoff_run_id is None
+    second = ensure_pending_signoff(db_session, solution_id=solution.id, run_id="run-a")
+    db_session.commit()
+    assert second.id == first.id and second.handoff_run_id == "run-a"
+    third = ensure_pending_signoff(db_session, solution_id=solution.id, run_id="run-b")
+    db_session.commit()
+    assert third.id == first.id and third.handoff_run_id == "run-a"  # 不覆写既有软链
+    assert len(_checkpoints(db_session, solution)) == 1
+    first.status = "approved"
+    db_session.commit()
+    fourth = ensure_pending_signoff(db_session, solution_id=solution.id, run_id=None)
+    db_session.commit()
+    assert fourth.id != first.id
+    assert len(_checkpoints(db_session, solution)) == 2

@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-P0-1：signoff 死锁修复（审计 WB-DEF-1，2026-11-02）
+
+### 服务端修复（零迁移、零新路由、零桌面改动）
+
+- **症状**（审计 WB-DEF-1，P0 功能阻断）：signoff checkpoint 唯一开闸点是 `handoff_run`，而它只收失败 / L1 降级 run；agent_assisted 方案经 generate-agent **正常 completed** 后既不能 handoff 又拿不到 pending → `POST …/signoff` 409 `signoff_not_pending` 与 `POST …/export-sow` 409 `solution_signoff_required` 永久互锁，SOW 一个字节都导不出。包声明 agent_assisted 而方案无 run 的形态同样死锁。
+- **修复**：新增 `fde_api/agents/signoff.py::ensure_pending_signoff` 作为唯一幂等开闸入口（同方案至多一个 pending，只补空 run 软链不覆写）；`_finalize` 对非降级 completed 且绑定 solution 的 run 即时开出 pending（L1 维持「人工接管后再开闸」既有语义）；`handoff_run` 改走同一入口；`export_sow` 的 agent_assisted 闸拆成独立事务，拦下且无 pending 时**兜底开闸并先提交再抛 409**（闸本身不放宽），409 `details` 携 `signoff_checkpoint_id / signoff_status / remedy=resolve_pending_signoff / remedy_path`。
+- **错误体**：`DocumentDraftServiceError`（= `SolutionServiceError`）新增可选 `detail`，solutions 蓝图错误处理器透传为 `error.details`（与 `AgentsServiceError` 同形；三参调用零改动）。
+- **测试**：`test_solution_signoff.py` +5（端到端先红后绿：generate-agent completed → export 409 携指路 → 终审拍板 approved → export 200；无 run 兜底开闸且重复导出不重复开闸；驳回后再导出重开新一轮 pending；L1 降级 completed 不自动开闸仍走 handoff；开闸入口幂等/软链回填）。对旧代码实跑红：completed 后 checkpoint 数 0、409 无 details。
+- **口径**：pytest 1717 收集 = 1711 passed + 6 skipped（d14 1712 + 本轮 5）；路由 269 / 表 96 / 迁移 22 不变；桌面零改动（vitest 730 沿用）。审计文档回写：`docs/implementation/v3-backlog.md` T-P0-1 → DONE（含实现偏差），风险登记册 / 差距矩阵 WB-DEF-1 → 已修复。
+
 ## [未发布] — V3 融合审计：Workbench × fde-v2 深度代码审计与 V3 升级实施方案（2026-11-02）
 
 ### 纯文档 + 审计脚本轮（零业务代码、零迁移、零部署）

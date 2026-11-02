@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from fde_api.agents.models import AgentArtifact, AgentRun, SolutionReviewCheckpoint
+from fde_api.agents.signoff import ensure_pending_signoff
 from fde_api.auth.models import User
 from fde_api.auth.passwords import verify_password
 from fde_api.control.access import ACCESS_RANK, authorize_ai_capability, effective_ai_access
@@ -43,8 +44,8 @@ HEALTH_COVERAGE_FIELDS = (
 SKELETON_OPTIONAL_FIELDS = {"name", "opportunity_ids", "business_category"}
 
 
-def _error(code: str, message: str, status: int = 400) -> NoReturn:
-    raise SolutionServiceError(code, message, status)
+def _error(code: str, message: str, status: int = 400, *, detail: dict[str, Any] | None = None) -> NoReturn:
+    raise SolutionServiceError(code, message, status, detail)
 
 
 def _version(value: object) -> int:
@@ -628,35 +629,66 @@ def _agent_trace(session: Session, solution: ProjectSolution) -> dict[str, Any] 
     }
 
 
+def _signoff_gate_detail(session: Session, solution: ProjectSolution) -> dict[str, Any] | None:
+    """agent_assisted 导出闸（goal-d13）：返回 None = 放行；否则返回 409 的 details。
+
+    闸只看「是否存在 approved signoff」，T-P0-1 不放宽它；但拦下时若方案连
+    pending 都没有（存量 completed run 早于 _finalize 开闸、或包声明
+    agent_assisted 而方案根本没有 run——两种形态都无 handoff 可走），在此兜底
+    开出 pending（软链 solution.agent_run_id），details 指路终审台。调用方须在
+    事务提交后再抛 409，否则兜底随事务回滚。
+    """
+    agent_assisted = session.scalar(
+        select(DeliveryPackage.id).where(
+            DeliveryPackage.solution_id == solution.id,
+            DeliveryPackage.agent_assisted.is_(True),
+        ).limit(1)
+    )
+    if agent_assisted is None:
+        return None
+    approved = session.scalar(
+        select(SolutionReviewCheckpoint.id).where(
+            SolutionReviewCheckpoint.solution_id == solution.id,
+            SolutionReviewCheckpoint.checkpoint_type == "signoff",
+            SolutionReviewCheckpoint.status == "approved",
+        ).limit(1)
+    )
+    if approved is not None:
+        return None
+    checkpoint = ensure_pending_signoff(session, solution_id=solution.id, run_id=solution.agent_run_id)
+    session.flush()
+    return {
+        "solution_id": solution.id,
+        "signoff_checkpoint_id": checkpoint.id,
+        "signoff_status": checkpoint.status,
+        "remedy": "resolve_pending_signoff",
+        "remedy_path": f"/api/v1/projects/{solution.project_id}/solutions/{solution.id}/signoff",
+    }
+
+
 def export_sow(*, actor: User, project_id: str, solution_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     if set(payload) != {"version"}:
         _error("invalid_request", "请仅提供要导出方案的版本号。")
     expected_version = _version(payload.get("version"))
+    # goal-d13 拍板：AI 协同参与（agent_assisted 交付包绑定本方案）的方案，
+    # 导出 SOW 前必须终审台拍板通过——含既有导出的重取（闸在复用路径之前，
+    # 严格口径：未 approved 的 AI 协同方案一个字节都不出系统）。纯人工方案
+    # 不受影响。只读 DeliveryPackage（派单 8 态机零触碰），无任何派单写路径。
+    # T-P0-1：闸单独成一个事务——拦下时的兜底开闸要先提交再抛 409（沿
+    # generate_agent_solution「先查后写」两段式先例）。
     with db.session() as session, session.begin():
         project = documents._load_project_for_update(session, project_id)
         documents._require_project_manager(actor, project)
         solution = _load(session, project.id, solution_id, update=True)
         _require_editable(solution, expected_version)
-        # goal-d13 拍板：AI 协同参与（agent_assisted 交付包绑定本方案）的方案，
-        # 导出 SOW 前必须终审台拍板通过——含既有导出的重取（闸在复用路径之前，
-        # 严格口径：未 approved 的 AI 协同方案一个字节都不出系统）。纯人工方案
-        # 不受影响。只读 DeliveryPackage（派单 8 态机零触碰），无任何派单写路径。
-        agent_assisted = session.scalar(
-            select(DeliveryPackage.id).where(
-                DeliveryPackage.solution_id == solution.id,
-                DeliveryPackage.agent_assisted.is_(True),
-            ).limit(1)
-        )
-        if agent_assisted is not None:
-            approved = session.scalar(
-                select(SolutionReviewCheckpoint.id).where(
-                    SolutionReviewCheckpoint.solution_id == solution.id,
-                    SolutionReviewCheckpoint.checkpoint_type == "signoff",
-                    SolutionReviewCheckpoint.status == "approved",
-                ).limit(1)
-            )
-            if approved is None:
-                _error("solution_signoff_required", "该方案由 AI 协同参与交付，导出 SOW 前需在终审台拍板通过。", 409)
+        blocked = _signoff_gate_detail(session, solution)
+    if blocked is not None:
+        _error("solution_signoff_required", "该方案由 AI 协同参与交付，导出 SOW 前需在终审台拍板通过。", 409, detail=blocked)
+    with db.session() as session, session.begin():
+        project = documents._load_project_for_update(session, project_id)
+        documents._require_project_manager(actor, project)
+        solution = _load(session, project.id, solution_id, update=True)
+        _require_editable(solution, expected_version)
         existing = session.scalar(select(ProjectSolutionExport).where(
             ProjectSolutionExport.solution_id == solution.id, ProjectSolutionExport.solution_version == solution.version))
         if existing is not None:

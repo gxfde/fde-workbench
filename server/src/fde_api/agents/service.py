@@ -63,7 +63,6 @@ from fde_api.agents.models import (
     AgentRegistry,
     AgentRun,
     AgentToolCall,
-    SolutionReviewCheckpoint,
 )
 from fde_api.agents.sandbox import (
     DockerBackend,
@@ -72,6 +71,7 @@ from fde_api.agents.sandbox import (
     SandboxHandle,
     SandboxProfile,
 )
+from fde_api.agents.signoff import ensure_pending_signoff
 from fde_api.agents import pilot, quota as seat_quota
 from fde_api.agents.tools import effective_run_tools, run_face_declared
 from fde_api.auth.models import User
@@ -478,6 +478,14 @@ def _finalize(
                         linked_solution_id=None if (gate_open or l1_path) else solution_id,
                     )
                 )
+        # V3 T-P0-1（WB-DEF-1 signoff 死锁）：非降级 completed 且绑定 solution 的
+        # run = 产物进入终审通道，pending signoff 在此即时开出（幂等，见
+        # agents/signoff.py）。此前唯一开闸点是 handoff_run，而它只收失败 / L1
+        # run：正常 completed 的 agent_assisted 方案既不能 handoff 又拿不到
+        # pending，export-sow 永久 409。L1（降级 completed）维持「人工接管后再
+        # 开闸」的既有语义；失败 / 门拦截（run.status=failed）走 handoff。
+        if solution_id is not None and run.status == "completed" and not l1_path:
+            ensure_pending_signoff(session, solution_id=solution_id, run_id=run.id)
         session.flush()
         return _serialize_run(session, run, detail=True), validation_failures, gate_open
 
@@ -896,26 +904,9 @@ def handoff_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> dict[st
             solution = session.get(ProjectSolution, solution_id)
             if solution is None or solution.project_id != project.id:
                 raise _error("solution_not_found", "方案不存在或不属于该项目。", 404)
-            checkpoint = session.scalar(
-                select(SolutionReviewCheckpoint).where(
-                    SolutionReviewCheckpoint.solution_id == solution.id,
-                    SolutionReviewCheckpoint.checkpoint_type == "signoff",
-                    SolutionReviewCheckpoint.status == "pending",
-                )
-            )
-            if checkpoint is None:
-                checkpoint = SolutionReviewCheckpoint(
-                    solution_id=solution.id,
-                    checkpoint_type="signoff",
-                    required_level="project_manager",
-                    status="pending",
-                    # goal-d9：触发 run 软链——终审台按 run 配对「接管→拍板」
-                    # 时长（资深介入时长样本），拍板事件 payload 携带 run_id
-                    handoff_run_id=run.id,
-                )
-                session.add(checkpoint)
-            elif checkpoint.handoff_run_id is None:
-                checkpoint.handoff_run_id = run.id
+            # goal-d9 触发 run 软链 + 同方案不重复挂检查点：统一走 agents/signoff.py
+            # （T-P0-1 后 _finalize / export_sow 兜底与此处共用同一幂等入口）
+            checkpoint = ensure_pending_signoff(session, solution_id=solution.id, run_id=run.id)
         record_event(session, actor, "agent_run_handoff", project, {"run_id": run.id, "fallback_level": "L3"})
         session.flush()
         data = _serialize_run(session, run, detail=True)

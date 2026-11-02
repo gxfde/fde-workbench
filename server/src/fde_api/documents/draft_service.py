@@ -67,13 +67,18 @@ _DRAFT_FIELD_KEYS = ("field_overrides", "rich_text", "list_selections")
 
 
 class DocumentDraftServiceError(Exception):
-    """A stable, user-facing document draft/version failure."""
+    """A stable, user-facing document draft/version failure.
 
-    def __init__(self, code: str, message: str, status: int):
+    ``detail`` is optional structured context surfaced as ``error.details``
+    (same shape as ``AgentsServiceError``); the three-argument form is unchanged.
+    """
+
+    def __init__(self, code: str, message: str, status: int, detail: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.detail = detail or {}
 
 
 def list_project_documents(
