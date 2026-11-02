@@ -148,7 +148,9 @@ def test_job_success_persists_draft_with_contract(db_session, d4_app, d4_client,
         handle_translator_translate(job)
     row = db_session.get(TranslatorTranslation, data["id"])
     assert row.status == "ready"
-    assert row.ai_model == d4_settings.kimi_translator_model == "kimi-k3"
+    # goal-d14：ai_model 落账的是**实际解析出的模型**（与 AI 聊天同源：无偏好时
+    # = 系统默认槽位的模型），不再是写死的 kimi-k3。
+    assert row.ai_model == d4_settings.deepseek_industry_template_model
     assert row.ai_generated_at is not None
     result = row.result_json
     assert result["customer_vision"]
@@ -217,10 +219,12 @@ def test_non_retryable_fails_without_retry(db_session, d4_app, d4_client, d4_set
     assert len(fake.calls) == 1
 
 
-def test_kimi_slot_unconfigured_fails_classified(db_session, d4_app, d4_client, d4_settings) -> None:
-    """goal-d13 拍板：翻译管道走 kimi 槽位——key 未配置时走真实客户端构造路径，
-    请求发出前即分类失败（ai_service_not_configured），绝不裸 500 或卡 running。"""
+def test_no_credential_anywhere_fails_classified(db_session, d4_app, d4_client, d4_settings) -> None:
+    """goal-d14：翻译与 AI 聊天同源解析后仍无凭据时（模型偏好未配 + 系统默认槽位
+    也没 key），请求发出前即分类失败（ai_service_not_configured），绝不裸 500 或卡 running。"""
     user = _persist_user(db_session)
+    settings = d4_settings.model_copy(update={"deepseek_api_key": None, "kimi_translator_api_key": None})
+    d4_app.config["SETTINGS"] = settings  # job 读 app 里的 SETTINGS
     data = _create(d4_client, user, d4_settings).json["data"]
     job = _job_for(db_session, data["id"])  # 不注入假客户端：走 _client 真实构造
     with d4_app.app_context():
@@ -231,11 +235,11 @@ def test_kimi_slot_unconfigured_fails_classified(db_session, d4_app, d4_client, 
     assert row.ai_model == ""  # ai_model 只在 ready 分支落账，失败不虚标模型
 
 
-def test_translator_uses_own_base_url_slot(d4_app, d4_settings, monkeypatch) -> None:
-    """goal-d13 补正：翻译管道用**翻译槽位自己的** base_url。
-    部署 env 可能把共享 FDE_KIMI_BASE_URL 指向另一家 OpenAI 兼容端点（如
-    minimaxi），若翻译共用该地址，就会拿 kimi-k3 去打没有该模型的端点。
-    断言只钉「槽位独立 + 取值来源」，不依赖 .env 实际值（CI 与本机不同）。"""
+def test_env_override_uses_own_base_url_slot(d4_app, d4_settings, monkeypatch) -> None:
+    """goal-d14：env 覆盖（kimi 翻译槽位三件配齐）时，翻译用**翻译槽位自己的**
+    base_url——部署 env 可能把共享 FDE_KIMI_BASE_URL 指向另一家兼容端点（如
+    minimaxi），共用会把 kimi-k3 打到没有该模型的端点上。断言只钉「槽位独立 +
+    取值来源」，不依赖 .env 实际值（CI 与本机不同）。"""
     captured: dict[str, object] = {}
 
     class _CapturingClient:
@@ -247,21 +251,23 @@ def test_translator_uses_own_base_url_slot(d4_app, d4_settings, monkeypatch) -> 
     settings = d4_settings.model_copy(
         update={
             "kimi_base_url": "https://api.minimaxi.com/v1",  # 共享槽位指向别家
+            "kimi_translator_api_key": "env-secret",
             "kimi_translator_base_url": "https://api.moonshot.cn/v1",
             "kimi_translator_model": "kimi-k3",
         }
     )
     with d4_app.app_context():
-        translator_jobs._client(settings)
+        target = translator_jobs._resolve_ai_target(None, settings, None)  # env 覆盖不需要会话
+        translator_jobs._client(settings, target)
     assert captured["base_url"] == "https://api.moonshot.cn/v1"
     assert captured["base_url"] != settings.kimi_base_url  # 槽位独立，不被共享槽位牵连
     assert captured["model"] == "kimi-k3"
 
 
 def test_translator_base_url_default_matches_kimi_model(d4_settings) -> None:
-    """goal-d13 补正：翻译槽位 base_url 默认与默认模型 kimi-k3 自洽（Moonshot）；
-    且它是**独立一条配置**——改翻译槽位不动共享 kimi 槽位（断言 env 无关，
-    只比「改一个不动另一个」）。"""
+    """goal-d13 补正（goal-d14 降级为可选覆盖项）：翻译槽位 base_url 默认与默认
+    模型 kimi-k3 自洽（Moonshot）；且它是**独立一条配置**——改翻译槽位不动共享
+    kimi 槽位（断言 env 无关，只比「改一个不动另一个」）。"""
     fields = Settings.model_fields
     assert fields["kimi_translator_base_url"].default == "https://api.moonshot.cn/v1"
     assert fields["kimi_translator_model"].default == "kimi-k3"

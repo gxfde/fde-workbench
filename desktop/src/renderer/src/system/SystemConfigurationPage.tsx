@@ -6,7 +6,7 @@ interface Configuration { values: Values; secrets_configured: Record<string, boo
 
 const secretLabels: Record<string, string> = {
   deepseek_api_key: "DeepSeek API Key", kimi_project_presurvey_api_key: "Kimi API Key",
-  kimi_translator_api_key: "翻译管道 API Key",
+  kimi_translator_api_key: "翻译管道 API Key（覆盖项，留空=跟随 AI 聊天模型）",
   dsh_service_token: "AI Server 服务令牌", weixin_credential_key: "微信凭据加密密钥",
   clawbot_gateway_token: "ClawBot 网关令牌", oss_access_key_id: "OSS AccessKey ID",
   oss_access_key_secret: "OSS AccessKey Secret",
@@ -49,8 +49,9 @@ export function SystemConfigurationPage() {
         <TextField label="机会分析模型" value={values.deepseek_ai_opportunity_model} onChange={v => set("deepseek_ai_opportunity_model", v)} /><TextField label="调研导出模型" value={values.deepseek_research_export_model} onChange={v => set("deepseek_research_export_model", v)} />
         <TextField label="文档生成模型" value={values.deepseek_document_generation_model} onChange={v => set("deepseek_document_generation_model", v)} /><NumberField label="DeepSeek 超时（秒）" value={values.deepseek_timeout_seconds} onChange={v => set("deepseek_timeout_seconds", v)} />
         <TextField label="Kimi API 地址" value={values.kimi_base_url} onChange={v => set("kimi_base_url", v)} />{secret("kimi_project_presurvey_api_key")}<TextField label="Kimi 模型" value={values.kimi_project_presurvey_model} onChange={v => set("kimi_project_presurvey_model", v)} /><NumberField label="Kimi 超时（秒）" value={values.kimi_timeout_seconds} onChange={v => set("kimi_timeout_seconds", v)} />
-        {/* 翻译管道独立槽位（goal-d13）：地址/模型/密钥与上方预调研槽位解耦，换供应商互不牵连。 */}
-        <TextField label="翻译管道 API 地址" value={values.kimi_translator_base_url} onChange={v => set("kimi_translator_base_url", v)} />{secret("kimi_translator_api_key")}<TextField label="翻译管道模型" value={values.kimi_translator_model} onChange={v => set("kimi_translator_model", v)} />
+        {/* 翻译管道**可选覆盖**（goal-d14）：默认跟随 AI 聊天的模型（模型偏好表 →
+            系统默认槽位）；只有填了翻译专用密钥，才强制走下面这组地址/模型。 */}
+        <TextField label="翻译管道 API 地址（覆盖项）" value={values.kimi_translator_base_url} onChange={v => set("kimi_translator_base_url", v)} />{secret("kimi_translator_api_key")}<TextField label="翻译管道模型（覆盖项）" value={values.kimi_translator_model} onChange={v => set("kimi_translator_model", v)} />
       </ConfigSection>
       <ConfigSection title="AI Server 与扩展市场" description="启用前请先保存服务令牌；内网 HTTP 仅建议用于开发环境。">
         <CheckField label="启用 AI Server" checked={values.dsh_enabled} onChange={v => set("dsh_enabled", v)} /><TextField label="AI Server 地址" value={values.dsh_base_url} onChange={v => set("dsh_base_url", v)} />{secret("dsh_service_token")}<TextField label="运行时版本" value={values.dsh_runtime_version} onChange={v => set("dsh_runtime_version", v)} /><TextField label="协议版本" value={values.dsh_protocol_version} onChange={v => set("dsh_protocol_version", v)} /><NumberField label="执行超时（秒）" value={values.dsh_timeout_seconds} onChange={v => set("dsh_timeout_seconds", v)} /><TextField label="内部 API 地址" value={values.ai_internal_api_url} onChange={v => set("ai_internal_api_url", v)} />

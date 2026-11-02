@@ -38,9 +38,9 @@
   2. **项目级关闭**：`PATCH /api/v1/projects/<id>` 置 `t6_review_disabled=true`（严格布尔）。适用于已在会下人工评审过的项目。
 - ⚠️ `T6-lite` 模板内容**已审定通过**（goal-d13 交互式拍板，2026-11-02）；`t6_review_cost_threshold` 定值仍**待试点数据回流后拍板**，本手册不预设数值。
 
-## 5. 翻译器门户操作流（goal-d9/d10/d12/d13）
+## 5. 翻译器门户操作流（goal-d9/d10/d12/d13/d14）
 
-0. **前置配置（蔡工人工，一次性）**：`server/.env` 配 `FDE_KIMI_TRANSLATOR_API_KEY`；端点与模型用**翻译槽位自己的** `FDE_KIMI_TRANSLATOR_BASE_URL`（默认 Moonshot `https://api.moonshot.cn/v1`）/ `FDE_KIMI_TRANSLATOR_MODEL`（默认 `kimi-k3`）——**不与预调研槽位共用地址**（共用会把 kimi-k3 打到没有该模型的端点）；也可在桌面端「系统配置」页改这两项 + 录入翻译密钥。未配置前提交翻译会**分类失败** `ai_service_not_configured`（不裸 500、不卡在 running），属预期行为。
+0. **模型来源（goal-d14，运维零配置）**：翻译**跟随 AI 聊天同源**——用「AI 与扩展 → 模型管理」里配好的默认模型；没配偏好则用系统默认槽位 `FDE_DEEPSEEK_*`（本机已指向 minimax / `MiniMax-M3.1-Flash`，**不需要 kimi key**）。仅当将来要强制走 kimi-k3 时，才在 `server/.env` 配齐 `FDE_KIMI_TRANSLATOR_API_KEY` + `FDE_KIMI_TRANSLATOR_BASE_URL` + `FDE_KIMI_TRANSLATOR_MODEL`（三件齐才生效；也可在桌面端「系统配置」页改）。**若要用智谱 GLM**：在模型管理里加一条（智谱 OpenAI 兼容地址 + 可用于 API 的 key + 模型名）即可，无需改代码。全部无凭据时翻译会**分类失败** `ai_service_not_configured`（不裸 500、不卡在 running），属预期行为。
 1. 登录 → 「翻译器」页：引导式表单录入客户诉求 → 提交 → AI 翻译管道 → 轮询就绪。
 2. 结果卡核读（**AI 草稿 · 待人工确认** 徽标常显）：问题清单带 severity/module/分类标签。
 3. 采纳：结果卡「采纳到项目」选目标项目 → 草稿升格为该项目指引**新版本**（draft 待确认）→ 到项目指引页编辑并逐条确认后正式生效。
