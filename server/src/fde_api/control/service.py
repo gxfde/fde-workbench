@@ -649,7 +649,7 @@ def create_dsh_approval_request(*, run_id: str, payload: dict[str, Any]) -> dict
 
 
 def _settle_workflow_node(
-    session: Any, approval: AutomationApproval, *, approved: bool | None, reviewer: User
+    session: Any, approval: AutomationApproval, *, approved: bool | None, reviewer: User | None
 ) -> None:
     """workflow human_approval 节点的审批落点（V3 T-W4）。
 
@@ -725,11 +725,12 @@ def decide_automation_approval(
             now = datetime.now(UTC)
             if approval.expires_at <= now:
                 approval.status = "expired"
-                if approval.run_id is not None:
-                    approval.run.status = "failed"
-                    approval.run.error_code = "approval_expired"
-                    approval.run.error_message = "操作审批已过期。"
-                    approval.run.finished_at = now
+                automation_run = approval.run
+                if automation_run is not None:
+                    automation_run.status = "failed"
+                    automation_run.error_code = "approval_expired"
+                    automation_run.error_message = "操作审批已过期。"
+                    automation_run.finished_at = now
                 else:
                     _settle_workflow_node(session, approval, approved=None, reviewer=user)
                 approval.version += 1
@@ -754,15 +755,17 @@ def decide_automation_approval(
                     if not password_valid:
                         raise ControlServiceError("invalid_password", "当前密码不正确。", 400)
                     approval.status = "approved"
-                    if approval.run_id is not None:
-                        approval.run.status = "running"
+                    automation_run = approval.run
+                    if automation_run is not None:
+                        automation_run.status = "running"
                 else:
                     approval.status = "rejected"
-                    if approval.run_id is not None:
-                        approval.run.status = "cancelled"
-                        approval.run.error_code = "approval_rejected"
-                        approval.run.error_message = "操作审批被拒绝。"
-                        approval.run.finished_at = now
+                    automation_run = approval.run
+                    if automation_run is not None:
+                        automation_run.status = "cancelled"
+                        automation_run.error_code = "approval_rejected"
+                        automation_run.error_message = "操作审批被拒绝。"
+                        automation_run.finished_at = now
                 approval.reviewed_by_user_id = user.id
                 approval.reviewed_at = now
                 approval.decision_reason = reason.strip()
@@ -798,11 +801,12 @@ def dsh_approval_status(*, approval_id: str) -> dict[str, Any]:
                 raise ControlServiceError("approval_not_found", "审批请求不存在。", 404)
             if approval.status == "pending" and approval.expires_at <= datetime.now(UTC):
                 approval.status = "expired"
-                if approval.run_id is not None:
-                    approval.run.status = "failed"
-                    approval.run.error_code = "approval_expired"
-                    approval.run.error_message = "操作审批已过期。"
-                    approval.run.finished_at = datetime.now(UTC)
+                automation_run = approval.run
+                if automation_run is not None:
+                    automation_run.status = "failed"
+                    automation_run.error_code = "approval_expired"
+                    automation_run.error_message = "操作审批已过期。"
+                    automation_run.finished_at = datetime.now(UTC)
                 else:
                     _settle_workflow_node(session, approval, approved=None, reviewer=None)
             return _serialize_approval(approval, can_review=False, include_arguments=False)

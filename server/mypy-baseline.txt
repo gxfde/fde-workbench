@@ -120,7 +120,6 @@ src/fde_api/projects/gantt.py:var-annotated: Need type annotation for "..."
 src/fde_api/projects/gantt.py:var-annotated: Need type annotation for "..."
 src/fde_api/projects/gantt.py:var-annotated: Need type annotation for "..." (hint: "...")
 src/fde_api/projects/gate_service.py:arg-type: Argument N to "..." of "..." has incompatible type "..."; expected "..."
-src/fde_api/projects/payment_service.py:arg-type: Argument N to "..." has incompatible type "..."; expected "..."
 src/fde_api/projects/payment_service.py:union-attr: Item "..." of "..." has no attribute "..."
 src/fde_api/projects/payment_service.py:union-attr: Item "..." of "..." has no attribute "..."
 src/fde_api/projects/service.py:arg-type: Argument "..." to "..." has incompatible type "..."; expected "..."
@@ -259,12 +258,8 @@ src/fde_api/research/models.py:name-defined: Name "..." is not defined; did you 
 src/fde_api/research/project_routes.py:arg-type: Argument N to "..." has incompatible type "..."; expected "..."
 src/fde_api/solutions/service.py:arg-type: Argument N to "..." has incompatible type "..."; expected "..."
 src/fde_api/solutions/service.py:arg-type: Argument N to "..." has incompatible type "..."; expected "..."
-src/fde_api/solutions/service.py:arg-type: Argument N to "..." has incompatible type "..."; expected "..."
 src/fde_api/solutions/service.py:arg-type: Argument N to "..." of "..." has incompatible type "..."; expected "..."
 src/fde_api/solutions/service.py:assignment: Incompatible types in assignment (expression has type "...", variable has type "...")
-src/fde_api/solutions/service.py:return-value: Incompatible return value type (got "...", expected "...")
-src/fde_api/solutions/service.py:return-value: Incompatible return value type (got "...", expected "...")
-src/fde_api/solutions/service.py:union-attr: Item "..." of "..." has no attribute "..."
 src/fde_api/solutions/service.py:union-attr: Item "..." of "..." has no attribute "..."
 src/fde_api/solutions/service.py:union-attr: Item "..." of "..." has no attribute "..."
 src/fde_api/solutions/service.py:union-attr: Item "..." of "..." has no attribute "..."
@@ -276,11 +271,6 @@ src/fde_api/users/routes.py:return-value: Incompatible return value type (got ".
 src/fde_api/workbench/models.py:name-defined: Name "..." is not defined
 src/fde_api/workbench/models.py:name-defined: Name "..." is not defined
 src/fde_api/workbench/models.py:name-defined: Name "..." is not defined
-src/fde_api/workbench/seed.py:call-overload: No overload variant of "..." of "..." matches argument type "..."
-src/fde_api/workbench/seed.py:index: Invalid index type "..." for "..."; expected type "..."
-src/fde_api/workbench/seed.py:index: Invalid index type "..." for "..."; expected type "..."
-src/fde_api/workbench/seed.py:index: Invalid index type "..." for "..."; expected type "..."
-src/fde_api/workbench/seed.py:index: Invalid index type "..." for "..."; expected type "..."
 tests/conftest.py:misc: The return type of a generator function should be "..." or one of its supertypes
 tests/mysql_lock_race.py:assignment: Incompatible types in assignment (expression has type "...", variable has type "...")
 tests/mysql_lock_race.py:attr-defined: "..." has no attribute "..."
