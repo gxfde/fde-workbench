@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W2：Workflow 运行层（runs / node_runs 两表，2026-11-03）
+
+### 服务端（2 张新表 / 1 个迁移 / **零新路由、零执行器、零服务逻辑改动** / 零桌面改动）
+
+- **运行 + 节点运行双表**（迁移 **`b7d9f1a3c5e2`**，含 downgrade）：`workflow_runs`（固定 (definition_id, definition_version)——跑动中被改即受影响的 fde-v2 教训；run 级 `idempotency_key` **全局唯一**，修 fde-v2 FV-F3 无幂等重跑重复建单；status 七态 CHECK queued/running/waiting_approval/paused/succeeded/failed/cancelled；context_json=运行级入参占位符源；definition FK **RESTRICT**——执行史在则定义不可静默删，project FK CASCADE 项目隔离）+ `workflow_node_runs`（**UNIQUE(run_id, node_key)**；node_type 四类 CHECK（无 condition/wait，设计钉死）；status 八态 CHECK pending/ready/running/waiting/succeeded/failed/skipped/cancelled；attempt 计数；`depends_on` 定义侧冗余快照可追溯；节点级 `idempotency_key` 可空——外副作用节点必填由 T-W3 执行器强制；input_snapshot 执行前落审计可回放 / output_json 下游占位符解析源；run FK CASCADE）。
+- **纯增量零改既有表**：T-W1 定义两表原样；执行器（ready 调度循环、重试、恢复）随 T-W3，路由随 T-W3 一起开。
+- **配套**：`conftest` 清理序（node_runs → runs → definition_versions → definitions）、`test_migrations.HEAD_REVISION` → `b7d9f1a3c5e2`；`migrations/env.py` 按模块导入无需改、审计抽取脚本按模块自动发现无需改。
+- **测试**：`test_workflow_runs.py`（新 11 例：默认态与版本钉住 / run 幂等键全局唯一（FV-F3 表级保证）/ 节点键 run 内唯一 run 间允许 / run 列守卫参数化 4 例 / 节点类型与状态守卫 / run 删除级联节点 / 定义删除 RESTRICT / 项目删除 CASCADE 带走 runs+nodes 且平台模板不阻拦）+ `test_migrations.py` +1（运行两表迁移往返保留 projects、定义两表共存）。
+- **口径**：业务表 **101**（+2）/ 迁移头 **`b7d9f1a3c5e2`（25 revision）** / 路由 **271 不变** / api_catalog ENTRIES 94 不变 / pytest **1745 收集 = 1739 passed + 6 skipped**（1733 + 12；本机全量实跑 1851s）/ vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（新表）。
+
 ## [未发布] — V3 实施 T-W1：Workflow 定义层（两表 + dag_json 校验纯函数，2026-11-02）
 
 ### 服务端（2 张新表 / 1 个迁移 / **零新路由、零执行器** / 零桌面改动）

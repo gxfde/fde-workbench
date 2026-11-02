@@ -1,6 +1,6 @@
 # Workflow DAG v1 设计（P1）
 
-> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2 workflow_definitions + 版本行两表与 §2「dag_json schema」校验规则 1–8（9 为告警）已于 2026-11-02 实施（T-W1，迁移 `f2a4c6e8b1d3`；偏差见 backlog）；§3 执行器 / §5 路由 / runs 两表仍 PROPOSED（T-W2/T-W3）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
+> 状态：**PROPOSED → 大半 IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`）与「dag_json schema」校验规则 1–8（9 为告警）均已实施（偏差见 backlog）；§3 执行器 / §5 路由仍 PROPOSED（T-W3，节点级 idempotency_key 必填自 T-W3 起）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
 > 核心决策（任务书"决策 3"）：**不复制队列**。workflow 是 background_jobs 的一个新 job_type（`workflow.run`），编排 handler 在一个 job 内驱动节点循环，复用 lease/token/续租/reconcile/failure-hook 全套机制。
 
 ## 1. 与现有体系的边界（决策 3 落实）
@@ -13,7 +13,7 @@
 | background_jobs 复用方式 | 新 handler：`workflow.run(target_id=workflow_run_id)`；RECOVERABLE_JOB_TYPES 增 `workflow.run`（**前提**：节点级幂等键落表，恢复时只重跑未完成节点） |
 | 外副作用防重 | ①run 级 idempotency_key 唯一；②每个 effect=external 节点有自己的 node idempotency_key（复用 api_actions sha256 模式）；③节点成功即落 succeeded+output，恢复跳过；④workflow 取消=停未执行节点，不回收已执行外呼（诚实呈现） |
 
-## 2. 表设计（PROPOSED；Alembic 新增）
+## 2. 表设计（Alembic 已新增：T-W1/T-W2；下列列结构即实施蓝本，偏差见 backlog 实施记录）
 
 ### workflow_definitions
 | 列 | 类型 | 说明 |

@@ -41,7 +41,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # goal-d8 交付工作台：delivery_packages.agent_assisted + difficulty（D2 合成裁决）
 # V3 T-E1：project_evidence 一等证据表（单表增量，零改既有表）
 # V3 T-W1：workflow_definitions + workflow_definition_versions 两表
-HEAD_REVISION = "f2a4c6e8b1d3"
+# V3 T-W2：workflow_runs + workflow_node_runs 两表（run 固定版本 + 幂等键）
+HEAD_REVISION = "b7d9f1a3c5e2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -599,5 +600,40 @@ def test_v3_workflow_definition_tables_roundtrip_preserves_projects(alembic_conf
         == "FDE-V3-WF-KEEP"
     )
     assert not {"workflow_definitions", "workflow_definition_versions"} & table_names(engine)
+
+    command.upgrade(alembic_config, "head")
+
+
+def test_v3_workflow_runs_tables_roundtrip_preserves_projects(alembic_config, engine):
+    """V3 T-W2：运行两表增量——downgrade 子表先行即消失、upgrade 回 head 重建；
+    两向都不碰 projects 行，定义两表保持存在。"""
+    command.downgrade(alembic_config, "f2a4c6e8b1d3")
+    assert not {"workflow_runs", "workflow_node_runs"} & table_names(engine)
+    assert {"workflow_definitions", "workflow_definition_versions"} <= table_names(engine)
+    ids = seed_user_and_template(engine, username="migration.v3-wfrun-keep")
+    seed_project(engine, ids, project_code="FDE-V3-WFRUN-KEEP")
+
+    command.upgrade(alembic_config, "head")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-WFRUN-KEEP'",
+        )
+        == "FDE-V3-WFRUN-KEEP"
+    )
+    assert {"workflow_runs", "workflow_node_runs"} <= table_names(engine)
+
+    command.downgrade(alembic_config, "f2a4c6e8b1d3")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-WFRUN-KEEP'",
+        )
+        == "FDE-V3-WFRUN-KEEP"
+    )
+    assert not {"workflow_runs", "workflow_node_runs"} & table_names(engine)
+    assert {"workflow_definitions", "workflow_definition_versions"} <= table_names(engine)
 
     command.upgrade(alembic_config, "head")
