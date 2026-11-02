@@ -16,6 +16,7 @@
 | 合并时远端状态（补记） | 本审计 PR（#68）跑 CI 期间 fork/main 前进至 `1f913ed`（#67 goal-d14：翻译模型来源改挂「AI 聊天」同源解析；改动 `server/src/fde_api/translator/jobs.py`、`config.py`、`server/.env.example`、2 个翻译测试文件、桌面 `SystemConfigurationPage.tsx` 与 3 份文档；**零迁移、零新路由**；d14 后 pytest 口径 1712 收集 = 1706 passed + 6 skipped，较本审计 §3/§7 的 1700+6 多出翻译模型来源六用例）。**本审计全部结论与口径仍以 `0570384` 为准**；d14 改动按文件判断不触及本审计的 signoff / 门禁 / 本体 / 工作流 / outbox 路径，但未逐条复核其对 WB-DEF-4（降级直连 AI 调用审计）等 AI 客户端相关结论的影响 → `NEEDS VERIFICATION`（下一轮开工前先对齐 fork/main 重跑 `scripts/audit/extract_workbench_inventory.py`） |
 | 开工前对齐（补记②，2026-11-02，T-P0-1 轮） | 在 `04c8a39`（= #68 合并后、d14 之后）重跑 `scripts/audit/extract_workbench_inventory.py`：路由 **269** / blueprint 33 / 表 **96** / 迁移 **22** / head `c3e7a9b1d5f4` 均不变——VERIFIED；`v3-route-inventory.csv` 仅 2 行 `test_file` 列刷新（translator 两条路由新增 `test_translator_model_source.py` 覆盖），已随 T-P0-1 轮入库。T-P0-1 本身零迁移零路由，口径数字不变 |
 | 开工后口径变化（补记③，2026-11-02，T-E1/T-E2 轮） | 本审计后首个带 DDL 的实施：+1 表 `project_evidence`（**97 表**）、+1 迁移 `e1f3a5c7b9d2`（**23 revision**，head 变更）、+2 路由（**271**，证据登记簿 GET/POST，有意不进 api_catalog，ENTRIES 94 不变）、+1 blueprint（34）。重跑 `scripts/audit/extract_workbench_inventory.py`（已登记新 blueprint/模型模块）核对一致。本目录 CSV/JSON 清单仍是审计基线产物（0570384 + d14 两行刷新），**未**按新口径重生成——待本体表（T-O1）落地后整体刷新 |
+| 开工后口径变化（补记④，2026-11-02，T-W1 轮） | +2 表 `workflow_definitions`/`workflow_definition_versions`（**99 表**）、+1 迁移 `f2a4c6e8b1d3`（**24 revision**）、**零路由**（校验器纯函数入 CI，无 HTTP 面）；抽取脚本模型清单同步。CSV 仍为审计基线产物 |
 
 ## 2. 技术栈与运行形态 — VERIFIED
 

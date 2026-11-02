@@ -319,6 +319,7 @@ MODEL_MODULES = [
     "fde_api.dispatch.models",
     "fde_api.documents.models",
     "fde_api.evidence.models",
+    "fde_api.workflows.models",
     "fde_api.files.models",
     "fde_api.guidance.models",
     "fde_api.jobs.models",

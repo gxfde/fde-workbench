@@ -350,6 +350,10 @@ def db_session(app) -> Session:
         TemplateResearchForm,
         # V3 T-E1：一等证据引用 projects（CASCADE）/users（SET NULL），显式先清
         __import__("fde_api.evidence.models", fromlist=["ProjectEvidence"]).ProjectEvidence,
+        # V3 T-W1：workflow 版本行引用 definitions（CASCADE），definitions 引用
+        # projects/users（RESTRICT/SET NULL），均先于两表清理
+        __import__("fde_api.workflows.models", fromlist=["WorkflowDefinitionVersion"]).WorkflowDefinitionVersion,
+        __import__("fde_api.workflows.models", fromlist=["WorkflowDefinition"]).WorkflowDefinition,
         OperationEvent,
         ProjectTaskDependency,
         ProjectTaskCollaborator,

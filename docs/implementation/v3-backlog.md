@@ -81,11 +81,12 @@
 
 ## P1（可控自动化）
 
-### T-W1 workflow 定义+版本表+DAG 校验器（域 5）
+### T-W1 workflow 定义+版本表+DAG 校验器（域 5）— **DONE（2026-11-02）**
 - 目标：definitions/definition_versions 两表；validate_dag 纯函数（环检测/白名单 ref/占位符/schema），先入 CI 无需执行器。
 - 前置：无（校验器纯函数）。修改文件：NEW `server/src/fde_api/workflows/{__init__,models,definition_service}.py`。
 - DB：两表。测试：NEW test_workflow_definition.py（§6 用例 1-3,5,7 的定义侧）。
 - 验收：环/未知引用/非白名单 call.ref 一律 422 带明细。复杂度：**M**。
+- **实施记录**：迁移 `f2a4c6e8b1d3`（两表，含 downgrade）；校验规则 1–8 全部阻断、规则 9（外部副作用须审批）按设计 P1 **只告警**（工具目录 effect 结构化在 T-R2 后转强制）；call.ref 白名单=api_catalog ENTRIES 全集（含只读），执行时还叠 `api_execute` 同闸（T-W3）；skill 白名单=active skill 既有版本（T-S1 后收敛 published 语义）；运行上下文键暂 `project_id/run_id/initiated_by_user_id`；事件目标注册表新增 `workflow_definition`（platform 模板 project_id=NULL）。**零路由**（§5 的 6 条路由随 T-W3 执行器+runs 一起开，避免先开无执行器的空面）。
 
 ### T-W2 runs/node_runs 表+迁移
 - 前置：T-W1。DB：workflow_runs、workflow_node_runs。复杂度：**S**。

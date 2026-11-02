@@ -20,6 +20,7 @@ from fde_api.mailing import models as mailing_models  # noqa: F401
 from fde_api.dispatch import models as dispatch_models  # noqa: F401
 from fde_api.translator import models as translator_models  # noqa: F401  (goal-d9)
 from fde_api.evidence import models as evidence_models  # noqa: F401  (V3 T-E1)
+from fde_api.workflows import models as workflow_models  # noqa: F401  (V3 T-W1)
 from fde_api.control import model_preferences, weixin_models, chat, lcsc_skills  # noqa: F401
 
 

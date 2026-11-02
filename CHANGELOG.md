@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W1：Workflow 定义层（两表 + dag_json 校验纯函数，2026-11-02）
+
+### 服务端（2 张新表 / 1 个迁移 / **零新路由、零执行器** / 零桌面改动）
+
+- **定义 + 不可变版本双表**（迁移 **`f2a4c6e8b1d3`**，含 downgrade）：`workflow_definitions`（draft/published/archived；发布递增 version；NULL project_id=平台模板）+ `workflow_definition_versions`（发布快照，(definition_id, version) 唯一，**写后不可变**——运行固定引用版本号，fde-v2 教训）。
+- **`validate_dag` 纯函数先入 CI**（零执行器依赖，backlog T-W1 验收）：环检测=Kahn 拓扑并**点名环节点**（修 fde-v2 FV-F1）；未知依赖/自依赖/重复 key/未知类型/未知字段；**call.ref 必须 ∈ api_catalog ENTRIES**（白名单封 SSRF 面）；skill.ref 须为 active skill 的显式 `key@版本号`；agent.ref 须已启用；output 唯一且不遮上下文键；`{{placeholder}}` 须为运行上下文键或**传递上游**节点的 output；外部副作用无审批后继 → **P1 告警不阻断**（effect 结构化在 T-R2，P2 转强制）。违规一律 422 `dag_invalid` 携逐条 issues（code/message/node_key/detail）。
+- **定义生命周期服务**（无 HTTP 路由——§5 路由随 T-W3 执行器一起开）：create（draft v1）→ update（已发布则自动 +1 开新草稿版本，版本行原样）→ publish（按**当前**白名单再校验后快照版本行；already_published 409）。事件 `workflow_definition_created/updated/published`（事件目标注册表新增 `workflow_definition`，平台模板 project_id 为 NULL）。
+- **配套**：`migrations/env.py` 模型导入、`conftest` 清理序（版本行先于定义行）、`test_migrations.HEAD_REVISION`、审计抽取脚本模型清单。
+- **测试**：`test_workflow_definition.py`（新 7 例：合法示例含拓扑序 / 环点名 / 结构与引用 / 三类 ref 白名单 / 占位符上下游 / 规则 9 告警 / 发布锁版本行+事件序）+ `test_migrations.py` +1（两表迁移往返保留 projects）。
+- **口径**：业务表 **99**（+2）/ 迁移头 **`f2a4c6e8b1d3`（24 revision）** / 路由 **271 不变**（零新路由）/ pytest **1733 收集 = 1727 passed + 6 skipped**（+8；本机全量实跑期间机器休眠致 2 例连接中断失败，单跑复核绿，CI server-tests 干净复核）/ vitest 730 沿用。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（新表）。
+
 ## [未发布] — V3 实施 T-E1 + T-E2：一等证据表 project_evidence + 门禁证据挂接（2026-11-02）
 
 ### 服务端（1 张新表 / 1 个迁移 / 2 条路由 / 零桌面改动）

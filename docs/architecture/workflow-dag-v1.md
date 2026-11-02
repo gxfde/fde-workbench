@@ -1,6 +1,6 @@
 # Workflow DAG v1 设计（P1）
 
-> 状态：**PROPOSED**（现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6）。
+> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2 workflow_definitions + 版本行两表与 §2「dag_json schema」校验规则 1–8（9 为告警）已于 2026-11-02 实施（T-W1，迁移 `f2a4c6e8b1d3`；偏差见 backlog）；§3 执行器 / §5 路由 / runs 两表仍 PROPOSED（T-W2/T-W3）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
 > 核心决策（任务书"决策 3"）：**不复制队列**。workflow 是 background_jobs 的一个新 job_type（`workflow.run`），编排 handler 在一个 job 内驱动节点循环，复用 lease/token/续租/reconcile/failure-hook 全套机制。
 
 ## 1. 与现有体系的边界（决策 3 落实）

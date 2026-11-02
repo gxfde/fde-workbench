@@ -31,6 +31,7 @@ from fde_api.workbench.models import (
     ProjectTask,
     Quote,
 )
+from fde_api.workflows.models import WorkflowDefinition  # V3 T-W1（只引 models，无环）
 
 
 EventTarget: TypeAlias = (
@@ -53,6 +54,8 @@ EventTarget: TypeAlias = (
     # OperationEvent；不注册则 record_event 直接 TypeError）
     | DeliveryPackage
     | DispatchOffer
+    # V3 T-W1：workflow 定义创建/更新/发布留痕（project_id 可空=平台模板）
+    | WorkflowDefinition
 )
 
 _TARGET_TYPES = {
@@ -73,6 +76,7 @@ _TARGET_TYPES = {
     ProjectFileVersion: "project_file_version",
     DeliveryPackage: "delivery_package",
     DispatchOffer: "dispatch_offer",
+    WorkflowDefinition: "workflow_definition",
 }
 _SENSITIVE_KEY = re.compile(
     r"password|passwd|pwd|token|secret|credential|privatekey|apikey|"
@@ -120,6 +124,9 @@ def _project_id_for_target(session: Session, target: EventTarget) -> str | None:
     if isinstance(target, (ProjectFile, ProjectFileVersion)):
         return target.project_id
     if isinstance(target, DeliveryPackage):
+        return target.project_id
+    if isinstance(target, WorkflowDefinition):
+        # 平台模板定义 project_id 为 NULL（事件仍可挂全局面）
         return target.project_id
     if isinstance(target, DispatchOffer):
         # offer 只挂 package_id；project_id 经交付包反查（一次主键点查）
