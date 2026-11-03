@@ -1,91 +1,9 @@
-/* 使用帮助页（#help）：沿用全局设计令牌，不引入新颜色体系。 */
+/* 使用帮助页（#help）：
+   版式骨架（章节卡片 / 目录 pill / 表格 / 提示条）已迁移到
+   pages/pages.css，与全站共用设计令牌。这里只保留帮助页专属的少量规则。 */
 
 .help-page {
-  gap: 20px;
-}
-
-.help-toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.help-toc-link {
-  display: inline-block;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
-  text-decoration: none;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.help-toc-link:hover {
-  border-color: var(--brand-blue);
-  background: var(--brand-blue-faint);
-}
-
-.help-section {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-}
-
-.help-section h2 {
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0 0 10px;
-}
-
-.help-section ol,
-.help-section ul {
-  margin: 8px 0 0;
-  padding-left: 20px;
-}
-
-.help-section li {
-  margin: 6px 0;
-  line-height: 1.65;
-}
-
-.help-table {
-  margin: 8px 0;
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.help-table th,
-.help-table td {
-  text-align: left;
-  white-space: normal;
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
-  font-size: 13px;
-}
-
-.help-table th {
-  color: var(--muted);
-  font-weight: 600;
-  background: var(--surface-2);
-}
-
-.help-table td:first-child {
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.help-warn {
-  margin: 12px 0 0;
-  padding: 10px 14px;
-  border-left: 3px solid var(--warning, #D97706);
-  background: var(--surface-2);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: 13px;
-  line-height: 1.6;
+  gap: var(--space-5);
 }
 
 /* 侧边栏导航项：使用帮助 */

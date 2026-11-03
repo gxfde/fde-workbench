@@ -52,6 +52,8 @@ server/.fde-storage/
 # 本机运行日志（桥采集等），永不入库
 logs/
 desktop/release-tmp/
+release-tmp/
 
 # GUI 回归截图（含本机路径与项目代号，只留本地证据）
 desktop/gui-harness/screenshots/
+desktop/gui-harness/shots/
