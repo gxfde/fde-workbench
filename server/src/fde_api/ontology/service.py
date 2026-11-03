@@ -1,4 +1,5 @@
-"""术语生命周期原语（V3 T-O1）与关系类型注册原语（V3 T-O2）。
+"""术语生命周期原语（V3 T-O1）、关系类型注册原语（V3 T-O2）与变更集事务
+（V3 T-O3）。
 
 术语（V3 T-O1）：create / confirm / merge（合并保留来源）。
 零路由（沿 T-W1 先例）：术语的 REST 面（只读 GET terms 与 change-set 变更面）
@@ -12,17 +13,30 @@ adopt→confirm 样板），本文件的函数就是 confirm 事务里逐项物�
 注册内置码一律 409 duplicate_code；服务层解析时内置优先，保证「∪ 语义不放
 开内置方向校验」（backlog T-O2 风险条）。
 
-不变式（§5 用例 3/4/7）：
-- confirmed 后定义不可原地改——服务层不提供任何 definition 编辑路径，修订走
-  change_set 产生新版本行（T-O3）。
+变更集（V3 T-O3）：AI 候选唯一入口——propose（形状校验 + 归一化载荷，不触
+DB 状态）→ submit（受影响行快照取 base 指纹）→ confirm（复核指纹 + 单事务
+逐项物化，全成全败）/ reject（留 reason）。语义裁决（backlog T-O3 实施记录）：
+- 修订同名术语 = 原行 definition/term_type 受控改写（仅 change-set confirm
+  一条路），旧定义随逐项结果进 `ontology_change_set_confirmed` 事件留档；
+  UNIQUE(project, term) 使同名新行不可共存，行级取代（superseded）只发生在
+  改名分支（new_term）。
+- create_subject / link_subjects 设计列有、本轮不开放（payload_schema 拒）。
+- confirm 验收分离：拍板人 ≠ 提交人（沿 gate P0-5 纪律，403）。
+
+不变式（§5 用例 1/2/3/4/7）：
+- confirmed 后定义不可原地改——服务层不提供 change-set 之外的任何 definition
+  编辑路径；直接编辑（无路由/原语）不可达。
 - 合并保留来源——merge_terms 把被并术语的规范名转写为保留行的别名并落逐项
   OperationEvent；被并行的既有别名不动（别名→merged 行→canonical 链可解析，
   不可变优先）。同项目「一个名字至多一个概念」由 create/别名写入共同把守。
 - retired 关系类型禁新边、存量边只读——retire 只改注册表状态，不动既有边行。
+- AI 候选 confirm 前不物化——propose 只写变更集行本身（用例 1）。
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -34,9 +48,11 @@ from sqlalchemy.orm import Session
 from fde_api.auth.models import User
 from fde_api.extensions import db
 from fde_api.ontology.models import (
+    CHANGE_SET_STATUSES,
     RELATION_TYPE_KINDS,
     RELATION_TYPE_STATUSES,
     TERM_TYPES,
+    OntologyChangeSet,
     OntologyRelationType,
     OntologyTerm,
     OntologyTermAlias,
@@ -656,6 +672,638 @@ def retire_relation_type(
 
 
 # ---------------------------------------------------------------------------
+# V3 T-O3：变更集（批量变更事务单元 + diff 评审 + base 指纹并发防护）
+# ---------------------------------------------------------------------------
+
+CHANGE_SET_TITLE_MAX_LENGTH = 200
+CHANGE_SET_DESCRIPTION_MAX_LENGTH = 2000
+CHANGE_SET_REJECTED_REASON_MAX_LENGTH = 2000
+# 批量上限：防 AI 一次灌爆评审面；超出直接 payload_schema
+CHANGE_SET_MAX_ITEMS = 50
+
+# 设计 §2.4 载荷动作域。create_subject / link_subjects 设计列有、本轮不开放
+# （业务对象候选走既有表单/导入人工路径），propose 时显式点名拒绝。
+CHANGE_SET_ACTIONS = (
+    "create_term",
+    "update_term",
+    "merge_terms",
+    "register_relation_type",
+)
+_CHANGE_SET_DEFERRED_ACTIONS = ("create_subject", "link_subjects")
+# 每个动作的必填字段（propose 形状校验；值级校验随归一化进行）
+_CHANGE_SET_REQUIRED_FIELDS = {
+    "create_term": ("term", "definition"),
+    "update_term": ("term", "definition"),
+    "merge_terms": ("source_term", "target_term"),
+    "register_relation_type": ("kind", "code"),
+}
+# 每个动作允许的字段全集（含可选项；action 本身单列）
+_CHANGE_SET_ALLOWED_FIELDS = {
+    "create_term": {"term", "definition", "term_type"},
+    "update_term": {"term", "definition", "term_type", "new_term"},
+    "merge_terms": {"source_term", "target_term"},
+    "register_relation_type": {
+        "kind",
+        "code",
+        "label",
+        "description",
+        "allowed_source_types",
+        "allowed_target_types",
+    },
+}
+_ACTION_LABELS = {
+    "create_term": "新建术语",
+    "update_term": "修订术语",
+    "merge_terms": "合并术语",
+    "register_relation_type": "登记类型",
+}
+
+
+def _normalize_change_set_title(value: object) -> str:
+    if not isinstance(value, str):
+        raise OntologyServiceError("invalid_request", "title 必须为字符串。", 400)
+    title = value.strip()
+    if not title:
+        raise OntologyServiceError("invalid_request", "title 不能为空白。", 400)
+    if len(title) > CHANGE_SET_TITLE_MAX_LENGTH:
+        raise OntologyServiceError(
+            "invalid_request",
+            f"title 长度不能超过 {CHANGE_SET_TITLE_MAX_LENGTH}。",
+            400,
+        )
+    return title
+
+
+def _normalize_change_set_item(index: int, raw: object) -> dict[str, Any]:
+    """形状 + 值级静态校验并归一化一项候选载荷（不触 DB 状态）。
+
+    返回的字典即 propose 落库的规范形态——submit 的指纹与 confirm 的物化都
+    消费同一形态，保证「指纹看到的名字」与「物化写入的名字」恒一致。
+    """
+    where = f"第 {index + 1} 项"
+    if not isinstance(raw, dict):
+        raise OntologyServiceError("payload_schema", f"{where}必须为对象。", 400)
+    action = raw.get("action")
+    if not isinstance(action, str) or not action:
+        raise OntologyServiceError("payload_schema", f"{where}缺少 action。", 400)
+    if action in _CHANGE_SET_DEFERRED_ACTIONS:
+        raise OntologyServiceError(
+            "payload_schema",
+            f"{where} action={action} 本轮未开放"
+            "（业务对象候选走既有表单/导入人工路径）。",
+            400,
+        )
+    if action not in _CHANGE_SET_ALLOWED_FIELDS:
+        raise OntologyServiceError(
+            "payload_schema",
+            f"{where} action 未知（允许：{'/'.join(CHANGE_SET_ACTIONS)}）。",
+            400,
+        )
+    unknown = set(raw) - _CHANGE_SET_ALLOWED_FIELDS[action] - {"action"}
+    if unknown:
+        raise OntologyServiceError(
+            "payload_schema",
+            f"{where}含未知字段：{'、'.join(sorted(unknown))}。",
+            400,
+        )
+    missing = [
+        field
+        for field in _CHANGE_SET_REQUIRED_FIELDS[action]
+        if raw.get(field) is None
+    ]
+    if missing:
+        raise OntologyServiceError(
+            "payload_schema", f"{where}缺少必填字段：{'、'.join(missing)}。", 400
+        )
+
+    item: dict[str, Any] = {"action": action}
+    if action == "create_term":
+        item["term"] = _normalize_name(raw["term"], field="term")
+        item["definition"] = _normalize_name(raw["definition"], field="definition")
+        item["term_type"] = _normalize_term_type(raw.get("term_type"))
+    elif action == "update_term":
+        item["term"] = _normalize_name(raw["term"], field="term")
+        item["definition"] = _normalize_name(raw["definition"], field="definition")
+        if "term_type" in raw and raw.get("term_type") is not None:
+            item["term_type"] = _normalize_term_type(raw.get("term_type"))
+        if raw.get("new_term") is not None:
+            new_name = _normalize_name(raw["new_term"], field="new_term")
+            if new_name != item["term"]:
+                # 同名视作原行受控修订；改名才是行级取代（superseded）
+                item["new_term"] = new_name
+    elif action == "merge_terms":
+        item["source_term"] = _normalize_name(raw["source_term"], field="source_term")
+        item["target_term"] = _normalize_name(raw["target_term"], field="target_term")
+        if item["source_term"] == item["target_term"]:
+            raise OntologyServiceError(
+                "payload_schema", f"{where}source_term 与 target_term 不能相同。", 400
+            )
+    else:  # register_relation_type
+        item["kind"] = _normalize_kind(raw["kind"])
+        item["code"] = _normalize_code(raw["code"])
+        item["label"] = _normalize_optional_text(
+            raw.get("label"), field="label", limit=RELATION_TYPE_LABEL_MAX_LENGTH
+        )
+        item["description"] = _normalize_optional_text(
+            raw.get("description"),
+            field="description",
+            limit=RELATION_TYPE_DESCRIPTION_MAX_LENGTH,
+        )
+        item["allowed_source_types"] = _normalize_endpoints(
+            raw.get("allowed_source_types"), field="allowed_source_types"
+        )
+        item["allowed_target_types"] = _normalize_endpoints(
+            raw.get("allowed_target_types"), field="allowed_target_types"
+        )
+    return item
+
+
+def _summarize_change_set(items: list[dict[str, Any]]) -> str:
+    """人读摘要（按载荷首现序聚合动作计数；服务端生成，不信任候选自报）。"""
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item["action"]] = counts.get(item["action"], 0) + 1
+    return " · ".join(
+        f"{_ACTION_LABELS[action]} {count}" for action, count in counts.items()
+    )
+
+
+def propose_change_set(
+    session: Session,
+    *,
+    project_id: str,
+    actor: User,
+    title: object,
+    proposed_json: object,
+    description: object = None,
+    captured_from: str | None = None,
+) -> OntologyChangeSet:
+    """新建候选变更集（会话内原语，事务归调用方）：只写变更集行本身，**不触
+    术语/类型表**（§5 用例 1：confirm 前不物化）。
+
+    captured_from 标记候选来源（如 ``agent_run:<id>``）——仅服务层原语可写
+    （AI 通道），HTTP 人工路径不收该字段。
+    """
+    normalized_title = _normalize_change_set_title(title)
+    optional_description = _normalize_optional_text(
+        description,
+        field="description",
+        limit=CHANGE_SET_DESCRIPTION_MAX_LENGTH,
+    )
+    if not isinstance(proposed_json, list) or not proposed_json:
+        raise OntologyServiceError(
+            "payload_schema", "proposed_json 必须为非空数组。", 400
+        )
+    if len(proposed_json) > CHANGE_SET_MAX_ITEMS:
+        raise OntologyServiceError(
+            "payload_schema",
+            f"proposed_json 最多 {CHANGE_SET_MAX_ITEMS} 项（收到 {len(proposed_json)} 项）。",
+            400,
+        )
+    items = [
+        _normalize_change_set_item(index, raw)
+        for index, raw in enumerate(proposed_json)
+    ]
+    if captured_from is not None:
+        captured_from = _normalize_optional_text(
+            captured_from, field="captured_from", limit=120
+        )
+    row = OntologyChangeSet(
+        project_id=project_id,
+        title=normalized_title,
+        description=optional_description,
+        proposed_json=items,
+        diff_summary=_summarize_change_set(items),
+        status="draft",
+        captured_from=captured_from,
+        created_by_user_id=actor.id,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def _term_snapshot(row: OntologyTerm | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "term": row.term,
+        "term_type": row.term_type,
+        "definition": row.definition,
+        "status": row.status,
+        "canonical_term_id": row.canonical_term_id,
+        "version": row.version,
+    }
+
+
+def _relation_type_snapshot(row: OntologyRelationType | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "kind": row.kind,
+        "code": row.code,
+        "label": row.label,
+        "description": row.description,
+        "allowed_source_types": list(row.allowed_source_types or []),
+        "allowed_target_types": list(row.allowed_target_types or []),
+        "status": row.status,
+        "version": row.version,
+    }
+
+
+def _term_by_name(
+    session: Session, *, project_id: str, name: str
+) -> OntologyTerm | None:
+    return session.scalar(
+        select(OntologyTerm).where(
+            OntologyTerm.project_id == project_id, OntologyTerm.term == name
+        )
+    )
+
+
+def _alias_owner_term_id(
+    session: Session, *, project_id: str, alias: str
+) -> str | None:
+    return session.scalar(
+        select(OntologyTermAlias.term_id).where(
+            OntologyTermAlias.project_id == project_id,
+            OntologyTermAlias.alias == alias,
+        )
+    )
+
+
+def _change_set_base_descriptor(
+    session: Session, *, project_id: str, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """逐项采集「受影响面现状」：submit 与 confirm 复核共用同一采集器——
+    指纹同时覆盖「既有行被并发改写」与「占位名凭空出现/消失」两类漂移。"""
+    descriptor: list[dict[str, Any]] = []
+    for item in items:
+        action = item["action"]
+        entry: dict[str, Any] = {"action": action}
+        if action == "create_term":
+            entry["term"] = item["term"]
+            entry["existing_term"] = _term_snapshot(
+                _term_by_name(session, project_id=project_id, name=item["term"])
+            )
+            entry["alias_owner_term_id"] = _alias_owner_term_id(
+                session, project_id=project_id, alias=item["term"]
+            )
+        elif action == "update_term":
+            entry["term"] = item["term"]
+            entry["effective_term"] = item.get("new_term", item["term"])
+            entry["target"] = _term_snapshot(
+                _term_by_name(session, project_id=project_id, name=item["term"])
+            )
+            if item.get("new_term"):
+                entry["new_name_term"] = _term_snapshot(
+                    _term_by_name(
+                        session, project_id=project_id, name=item["new_term"]
+                    )
+                )
+                entry["new_name_alias_owner_term_id"] = _alias_owner_term_id(
+                    session, project_id=project_id, alias=item["new_term"]
+                )
+        elif action == "merge_terms":
+            entry["source_term"] = item["source_term"]
+            entry["target_term"] = item["target_term"]
+            entry["source"] = _term_snapshot(
+                _term_by_name(
+                    session, project_id=project_id, name=item["source_term"]
+                )
+            )
+            entry["target"] = _term_snapshot(
+                _term_by_name(
+                    session, project_id=project_id, name=item["target_term"]
+                )
+            )
+        else:  # register_relation_type（变更集只登记项目内类型）
+            entry["kind"] = item["kind"]
+            entry["code"] = item["code"]
+            project_row = session.scalar(
+                select(OntologyRelationType).where(
+                    OntologyRelationType.project_id == project_id,
+                    OntologyRelationType.kind == item["kind"],
+                    OntologyRelationType.code == item["code"],
+                )
+            )
+            global_row = session.scalar(
+                select(OntologyRelationType).where(
+                    OntologyRelationType.project_id.is_(None),
+                    OntologyRelationType.kind == item["kind"],
+                    OntologyRelationType.code == item["code"],
+                )
+            )
+            entry["project_row"] = _relation_type_snapshot(project_row)
+            entry["global_row"] = _relation_type_snapshot(global_row)
+        descriptor.append(entry)
+    return descriptor
+
+
+def _base_snapshot_sha256(descriptor: list[dict[str, Any]]) -> str:
+    payload = json.dumps(
+        descriptor, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def submit_change_set(
+    session: Session, *, row: OntologyChangeSet, actor: User
+) -> OntologyChangeSet:
+    """draft → in_review：对受影响行快照取 base 指纹（并发防护锚点）。"""
+    if row.status != "draft":
+        raise OntologyServiceError(
+            "invalid_transition", f"状态 {row.status} 不能提交评审。", 409
+        )
+    descriptor = _change_set_base_descriptor(
+        session, project_id=row.project_id, items=list(row.proposed_json or [])
+    )
+    row.base_snapshot_sha256 = _base_snapshot_sha256(descriptor)
+    row.status = "in_review"
+    row.submitted_by_user_id = actor.id
+    row.submitted_at = datetime.now(UTC)
+    row.version += 1
+    session.flush()
+    return row
+
+
+def _materialize_create_term(
+    session: Session, *, project_id: str, item: dict[str, Any], actor: User
+) -> dict[str, Any]:
+    row = create_term(
+        session,
+        project_id=project_id,
+        term=item["term"],
+        definition=item["definition"],
+        term_type=item.get("term_type"),
+        actor=actor,
+        initial_status="confirmed",
+    )
+    return {"action": "create_term", "status": "created", "term_id": row.id, "term": row.term}
+
+
+def _materialize_update_term(
+    session: Session, *, project_id: str, item: dict[str, Any], actor: User
+) -> dict[str, Any]:
+    """修订术语：同名 = 原行受控改写（仅此一条路，旧定义随事件留档）；
+    改名 = 新行 confirmed + 原行 superseded 指 canonical + 原名转别名。"""
+    target = _term_by_name(session, project_id=project_id, name=item["term"])
+    if target is None:
+        raise OntologyServiceError("term_not_found", "术语不存在。", 404)
+    if target.status in ("merged", "superseded"):
+        raise OntologyServiceError(
+            "invalid_transition",
+            f"术语「{target.term}」已处于终态 {target.status}，不能修订。",
+            409,
+        )
+    before = {"definition": target.definition, "term_type": target.term_type}
+    if item.get("new_term"):
+        replacement = create_term(
+            session,
+            project_id=project_id,
+            term=item["new_term"],
+            definition=item["definition"],
+            term_type=item.get("term_type", target.term_type),
+            actor=actor,
+            initial_status="confirmed",
+        )
+        target.status = "superseded"
+        target.canonical_term_id = replacement.id
+        target.version += 1
+        # 原名转写为新一行的别名（合并保留来源同一纪律）
+        _ensure_alias(
+            session,
+            project_id=project_id,
+            term_id=replacement.id,
+            alias=target.term,
+            actor=actor,
+            exclude_term_id=target.id,
+        )
+        session.flush()
+        return {
+            "action": "update_term",
+            "status": "superseded",
+            "old_term_id": target.id,
+            "old_term": target.term,
+            "new_term_id": replacement.id,
+            "new_term": replacement.term,
+        }
+    target.definition = item["definition"]
+    if "term_type" in item:
+        target.term_type = item["term_type"]
+    target.version += 1
+    session.flush()
+    return {
+        "action": "update_term",
+        "status": "updated",
+        "term_id": target.id,
+        "term": target.term,
+        "before": before,
+        "after": {"definition": target.definition, "term_type": target.term_type},
+    }
+
+
+def _materialize_merge_terms(
+    session: Session, *, project_id: str, item: dict[str, Any], actor: User
+) -> dict[str, Any]:
+    source = _term_by_name(session, project_id=project_id, name=item["source_term"])
+    target = _term_by_name(session, project_id=project_id, name=item["target_term"])
+    if source is None or target is None:
+        raise OntologyServiceError("term_not_found", "术语不存在。", 404)
+    outcome = merge_terms(
+        session, source_id=source.id, target_id=target.id, actor=actor
+    )
+    return {
+        "action": "merge_terms",
+        "status": "merged",
+        "source_term_id": source.id,
+        "target_term_id": target.id,
+        "merged_term": outcome["source"]["term"],
+        "canonical_term": outcome["target"]["term"],
+    }
+
+
+def _materialize_register_relation_type(
+    session: Session, *, project_id: str, item: dict[str, Any], actor: User
+) -> dict[str, Any]:
+    # 变更集只登记项目内类型；全局登记走 admin 人工路由（lesson 15 权限口径）
+    row = register_relation_type(
+        session,
+        project_id=project_id,
+        kind=item["kind"],
+        code=item["code"],
+        label=item.get("label"),
+        description=item.get("description"),
+        allowed_source_types=item.get("allowed_source_types"),
+        allowed_target_types=item.get("allowed_target_types"),
+        actor=actor,
+    )
+    return {
+        "action": "register_relation_type",
+        "status": "registered",
+        "relation_type_id": row.id,
+        "kind": row.kind,
+        "code": row.code,
+    }
+
+
+def confirm_change_set(
+    session: Session, *, row: OntologyChangeSet, actor: User
+) -> dict[str, Any]:
+    """in_review → confirmed（会话内，事务归调用方）：①复核 base 指纹
+    （并发漂移 409 base_conflict，不物化）②单事务逐项物化（全成全败，任一项
+    失败整体回滚并以 change_set_item_failed 点名）③翻转状态 ④落
+    `ontology_change_set_confirmed` 事件携带逐项结果。
+
+    验收分离（P0-5 纪律）：拍板人 ≠ 提交人。
+    """
+    if row.status != "in_review":
+        raise OntologyServiceError(
+            "not_in_review", f"状态 {row.status} 不能确认（仅 in_review 可确认）。", 409
+        )
+    if row.submitted_by_user_id is not None and row.submitted_by_user_id == actor.id:
+        raise OntologyServiceError(
+            "change_set_decider_conflict",
+            "验收分离：变更集拍板人不能是提交人。",
+            403,
+        )
+    items = list(row.proposed_json or [])
+    descriptor = _change_set_base_descriptor(
+        session, project_id=row.project_id, items=items
+    )
+    digest = _base_snapshot_sha256(descriptor)
+    if row.base_snapshot_sha256 is None or digest != row.base_snapshot_sha256:
+        raise OntologyServiceError(
+            "base_conflict",
+            "受影响的本体在提交后被并发修改（base 指纹不符），"
+            "请重新提交变更集后再拍板。",
+            409,
+        )
+
+    materializers = {
+        "create_term": _materialize_create_term,
+        "update_term": _materialize_update_term,
+        "merge_terms": _materialize_merge_terms,
+        "register_relation_type": _materialize_register_relation_type,
+    }
+    results: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        try:
+            results.append(
+                materializers[item["action"]](
+                    session, project_id=row.project_id, item=item, actor=actor
+                )
+            )
+        except OntologyServiceError as error:
+            raise OntologyServiceError(
+                "change_set_item_failed",
+                f"第 {index + 1} 项（{item['action']}）物化失败：{error.message}",
+                error.status,
+            ) from None
+
+    row.status = "confirmed"
+    row.confirmed_by_user_id = actor.id
+    row.confirmed_at = datetime.now(UTC)
+    row.version += 1
+    session.flush()
+    record_event(
+        session,
+        actor,
+        "ontology_change_set_confirmed",
+        row,
+        {"results": results, "item_count": len(results)},
+    )
+    return {"results": results}
+
+
+def reject_change_set(
+    session: Session, *, row: OntologyChangeSet, actor: User, reason: object
+) -> OntologyChangeSet:
+    """draft/in_review → rejected（只改状态留 reason）。拍板否决同样受
+    验收分离约束：拍板人 ≠ 提交人。"""
+    if row.status not in ("draft", "in_review"):
+        raise OntologyServiceError(
+            "invalid_transition", f"状态 {row.status} 不能否决。", 409
+        )
+    if row.submitted_by_user_id is not None and row.submitted_by_user_id == actor.id:
+        raise OntologyServiceError(
+            "change_set_decider_conflict",
+            "验收分离：变更集拍板人不能是提交人。",
+            403,
+        )
+    reason_text = _normalize_optional_text(
+        reason,
+        field="reason",
+        limit=CHANGE_SET_REJECTED_REASON_MAX_LENGTH,
+    )
+    if reason_text is None:
+        raise OntologyServiceError("invalid_request", "reason 不能为空白。", 400)
+    row.status = "rejected"
+    row.rejected_reason = reason_text
+    row.version += 1
+    session.flush()
+    return row
+
+
+def serialize_change_set(row: OntologyChangeSet) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "project_id": row.project_id,
+        "title": row.title,
+        "description": row.description,
+        "proposed_json": list(row.proposed_json or []),
+        "diff_summary": row.diff_summary,
+        "status": row.status,
+        "base_snapshot_sha256": row.base_snapshot_sha256,
+        "captured_from": row.captured_from,
+        "submitted_by_user_id": row.submitted_by_user_id,
+        "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+        "confirmed_by_user_id": row.confirmed_by_user_id,
+        "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+        "rejected_reason": row.rejected_reason,
+        "version": row.version,
+        "created_by_user_id": row.created_by_user_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def list_project_terms(
+    *, actor: User, project_id: str, q: str | None = None
+) -> dict[str, Any]:
+    """术语只读面（§4：GET /ontology/terms?q=）：q 大小写不敏感地匹配规范名
+    或别名（别名命中返回属主术语行）。can_view。"""
+    with db.session() as session:
+        project = _load_project(session, actor, project_id, manage=False)
+        rows = list(
+            session.scalars(
+                select(OntologyTerm)
+                .where(OntologyTerm.project_id == project.id)
+                .order_by(OntologyTerm.term.asc(), OntologyTerm.id.asc())
+            )
+        )
+        aliases_by_term: dict[str, list[str]] = {}
+        for alias_row in session.scalars(
+            select(OntologyTermAlias).where(
+                OntologyTermAlias.project_id == project.id
+            )
+        ):
+            aliases_by_term.setdefault(alias_row.term_id, []).append(alias_row.alias)
+        needle = q.strip().lower() if isinstance(q, str) and q.strip() else None
+        items = []
+        for row in rows:
+            names = [row.term, *aliases_by_term.get(row.id, [])]
+            if needle is not None and not any(needle in name.lower() for name in names):
+                continue
+            data = serialize_term(row)
+            data["aliases"] = sorted(aliases_by_term.get(row.id, []))
+            items.append(data)
+        return {"items": items}
+
+
+# ---------------------------------------------------------------------------
 # HTTP 面（人工路径：有意不进 api_catalog）
 # ---------------------------------------------------------------------------
 
@@ -668,7 +1316,7 @@ def _load_project(
         raise OntologyServiceError("project_not_found", "项目不存在或已被删除。", 404)
     access = project_access(actor, project)
     if not (access.can_manage if manage else access.can_view):
-        raise OntologyServiceError("forbidden", "你没有该项目的类型注册表操作权限。", 403)
+        raise OntologyServiceError("forbidden", "你没有该项目的本体操作权限。", 403)
     return project
 
 
@@ -760,3 +1408,129 @@ def retire_project_relation_type(
             {"kind": retired.kind, "code": retired.code},
         )
         return {"relation_type": serialize_relation_type(retired)}
+
+
+# ---------------------------------------------------------------------------
+# V3 T-O3：变更集 HTTP 面（人工路径——AI 候选经服务层原语，不进 api_catalog）
+# ---------------------------------------------------------------------------
+
+# propose 人工载荷字段；captured_from 是 AI 通道专用，人工路径显式拒收
+_CHANGE_SET_PAYLOAD_FIELDS = {"title", "description", "proposed_json"}
+_REJECT_PAYLOAD_FIELDS = {"reason"}
+
+
+def _load_change_set(
+    session: Session, project: Project, change_set_id: str
+) -> OntologyChangeSet:
+    row = session.get(OntologyChangeSet, change_set_id)
+    if row is None or row.project_id != project.id:
+        raise OntologyServiceError("change_set_not_found", "变更集不存在。", 404)
+    return row
+
+
+def propose_project_change_set(
+    *, actor: User, project_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """提出候选变更集（can_manage）→ draft：只写变更集行，confirm 前不物化。"""
+    if set(payload) - _CHANGE_SET_PAYLOAD_FIELDS:
+        raise OntologyServiceError("invalid_request", "请求字段无效。", 400)
+    if "captured_from" in payload:
+        raise OntologyServiceError(
+            "invalid_request", "captured_from 仅限 AI 候选通道，人工路径不可指定。", 400
+        )
+    if not isinstance(payload.get("proposed_json"), list):
+        raise OntologyServiceError(
+            "payload_schema", "proposed_json 必须为数组。", 400
+        )
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=True)
+        row = propose_change_set(
+            session,
+            project_id=project.id,
+            actor=actor,
+            title=payload.get("title"),
+            proposed_json=payload["proposed_json"],
+            description=payload.get("description"),
+        )
+        # 不落 OperationEvent：变更集行本身即审计记录（设计只强制 confirm 事件）
+        return {"change_set": serialize_change_set(row)}
+
+
+def submit_project_change_set(
+    *, actor: User, project_id: str, change_set_id: str
+) -> dict[str, Any]:
+    """draft → in_review（can_manage）：计算 base 指纹，进入评审。"""
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=True)
+        row = _load_change_set(session, project, change_set_id)
+        submitted = submit_change_set(session, row=row, actor=actor)
+        return {"change_set": serialize_change_set(submitted)}
+
+
+def confirm_project_change_set(
+    *, actor: User, project_id: str, change_set_id: str
+) -> dict[str, Any]:
+    """拍板确认（can_manage，且 ≠ 提交人）：指纹复核 + 单事务逐项物化。"""
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=True)
+        row = _load_change_set(session, project, change_set_id)
+        outcome = confirm_change_set(session, row=row, actor=actor)
+        return {
+            "change_set": serialize_change_set(row),
+            "results": outcome["results"],
+        }
+
+
+def reject_project_change_set(
+    *, actor: User, project_id: str, change_set_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """否决（can_manage，且 ≠ 提交人）：只改状态留 reason。"""
+    if set(payload) - _REJECT_PAYLOAD_FIELDS:
+        raise OntologyServiceError("invalid_request", "请求字段无效。", 400)
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=True)
+        row = _load_change_set(session, project, change_set_id)
+        rejected = reject_change_set(
+            session, row=row, actor=actor, reason=payload.get("reason")
+        )
+        return {"change_set": serialize_change_set(rejected)}
+
+
+def _normalize_change_set_status(value: object) -> str:
+    if not isinstance(value, str) or value not in CHANGE_SET_STATUSES:
+        raise OntologyServiceError(
+            "invalid_request",
+            f"status 仅可为 {'/'.join(CHANGE_SET_STATUSES)}。",
+            400,
+        )
+    return value
+
+
+def list_project_change_sets(
+    *, actor: User, project_id: str, status: str | None = None
+) -> dict[str, Any]:
+    """变更集列表（can_view）：?status= 过滤，新者在前。"""
+    status_filter = _normalize_change_set_status(status) if status else None
+    with db.session() as session:
+        project = _load_project(session, actor, project_id, manage=False)
+        query = (
+            select(OntologyChangeSet)
+            .where(OntologyChangeSet.project_id == project.id)
+            .order_by(
+                OntologyChangeSet.created_at.desc(), OntologyChangeSet.id.desc()
+            )
+        )
+        if status_filter is not None:
+            query = query.where(OntologyChangeSet.status == status_filter)
+        rows = list(session.scalars(query))
+        return {"items": [serialize_change_set(row) for row in rows]}
+
+
+def get_project_change_set(
+    *, actor: User, project_id: str, change_set_id: str
+) -> dict[str, Any]:
+    """变更集详情（can_view）：diff 评审读 proposed_json 与指纹。"""
+    with db.session() as session:
+        project = _load_project(session, actor, project_id, manage=False)
+        row = _load_change_set(session, project, change_set_id)
+        return {"change_set": serialize_change_set(row)}

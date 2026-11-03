@@ -1,16 +1,25 @@
-"""本体注册表路由（V3 T-O2；设计 ontology-registry-v1 §4）。
+"""本体注册表路由（V3 T-O2/T-O3；设计 ontology-registry-v1 §4）。
 
-术语面（§4 的 GET /ontology/terms 与 change-set 变更面）随 T-O3 的 routes.py
-一并开；本轮先开**关系类型注册表**这一面：
-
+- ``GET  /api/v1/projects/<id>/ontology/terms``（can_view，T-O1 的公开读面）：
+  术语清单，``?q=`` 大小写不敏感匹配规范名或别名（别名命中返回属主行）。
 - ``GET  /api/v1/projects/<id>/ontology/relation-types``（can_view）：列出对项目
   生效的类型（全局 ∪ 项目内，项目内遮蔽同名全局）。
 - ``POST /api/v1/projects/<id>/ontology/relation-types``（can_manage）：登记类型；
   ``scope=global`` 另需管理员。人工路径——**有意不进 api_catalog**（AI 候选
-  走 change_set，T-O3）。
+  走 change_set）。
 - ``POST /api/v1/projects/<id>/ontology/relation-types/<id>/retire``（can_manage）：
   停用类型（禁新边、存量边只读）。设计 §4 的表格未列本条，是为让 §5 用例 7
   的「retired 后建边 409」在人工路径上可达——偏差见 backlog T-O2 实施记录。
+- 变更集（T-O3，AI 候选唯一入口的人工评审面）：
+  ``POST   …/ontology/change-sets``（提出，draft，confirm 前不物化）、
+  ``GET    …/ontology/change-sets``（清单，?status= 过滤）、
+  ``GET    …/ontology/change-sets/<id>``（详情：载荷 + diff 摘要 + 指纹）、
+  ``POST   …/ontology/change-sets/<id>/submit``（draft→in_review，算 base 指纹；
+  设计 §4 未列本条，状态机的并发防护锚点——偏差见 backlog T-O3 实施记录）、
+  ``POST   …/ontology/change-sets/<id>/confirm``（拍板：指纹复核 + 单事务逐项
+  物化；验收分离，拍板人 ≠ 提交人）、
+  ``POST   …/ontology/change-sets/<id>/reject``（否决，留 reason）。
+  七条全部**有意不进 api_catalog**（同 signoff 纪律：AI 不可触达拍板路径）。
 """
 from __future__ import annotations
 
@@ -28,6 +37,18 @@ ontology_blueprint = Blueprint(
 @ontology_blueprint.errorhandler(service.OntologyServiceError)
 def service_error(error):
     return error_response(error.code, error.message, error.status)
+
+
+@ontology_blueprint.get("/terms")
+@require_auth
+def list_terms(project_id: str):
+    """术语只读面（can_view）：?q= 匹配规范名或别名。"""
+    data = service.list_project_terms(
+        actor=g.current_user,
+        project_id=project_id,
+        q=request.args.get("q"),
+    )
+    return jsonify({"data": data, "error": None})
 
 
 @ontology_blueprint.get("/relation-types")
@@ -65,5 +86,86 @@ def retire_relation_type(project_id: str, relation_type_id: str):
         actor=g.current_user,
         project_id=project_id,
         relation_type_id=relation_type_id,
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.get("/change-sets")
+@require_auth
+def list_change_sets(project_id: str):
+    """变更集清单（can_view）：?status= 按状态过滤。"""
+    data = service.list_project_change_sets(
+        actor=g.current_user,
+        project_id=project_id,
+        status=request.args.get("status"),
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.get("/change-sets/<change_set_id>")
+@require_auth
+def get_change_set(project_id: str, change_set_id: str):
+    """变更集详情（can_view）：diff 评审读载荷、摘要与 base 指纹。"""
+    data = service.get_project_change_set(
+        actor=g.current_user,
+        project_id=project_id,
+        change_set_id=change_set_id,
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.post("/change-sets")
+@require_auth
+def create_change_set(project_id: str):
+    """提出候选变更集（can_manage）→ draft：confirm 前不物化（§5 用例 1）。"""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise service.OntologyServiceError(
+            "invalid_request", "请求内容必须为 JSON 对象。", 400
+        )
+    data = service.propose_project_change_set(
+        actor=g.current_user, project_id=project_id, payload=payload
+    )
+    return jsonify({"data": data, "error": None}), 201
+
+
+@ontology_blueprint.post("/change-sets/<change_set_id>/submit")
+@require_auth
+def submit_change_set(project_id: str, change_set_id: str):
+    """draft → in_review（can_manage）：计算 base 指纹（并发防护锚点）。"""
+    data = service.submit_project_change_set(
+        actor=g.current_user,
+        project_id=project_id,
+        change_set_id=change_set_id,
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.post("/change-sets/<change_set_id>/confirm")
+@require_auth
+def confirm_change_set(project_id: str, change_set_id: str):
+    """拍板确认（can_manage 且 ≠ 提交人）：指纹复核 + 单事务逐项物化。"""
+    data = service.confirm_project_change_set(
+        actor=g.current_user,
+        project_id=project_id,
+        change_set_id=change_set_id,
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.post("/change-sets/<change_set_id>/reject")
+@require_auth
+def reject_change_set(project_id: str, change_set_id: str):
+    """否决（can_manage 且 ≠ 提交人）：只改状态留 reason。"""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise service.OntologyServiceError(
+            "invalid_request", "请求内容必须为 JSON 对象。", 400
+        )
+    data = service.reject_project_change_set(
+        actor=g.current_user,
+        project_id=project_id,
+        change_set_id=change_set_id,
+        payload=payload,
     )
     return jsonify({"data": data, "error": None})

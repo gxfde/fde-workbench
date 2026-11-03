@@ -1,6 +1,6 @@
 # Ontology Registry v1 设计（P0）
 
-> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；**§2.3 `ontology_relation_types` 已于 2026-11-03 实施（T-O2，迁移 `b8d3f1a5c7e2`；3 条路由 GET/POST/retire，服务层 ∪ 接入 `_validate_link`；偏差见 backlog T-O2 实施记录——subject_type 值域本轮只落登记不开放使用）**；change_sets 仍 PROPOSED。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
+> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；**§2.3 `ontology_relation_types` 已于 2026-11-03 实施（T-O2，迁移 `b8d3f1a5c7e2`；3 条路由 GET/POST/retire，服务层 ∪ 接入 `_validate_link`；偏差见 backlog T-O2 实施记录——subject_type 值域本轮只落登记不开放使用）**；**§2.4 `ontology_change_sets` 已于 2026-11-03 实施（T-O3，迁移 `c9e3a7d1b5f8`；7 条路由=GET terms+change-sets 六条，验收分离+base 指纹并发防护；偏差见 backlog T-O3 实施记录与 §2.4 落地裁决）**。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
 > 原则：不建平行实体体系。实体=既有 `project_research_subjects`；本设计只补 WB 完全缺失的三件：**术语治理、关系类型注册、变更集审核**，外加一等证据表（evidence，域 3 共享底座）。
 
 ## 1. 决策依据（对照任务书"决策 1/2"）
@@ -89,7 +89,19 @@
 - **subject_type 值域本轮只落登记不开放使用**：登记 `kind=subject_type` 的行合法且可被关系类型的端点约束引用，但**新建调研对象仍只能取内置五类**——`project_research_subjects` / `template_research_forms` / `project_research_import_batches` 三处 CheckConstraint 冻结（设计兼容边界 + backlog 口径），放开值域会连带表单定义、文档映射、文档快照、AI 模板 schema 四处消费方（漏一处即静默丢数据），属独立一轮（backlog T-O2b）。
 - **HTTP 面**：设计 §4 的 `GET/POST /projects/{id}/ontology/relation-types` 已开，另加一条 `POST …/relation-types/{id}/retire`（让 §5 用例 7 的「retired 后建边 409」在人工路径上可达）；三条路由均**不进 api_catalog**（人工路径，AI 候选走 change_set）。
 
-### 2.4 `ontology_change_sets`（批量变更事务单元 + diff 评审）
+### 2.4 `ontology_change_sets`（批量变更事务单元 + diff 评审）— **IMPLEMENTED（T-O3，2026-11-03）**
+
+> **T-O3 落地裁决（实现偏差回写）**：①状态机补 `submit` 路由（§4 表未列）——`not_in_review`
+> 错误码预设了评审态，且 base 指纹语义是「提交时受影响行指纹」，submit 即并发防护锚点；
+> ②`captured_from` 括注落成列（仅服务层原语可写，HTTP 人工路径拒收）；③载荷动作域本轮开
+> create_term/update_term/merge_terms/register_relation_type（项目内类型），**create_subject/
+> link_subjects 暂不开放**（propose 即 payload_schema 点名拒绝——业务对象候选走既有表单/导入
+> 人工路径，避免双轨）；④update_term 语义：UNIQUE(project, term) 使同名新行不可共存，**同名
+> 修订=原行受控改写**（旧定义随 confirmed 事件逐项结果留档，change-set confirm 是全系统唯一
+> definition 写路径——用例 3 的「不可原地改」不变式保持），**改名（new_term）才是行级取代**
+> （新行 confirmed+原行 superseded 指 canonical+原名转别名）——状态域的 `superseded` 由此获得
+> 真实产出场景，`draft` 由变更集占用（同 T-O2 先例）；⑤confirm 单事务**全成全败**（无 partial），
+> 「补偿日志」以全有全无+事件逐项结果承载；⑥验收分离：拍板人 ≠ 提交人（403，沿 gate P0-5）。
 
 | 列 | 类型 | 说明 |
 |---|---|---|
@@ -127,8 +139,15 @@ confirm 语义（服务层，PROPOSED）：事务内 ①校验 base 指纹 ②�
 | GET /projects/{id}/evidence?kind=&referenced_by= | can_view | — | {items[]} | — | — |
 | GET /projects/{id}/ontology/terms?q= | can_view | — | {items[]} | — | — |
 | POST /projects/{id}/ontology/change-sets | can_manage | {title, proposed_json, description?} | {change_set(draft)} | 400 payload_schema | — |
-| POST /projects/{id}/ontology/change-sets/{csid}/confirm | can_manage（且提交人≠确认人，沿用拍板人≠执行人纪律） | {confirm: true} | {results[]} | 409 base_conflict / 409 not_in_review | — |
-| POST …/change-sets/{csid}/reject | can_manage | {reason} | — | 409 | — |
+| GET /projects/{id}/ontology/change-sets?status= | can_view | — | {items[]} | 400 status | — |
+| GET /projects/{id}/ontology/change-sets/{csid} | can_view | — | {change_set} | 404 | — |
+| POST /projects/{id}/ontology/change-sets/{csid}/submit | can_manage | — | {change_set(in_review+指纹)} | 409 invalid_transition | — |
+| POST /projects/{id}/ontology/change-sets/{csid}/confirm | can_manage（且提交人≠确认人，沿用拍板人≠执行人纪律） | — | {change_set, results[]} | 403 change_set_decider_conflict / 409 base_conflict / 409 not_in_review / 400 change_set_item_failed | — |
+| POST …/change-sets/{csid}/reject | can_manage（且提交人≠确认人） | {reason} | {change_set(rejected)} | 403 change_set_decider_conflict / 409 invalid_transition / 400 reason | — |
+
+**T-O3 落地注**：上表 change-sets 六行与 GET terms 已实施（T-O3，2026-11-03）；submit 与 GET×2 为
+设计表外补充（同 T-O2 retire 先例）；confirm/reject 请求体简化为无体/`{reason}`（设计草拟的
+`{confirm: true}` 不需要——状态机已区分）；全部不进 api_catalog（AI 不可触达拍板路径）。
 | GET/POST /projects/{id}/ontology/relation-types | can_view / can_manage（scope=global 另需 admin） | {kind, code, label?, description?, allowed_source_types?, allowed_target_types?, scope?} | {relation_type, created} | 409 duplicate_code / 409 / 400 invalid_request | — |
 | POST /projects/{id}/ontology/relation-types/{rtid}/retire | can_manage | — | {relation_type} | 409 invalid_transition | — |
 
@@ -138,9 +157,9 @@ confirm 语义（服务层，PROPOSED）：事务内 ①校验 base 指纹 ②�
 
 ## 5. 验收测试（server/tests/test_evidence_registry.py、test_ontology_registry.py，PROPOSED）
 
-1. 候选不自动成为发布本体：AI 产 change_set（captured_from=agent_run）→ confirm 前 terms 表无行。
-2. 跨项目：另一项目用户 GET/POST terms/change-sets → 404/403（project_access）。
-3. confirmed 不可原地改：直接 PATCH term definition → 409 immutable（须走 change_set supersede）。
+1. 候选不自动成为发布本体：AI 产 change_set（captured_from=agent_run）→ confirm 前 terms 表无行。**（T-O3 已实施并覆盖）**
+2. 跨项目：另一项目用户 GET/POST terms/change-sets → 404/403（project_access）。**（T-O3 已实施并覆盖）**
+3. confirmed 不可原地改：直接 PATCH term definition → 409 immutable（须走 change_set supersede）。**（T-O3 已实施并覆盖——「supersede」落定为改名分支 new_term；同名修订=受控改写见 §2.4 裁决④）**
 4. 合并保留来源：merge_terms 后被并行 status=merged、canonical 指向保留行、alias 写入、operation_events 有逐项记录。
 5. 证据不可变历史：gate 证据二次提交 → evidence 表幂等唯一；gates 行 operation_events 保留旧指针记录。
 6. 变更影响分析（P2 扩展位）：term superseded 后，引用该 term 的 subjects/links 列表可查询（服务层 `impact_of_term`）。

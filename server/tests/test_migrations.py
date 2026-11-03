@@ -46,7 +46,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-S1：skill 治理态——status 换 draft/in_review/published/deprecated + 版本契约/审核列
 # V3 T-O1：ontology_terms + ontology_term_aliases 两表（术语/别名治理底座）
 # V3 T-O2：ontology_relation_types 一表（关系/对象类型注册表）
-HEAD_REVISION = "b8d3f1a5c7e2"
+# V3 T-O3：ontology_change_sets 一表（变更集：批量事务单元 + base 指纹并发防护）
+HEAD_REVISION = "c9e3a7d1b5f8"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -800,6 +801,78 @@ def test_v3_relation_type_table_roundtrip_enforces_scopes(alembic_config, engine
         == "FDE-V3-TYPE-KEEP"
     )
     assert "ontology_relation_types" not in table_names(engine)
+
+    command.upgrade(alembic_config, "head")
+    cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
+    # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
+    seed_reference_data(engine.url.render_as_string(hide_password=False))
+
+
+def test_v3_change_set_table_roundtrip_preserves_projects(alembic_config, engine):
+    """V3 T-O3：变更集增量——downgrade 表消失、upgrade 回 head 重建；两向都不碰
+    projects 行；head 上状态 CHECK 生效（非法状态拒）、载荷 JSON 落行可读。"""
+    command.downgrade(alembic_config, "b8d3f1a5c7e2")
+    assert "ontology_change_sets" not in table_names(engine)
+    ids = seed_user_and_template(engine, username="migration.v3-cs-keep")
+    project_id, sop_node_id = seed_project(engine, ids, project_code="FDE-V3-CS-KEEP")
+
+    command.upgrade(alembic_config, "head")
+
+    assert "ontology_change_sets" in table_names(engine)
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-CS-KEEP'",
+        )
+        == "FDE-V3-CS-KEEP"
+    )
+
+    set_id = str(uuid4())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ontology_change_sets "
+                "(id, project_id, title, proposed_json, diff_summary, status, "
+                "base_snapshot_sha256, captured_from, created_at, updated_at) "
+                "VALUES (:id, :project_id, '术语候选一批', "
+                "'[{\"action\": \"create_term\", \"term\": \"交付包\", "
+                "\"definition\": \"一次交付的物量集合。\"}]', "
+                "'新建术语 1', 'in_review', "
+                "'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', "
+                "'agent_run:11111111-1111-4111-8111-111111111111', now(), now())"
+            ),
+            {"id": set_id, "project_id": project_id},
+        )
+    row = scalar(
+        engine,
+        "SELECT proposed_json FROM ontology_change_sets WHERE id = :id",
+        {"id": set_id},
+    )
+    assert row[0]["action"] == "create_term"
+    assert row[0]["term"] == "交付包"
+
+    # 状态 CHECK：非法状态被拒
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO ontology_change_sets "
+                    "(id, project_id, title, proposed_json, status, created_at, updated_at) "
+                    "VALUES (:id, :project_id, '坏状态', '[]', 'pending', now(), now())"
+                ),
+                {"id": str(uuid4()), "project_id": project_id},
+            )
+
+    command.downgrade(alembic_config, "b8d3f1a5c7e2")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-CS-KEEP'",
+        )
+        == "FDE-V3-CS-KEEP"
+    )
+    assert "ontology_change_sets" not in table_names(engine)
 
     command.upgrade(alembic_config, "head")
     cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)

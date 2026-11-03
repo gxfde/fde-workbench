@@ -358,6 +358,10 @@ def db_session(app) -> Session:
         __import__(
             "fde_api.ontology.models", fromlist=["OntologyRelationType"]
         ).OntologyRelationType,
+        # V3 T-O3：变更集引用 projects（CASCADE）/users（SET NULL），先于两表清理
+        __import__(
+            "fde_api.ontology.models", fromlist=["OntologyChangeSet"]
+        ).OntologyChangeSet,
         # V3 T-W2：node_runs 引用 runs（CASCADE），runs 引用 definitions（RESTRICT，
         # 故必须先于 definitions 清理）与 projects/users
         __import__("fde_api.workflows.models", fromlist=["WorkflowNodeRun"]).WorkflowNodeRun,

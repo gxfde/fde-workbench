@@ -1,5 +1,5 @@
-"""术语表（V3 T-O1，域 2；设计 ontology-registry-v1 §2.2）与关系类型注册表
-（V3 T-O2，§2.3）。
+"""术语表（V3 T-O1，域 2；设计 ontology-registry-v1 §2.2）、关系类型注册表
+（V3 T-O2，§2.3）与变更集（V3 T-O3，§2.4）。
 
 术语表：项目内术语/别名治理——一个规范业务名一行（UNIQUE(project, term)），
 别名子表同项目唯一（UNIQUE(project, alias)）——同项目一个名字至多指向一个概念，
@@ -18,6 +18,7 @@ project_id 为 NULL = 全局类型（仅 admin 可建），非 NULL = 项目内�
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -185,4 +186,61 @@ class OntologyRelationType(Base, TimestampMixin, VersionedMixin):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     created_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+# 变更集状态域（设计 §2.2/§2.4）：draft（候选）→ in_review（提交评审）→
+# confirmed / rejected（终态）。superseded 为设计状态域原文保留位——本轮状态机
+# 不产出该态（修订经 update_term 物化，行级取代只发生在改名分支，见服务层裁决）。
+CHANGE_SET_STATUSES = ("draft", "in_review", "confirmed", "rejected", "superseded")
+
+
+class OntologyChangeSet(Base, TimestampMixin, VersionedMixin):
+    """变更集（V3 T-O3，设计 ontology-registry-v1 §2.4）：批量变更事务单元 +
+    diff 评审 + base 指纹并发防护——**AI 候选唯一入口**。
+
+    AI 产物永不直接写 terms/relation_types：候选载荷进 proposed_json
+    （captured_from 标记来源，如 agent_run:<id>，仅服务层原语可写、HTTP 人工
+    路径不收），人工 submit（算 base 指纹）→ confirm（复核指纹 + 单事务逐项
+    物化，全成全败）才落表；逐项结果落 `ontology_change_set_confirmed` 事件。
+    并发漂移由指纹把关：confirm 复算受影响行快照不符即 409 base_conflict。
+    """
+
+    __tablename__ = "ontology_change_sets"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'confirmed', 'rejected', 'superseded')",
+            name="ck_ontology_change_sets_status",
+        ),
+        Index("ix_ontology_change_sets_project_status", "project_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 变更载荷：[{action, ...action 字段}]（服务层做形状校验与逐项物化）
+    proposed_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    # 人读摘要（propose 时按载荷自动生成，不信任候选自报）
+    diff_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    # submit 时对受影响行快照取的指纹；confirm 复核（409 base_conflict）
+    base_snapshot_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 候选来源标记（如 agent_run:<id>）——仅服务层原语可写
+    captured_from: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    submitted_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    confirmed_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    rejected_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
     )

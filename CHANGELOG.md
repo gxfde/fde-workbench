@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O3：变更集 ontology_change_sets（AI 候选唯一入口：propose→submit→confirm 人工拍板闭环，2026-11-03）
+
+### 服务端（1 个迁移（一张新表，唯一 DDL）/ 7 条新路由 / 零桌面改动）
+
+- **变更集**：`ontology_change_sets`（title/description/proposed_json 载荷/diff_summary 人读摘要/status ∈ draft·in_review·confirmed·rejected·superseded/base_snapshot_sha256 并发防护指纹/captured_from 候选来源标记/提交与拍板留痕）。迁移 **`c9e3a7d1b5f8`**（30 rev，additive，含 downgrade）。AI 产物永不直接写术语/类型表——候选载荷进 proposed_json，人工拍板后才逐项物化。
+- **状态机与并发防护**：draft →(submit)→ in_review（对受影响行快照取 sha256 指纹）→(confirm)→ confirmed / →(reject)→ rejected（留 reason）；draft 可否决（撤回）。confirm 复核指纹——既有行被并发改写或占位名凭空出现/消失都判漂移，**409 `base_conflict` 零物化**。confirm **单事务全成全败**：任一项物化失败整体回滚（无 partial），错误 `change_set_item_failed` 点名项次；成功落 `ontology_change_set_confirmed` 事件携带逐项结果。
+- **物化语义**：`create_term` 直落 confirmed；`update_term` 同名=原行受控改写（旧定义随事件留档；**change-set confirm 是全系统唯一 definition 写路径**）、改名（`new_term`）=新行 confirmed+原行 superseded 指 canonical+原名转别名；`merge_terms` 走 T-O1 原语（合并保留来源）；`register_relation_type` 只登记项目内类型（全局登记留 admin 人工路由）。`create_subject`/`link_subjects` 设计列有、本轮不开放（propose 即点名拒绝）。
+- **验收分离（P0-5 纪律移植）**：confirm/reject 均要求拍板人 ≠ 提交人（403 `change_set_decider_conflict`，沿 gate 先例）。
+- **HTTP 面（人工路径，不进 api_catalog）**：`GET /projects/{id}/ontology/terms?q=`（T-O1 欠账的术语只读面，别名命中返回属主行）+ change-sets 六条（propose/list/detail/submit/confirm/reject；submit 为设计 §4 表外补充——`not_in_review` 预设评审态、指纹语义锚在提交时刻）。跨项目 404 `change_set_not_found`（不泄露存在性）。事件目标注册表 +`ontology_change_set`。
+- **测试**：`test_ontology_registry.py` **8 例**（payload_schema 校验族 / 状态机+HTTP 全链路（含验收分离、重复确认、跨项目、?status= 过滤、confirmed 事件逐项结果）/ base_conflict 双漂移（行改写+占名抢注）/ 单项失败整体回滚 / update_term 同名与改名双分支 / captured_from AI 通道 / merge+register 物化 / 术语 GET 面 + api_catalog 三面钉子）+ `test_migrations.py` 迁移往返 **1 例**（载荷 JSON 落行可读 + 状态 CHECK）；`HEAD_REVISION` → `c9e3a7d1b5f8`。
+- **口径**：业务表 **104→105**（+ontology_change_sets）/ 迁移头 **`c9e3a7d1b5f8`（30 revision，+1）** / 路由 **286→293**（+7） / api_catalog ENTRIES **94 不变** / pytest **1808 收集 = 1802 passed + 6 skipped**（本轮 +9：变更集 8 + 迁移往返 1；较 T-O2 记录基线 1798 的 +1 为该轮基线记法偏差，与本轮无关） / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（一张新表；**api/worker/scheduler 三个镜像都要 build**）。
+
 ## [未发布] — V3 实施 T-O2：关系/对象类型注册表 ontology_relation_types（关系类型不再硬编码，2026-11-03）
 
 ### 服务端（1 个迁移（一张新表，唯一 DDL）/ 3 条新路由 / 服务层 ∪ 接入 / 零桌面改动）

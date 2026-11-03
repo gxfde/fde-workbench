@@ -99,11 +99,22 @@
 - 风险：值域放宽是**存量语义变更**（约束从枚举变格式），须评估存量数据与历史导入的兼容；文档快照漏一类即静默丢内容。
 - 复杂度：**L**（超出 M，故与 T-O2 分轮）。
 
-### T-O3 变更集 ontology_change_sets（候选→人工确认闭环）
+### T-O3 变更集 ontology_change_sets（候选→人工确认闭环）— **DONE（2026-11-03，分支 feat/v3-t-o3-change-sets，squash 合并至 fork/main）**
 - 目标：批量变更事务单元+diff 评审+base 指纹并发防护；AI 候选唯一入口。
 - 前置：T-O1。修改文件：ontology/service.py（propose/confirm/reject 事务）、routes.py。
 - DB：ontology_change_sets。测试：change-set 状态机/base_conflict 409/AI 候选 confirm 前不物化。
 - 风险：confirm 事务跨表物化需逐项补偿日志（失败回滚+事件记 partial）。复杂度：**M**。
+- **实施记录（2026-11-03）**：
+  - **一表+迁移**：`ontology_change_sets`（迁移 `c9e3a7d1b5f8`，30 rev，additive-only）。列域=设计 §2.4 原文（title/proposed_json/diff_summary/status/base_snapshot_sha256/提交与拍板留痕）+ `captured_from`（候选来源标记，如 `agent_run:<id>`——设计 §2.4 括注「captured_from 标 agent_run」落成列；仅服务层原语可写，HTTP 人工路径显式拒收）。CHECK 状态域含 `superseded`（设计原文保留位，本轮状态机不产出该态）。
+  - **状态机**：draft →(submit)→ in_review →(confirm)→ confirmed / →(reject)→ rejected；draft 亦可 reject（撤回）。**submit 是设计 §4 表外的一条**——§4 只列 propose/confirm/reject，但 confirm 错误码 `not_in_review` 预设了评审态，而 base 指纹的语义是「提交时受影响行指纹」，故 submit 作为并发防护锚点落地（同 T-O2 retire 先例：为让验收用例在人工路径可达而补路由）。
+  - **base 指纹**：submit 与 confirm 复核共用同一采集器 `_change_set_base_descriptor`——逐项对受影响面采快照（术语行全量含 definition；别名占用；关系类型项目行+全局行双快照），canonical JSON sha256。同时覆盖「既有行被并发改写」与「占位名凭空出现/消失」两类漂移，一律 409 `base_conflict` 零物化。
+  - **confirm 单事务全成全败**：任一项物化失败→整体回滚（无 partial），错误 `change_set_item_failed` 点名项次与原因——设计风险条写的「补偿日志」以全有全无+事件逐项结果承载（强一致性优于补偿）。confirmed 事件 `ontology_change_set_confirmed` 携带逐项 results（设计强制）；propose/submit/reject **不落事件**（变更集行本身即审计记录：created_by/submitted_by/rejected_reason 全在行上）。
+  - **载荷动作域裁决**：T-O3 开 `create_term`（直落 confirmed）/`update_term`/`merge_terms`/`register_relation_type`（只登记项目内类型，全局登记留 admin 人工路由——lesson 15）；**`create_subject`/`link_subjects` 设计列有、本轮不开放**（propose 即 `payload_schema` 点名拒绝——业务对象候选走既有表单/导入人工路径，避免与既有写路径双轨）。before/after 由服务端在物化结果里实测生成，不信任候选自报。
+  - **update_term 语义裁决（对设计「新版本行」的落地解释）**：UNIQUE(project, term) 使同名新行不可共存。同名修订=**原行受控改写**（definition/term_type，version+1，旧定义随事件 results 留档）——change-set confirm 是全系统唯一 definition 写路径，「confirmed 不可原地改」不变式保持（无 change-set 之外的编辑路由/原语）；改名分支（`new_term`）才是行级取代：新行 confirmed + 原行 `superseded` 指 canonical + 原名转别名（合并保留来源同一纪律）——`superseded` 由此获得真实产出场景。
+  - **验收分离（P0-5 纪律移植）**：confirm 与 reject 均要求拍板人 ≠ 提交人（403 `change_set_decider_conflict`，沿 gate `gate_decider_conflict` 先例）。
+  - **路由 +7（286→293）**：GET terms（T-O1 欠账的只读面，?q= 名/别名检索）、change-sets GET×2/POST/submit/confirm/reject；全部**有意不进 api_catalog**（红线钉子测试扩展到三面）。`_load_project` 文案泛化为「本体操作权限」。
+  - **事件双记裁决**：merge 走 T-O1 原语时其 `ontology_term_merged` 事件保留（term 级溯源），叠 change-set 级 confirmed 事件——粒度不同不算双写（T-O1 遗留裁决点，就此定案）。
+  - **口径**：104→**105 表**、迁移头 `b8d3f1a5c7e2`→**`c9e3a7d1b5f8`**（29→**30 rev**）、业务路由 286→**293**（+7）、ENTRIES 94 不变、pytest **1808 收集 = 1802 passed + 6 skipped**（T-O3 +9：变更集 8 + 迁移往返 1）、vitest 730 不变（零桌面改动）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
 
 ### T-O4 导入别名去重接入
 - 目标：research 导入遇同名不同 key → 产出合并候选 change_set 而非静默新建（imports.py:1261-1262 合成键路径）。
