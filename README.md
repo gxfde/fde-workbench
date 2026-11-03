@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="desktop/src/renderer/src/assets/logo.png" width="112" alt="蔡工FDE智能交付系统 Logo" />
+  <img src="desktop/src/renderer/src/assets/logo-caigong-fde.svg" width="112" alt="蔡工FDE智能交付系统 Logo" />
   <h1>蔡工FDE智能交付系统</h1>
   <p>面向 Forward Deployed Engineer 团队的开源智能交付工作台</p>
   <p>
@@ -22,7 +22,7 @@
 
 ---
 
-蔡工FDE智能交付系统（FDE Workbench）覆盖 FDE 交付全流程：项目、成员、任务、甘特、调研、AI 机会、方案、交付文档、文件库，以及 **G1–G9 交付门禁**和**报价/收款/合同**商务模块。它由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 PostgreSQL、Redis 和文件存储中；桌面端侧边栏内置「使用帮助」，随时可查各模块操作说明。
+蔡工FDE智能交付系统（FDE Workbench）覆盖 FDE 交付全流程：项目、成员、任务、甘特、调研、AI 机会、方案、交付文档、文件库、术语表、工作流，以及 **G1–G9 交付门禁**和**报价/收款/合同**商务模块。它由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 PostgreSQL、Redis 和文件存储中；桌面端侧边栏内置「使用帮助」，随时可查各模块操作说明。
 
 | 当前版本 | 你需要知道的事 |
 | --- | --- |
@@ -41,9 +41,9 @@
 
 | 项目工作台 | 交付门禁与商务 | AI 与平台管理 |
 | --- | --- | --- |
-| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、AI 机会、方案设计与交付文档 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离 | AI 模型、Skills、插件、AI Server、微信/ClawBot 集成 |
+| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离 | AI 模型、Skills（治理态与效果统计）、工作流控制台、插件、AI Server、微信/ClawBot 集成 |
 | 项目负责人、FDE 工程师、查看者等角色权限 | **报价 / 收款（里程碑）/ 合同**商务看板；标准 FDE 项目模板一键派生 | 行业模板、文档模板、模块管理、用户管理、系统配置 |
-| 集成桥：本地 openfde / fdeops 工作目录在台内的只读投影 | 任务中心：后台任务与自动化执行状态集中可见 | 桌面端内嵌「使用帮助」：模块操作 + 门禁流程 + 实操示例 |
+| 集成桥：本地 openfde / fdeops 工作目录在台内的只读投影 | 任务中心：后台任务、自动化执行与工作流人工审批集中可见 | 桌面端内嵌「使用帮助」：模块操作 + 门禁流程 + 实操示例 |
 
 安全基线（默认启用）：argon2 口令哈希；15 分钟 access token + 30 天轮换 refresh token，改密后旧令牌立即失效；登录连续失败 5 次锁定约 15 分钟（Redis 计数，Redis 不可用时静默放行不影响认证）；API 容器非 root 运行；模型 API Key 等密钥后端加密保存且不经 API 回显。
 
@@ -308,8 +308,9 @@ npm run package:mac
 
 ### 更换 Logo 与安装图标
 
-- 界面及本 README 页首使用 [`desktop/src/renderer/src/assets/logo.png`](desktop/src/renderer/src/assets/logo.png)，同名 PNG 替换后重新构建客户端。
-- macOS 图标由 `npm run package:mac` 自动从 Logo 生成；Windows 使用 [`desktop/build/icon.png`](desktop/build/icon.png) 与 [`desktop/build/icon.ico`](desktop/build/icon.ico)，换 Logo 后需另行重新生成 `.ico`。
+- 界面品牌资源在 `desktop/src/renderer/src/assets/`：[`logo-caigong-fde.svg`](desktop/src/renderer/src/assets/logo-caigong-fde.svg)（侧边栏、favicon 及本 README 页首）、`logo-caigong-fde-full.png`（带字全标）、`logo-caigong-fde-light.svg`（浅色底变体）。产品名一律取 `desktop/src/renderer/src/brand.ts`，不在代码里硬编码。
+- Windows 构建图标使用 [`desktop/build/icon.png`](desktop/build/icon.png) 与 [`desktop/build/icon.ico`](desktop/build/icon.ico)（安装器图标三处同源）。
+- macOS 图标由 `npm run icon:mac`（`desktop/scripts/generate-icon.sh`）从 `assets/logo.png` 渲染圆角图标并生成 `build/icon.icns`，`npm run package:mac` 会先自动执行；换 Logo 时需同步更新该源图并重新生成图标。
 
 ## 数据与安全
 
