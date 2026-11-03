@@ -27,6 +27,7 @@ from fde_api.control.models import (
 )
 from fde_api.control.service import ControlServiceError
 from fde_api.control.dsh_market import marketplace_status
+from fde_api.workbench.models import OperationEvent  # V3 T-S2：Skill 留痕直落事件表
 from fde_api.extensions import db
 
 
@@ -303,6 +304,28 @@ def _save_skill(
         session.close()
 
 
+def _skill_event(
+    session: Any, user: User, skill: SkillDefinition, event_type: str, changes: dict[str, Any]
+) -> None:
+    """V3 T-S2：Skill 治理/消费事件直落 operation_events（control 层 _event 同构）。
+
+    不走 projects.events.record_event——events.py 顶层引入 control.models 会
+    经重型 control/__init__ 反转 projects↔control 导入序（实测即环）。
+    Skill 不挂项目：公共技能全局面、个人技能仅 owner，project_id 恒空；
+    changes 键固定非敏感（version/surface/from_version/to_version/waive_reason）。
+    """
+    session.add(
+        OperationEvent(
+            actor_user_id=user.id,
+            project_id=None,
+            target_type="skill_definition",
+            target_id=skill.id,
+            event_type=event_type,
+            changes=changes,
+        )
+    )
+
+
 def submit_skill_review(*, user: User, skill_id: str) -> dict[str, Any]:
     """提交审核（draft→in_review；公共 Skill；system_operator）。"""
     _require_system_operator(user, "只有管理员可以提交公共 Skill 审核。")
@@ -314,6 +337,8 @@ def submit_skill_review(*, user: User, skill_id: str) -> dict[str, Any]:
             )
         skill.status = "in_review"
         skill.version += 1
+        _skill_event(session, user, skill, "skill_review_submitted",
+                     {"version": skill.current_version_number})
         session.flush()
         return _serialize_skill(skill, user)
 
@@ -353,6 +378,8 @@ def publish_skill(*, user: User, skill_id: str, payload: dict[str, Any]) -> dict
         skill.published_at = datetime.now(UTC)
         version.reviewed_by_user_id = user.id
         skill.version += 1
+        _skill_event(session, user, skill, "skill_published",
+                     {"version": skill.current_version_number, "waive_reason": waive_reason})
         session.flush()
         return _serialize_skill(skill, user)
 
@@ -394,11 +421,15 @@ def rollback_skill(*, user: User, skill_id: str, payload: dict[str, Any]) -> dic
                 "目标版本没有测试报告；如确需跳过请携带 waive_reason 说明理由。",
                 409,
             )
+        from_number = skill.current_version_number
         skill.current_version_number = target_number
         skill.published_by_user_id = user.id
         skill.published_at = datetime.now(UTC)
         version.reviewed_by_user_id = user.id
         skill.version += 1
+        _skill_event(session, user, skill, "skill_rolled_back",
+                     {"from_version": from_number, "to_version": target_number,
+                      "waive_reason": waive_reason})
         session.flush()
         return _serialize_skill(skill, user)
 
@@ -417,6 +448,8 @@ def deprecate_skill(*, user: User, skill_id: str) -> dict[str, Any]:
             )
         skill.status = "deprecated"
         skill.version += 1
+        _skill_event(session, user, skill, "skill_deprecated",
+                     {"version": skill.current_version_number})
         session.flush()
         return _serialize_skill(skill, user)
 
@@ -450,7 +483,72 @@ def list_skill_versions(*, user: User, skill_id: str) -> dict[str, Any]:
             }
             for row in rows
         ]
-        return {"skill": _serialize_skill(skill, user), "versions": versions}
+        return {"skill": _serialize_skill(skill, user), "versions": versions,
+                "usage": _skill_usage_summary(session, skill.id)}
+
+
+_SKILL_USAGE_EVENT_TYPES = ("skill_used_chat", "skill_used_workflow")
+# 有界扫描窗口：单技能消费事件 最近 N 条（正常远小于此；触顶 truncated=true 诚实标注）
+_SKILL_USAGE_EVENT_LIMIT = 1000
+
+
+def record_skill_usage(*, actor_id: str, skill_id: str, surface: str, version: int) -> None:
+    """Skill 消费即计数：独立微事务落 skill_used_* 事件（V3 T-S2 效果统计）。
+
+    直连 AI 工具循环每轮 tool 后回滚共享会话（该循环假定工具只读），因此
+    消费计数必须自带已提交事务才能在两条消费面上都存活——与
+    run_lcsc_skill 自管事务穿过 call_tool 的先例同构。
+    消费面：chat=MCP skill_read 成功读出指南；workflow=skill 节点按
+    pinned 版本完成一次确定性 AI 调用（分派失败不计——失败是噪声不是效果）。
+    """
+    with db.session() as session, session.begin():
+        actor = session.get(User, actor_id)
+        skill = session.get(SkillDefinition, skill_id)
+        if actor is None or skill is None:
+            return
+        _skill_event(session, actor, skill, f"skill_used_{surface}",
+                     {"surface": surface, "version": version})
+
+
+def _skill_usage_summary(session: Any, skill_id: str) -> dict[str, Any]:
+    """run 面累计效果统计（agent-policy §2.4 效果评估：operation_events 已有基础）。
+
+    有界扫描（最近 1000 条消费事件，新→旧）后 Python 侧聚合：分面计数、
+    按版本计数（回滚决策的依据——旧版本还在被 workflow pinned 引用吗）、
+    最近使用时间。治理生命周期事件（published/rolled_back/...）是审计不
+    是消费，不计入 usage。
+    """
+    rows = session.execute(
+        select(OperationEvent.changes, OperationEvent.occurred_at)
+        .where(
+            OperationEvent.target_type == "skill_definition",
+            OperationEvent.target_id == skill_id,
+            OperationEvent.event_type.in_(_SKILL_USAGE_EVENT_TYPES),
+        )
+        .order_by(OperationEvent.occurred_at.desc(), OperationEvent.id.desc())
+        .limit(_SKILL_USAGE_EVENT_LIMIT)
+    ).all()
+    summary: dict[str, Any] = {
+        "total": len(rows),
+        "chat": 0,
+        "workflow": 0,
+        "last_used_at": None,
+        "by_version": {},
+        "truncated": len(rows) >= _SKILL_USAGE_EVENT_LIMIT,
+    }
+    for index, (changes, occurred_at) in enumerate(rows):
+        if not isinstance(changes, dict):
+            continue
+        surface = changes.get("surface")
+        if surface in ("chat", "workflow"):
+            summary[surface] += 1
+        version = changes.get("version")
+        if isinstance(version, int):
+            key = str(version)
+            summary["by_version"][key] = summary["by_version"].get(key, 0) + 1
+        if index == 0 and occurred_at:
+            summary["last_used_at"] = occurred_at.isoformat()
+    return summary
 
 
 def _load_governed_skill(session: Any, skill_id: str) -> SkillDefinition:

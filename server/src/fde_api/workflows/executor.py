@@ -880,6 +880,7 @@ def _dispatch_skill(
             )
         _skill, version = rows
         instructions = version.instructions_text
+        skill_id = _skill.id
         initiator_id, project_id = run.initiated_by_user_id, run.project_id
     if not initiator_id:
         raise _NodeFailure("initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False)
@@ -901,6 +902,11 @@ def _dispatch_skill(
         ) from error
     if not isinstance(answer, str):
         answer = json.dumps(answer, ensure_ascii=False)
+    # V3 T-S2：pinned 版本完成一次确定性调用即消费——独立微事务计数，
+    # 节点失败（AI 异常/重试）不计；attempt 代际各自计一次（每次都真消费了）
+    from fde_api.control.extensions_service import record_skill_usage
+    record_skill_usage(actor_id=initiator_id, skill_id=skill_id, surface="workflow",
+                       version=int(version_part))
     return {"text": answer}
 
 

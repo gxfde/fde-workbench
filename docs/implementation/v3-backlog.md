@@ -217,8 +217,16 @@
   - **迁移实现教训**：首轮把数据 UPDATE 写在 add_column 之前（引用尚不存在的列）——conftest 每会话 downgrade base→upgrade head 即红，测试库先于 CI 暴露；列先行→约束换值→迁数据的顺序才对。
   - 测试：NEW test_skill_lifecycle.py **7 例**（四闸逐一可见/契约+报告免 waive/编辑回 draft 重走治理+公共开关防旁路/回滚材料闸+already_current+404/弃用退出+复活封路/个人自发布+PATCH 幂等/CHECK 状态域自检）+ 修 5 处 active 语义既有用例（chat_mcp make_skill、executor _seed_skill、solution_skills/lcsc_other 的 _is_unchanged_builtin 自测、extension_management 的「建→停→改名重存」PATCH 流改治理语义）；test_migrations HEAD 钉 `c1e5f9a3d7b2`（往返含数据迁移双向归位）。
 
-### T-S2 Skill 回滚+效果统计
+### T-S2 Skill 回滚+效果统计 — **DONE（2026-11-03，分支 feat/v3-t-s2-skill-usage-stats，squash 合并至 fork/main）**
 - 前置：T-S1。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **回滚已随 T-S1 落地**（POST …/rollback + 同密码材料闸），本任务唯一新增面=**效果统计**（agent-policy §2.4「效果评估：run 面累计 usage，operation_events 已有基础」）。
+  - **T-S1 审计缺口顺带收口**：gap-matrix 域 8 验收「回滚留 operation_events」在 T-S1 未落地（publish/rollback/deprecate 零事件）——本轮补齐四条治理事件 `skill_review_submitted / skill_published（version+waive_reason）/ skill_rolled_back（from_version+to_version+waive_reason）/ skill_deprecated`，与生命周期服务函数同事务落表；闸失败（403 错密码 / 409 材料）不留事件（有测试钉住）。
+  - **双消费面计数**：`skill_used_chat`（MCP `skill_read` 成功读出指南，mcp_gateway 落点）+ `skill_used_workflow`（executor `_dispatch_skill` 按 pinned 版本完成一次确定性 AI 调用）。**失败不计**（AI 异常/重试是噪声不是效果；skill_ref_unavailable=内容未被消费）；attempt 代际各计一次（resume 重跑的每次都真消费了）。skill_list 只浏览不计数。
+  - **关键实现约束——独立微事务**：直连 AI 工具循环每轮 tool 后**回滚共享会话**（ai_tool_loop 假定工具只读），经 call_tool 的消费计数必须自带已提交事务才能存活——`record_skill_usage` 自开 `db.session()+begin()`（与 run_lcsc_skill 穿过 call_tool 自管事务的先例同构），有专项测试钉「call_tool 后 rollback 事件仍在」。
+  - **导环教训（实现偏差）**：原计划把 SkillDefinition 注册进 projects/events.py 的 `_TARGET_TYPES` 走公共 `record_event`——顶层 `from fde_api.control.models import …` 会经重型 `control/__init__`（→control.routes→control.service→projects.service）反转 projects↔control 导入序，实测 import 即环。改为 control 层 `_event` 直落 `OperationEvent`（api_actions.py:73 同构）：`target_type="skill_definition"`、`project_id=None`（Skill 不挂项目：公共技能全局面/个人仅 owner）、changes 键固定非敏感（version/surface/from_version/to_version/waive_reason）。事件注册表未扩——record_event(SkillDefinition) 未来若被调用仍 TypeError，属已知边界。
+  - **统计读出（零新路由，283 不变）**：GET …/extensions/skills/{id}/versions 响应新增 `usage` 块——`{total, chat, workflow, last_used_at, by_version, truncated}`；有界扫描（最近 1000 条消费事件，新→旧）Python 侧聚合（metrics/service 同款模式），触顶 `truncated=true` 诚实标注；治理事件不进 usage；by_version 供回滚决策（旧版本还在被 workflow pinned 引用吗）。桌面端本就不消费 versions 端点，零桌面改动（vitest 731 不变）。
+  - 测试：test_skill_lifecycle.py **7→11**（治理事件四类+闸失败零事件 / chat 计数+回滚存活+404 不计数 / usage 汇总含零值与按版本 / truncated 诚实标注）+ test_workflow_executor.py 两用例扩展（pinned v1 消费断言 / 失败 attempt 不计消费）；零迁移零新表（operation_events 直落），test_migrations HEAD 不变 `b5d9e3f7a1c6`。
 
 ### T-J1 outbox 状态闭环（WB-DEF-9）
 - 修改文件：`jobs/outbox.py`（mark_completed/mark_failed）、`jobs/worker.py`（settle 时回写）。测试：test_outbox 扩展。复杂度：**S**。

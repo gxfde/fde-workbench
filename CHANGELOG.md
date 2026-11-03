@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-S2：Skill 效果统计 + 治理留痕（回滚已随 T-S1 落地，2026-11-03）
+
+### 服务端（零迁移零新路由 / 零桌面改动）
+
+- **效果统计（agent-policy §2.4「run 面累计 usage，operation_events 已有基础」落地）**：双消费面计数——`skill_used_chat`（MCP `skill_read` 成功读出指南）与 `skill_used_workflow`（工作流 skill 节点按 pinned 版本完成一次确定性 AI 调用）；**失败不计**（AI 异常/重试是噪声不是效果，`skill_ref_unavailable`=内容未被消费），attempt 代际各计一次（resume 重跑每次都真消费了），`skill_list` 只浏览不计数。
+- **独立微事务计数**：直连 AI 工具循环每轮 tool 后回滚共享会话（假定工具只读），经 `call_tool` 的消费计数自带已提交事务才能存活——与 `run_lcsc_skill` 自管事务的先例同构，专项测试钉「call_tool 后 rollback 事件仍在」。
+- **统计读出（零新路由）**：`GET /extensions/skills/{id}/versions` 响应新增 `usage` 块 `{total, chat, workflow, last_used_at, by_version, truncated}`——有界扫描（最近 1000 条消费事件）Python 侧聚合，触顶 `truncated=true` 诚实标注；`by_version` 供回滚决策（旧版本还在被 workflow pinned 引用吗）；治理事件不进 usage。
+- **T-S1 审计缺口顺带收口**（gap-matrix 域 8「回滚留 operation_events」）：补齐四条治理事件 `skill_review_submitted / skill_published（version+waive_reason）/ skill_rolled_back（from_version+to_version+waive_reason）/ skill_deprecated`，与生命周期操作同事务落表；闸失败（错密码/材料缺失）不留事件。
+- **实现偏差（backlog 已回写）**：事件不走 `projects/events.py::record_event`——`events.py` 顶层引入 `control.models` 会经重型 `control/__init__` 反转 projects↔control 导入序（实测即环），改用 control 层 `_event` 直落 `OperationEvent` 的既有同构（api_actions 先例）；`target_type="skill_definition"`、`project_id=None`（Skill 不挂项目）。
+- **测试**：`test_skill_lifecycle.py` **7→11**（治理事件四类+闸失败零事件 / chat 计数+回滚存活+404 不计数 / usage 汇总+零值+按版本 / truncated 诚实标注）+ `test_workflow_executor.py` 两用例扩展（pinned 版本消费断言 / 失败 attempt 不计）。服务端 pytest **1829 收集 = 1823 passed + 6 skipped**（+4）/ vitest **731 不变**。**零迁移**（head `b5d9e3f7a1c6` 不变）/ **零新路由**（283 不变）/ ENTRIES 94 不变。
+
 ## [未发布] — 桌面端视觉统一：设计令牌体系与缺失样式类补齐（2026-11-03）
 
 ### 纯 CSS 重构（零功能变更，零 TSX 逻辑改动）

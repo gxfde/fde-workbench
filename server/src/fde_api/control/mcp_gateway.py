@@ -221,6 +221,10 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
     row = next(((s, v) for s, v in rows if s.id == arguments.get("skill_id")), None)
     if row is None:
         raise ControlServiceError("not_found", "技能不存在或无权使用。", 404)
+    # V3 T-S2：读出指南即消费——独立微事务计数（直连循环回滚共享会话也不丢）
+    from fde_api.control.extensions_service import record_skill_usage
+    record_skill_usage(actor_id=user.id, skill_id=row[0].id, surface="chat",
+                       version=row[1].version_number)
     return {"name": row[0].name, "instructions": row[1].instructions_text, "version": row[1].version_number}
 
 

@@ -542,7 +542,7 @@ def test_definition_version_pinned_across_publish(db_session, settings, monkeypa
 def test_skill_node_uses_pinned_version_instructions(db_session, settings, monkeypatch):
     leader = make_user(db_session, "project_lead")
     project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
-    _seed_skill(db_session, leader, key="polisher", versions=["V1 指令", "V2 指令"])
+    skill = _seed_skill(db_session, leader, key="polisher", versions=["V1 指令", "V2 指令"])
     calls: list = []
     _install_fake_api(monkeypatch, calls)
     ai_calls: list = []
@@ -578,6 +578,17 @@ def test_skill_node_uses_pinned_version_instructions(db_session, settings, monke
     assert ai_calls[0]["project_id"] == project.id
     assert ai_calls[0]["execution_id"].startswith("wfnode-")
     assert nodes["ship"].input_snapshot == {"note": "润色结果"}
+    # V3 T-S2：pinned 版本完成一次确定性调用即消费——workflow 面计数钉 v1（不是 current v2）
+    usage = db_session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "skill_definition",
+            OperationEvent.target_id == skill.id,
+            OperationEvent.event_type == "skill_used_workflow",
+        )
+    ).all()
+    assert len(usage) == 1
+    assert usage[0].actor_user_id == leader.id
+    assert usage[0].changes == {"surface": "workflow", "version": 1}
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +599,7 @@ def test_skill_node_uses_pinned_version_instructions(db_session, settings, monke
 def test_node_failure_retries_then_succeeds(db_session, settings, monkeypatch):
     leader = make_user(db_session, "project_lead")
     project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
-    _seed_skill(db_session, leader, key="flaky", versions=["指令"])
+    skill = _seed_skill(db_session, leader, key="flaky", versions=["指令"])
     _install_fake_api(monkeypatch, [])
     ai_calls: list = []
     _install_fake_ai(monkeypatch, ai_calls, fail_times=2)
@@ -614,6 +625,15 @@ def test_node_failure_retries_then_succeeds(db_session, settings, monkeypatch):
     nodes = _node_map(db_session, run.id)
     assert nodes["draft"].attempt == 3 and nodes["draft"].status == "succeeded"
     assert len(ai_calls) == 3
+    # V3 T-S2：失败 attempt 不计消费——3 次 AI 调用只有成功那次落 1 条 skill_used_workflow
+    usage = db_session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "skill_definition",
+            OperationEvent.target_id == skill.id,
+            OperationEvent.event_type == "skill_used_workflow",
+        )
+    ).all()
+    assert len(usage) == 1 and usage[0].changes == {"surface": "workflow", "version": 1}
 
 
 def test_retries_exhausted_run_failed_and_resume_reuses_outputs(

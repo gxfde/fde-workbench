@@ -22,8 +22,12 @@ from conftest import INITIAL_PASSWORD as PASSWORD
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
+from fde_api.control.extensions_service import record_skill_usage
 from fde_api.control.mcp_gateway import _skills as mcp_skills
+from fde_api.control.mcp_gateway import call_tool
 from fde_api.control.models import SkillDefinition, UserAIAccessGrant
+from fde_api.control.service import ControlServiceError
+from fde_api.workbench.models import OperationEvent
 from fde_api.workflows.definition_service import published_skill_refs
 
 from test_gates_api import AuthorizedClient
@@ -347,3 +351,146 @@ def test_skill_definitions_constraint_accepts_governance_states(db_session):
         select(SkillDefinition).where(SkillDefinition.namespace_key == "lifecycle-test")
     ).all()
     assert {row.status for row in rows} == {"draft", "in_review", "published", "deprecated"}
+
+
+# ---------------------------------------------------------------------------
+# V3 T-S2：治理留痕 + 消费效果统计（operation_events 直落，control 层 _event 同构）
+# ---------------------------------------------------------------------------
+
+
+def _skill_events(db_session, skill_id: str, event_type: str) -> list[OperationEvent]:
+    return list(
+        db_session.scalars(
+            select(OperationEvent).where(
+                OperationEvent.target_type == "skill_definition",
+                OperationEvent.target_id == skill_id,
+                OperationEvent.event_type == event_type,
+            )
+        )
+    )
+
+
+def test_lifecycle_actions_leave_operation_events(db_session, operator):
+    """T-S1 审计缺口收口（gap-matrix 域 8「回滚留 operation_events」）：
+    submit/publish/rollback/deprecate 各落一条事件；密码/材料闸失败不留发布事件。"""
+    key = f"audit-{uuid4().hex[:8]}"
+    data = _save_public(operator, key=key)
+    skill_id = data["id"]
+
+    assert (
+        operator.post(f"/api/v1/extensions/skills/{skill_id}/submit-review", json={}).status_code
+        == 200
+    )
+    submitted = _skill_events(db_session, skill_id, "skill_review_submitted")
+    assert len(submitted) == 1 and submitted[0].changes == {"version": 1}
+    assert submitted[0].actor_user_id == operator.user.id
+    assert submitted[0].project_id is None  # Skill 不挂项目（全局面）
+
+    # in_review 后密码闸先于材料闸：错密码 403 且不留发布事件
+    wrong = operator.post(
+        f"/api/v1/extensions/skills/{skill_id}/publish",
+        json={"password": "wrong-password", "waive_reason": "x"},
+    )
+    assert wrong.status_code == 403
+    assert _skill_events(db_session, skill_id, "skill_published") == []
+
+    assert _publish(operator, skill_id).status_code == 200
+    published = _skill_events(db_session, skill_id, "skill_published")
+    assert len(published) == 1
+    assert published[0].changes["version"] == 1
+    assert "治理测试豁免" in published[0].changes["waive_reason"]
+
+    # 编辑出 v2 并发布，回滚到 v1：from/to 留痕（回滚决策可审计）
+    edited = operator.post(
+        "/api/v1/extensions/skills/public",
+        json=_skill_payload(key=key, instructions="第二版指令。"),
+    )
+    assert edited.status_code == 201
+    assert _publish(operator, skill_id).status_code == 200
+    rolled = operator.post(
+        f"/api/v1/extensions/skills/{skill_id}/rollback",
+        json={"version": 1, "password": PASSWORD, "waive_reason": "回滚到 v1 复核"},
+    )
+    assert rolled.status_code == 200
+    rollback_events = _skill_events(db_session, skill_id, "skill_rolled_back")
+    assert len(rollback_events) == 1
+    assert rollback_events[0].changes == {
+        "from_version": 2,
+        "to_version": 1,
+        "waive_reason": "回滚到 v1 复核",
+    }
+
+    assert operator.post(f"/api/v1/extensions/skills/{skill_id}/deprecate", json={}).status_code == 200
+    deprecated = _skill_events(db_session, skill_id, "skill_deprecated")
+    assert len(deprecated) == 1 and deprecated[0].changes == {"version": 1}
+
+
+def test_chat_skill_read_records_usage_and_survives_rollback(db_session, operator):
+    """MCP skill_read 即消费：独立微事务计数——直连 AI 工具循环每轮回滚共享会话也不丢。"""
+    data = _save_public(operator)
+    assert _publish(operator, data["id"]).status_code == 200
+    _fresh(db_session)
+
+    value = call_tool(db_session, user=operator.user, claims={}, allowed=set(),
+                      name="skill_read", arguments={"skill_id": data["id"]})
+    assert value["version"] == 1
+    db_session.rollback()  # 直连工具循环每轮 tool 后就这么做（ai_tool_loop._run_tools 语义）
+
+    events = _skill_events(db_session, data["id"], "skill_used_chat")
+    assert len(events) == 1
+    assert events[0].actor_user_id == operator.user.id
+    assert events[0].changes == {"surface": "chat", "version": 1}
+
+    # 未知技能：404 且不计数
+    with pytest.raises(ControlServiceError) as excinfo:
+        call_tool(db_session, user=operator.user, claims={}, allowed=set(),
+                  name="skill_read", arguments={"skill_id": f"missing-{uuid4().hex[:6]}"})
+    assert excinfo.value.status == 404
+    db_session.rollback()
+    assert len(_skill_events(db_session, data["id"], "skill_used_chat")) == 1
+
+
+def test_versions_report_usage_summary(db_session, operator):
+    """版本视图带 usage 汇总：分面/按版本/最近使用时间；治理事件不算消费。"""
+    data = _save_public(operator)
+    assert _publish(operator, data["id"]).status_code == 200
+
+    usage = operator.get(
+        f"/api/v1/extensions/skills/{data['id']}/versions"
+    ).get_json()["data"]["usage"]
+    assert usage == {"total": 0, "chat": 0, "workflow": 0, "last_used_at": None,
+                     "by_version": {}, "truncated": False}
+
+    # 编辑出 v2 并发布；消费：chat×2@v1 + workflow×1@v2（submit/publish 治理事件不进 usage）
+    edited = operator.post(
+        "/api/v1/extensions/skills/public",
+        json=_skill_payload(key=data["key"], instructions="第二版指令。"),
+    )
+    assert edited.status_code == 201
+    assert _publish(operator, data["id"]).status_code == 200
+    record_skill_usage(actor_id=operator.user.id, skill_id=data["id"], surface="chat", version=1)
+    record_skill_usage(actor_id=operator.user.id, skill_id=data["id"], surface="chat", version=1)
+    record_skill_usage(actor_id=operator.user.id, skill_id=data["id"], surface="workflow", version=2)
+
+    usage = operator.get(
+        f"/api/v1/extensions/skills/{data['id']}/versions"
+    ).get_json()["data"]["usage"]
+    assert usage["total"] == 3 and usage["chat"] == 2 and usage["workflow"] == 1
+    assert usage["by_version"] == {"1": 2, "2": 1}
+    assert usage["last_used_at"] is not None and usage["truncated"] is False
+
+
+def test_usage_summary_marks_truncation_honestly(db_session, operator, monkeypatch):
+    """有界扫描窗口触顶：total=窗口内计数 + truncated=true（诚实呈现不冒充全量）。"""
+    from fde_api.control import extensions_service
+
+    data = _save_public(operator)
+    assert _publish(operator, data["id"]).status_code == 200
+    monkeypatch.setattr(extensions_service, "_SKILL_USAGE_EVENT_LIMIT", 2)
+    for _ in range(3):
+        record_skill_usage(actor_id=operator.user.id, skill_id=data["id"],
+                           surface="chat", version=1)
+    usage = operator.get(
+        f"/api/v1/extensions/skills/{data['id']}/versions"
+    ).get_json()["data"]["usage"]
+    assert usage["total"] == 2 and usage["chat"] == 2 and usage["truncated"] is True
