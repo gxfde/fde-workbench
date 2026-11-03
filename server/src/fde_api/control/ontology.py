@@ -3,6 +3,10 @@
 IDs identify entities; names only help resolve them. Relations below describe
 the existing model, including AI opportunities being typed research subjects.
 Skills compose operations against this contract; authorization stays in APIs.
+
+V3 T-O1（2026-11-03）：本 dict 仍是只读业务语义投影；项目内**术语/别名治理**
+已落一等表 `fde_api/ontology/`（ontology_terms/aliases，见该模块与设计
+ontology-registry-v1 §2.2），MCP ontology_read 契约不变，本文件不接管其数据。
 """
 
 ONTOLOGY = {

@@ -327,6 +327,7 @@ MODEL_MODULES = [
     "fde_api.jobs.models",
     "fde_api.mailing.models",
     "fde_api.meetings.models",
+    "fde_api.ontology.models",
     "fde_api.research.models",
     "fde_api.solutions.models",
     "fde_api.system_configuration",

@@ -63,12 +63,19 @@
   - **零迁移零路由零 DDL**：evidence_uri/evidence_hash 是 ProjectTask 既有列；登记路径仍不进 api_catalog（AI 不可写证据纪律不变——桥侧是服务端内部调用不经 HTTP）。
   - mypy 花絮：新调用点引用 `project.id` 触发 `_load_project` 的 `Project|None` 标注新增 2 处 union-attr——直接改用路径参数 `project_id`（同值），不扩基线。
 
-### T-O1 术语表 ontology_terms(+aliases) + 迁移（域 2）
+### T-O1 术语表 ontology_terms(+aliases) + 迁移（域 2）— **DONE（2026-11-03）**
 - 目标：项目内术语/别名治理；根治导入同名重复（附录 D ⑨）。
 - 前置：T-E1（change_sets 引用证据可选）。修改文件：NEW `server/src/fde_api/ontology/{__init__,models}.py`。
 - DB：ontology_terms、ontology_term_aliases（ontology-registry-v1.md §2.2）。
 - 测试：NEW `server/tests/test_ontology_registry.py`（术语部分：唯一约束/confirmed 不可变/合并保留来源）。
 - 验收：§5 用例 1-4。回滚：downgrade。风险：低。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **文件清单纠偏**：backlog 只列 models.py，但「confirmed 不可变 / 合并保留来源」两条测试验收需要生命周期逻辑 → 加 NEW `ontology/service.py`（设计 §3 本就规划 ontology/{models,service,routes} 三件）；测试落 `test_ontology_registry.py` **7 例**（生命周期+不可变 / 入参归一 / 唯一+别名占用 / 合并保留来源链 / 别名 DB 唯一 / CHECK 拒非法态 / api_catalog 钉子）+ `test_migrations.py` 迁移往返 **1 例**（head 上自引用外键落 canonical/merged 对）。
+  - **零路由（T-W1 先例）**：设计 §4 术语公开面只有只读 GET；写路径一律 change_sets propose→confirm（AI 候选永不直接写表）→ 术语 REST 面（GET terms + change-set 三条）随 T-O3 routes.py 一并开；本轮 service.py 是 confirm 事务的**物化原语**（create_term 支持 `initial_status="confirmed"` 直落，T-S1 种子先例）。用例 1（confirm 前不物化）与用例 2（跨项目 403）的 HTTP 面随 T-O3 补齐——本轮验收实盖用例 3/4 + 两用例的服务层等价面（draft→confirm 两段式、查询恒按 project_id 过滤）。
+  - **合并保留来源语义落定**：source→merged 指向 target；target 转写获得 source 规范名为别名（`_ensure_alias` 排除 source 自身——其名字即将让位，否则永远撞不上）；source 既有别名**不动**（别名→merged→canonical 链解析，不可变优先）；**链一跳化**：曾并入 source 的 merged 行重指 target（依赖行 version 递增），不存在 merged→merged→…链；逐项 OperationEvent `ontology_term_merged`（merged_term/canonical_term_id/canonical_term/alias_added/repointed），事件目标注册表 +`ontology_term`（projects/events.py 三处）。
+  - **事件口径**：merge 必记事件（用例 4 逐项记录）；create/confirm 原语**事件静默**——T-O3 change-set confirm 事件统一「携带逐项结果」，原语再记就是双写噪声（实施偏差，回写备 T-O3 设计时裁决）。
+  - **一个名字一个概念**：create_term 预检**别名占用先于同名检查**（合并后名字既存 merged 行又存别名，「已并入 X」比「已存在」更有用）；merged 行名占位是设计语义（UNIQUE(project, term) 绝对 + 不可变历史）；DB 层 CHECK 拒 merged 无指向 / 非法 term_type / 非法 status。
+  - **口径**：**101→103 表**、迁移头 `a3e7c1f9b5d2`（**28 rev**）、路由 283 不变、ENTRIES 94 不变、pytest **1790 收集 = 1784 passed + 6 skipped**（+8）；**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。花絮①：本地全量误带 `-p no:warnings` 使 SAWarning 泄入 CLI 捕获输出、`test_workbench_seed`「只打印计数」假红——canonical 调用（无该 flag）单文件复跑 10 绿，权威计数以 pre-commit 钩子全量为准。花絮②：`session.execute(update(...)).rowcount` 触发 mypy `Result[Any]` attr-defined——改 ORM 逐行重指，顺带把依赖行 version 递增补齐（语义更对）。
 
 ### T-O2 关系/对象类型注册 ontology_relation_types + 接入
 - 目标：subject_type 与 link_type 可注册（不动存量 CheckConstraint，服务层 ∪ 语义）。

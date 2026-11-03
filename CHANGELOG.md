@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O1：术语表 ontology_terms+aliases（同项目一个名字一个概念，2026-11-03）
+
+### 服务端（1 个迁移（两张新表，唯一 DDL）/ 零路由 / 零桌面改动）
+
+- **唯一性底座**：`ontology_terms`（UNIQUE(project, term)+状态机 draft/confirmed/superseded/merged+merged 必须指向保留行的 CHECK+乐观锁 version）与 `ontology_term_aliases`（UNIQUE(project, alias)，冗余 project_id 供导入去重点查）——同项目一个名字至多指向一个概念，是「导入同名重复」（审计附录 D ⑨）的根治面。迁移 **`a3e7c1f9b5d2`**（28 rev，additive，含 downgrade）。
+- **服务原语**：`ontology/service.py` 的 `create_term`（别名占用先于同名预检；`initial_status="confirmed"` 直落供变更集 confirm 用）/ `confirm_term`（draft→confirmed 拍板；confirmed 409 `term_immutable` 不可原地改——服务层无 definition 编辑路径，修订走 change_set 新版本）/ `merge_terms`（合并保留来源：source 规范名转写为保留行别名、source 既有别名不动走 canonical 链、**链一跳化**重指、逐项 OperationEvent `ontology_term_merged`）。
+- **零路由（T-W1 先例）**：术语公开面只有只读 GET；写路径一律经 change_sets propose→confirm（AI 候选永不直接写表）——REST 面随 T-O3 routes.py 开；治理面不进 api_catalog（钉子测试）。事件目标注册表 +`ontology_term`。
+- **测试**：NEW `test_ontology_registry.py` **7 例**（生命周期+confirmed 不可变 / 入参归一 / 同名+别名占用唯一 / 合并保留来源链+409 族 / 别名 DB 唯一 / CHECK 拒非法态 / api_catalog 钉子）+ `test_migrations.py` 迁移往返 **1 例**（自引用外键落 canonical/merged 对）；`HEAD_REVISION` → `a3e7c1f9b5d2`。
+- **口径**：业务表 **101→103**（+ontology_terms/+ontology_term_aliases）/ 迁移头 **`a3e7c1f9b5d2`（28 revision，+1）** / 路由 **283 不变** / api_catalog ENTRIES **94 不变** / pytest **1790 收集 = 1784 passed + 6 skipped**（+8） / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（两张新表；**api/worker/scheduler 三个镜像都要 build**）。
+
 ## [未发布] — V3 实施 T-E3：bridge/任务证据统一入口（双通道落一等证据行，2026-11-03）
 
 ### 服务端（零迁移零路由零 DDL / task_service + bridge/sync 两处写入点挂接 / 零桌面改动）

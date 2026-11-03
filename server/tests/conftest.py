@@ -350,6 +350,10 @@ def db_session(app) -> Session:
         TemplateResearchForm,
         # V3 T-E1：一等证据引用 projects（CASCADE）/users（SET NULL），显式先清
         __import__("fde_api.evidence.models", fromlist=["ProjectEvidence"]).ProjectEvidence,
+        # V3 T-O1：别名引用 terms（CASCADE），terms 引用 projects/users + 自引用
+        # canonical（SET NULL），均先于 projects/users 清理
+        __import__("fde_api.ontology.models", fromlist=["OntologyTermAlias"]).OntologyTermAlias,
+        __import__("fde_api.ontology.models", fromlist=["OntologyTerm"]).OntologyTerm,
         # V3 T-W2：node_runs 引用 runs（CASCADE），runs 引用 definitions（RESTRICT，
         # 故必须先于 definitions 清理）与 projects/users
         __import__("fde_api.workflows.models", fromlist=["WorkflowNodeRun"]).WorkflowNodeRun,

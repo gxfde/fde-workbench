@@ -1,10 +1,10 @@
 {
  "route_count": 283,
  "blueprint_count": 35,
- "table_count": 101,
- "revision_count": 27,
+ "table_count": 103,
+ "revision_count": 28,
  "heads": [
-  "c1e5f9a3d7b2"
+  "a3e7c1f9b5d2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -18,6 +18,15 @@
    "add_column_tables": [
     "project_guidance_analyses"
    ]
+  },
+  "a3e7c1f9b5d2": {
+   "file": "a3e7c1f9b5d2_v3_ontology_terms.py",
+   "down_revision": "c1e5f9a3d7b2",
+   "create_tables": [
+    "ontology_terms",
+    "ontology_term_aliases"
+   ],
+   "add_column_tables": []
   },
   "a7b4d9e2c6f1": {
    "file": "a7b4d9e2c6f1_o3_seat_quota.py",

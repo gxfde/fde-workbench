@@ -44,7 +44,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-W2：workflow_runs + workflow_node_runs 两表（run 固定版本 + 幂等键）
 # V3 T-W4：automation_approvals 审批复用——run_id 放开可空 + workflow_node_run_id 反链
 # V3 T-S1：skill 治理态——status 换 draft/in_review/published/deprecated + 版本契约/审核列
-HEAD_REVISION = "c1e5f9a3d7b2"
+# V3 T-O1：ontology_terms + ontology_term_aliases 两表（术语/别名治理底座）
+HEAD_REVISION = "a3e7c1f9b5d2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -639,3 +640,69 @@ def test_v3_workflow_runs_tables_roundtrip_preserves_projects(alembic_config, en
     assert {"workflow_definitions", "workflow_definition_versions"} <= table_names(engine)
 
     command.upgrade(alembic_config, "head")
+
+
+def test_v3_ontology_tables_roundtrip_preserves_projects(alembic_config, engine):
+    """V3 T-O1：术语两表增量——downgrade 别名表先行消失、upgrade 回 head 重建；
+    两向都不碰 projects 行；head 上自引用外键可用（merged 行指向保留行）。"""
+    command.downgrade(alembic_config, "c1e5f9a3d7b2")
+    assert not {"ontology_terms", "ontology_term_aliases"} & table_names(engine)
+    ids = seed_user_and_template(engine, username="migration.v3-term-keep")
+    project_id, sop_node_id = seed_project(engine, ids, project_code="FDE-V3-TERM-KEEP")
+
+    command.upgrade(alembic_config, "head")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-TERM-KEEP'",
+        )
+        == "FDE-V3-TERM-KEEP"
+    )
+    assert {"ontology_terms", "ontology_term_aliases"} <= table_names(engine)
+
+    # head 上落一对 canonical/merged 行：自引用外键 + merged 必须指向保留行
+    kept_id, merged_id = str(uuid4()), str(uuid4())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ontology_terms "
+                "(id, project_id, term, term_type, definition, status, created_at, updated_at) "
+                "VALUES (:kept, :project_id, '交付包', 'entity', "
+                "'一次交付的物量集合。', 'confirmed', now(), now())"
+            ),
+            {"kept": kept_id, "project_id": project_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ontology_terms "
+                "(id, project_id, term, term_type, definition, status, canonical_term_id, created_at, updated_at) "
+                "VALUES (:merged, :project_id, '交付物量', 'entity', "
+                "'同「交付包」。', 'merged', :kept, now(), now())"
+            ),
+            {"merged": merged_id, "project_id": project_id, "kept": kept_id},
+        )
+    assert (
+        scalar(
+            engine,
+            "SELECT canonical_term_id FROM ontology_terms WHERE id = :id",
+            {"id": merged_id},
+        )
+        == kept_id
+    )
+
+    command.downgrade(alembic_config, "c1e5f9a3d7b2")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-TERM-KEEP'",
+        )
+        == "FDE-V3-TERM-KEEP"
+    )
+    assert not {"ontology_terms", "ontology_term_aliases"} & table_names(engine)
+
+    command.upgrade(alembic_config, "head")
+    cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
+    # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
+    seed_reference_data(engine.url.render_as_string(hide_password=False))

@@ -1,6 +1,6 @@
 # Ontology Registry v1 设计（P0）
 
-> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；terms / relation_types / change_sets 仍 PROPOSED。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
+> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；relation_types / change_sets 仍 PROPOSED。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
 > 原则：不建平行实体体系。实体=既有 `project_research_subjects`；本设计只补 WB 完全缺失的三件：**术语治理、关系类型注册、变更集审核**，外加一等证据表（evidence，域 3 共享底座）。
 
 ## 1. 决策依据（对照任务书"决策 1/2"）
@@ -49,7 +49,7 @@
 
 迁移策略：新表 + gates.evidence_checklist 项加可空 `evidence_id`（读时合并，旧行不受影响）。
 
-### 2.2 `ontology_terms`
+### 2.2 `ontology_terms`+aliases — **IMPLEMENTED（T-O1，2026-11-03，迁移 `a3e7c1f9b5d2`）**
 
 | 列 | 类型 | 说明 |
 |---|---|---|
