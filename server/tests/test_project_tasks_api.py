@@ -9,6 +9,7 @@ from sqlalchemy import event, func, select
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
+from fde_api.evidence.models import ProjectEvidence
 from fde_api.workbench.models import (
     IndustryTemplate,
     IndustryTemplateVersion,
@@ -1101,3 +1102,83 @@ def test_manual_task_accepts_planned_start_date(
     )
     assert weekend.status_code == 201, weekend.get_data(as_text=True)
     assert weekend.json["data"]["planned_start_date"] == "2026-08-24"
+
+
+def test_task_evidence_pointer_syncs_unified_evidence_registry(
+    admin_client, leader_client, published_template, db_session
+):
+    """V3 T-E3：任务证据出处指针 + sha256 指纹齐备时，同步登记一等证据行
+    （kind=task / captured_from=human / origin=task:<task_key>）；同指纹幂等不增行，
+    只挂指针不落指纹不登记，清空指针不动登记簿（证据不可变）。"""
+    project = create_project(
+        admin_client, published_template, leader_client.user, code="TASK-EVID"
+    )
+    first_module = next(m for m in project["modules"] if m["module_key"] == "pre_diagnosis")
+
+    def evidence_rows() -> list:
+        db_session.rollback()
+        return list(
+            db_session.scalars(
+                select(ProjectEvidence).order_by(ProjectEvidence.created_at, ProjectEvidence.id)
+            )
+        )
+
+    # 建任务即登记（大写 hash 归一为小写——与一等表 sha256 口径一致）
+    created = admin_client.post(
+        f"/api/v1/projects/{project['id']}/modules/{first_module['module_key']}/tasks",
+        json={
+            "name": "带证据的交付任务",
+            "duration_days": 2,
+            "evidence_uri": "file://fdeops/somwyn/.fde/gates/G5/case.pdf",
+            "evidence_hash": "A" * 64,
+        },
+    )
+    assert created.status_code == 201, created.get_data(as_text=True)
+    task = created.json["data"]
+    rows = evidence_rows()
+    assert len(rows) == 1
+    assert rows[0].project_id == project["id"]
+    assert rows[0].kind == "task"
+    assert rows[0].source_uri == "file://fdeops/somwyn/.fde/gates/G5/case.pdf"
+    assert rows[0].content_sha256 == "a" * 64
+    assert rows[0].captured_from == "human"
+    assert rows[0].origin == f"task:{task['task_key']}"
+    assert rows[0].created_by_user_id == admin_client.user.id
+
+    # 同指纹重复提交（顺带改别的字段）→ 幂等不增行
+    repatched = patch_task(
+        admin_client, project["id"], task["id"], task["version"], progress=50,
+        evidence_uri="file://fdeops/somwyn/.fde/gates/G5/case.pdf", evidence_hash="a" * 64,
+    )
+    assert repatched.status_code == 200, repatched.get_data(as_text=True)
+    assert len(evidence_rows()) == 1
+
+    # 指纹变化（内容更新）→ 新指纹新行，不可变采集史
+    task_v2 = repatched.json["data"]
+    updated = patch_task(
+        admin_client, project["id"], task["id"], task_v2["version"],
+        evidence_uri="file://fdeops/somwyn/.fde/gates/G5/case-v2.pdf",
+        evidence_hash="b" * 64,
+    )
+    assert updated.status_code == 200, updated.get_data(as_text=True)
+    rows = evidence_rows()
+    assert len(rows) == 2
+    assert {row.content_sha256 for row in rows} == {"a" * 64, "b" * 64}
+
+    # 清空指针 → 登记簿不动（不可变），任务字段归空
+    task_v3 = updated.json["data"]
+    cleared = patch_task(
+        admin_client, project["id"], task["id"], task_v3["version"],
+        evidence_uri=None, evidence_hash=None,
+    )
+    assert cleared.status_code == 200, cleared.get_data(as_text=True)
+    assert cleared.json["data"]["evidence_uri"] is None
+    assert len(evidence_rows()) == 2
+
+    # 只挂指针不落指纹 → 不构成指纹，不登记
+    pointer_only = admin_client.post(
+        f"/api/v1/projects/{project['id']}/modules/{first_module['module_key']}/tasks",
+        json={"name": "只有指针", "duration_days": 1, "evidence_uri": "file://fdeops/x.pdf"},
+    )
+    assert pointer_only.status_code == 201, pointer_only.get_data(as_text=True)
+    assert len(evidence_rows()) == 2

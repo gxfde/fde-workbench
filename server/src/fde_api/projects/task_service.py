@@ -447,6 +447,17 @@ def update_project_task(
                 )
                 if rescheduled_task_ids:
                     event_changes["rescheduled_task_ids"] = rescheduled_task_ids
+            # V3 T-E3：证据字段变更且指针+指纹齐备 → 一等证据行（幂等）。放在乐观锁
+            # rowcount 校验之后——stale 版本不产生任何证据副作用。project_id 直接用
+            # 路径参数（与 project.id 同值，绕开 _load_project 的 Project|None 标注）。
+            _sync_task_evidence(
+                session,
+                project_id=project_id,
+                actor=actor,
+                task_key=task.task_key,
+                evidence_uri=scalar_values.get("evidence_uri"),
+                evidence_hash=scalar_values.get("evidence_hash"),
+            )
             record_event(
                 session,
                 actor,
@@ -584,6 +595,16 @@ def create_project_task(
                     )
                     for predecessor_id in dependency_ids
                 )
+            # V3 T-E3：证据出处指针 + 指纹齐备 → 一等证据行（幂等，同事务）；
+            # project_id 直接用路径参数（与 project.id 同值，绕开 None 标注）。
+            _sync_task_evidence(
+                session,
+                project_id=project_id,
+                actor=actor,
+                task_key=task.task_key,
+                evidence_uri=values["evidence_uri"],
+                evidence_hash=values["evidence_hash"],
+            )
             if module.planned_start_date is None or start < module.planned_start_date:
                 module.planned_start_date = start
             if module.planned_end_date is None or end > module.planned_end_date:
@@ -748,6 +769,37 @@ def _sop_evidence_values(source: Mapping[str, Any]) -> dict[str, str | None]:
     ):
         raise _invalid_request_error()
     return values
+
+
+def _sync_task_evidence(
+    session: Session,
+    *,
+    project_id: str,
+    actor: User,
+    task_key: str,
+    evidence_uri: str | None,
+    evidence_hash: str | None,
+) -> None:
+    """V3 T-E3：任务证据出处指针 + sha256 指纹齐备时，同步登记为一等证据行
+    （kind=task，captured_from=human，origin 记任务出处粒度）。同指纹幂等不重复
+    （evidence/service.py）；只挂指针不落指纹不构成指纹，不登记。入参已经
+    _sop_evidence_values 归一化（uri ≤500、hash 64 位十六进制），满足一等表约束。"""
+    if not evidence_uri or not evidence_hash:
+        return
+    # 延迟导入：evidence.service 依赖 projects.events/permissions，模块级互导会成
+    # projects⇄evidence 环（沿 gate_service T-E2 的先例）
+    from fde_api.evidence.service import upsert_evidence
+
+    upsert_evidence(
+        session,
+        project_id=project_id,
+        kind="task",
+        source_uri=evidence_uri,
+        content_sha256=evidence_hash.lower(),
+        origin=f"task:{task_key}",
+        captured_from="human",
+        created_by_user_id=actor.id,
+    )
 
 
 def _normalized_scalar_values(

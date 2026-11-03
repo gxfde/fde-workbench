@@ -51,10 +51,17 @@
 - 验收/回滚/风险：如 T-E1。复杂度：**S**。
 - **实施记录**：`submit_gate_evidence` 每项 `upsert_evidence(kind=gate, origin=gate:Gx/<label>, captured_from=human)` 后清单项挂 `evidence_id`，事件 items 携 evidence_id；`_serialize_gate` 读时合并（历史清单项 null）；零 DDL。同指纹二次提交 id 不变、行数不增（用例钉住）。`gates_read` AI 只读摘要**未**暴露 evidence_id（契约不动）。
 
-### T-E3 bridge/任务证据统一入口
+### T-E3 bridge/任务证据统一入口 — **DONE（2026-11-03）**
 - 目标：ProjectTask.evidence_uri、bridge 投影可选写 evidence 行（captured_from 标来源）。
 - 前置：T-E1。修改文件：`projects/task_service.py`、`bridge/sync.py`。
 - 测试：test_file_previews/test_bridge_sync_flags 扩展。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **测试文件纠偏**：设计提示的 test_file_previews 与任务证据无关（文件预览域）——任务侧用例落 `test_project_tasks_api.py`（+1，建/幂等/换指纹/清空/只指针 五段），桥侧落 `test_bridge_sync_flags.py`（+1，挂接登记/未挂跳过/坏指纹跳过/重放幂等）。
+  - **任务侧写入点两处**：`create_project_task`（依赖块后，同事务）与 `update_project_task`（乐观锁 rowcount 校验**之后**、record_event 之前——stale 版本零证据副作用）；统一走新私有助手 `_sync_task_evidence`：双字段齐备才登记（只挂指针不落指纹不构成指纹），kind=task、captured_from=human、origin=`task:<task_key>`、hash 归一小写；幂等沿用 upsert_evidence。**清空指针不删登记簿**（证据不可变，一等表语义优先于任务字段）。
+  - **桥侧挂在投影事务内**（apply_snapshot 步骤①，advisory lock 保护下）：只对**已挂接** workbench 项目的 slug 写（openfde_engagement / fdeops_workspace 反查）；openfde 逐 slug 按 stdout_sha256、fdeops 按工作区级 registry_sha256（注册表口径=一次扫描一个指纹）；captured_from=`bridge_sync:{run_id}`、created_by=NULL（机器通道）；kind=bridge。指纹不齐整（缺 hash / uri 空·越界）**跳过不炸**——投影是 4h 关键路径，证据永远是锦上添花；DB 级故障不上吞，随投影一起落 failed run（与既有 all-or-nothing 一致）。`summary` 增 `evidence_created` 计数。
+  - **契约不动**：任务 DTO 与 engagement_view 均不暴露 evidence_id（沿 T-E2 gates_read 先例）；零新事件——任务侧既有 event_changes 已含 evidence 字段变更，桥侧无 actor（OperationEvent 需真人），summary+登记簿即审计轨迹。
+  - **零迁移零路由零 DDL**：evidence_uri/evidence_hash 是 ProjectTask 既有列；登记路径仍不进 api_catalog（AI 不可写证据纪律不变——桥侧是服务端内部调用不经 HTTP）。
+  - mypy 花絮：新调用点引用 `project.id` 触发 `_load_project` 的 `Project|None` 标注新增 2 处 union-attr——直接改用路径参数 `project_id`（同值），不扩基线。
 
 ### T-O1 术语表 ontology_terms(+aliases) + 迁移（域 2）
 - 目标：项目内术语/别名治理；根治导入同名重复（附录 D ⑨）。

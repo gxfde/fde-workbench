@@ -12,6 +12,7 @@ orphan 语义：
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -77,6 +78,86 @@ def _last_successful_payload(session) -> tuple[str | None, dict[str, Any] | None
     return run.id, run.payload
 
 
+_HEX64_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
+
+
+def _valid_fingerprint(uri: object, sha: object) -> tuple[str, str] | None:
+    """一等证据表的指纹门槛（uri 1–500 + sha256 64 位十六进制）；不齐整跳过。"""
+    if not isinstance(uri, str) or not 0 < len(uri.strip()) <= 500:
+        return None
+    if not isinstance(sha, str) or not _HEX64_PATTERN.fullmatch(sha):
+        return None
+    return uri.strip(), sha.lower()
+
+
+def _sync_bridge_evidence(session, *, run: BridgeSyncRun, payload: dict[str, Any]) -> int:
+    """V3 T-E3：桥接投影可选落一等证据行（kind=bridge，captured_from=bridge_sync:{run_id}）。
+
+    只对已挂接 workbench 项目的 slug 写（openfde 按 openfde_engagement、fdeops 按
+    fdeops_workspace 反查）；指纹不齐整（缺 sha256 / uri 越界）跳过——投影是 4h
+    关键路径，证据永远是锦上添花，不构成失败。同指纹幂等（内容不变不增行）；
+    内容变化 = 新指纹 = 新行（不可变采集史）。DB 级故障不上吞：随投影一起落
+    failed run（与既有 all-or-nothing 一致）。返回本次新建行数（进 run.summary）。"""
+    # 延迟导入：与 gate_service/task_service 同纪律，避免模块级互导成环
+    from fde_api.evidence.service import upsert_evidence
+
+    openfde = payload.get("openfde") or {}
+    fdeops = payload.get("fdeops") or {}
+    openfde_links: dict[str, list[str]] = {}
+    fdeops_links: dict[str, list[str]] = {}
+    for project in session.scalars(select(Project)).all():
+        if project.openfde_engagement:
+            openfde_links.setdefault(project.openfde_engagement, []).append(project.id)
+        if project.fdeops_workspace:
+            fdeops_links.setdefault(project.fdeops_workspace, []).append(project.id)
+
+    # 候选 = (project_id, source_uri, sha256, origin)
+    candidates: list[tuple[str, str, str, str]] = []
+    for entry in openfde.get("engagements") or []:
+        if not isinstance(entry, dict) or entry.get("ok") is not True:
+            continue
+        slug = entry.get("slug")
+        targets = openfde_links.get(slug) if isinstance(slug, str) else None
+        if not targets:
+            continue
+        fingerprint = _valid_fingerprint(
+            entry.get("source_uri") or f"cli://openfde/status?engagement={slug}",
+            entry.get("stdout_sha256"),
+        )
+        if fingerprint is None:
+            continue
+        uri, sha = fingerprint
+        candidates.extend(
+            (project_id, uri, sha, f"bridge:openfde/{slug}") for project_id in targets
+        )
+
+    # fdeops 轨是工作区级注册表：一个 registry_sha256 对全部存活目录
+    registry_fingerprint = _valid_fingerprint(
+        fdeops.get("source_uri") or "file://fdeops", fdeops.get("registry_sha256")
+    )
+    if registry_fingerprint is not None:
+        uri, sha = registry_fingerprint
+        for slug, targets in fdeops_links.items():
+            candidates.extend(
+                (project_id, uri, sha, f"bridge:fdeops/{slug}") for project_id in targets
+            )
+
+    created = 0
+    for project_id, uri, sha, origin in candidates:
+        _, was_created = upsert_evidence(
+            session,
+            project_id=project_id,
+            kind="bridge",
+            source_uri=uri,
+            content_sha256=sha,
+            origin=origin,
+            captured_from=f"bridge_sync:{run.id}",
+            created_by_user_id=None,
+        )
+        created += int(was_created)
+    return created
+
+
 def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
     """快照落库。注意 db.session() 是 sessionmaker 语义（每次新开），
     摘要必须等投影提交后再取视图——分三段：①upsert+提交 ②标记 run ok+提交
@@ -137,6 +218,8 @@ def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
                 row.fdeops_state = merged
 
         run.engagements_seen = len(seen_slugs)
+        # V3 T-E3：投影事务内顺带把已挂接项目的桥接采集登记为一等证据行（幂等）
+        evidence_created = _sync_bridge_evidence(session, run=run, payload=payload)
         session.commit()
     except BridgeSyncError as exc:
         session.rollback()
@@ -164,6 +247,7 @@ def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
         "vanished": sum("vanished" in e["flags"] for e in view["engagements"]),
         "unlinked": sum("unlinked" in e["flags"] for e in view["engagements"]),
         "orphan_projects": sum(1 for p in view["projects"] if p["flags"]),
+        "evidence_created": evidence_created,
     }
     finish = db.session()
     finish.get(BridgeSyncRun, run_id).summary = summary

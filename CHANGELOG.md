@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-E3：bridge/任务证据统一入口（双通道落一等证据行，2026-11-03）
+
+### 服务端（零迁移零路由零 DDL / task_service + bridge/sync 两处写入点挂接 / 零桌面改动）
+
+- **任务侧**：`evidence_uri` + `evidence_hash` 齐备时，建任务/改任务同事务同步登记一等证据行（kind=`task`、captured_from=`human`、origin=`task:<task_key>`，大写 hash 归一小写）；同指纹幂等不增行，清空指针不动登记簿（证据不可变），只挂指针不落指纹不构成指纹不登记。写入点在乐观锁 rowcount 校验之后——stale 版本零证据副作用。
+- **桥侧**：`apply_snapshot` 投影事务内把**已挂接 workbench 项目**的桥接采集登记为一等证据行（kind=`bridge`、captured_from=`bridge_sync:{run_id}` 机器通道、created_by 空）；openfde 按 engagement 指纹逐 slug、fdeops 按工作区级 registry_sha256；指纹不齐整（缺 hash / uri 越界）跳过不炸——投影是 4h 关键路径，证据不构成失败；同指纹幂等（内容不变不增行，内容变化=新指纹=不可变采集史新行）；`BridgeSyncRun.summary` 增 `evidence_created` 计数。
+- **契约不动**：任务 DTO 与 engagement_view 均不暴露 evidence_id（沿 T-E2 gates_read 先例）；零新事件（任务侧 event_changes 已含证据字段变更；桥侧无 actor，summary+登记簿即审计）；登记路径仍不进 api_catalog（AI 不可写证据纪律不变）。
+- **测试**：`test_project_tasks_api.py` +1（建/幂等/换指纹/清空/只指针 五段）+ `test_bridge_sync_flags.py` +1（挂接登记/未挂跳过/坏指纹跳过/重放幂等）。
+- **口径**：业务表 **101 不变** / 迁移头 **`c1e5f9a3d7b2`（27 revision）不变** / 路由 **283 不变** / pytest **1782 收集 = 1776 passed + 6 skipped** / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d`（**api/worker/scheduler 三镜像**；迁移头不变，无需 alembic）。
+
 ## [未发布] — V3 实施 T-S1：Skill 治理态（draft/in_review/published/deprecated + 发布四闸，2026-11-03）
 
 ### 服务端（1 个迁移（唯一 DDL）/ 5 条新路由 / extensions_service 治理化 / 零桌面改动）
