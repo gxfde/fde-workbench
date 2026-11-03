@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O4：导入别名去重（同名让位 + 合并候选 change_set，2026-11-03）
+
+### 服务端（零迁移零路由 / 桌面端契约同步）+ 桌面端（验证器/类型/测试）
+
+- **两把尺子裁决（附录 D ⑨ 导入重复根治）**：**文件内同名 = 致命行错误** `duplicate_name`（preview 报且首行干净，commit 同尺复核——文件是用户声明，歧义由人解决，不替人猜）；**文件 vs 项目既有 active 同名（同类型）= 让位**——撞名行不再静默新建合成键对象（`import_<type>_<preview>_<row>` 每行各异的旧路径），改为合并候选。归档/停用行不拦重建，跨类型同名（部门的销售部 vs 角色的销售部）是不同实体不去重。
+- **合并候选三面呈现**：①导入结果载荷新键 `merge_candidates`（name/row/description/matched_subject{id,name,tracking_code}——被让位行的说明无损保留供拍板）；②跟踪码只发真正新建的行（让位不占号，新号接既有最大值，不产生空洞）；③**全部让位 = 合法成功**（零新建 + 全量候选 + 版本照常 +1，重复导入幂等友好；收据回放完整带出候选，`idempotent_replay` 语义不变）。
+- **合并候选 → change_set 提案（T-O3 闭环的自然落地）**：候选名若无术语行/别名占用（且 ≤TERM_MAX_LENGTH=120），按首现序去重提案 `create_term`（definition=被让位行说明，超长截 120）——**draft** 变更集带 `captured_from="research_import:<preview_id>"`，经既有 submit→confirm 人工拍板坐实「同项目一个名字一个概念」；拍板拒绝无残留（让位已在导入侧完成，术语只是不登记）。**动作域不因 T-O4 开 subject 合并**（T-O3「业务对象不走 change_set 双轨」裁决仍成立；subject 合并原语牵动表单/答案/链接/跟踪码，L 级别另行立项）；候选名已有术语/别名占用时不提案（物化期 409 term_exists 的死路不走）；超 `CHANGE_SET_MAX_ITEMS`=50 截断并在 description 注明。ontology/service 新增占位检查原语 `existing_term_names`。
+- **桌面端契约同步（精确键集校验不破）**：`isResearchImportResultDto` 精确键集 +`merge_candidates`（`ResearchImportMergeCandidateDto` 类型 + 验证器 `isResearchMergeCandidateDto` + 测试 2 例）；preview 载荷零变化（`duplicate_name` 走既有 errors 通道直透，`isImportError` 只验形状）。
+- **测试**：`test_research_imports.py` **+7**（批内同名致命/让位+提案+跟踪码钉子/全让位+回放带候选/术语占用不提案/confirm 闭环落 confirmed 术语+验收分离/跨类型不去重/超长说明截断）；桌面 `project-runtime-validation.test.ts` +1。服务端 pytest **1825 收集 = 1819 passed + 6 skipped**（+7）/ vitest **731**（+1）。**零迁移**（ontology_change_sets 表 T-O3 已备）/ 零路由（293 不变）/ ENTRIES 94 不变。
+- **有界查询不变量**：commit 的同名让位扫描为**恒定 1 次**整行 select（不随行数乘法），既有 bounded-queries 测试上限 1→2（注释钉住）。
+
 ## [未发布] — V3 实施 T-O2b：对象类型值域开放（T-O2 注册表的 subject_type 真正可用于新建对象/表单/导入，2026-11-03）
 
 ### 服务端（1 个迁移（零新表：三处 CHECK 放宽 + 三列放宽）/ 零路由 / 零桌面改动）

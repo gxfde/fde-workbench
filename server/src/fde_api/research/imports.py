@@ -179,6 +179,10 @@ class ImportResult:
     subjects: tuple[dict[str, Any], ...]
     project_version: int
     idempotent_replay: bool = False
+    # V3 T-O4：与项目既有 active 同名对象撞名的行不再静默新建——让位并在
+    # 结果里留下合并候选（matched_subject 指向既有行，description 保留被让位
+    # 行的说明供人拍板）。
+    merge_candidates: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -186,6 +190,7 @@ class ImportResult:
             "imported_count": len(self.subjects),
             "project_version": self.project_version,
             "idempotent_replay": self.idempotent_replay,
+            "merge_candidates": list(self.merge_candidates),
         }
 
 
@@ -398,20 +403,52 @@ def _commit_state(
             ]
             if header_errors:
                 raise _invalid_import(header_errors)
+            if not rows:
+                raise _invalid_import(
+                    [
+                        ImportRowError(
+                            1,
+                            "名称",
+                            "empty_import",
+                            "The import contains no subject rows.",
+                        )
+                    ]
+                )
+            duplicates = _batch_duplicate_errors(rows)
+            if duplicates:
+                raise _invalid_import(duplicates)
             parents = _load_parent_candidates(
                 session, project.id, subject_type, rows
             )
-            tracking_codes = allocate_tracking_codes(
-                session, project.id, subject_type, len(rows)
+            same_name = _load_same_name_subjects(
+                session, project.id, subject_type, rows
             )
+            # V3 T-O4 同名让位：文件 vs 项目现状的撞名行不再静默新建——
+            # 让位为合并候选（matched 指向既有 active 行），文件内歧义已
+            # 由 _batch_duplicate_errors 拦死。全部让位的导入是合法成功
+            # （零新建 + 候选记录），重复导入因此幂等友好。
+            merge_candidates = [
+                _merge_candidate(row, same_name[row.name])
+                for row in rows
+                if isinstance(row.name, str) and row.name in same_name
+            ]
+            creates = [
+                row
+                for row in rows
+                if not (isinstance(row.name, str) and row.name in same_name)
+            ]
             form_context = build_subject_form_context(session, project)
-            subjects: list[ProjectResearchSubject] = []
-            for position, (row, tracking_code) in enumerate(
-                zip(rows, tracking_codes, strict=True)
-            ):
+            for row in rows:
                 errors = _validate_import_row(row, subject_type)
                 if errors:
                     raise _invalid_import(errors)
+            tracking_codes = allocate_tracking_codes(
+                session, project.id, subject_type, len(creates)
+            )
+            subjects: list[ProjectResearchSubject] = []
+            for position, (row, tracking_code) in enumerate(
+                zip(creates, tracking_codes, strict=True)
+            ):
                 parent_id = _resolve_parent(row, parents)
                 subject = create_subject_in_transaction(
                     session=session,
@@ -429,21 +466,18 @@ def _commit_state(
                     form_context=form_context,
                 )
                 subjects.append(subject)
-            if not subjects:
-                raise _invalid_import(
-                    [
-                        ImportRowError(
-                            1,
-                            "名称",
-                            "empty_import",
-                            "The import contains no subject rows.",
-                        )
-                    ]
-                )
+            _propose_import_merge_change_set(
+                session,
+                project=project,
+                actor=actor,
+                preview_id=preview_id,
+                merge_candidates=merge_candidates,
+            )
             project.version += 1
             result = ImportResult(
                 tuple(serialize_subject(subject) for subject in subjects),
                 project.version,
+                merge_candidates=tuple(merge_candidates),
             )
             session.add(
                 ProjectResearchImportBatch(
@@ -480,10 +514,16 @@ def _load_import_receipt(session, project_id: str, preview_id: str) -> ImportRes
             "The subject import receipt is invalid.",
             409,
         )
+    # V3 T-O4：T-O4 之前的收据没有 merge_candidates 键——回放补空表，键集
+    # 契约（桌面端 isResearchImportResultDto 精确键校验）保持完整。
+    candidates = raw.get("merge_candidates") if isinstance(raw, dict) else None
+    if not isinstance(candidates, list):
+        candidates = []
     return ImportResult(
         tuple(subjects),
         receipt.committed_project_version,
         idempotent_replay=True,
+        merge_candidates=tuple(candidates),
     )
 
 
@@ -1113,6 +1153,9 @@ def _build_preview(
         )
         rows.append(row)
         errors.extend(_validate_import_row(row, subject_type))
+    # V3 T-O4：文件内同名是用户声明里的歧义，导入不替人猜——后出现的行报
+    # duplicate_name（致命行错误，commit 侧同尺复核）。
+    errors.extend(_batch_duplicate_errors(rows))
     if not rows:
         errors.append(
             ImportRowError(
@@ -1217,6 +1260,145 @@ def _validate_import_row(
             )
         )
     return errors
+
+
+def _batch_duplicate_errors(rows) -> list[ImportRowError]:
+    """文件内同名检测（V3 T-O4）：后出现的同名行报 duplicate_name，首行干净。
+
+    名称在行构造时已 strip；非字符串名由 invalid_name 负责，这里跳过。
+    preview 与 commit 复核共用同一把尺（与 header_errors 同款双重把关）。
+    """
+    first_by_name: dict[str, int] = {}
+    errors: list[ImportRowError] = []
+    for row in rows:
+        name = row.name if isinstance(row.name, str) else None
+        if not name:
+            continue
+        keeper = first_by_name.setdefault(name, row.row)
+        if keeper != row.row:
+            errors.append(
+                ImportRowError(
+                    row.row,
+                    "名称",
+                    "duplicate_name",
+                    f"Row {keeper} already uses this name. "
+                    "Remove the duplicate row or rename one of them.",
+                )
+            )
+    return errors
+
+
+def _load_same_name_subjects(session, project_id, subject_type, rows):
+    """按 stripped 名字收集项目内同类型 active 对象（with_for_update 与
+    _load_parent_candidates 同款锁纪律），返回 {name: 首个对象}。
+
+    V3 T-O4 的「同名让位」尺子：只匹配 active——归档/停用行不拦截重建，
+    跨类型同名（部门的销售部 vs 角色的销售部）是不同实体，不去重。
+    """
+    names = sorted(
+        {row.name for row in rows if isinstance(row.name, str) and row.name}
+    )
+    if not names:
+        return {}
+    subjects = list(
+        session.scalars(
+            select(ProjectResearchSubject)
+            .where(
+                ProjectResearchSubject.project_id == project_id,
+                ProjectResearchSubject.subject_type == subject_type,
+                ProjectResearchSubject.status == "active",
+                ProjectResearchSubject.name.in_(names),
+            )
+            .order_by(ProjectResearchSubject.name, ProjectResearchSubject.id)
+            .with_for_update()
+        )
+    )
+    matched: dict[str, ProjectResearchSubject] = {}
+    for subject in subjects:
+        matched.setdefault(subject.name, subject)
+    return matched
+
+
+def _merge_candidate(row, matched: ProjectResearchSubject) -> dict[str, Any]:
+    return {
+        "name": row.name,
+        "row": row.row,
+        "description": row.description if isinstance(row.description, str) else "",
+        "matched_subject": {
+            "id": matched.id,
+            "name": matched.name,
+            "tracking_code": matched.tracking_code,
+        },
+    }
+
+
+def _propose_import_merge_change_set(session, *, project, actor, preview_id, merge_candidates):
+    """把合并候选以 create_term 提案落成 draft 变更集（V3 T-O4）。
+
+    裁决：change_set 动作域不因 T-O4 开 subject 合并（T-O3「业务对象不走
+    change_set 双轨」仍成立，subject 合并原语是 L 级别另行立项）——这里提案
+    的是术语层的概念登记：同名让位的名字若尚无术语/别名占用，提案 create_term
+    让「一个名字一个概念」经人工 submit/confirm 拍板坐实。拍板拒绝无残留
+    （让位行为已在导入侧完成，术语只是不登记）。物品按首现序去重，超
+    CHANGE_SET_MAX_ITEMS 截断并在 description 注明。
+    """
+    from fde_api.ontology import service as ontology_service
+
+    if not merge_candidates:
+        return None
+    seen: dict[str, dict[str, Any]] = {}
+    for candidate in merge_candidates:
+        name = candidate["name"]
+        if isinstance(name, str) and name and name not in seen:
+            seen[name] = candidate
+    names = [
+        name
+        for name in seen
+        if len(name) <= ontology_service.TERM_MAX_LENGTH
+    ]
+    taken = ontology_service.existing_term_names(
+        session, project_id=project.id, names=names
+    )
+    items: list[dict[str, Any]] = []
+    for candidate in merge_candidates:
+        name = candidate["name"]
+        if not isinstance(name, str) or not name or name in taken:
+            continue
+        if name in {item["term"] for item in items}:
+            continue
+        if len(items) >= ontology_service.CHANGE_SET_MAX_ITEMS:
+            break
+        description = candidate["description"]
+        if not isinstance(description, str) or not description.strip():
+            description = (
+                f"同名对象合并候选：导入批次 {preview_id} 第 {candidate['row']} 行。"
+            )
+        elif len(description) > ontology_service.TERM_MAX_LENGTH:
+            description = description[: ontology_service.TERM_MAX_LENGTH]
+        items.append(
+            {
+                "action": "create_term",
+                "term": name,
+                "definition": description,
+            }
+        )
+    if not items:
+        return None
+    summary = (
+        f"研究导入 {preview_id} 有 {len(merge_candidates)} 行与项目既有同名"
+        f"对象撞名，已让位为合并候选（{project.name} · {project.enterprise_code}）。"
+    )
+    if len({item["term"] for item in items}) < len(seen):
+        summary += f"仅前 {len(items)} 个名字进入提案（超出 {ontology_service.CHANGE_SET_MAX_ITEMS} 项上限）。"
+    return ontology_service.propose_change_set(
+        session,
+        project_id=project.id,
+        actor=actor,
+        title=f"导入合并候选：{project.name}",
+        proposed_json=items,
+        description=summary,
+        captured_from=f"research_import:{preview_id}",
+    )
 
 
 def _load_parent_candidates(session, project_id, subject_type, rows):

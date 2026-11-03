@@ -25,6 +25,13 @@ from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.extensions import db
+from fde_api.ontology.models import OntologyChangeSet, OntologyTerm
+from fde_api.ontology.service import (
+    OntologyServiceError,
+    confirm_change_set,
+    create_term,
+    submit_change_set,
+)
 from fde_api.research import subject_service
 from fde_api.research import imports as imports_service
 from fde_api.research import project_routes
@@ -1359,7 +1366,9 @@ def test_large_import_uses_bounded_tracking_and_form_definition_queries(
         for statement in statements
         if "project_research_forms.form_key" in statement
     ]
-    assert len(tracking_scans) <= 1
+    # V3 T-O4：+1 是恒定的同名让位扫描（整行 select 列表含 tracking_code 列），
+    # 不随行数乘法增长——反乘法不变量保持。
+    assert len(tracking_scans) <= 2
     assert len(active_module_lookups) <= 1
     assert existing_form_lookups == []
 
@@ -1427,3 +1436,348 @@ def test_event_failure_rolls_back_batch_and_events_exclude_file_content(
     assert "销售部" not in serialized_changes
     assert "产品部" not in serialized_changes
     assert "RAW-CONTENT" not in serialized_changes
+
+
+# ---------------------------------------------------------------------------
+# V3 T-O4：同名让位与合并候选 change_set
+# ---------------------------------------------------------------------------
+
+
+def test_batch_internal_duplicate_name_is_fatal_at_preview_and_commit(
+    admin_client, published_template, leader_client, db_session
+):
+    """文件内同名是用户声明里的歧义：preview 报 duplicate_name（首行干净），
+    commit 复核同尺拦死——导入不替人猜该保留哪一行。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    preview = _preview(
+        admin_client,
+        project["id"],
+        [["名称", "说明"], ["销售部", "A"], ["产品部", "B"], ["销售部", "C"]],
+    )
+    assert preview.status_code == 200
+    errors = preview.json["data"]["errors"]
+    assert [error["code"] for error in errors] == ["duplicate_name"]
+    assert errors[0]["row"] == 4
+    assert errors[0]["column"] == "名称"
+    assert "Row 2" in errors[0]["message"]
+
+    commit = _commit(
+        admin_client,
+        project["id"],
+        preview.json["data"]["preview_token"],
+        project["version"],
+    )
+    assert commit.status_code == 422
+    assert commit.json["error"]["code"] == "invalid_research_import"
+    details = commit.json["error"]["details"]["errors"]
+    assert [error["code"] for error in details] == ["duplicate_name"]
+
+
+def test_commit_defers_to_existing_same_name_subject_and_proposes_change_set(
+    admin_client, published_template, leader_client, db_session
+):
+    """文件 vs 项目现状的撞名行不再静默新建：让位为合并候选（指向既有
+    active 行、保留被让位行的说明），只有真正新建的行占跟踪码，并产出
+    create_term 提案（draft，captured_from=research_import:<preview_id>）。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    first = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "最初说明"], ["产品经理", "B"]],
+            subject_type="role",
+        ).json["data"]["preview_token"],
+        project["version"],
+    )
+    assert first.status_code == 201, first.get_data(as_text=True)
+    existing = {subject["name"]: subject for subject in first.json["data"]["subjects"]}
+    version = first.json["data"]["project_version"]
+
+    second = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "新信息说明"], ["交付经理", "C"]],
+            subject_type="role",
+        ).json["data"]["preview_token"],
+        version,
+    )
+    assert second.status_code == 201, second.get_data(as_text=True)
+    data = second.json["data"]
+    assert [subject["name"] for subject in data["subjects"]] == ["交付经理"]
+    assert data["imported_count"] == 1
+    candidates = data["merge_candidates"]
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["name"] == "销售部"
+    assert candidate["row"] == 2
+    assert candidate["description"] == "新信息说明"
+    assert candidate["matched_subject"]["id"] == existing["销售部"]["id"]
+    assert (
+        candidate["matched_subject"]["tracking_code"]
+        == existing["销售部"]["tracking_code"]
+    )
+    # 跟踪码只发给真正新建的行：让位的销售部不占码，交付经理接既有最大号
+    assert data["subjects"][0]["tracking_code"] == "JOB-0003"
+
+    change_set = db_session.scalar(
+        select(OntologyChangeSet).where(
+            OntologyChangeSet.project_id == project["id"]
+        )
+    )
+    assert change_set is not None
+    assert change_set.status == "draft"
+    assert change_set.captured_from.startswith("research_import:")
+    items = change_set.proposed_json
+    assert [item["action"] for item in items] == ["create_term"]
+    assert items[0]["term"] == "销售部"
+    assert items[0]["definition"] == "新信息说明"
+    assert change_set.created_by_user_id == admin_client.user.id
+    assert change_set.base_snapshot_sha256 is None
+
+
+def test_commit_with_all_deferred_rows_succeeds_and_replays_with_candidates(
+    admin_client, published_template, leader_client, db_session
+):
+    """全部撞名的导入是合法成功：零新建 + 全量候选记录 + 版本照常推进；
+    收据回放完整带出候选（幂等重放不断言失败）。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    rows = [["名称", "说明"], ["销售部", "A"], ["解决方案总监", "B"]]
+    first = _commit(
+        admin_client,
+        project["id"],
+        _preview(admin_client, project["id"], rows, subject_type="role").json["data"][
+            "preview_token"
+        ],
+        project["version"],
+    )
+    assert first.status_code == 201
+    version = first.json["data"]["project_version"]
+
+    replay_preview = _preview(admin_client, project["id"], rows, subject_type="role")
+    token = replay_preview.json["data"]["preview_token"]
+    second = _commit(admin_client, project["id"], token, version)
+    assert second.status_code == 201
+    data = second.json["data"]
+    assert data["subjects"] == []
+    assert data["imported_count"] == 0
+    assert [candidate["name"] for candidate in data["merge_candidates"]] == [
+        "销售部",
+        "解决方案总监",
+    ]
+    assert data["project_version"] == version + 1
+    assert db_session.scalar(
+        select(func.count()).select_from(OntologyChangeSet).where(
+            OntologyChangeSet.project_id == project["id"]
+        )
+    ) == 1
+
+    replay = _commit(admin_client, project["id"], token, version)
+    assert replay.status_code == 200
+    assert replay.json["data"]["idempotent_replay"] is True
+    assert replay.json["data"]["merge_candidates"] == data["merge_candidates"]
+
+
+def test_no_change_set_when_candidate_names_already_have_terms(
+    admin_client, published_template, leader_client, db_session
+):
+    """候选名已有术语（任意状态）或别名占用时不提案（物化期会 409）——
+    让位行为照常，change_set 缺席。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    first = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client, project["id"], [["名称", "说明"], ["销售部", "A"]]
+        ).json["data"]["preview_token"],
+        project["version"],
+    )
+    assert first.status_code == 201
+    create_term(
+        db_session,
+        project_id=project["id"],
+        term="销售部",
+        definition="既有术语占用。",
+        actor=admin_client.user,
+    )
+    db_session.commit()
+
+    second = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client, project["id"], [["名称", "说明"], ["销售部", "B"]]
+        ).json["data"]["preview_token"],
+        first.json["data"]["project_version"],
+    )
+    assert second.status_code == 201
+    assert second.json["data"]["subjects"] == []
+    assert len(second.json["data"]["merge_candidates"]) == 1
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(OntologyChangeSet).where(
+                OntologyChangeSet.project_id == project["id"]
+            )
+        )
+        == 0
+    )
+
+
+def test_merge_candidate_change_set_confirms_into_confirmed_term(
+    admin_client, published_template, leader_client, db_session
+):
+    """候选闭环落地面：draft → submit（base 指纹）→ confirm（拍板人 ≠ 提交人）
+    → 术语 confirmed 且定义取自被让位行的说明。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    first = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "A"], ["交付经理", "C"]],
+        ).json["data"]["preview_token"],
+        project["version"],
+    )
+    assert first.status_code == 201
+    second = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "客户对接的统一入口角色。"]],
+        ).json["data"]["preview_token"],
+        first.json["data"]["project_version"],
+    )
+    assert second.status_code == 201
+    change_set = db_session.scalar(
+        select(OntologyChangeSet).where(OntologyChangeSet.project_id == project["id"])
+    )
+    assert change_set is not None
+
+    submitted = submit_change_set(db_session, row=change_set, actor=admin_client.user)
+    db_session.commit()
+    assert submitted.status == "in_review"
+    assert submitted.base_snapshot_sha256 is not None
+
+    confirm_change_set(db_session, row=change_set, actor=leader_client.user)
+    db_session.commit()
+    assert change_set.status == "confirmed"
+    term = db_session.scalar(
+        select(OntologyTerm).where(
+            OntologyTerm.project_id == project["id"], OntologyTerm.term == "销售部"
+        )
+    )
+    assert term is not None
+    assert term.status == "confirmed"
+    assert term.definition == "客户对接的统一入口角色。"
+
+    # 拍板验收分离照旧生效：提交人不能拍板（第三次让位交付经理——其名尚无
+    # 术语占用，故产出第二个 change_set；销售部已被上一次 confirm 注册）
+    third = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client, project["id"], [["名称", "说明"], ["交付经理", "又一条新说明"]]
+        ).json["data"]["preview_token"],
+        second.json["data"]["project_version"],
+    )
+    assert third.status_code == 201
+    fresh = db_session.scalar(
+        select(OntologyChangeSet)
+        .where(OntologyChangeSet.project_id == project["id"])
+        .order_by(OntologyChangeSet.created_at.desc(), OntologyChangeSet.id.desc())
+    )
+    assert fresh.id != change_set.id
+    submit_change_set(db_session, row=fresh, actor=admin_client.user)
+    db_session.commit()
+    with pytest.raises(OntologyServiceError) as conflict:
+        confirm_change_set(db_session, row=fresh, actor=admin_client.user)
+    assert conflict.value.code == "change_set_decider_conflict"
+
+
+def test_cross_type_same_name_does_not_deduplicate(
+    admin_client, published_template, leader_client, db_session
+):
+    """同名不同类型是不同实体：角色销售部在场不拦截部门销售部新建，
+    无候选无提案。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    role_commit = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "角色侧"]],
+            subject_type="role",
+        ).json["data"]["preview_token"],
+        project["version"],
+    )
+    assert role_commit.status_code == 201
+
+    department_commit = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", "部门侧"], ["产品部", "B"]],
+        ).json["data"]["preview_token"],
+        role_commit.json["data"]["project_version"],
+    )
+    assert department_commit.status_code == 201
+    data = department_commit.json["data"]
+    assert [subject["name"] for subject in data["subjects"]] == ["销售部", "产品部"]
+    assert data["merge_candidates"] == []
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(OntologyChangeSet).where(
+                OntologyChangeSet.project_id == project["id"]
+            )
+        )
+        == 0
+    )
+
+
+def test_long_description_truncates_in_change_set_item_definition(
+    admin_client, published_template, leader_client, db_session
+):
+    """术语 definition 域 120 字（TERM_MAX_LENGTH）：超长说明在提案条目里
+    截断，完整说明仍保留在导入结果的候选记录中。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    first = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client, project["id"], [["名称", "说明"], ["销售部", "A"]]
+        ).json["data"]["preview_token"],
+        project["version"],
+    )
+    assert first.status_code == 201
+    long_description = "客户对接入口。" + "补充说明细节。" * 30
+    assert len(long_description) > 120
+
+    second = _commit(
+        admin_client,
+        project["id"],
+        _preview(
+            admin_client,
+            project["id"],
+            [["名称", "说明"], ["销售部", long_description]],
+        ).json["data"]["preview_token"],
+        first.json["data"]["project_version"],
+    )
+    assert second.status_code == 201
+    change_set = db_session.scalar(
+        select(OntologyChangeSet).where(OntologyChangeSet.project_id == project["id"])
+    )
+    assert change_set is not None
+    item = change_set.proposed_json[0]
+    assert item["term"] == "销售部"
+    assert len(item["definition"]) == 120
+    assert second.json["data"]["merge_candidates"][0]["description"] == long_description

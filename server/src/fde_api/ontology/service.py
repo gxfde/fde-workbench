@@ -959,6 +959,35 @@ def _alias_owner_term_id(
     )
 
 
+def existing_term_names(
+    session: Session, *, project_id: str, names: list[str]
+) -> set[str]:
+    """返回 names 中已被术语行（任意状态）或别名占用的名字。
+
+    V3 T-O4 导入去重的占位检查：被占用的名字不再提案 create_term（物化期
+    会 409 term_exists），空名字单返回空集。
+    """
+    if not names:
+        return set()
+    taken = set(
+        session.scalars(
+            select(OntologyTerm.term).where(
+                OntologyTerm.project_id == project_id,
+                OntologyTerm.term.in_(names),
+            )
+        )
+    )
+    taken.update(
+        session.scalars(
+            select(OntologyTermAlias.alias).where(
+                OntologyTermAlias.project_id == project_id,
+                OntologyTermAlias.alias.in_(names),
+            )
+        )
+    )
+    return taken
+
+
 def _change_set_base_descriptor(
     session: Session, *, project_id: str, items: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:

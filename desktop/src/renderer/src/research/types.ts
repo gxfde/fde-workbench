@@ -314,9 +314,21 @@ export interface ResearchImportPreviewDto {
   expires_in_seconds: number
 }
 
+export interface ResearchImportMergeCandidateDto {
+  name: string
+  row: number
+  description: string
+  matched_subject: {
+    id: string
+    name: string
+    tracking_code: string | null
+  }
+}
+
 export interface ResearchImportResultDto {
   subjects: ResearchSubjectDto[]
   imported_count: number
   project_version: number
   idempotent_replay: boolean
+  merge_candidates: ResearchImportMergeCandidateDto[]
 }

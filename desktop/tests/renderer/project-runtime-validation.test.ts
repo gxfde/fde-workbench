@@ -116,6 +116,41 @@ describe("project research response guards", () => {
       imported_count: 2,
       project_version: 3,
       idempotent_replay: true,
+      merge_candidates: [],
+    })).toBe(false)
+  })
+
+  it("requires merge_candidates with exact matched-subject shape on import results", () => {
+    // V3 T-O4：同名让位的合并候选是新契约键——缺失即拒收（老载荷不兼容）
+    expect(isResearchImportResultDto({
+      subjects: [],
+      imported_count: 0,
+      project_version: 3,
+      idempotent_replay: true,
+    })).toBe(false)
+    expect(isResearchImportResultDto({
+      subjects: [],
+      imported_count: 0,
+      project_version: 3,
+      idempotent_replay: true,
+      merge_candidates: [{
+        name: "销售部",
+        row: 3,
+        description: "新说明",
+        matched_subject: { id: "sub-1", name: "销售部", tracking_code: "DEPT-0001" },
+      }],
+    })).toBe(true)
+    expect(isResearchImportResultDto({
+      subjects: [],
+      imported_count: 0,
+      project_version: 3,
+      idempotent_replay: true,
+      merge_candidates: [{
+        name: "销售部",
+        row: 3,
+        description: "",
+        matched_subject: { id: "sub-1", tracking_code: null },
+      }],
     })).toBe(false)
   })
 

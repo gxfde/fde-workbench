@@ -127,9 +127,16 @@
   - **事件双记裁决**：merge 走 T-O1 原语时其 `ontology_term_merged` 事件保留（term 级溯源），叠 change-set 级 confirmed 事件——粒度不同不算双写（T-O1 遗留裁决点，就此定案）。
   - **口径**：104→**105 表**、迁移头 `b8d3f1a5c7e2`→**`c9e3a7d1b5f8`**（29→**30 rev**）、业务路由 286→**293**（+7）、ENTRIES 94 不变、pytest **1808 收集 = 1802 passed + 6 skipped**（T-O3 +9：变更集 8 + 迁移往返 1）、vitest 730 不变（零桌面改动）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
 
-### T-O4 导入别名去重接入
-- 目标：research 导入遇同名不同 key → 产出合并候选 change_set 而非静默新建（imports.py:1261-1262 合成键路径）。
+### T-O4 导入别名去重接入 — **DONE（2026-11-03，分支 feat/v3-t-o4-import-dedupe，squash 合并至 fork/main）**
+- 目标：research 导入遇同名不同 key → 产出合并候选 change_set 而非静默新建（imports.py 合成键路径 `_subject_key(preview_id, type, row)` 每行各异）。
 - 前置：T-O1/T-O3。修改文件：`research/imports.py`。测试：test_research_imports 扩展。复杂度：**S**。
+- **实施记录（2026-11-03）**：
+  - **两把尺子裁决**：**文件内同名=致命行错误 `duplicate_name`**（`_batch_duplicate_errors` preview 报且首行干净、commit 同尺复核——文件是用户声明，歧义由人解决）；**文件 vs 项目既有 active 同名（同类型）=让位**（`_load_same_name_subjects`，with_for_update 与父级候选同款锁纪律）——撞名行不再静默新建，归档行不拦重建、跨类型同名不去重（不同实体）。
+  - **合并候选三面呈现**：结果载荷新键 `merge_candidates`（name/row/description/matched_subject{id,name,tracking_code}，被让位行说明无损保留）；跟踪码只发真正新建的行（`allocate_tracking_codes` 计数改 len(creates)，新号接既有最大值无空洞）；**全让位=合法成功**（empty_import 检查从「subjects 空后置」改为「rows 空前置」；版本照常 +1；收据回放带候选，旧收据无键补空表向后兼容）。
+  - **change_set 提案（实现偏差回写）**：台账原文「产出合并候选 change_set」落地为**术语层概念登记提案**而非 subject 合并动作——`_propose_import_merge_change_set` 对无术语/别名占用且 ≤TERM_MAX_LENGTH=120 的候选名按首现序去重提案 `create_term`（definition=被让位行说明，超长截 120），draft+`captured_from="research_import:<preview_id>"`，走 T-O3 submit→confirm 人工拍板坐实「一个名字一个概念」，拒绝无残留。**不开 subject 合并动作**：T-O3「业务对象不走 change_set 双轨」裁决仍成立，subject 合并原语牵动表单/答案/链接/跟踪码，L 级别另行立项（遗留候选：T-O4b）。>50 项截断并在 description 注明；ontology/service 新增占位检查原语 `existing_term_names`（任意状态术语行 ∪ 别名）。
+  - **桌面端契约同步（预估外改动，偏差记录）**：台账「修改文件 imports.py」之外，桌面 `isResearchImportResultDto` 精确键集 +`merge_candidates` 必须同步（不同步=桌面拒收一切成功响应）——`ResearchImportMergeCandidateDto` 类型+`isResearchMergeCandidateDto` 验证器+测试。preview 载荷零变化（duplicate_name 走既有 errors 通道，`isImportError` 形状校验直透）。
+  - **测试**：`test_research_imports.py` +7（批内致命/让位+提案+跟踪码钉子/全让位+回放/术语占用不提案/confirm 闭环+验收分离/跨类型不去重/超长截断）；桌面 +1。有界查询测试上限 1→2（T-O4 恒定 +1 次同名扫描，反乘法不变量保持）。
+  - **口径**：105 表不变、**零迁移**（head `b5d9e3f7a1c6` 31 rev 不变）、路由 293 不变、ENTRIES 94 不变、pytest **1825 收集 = 1819 passed + 6 skipped**（+7）、vitest **731**（+1）。零部署迁移（改 server 仍须 rebuild 三镜像 + up -d，无需 alembic）。
 
 ## P1（可控自动化）
 

@@ -70,14 +70,29 @@ export function isResearchImportPreviewDto(value: unknown): value is ResearchImp
     && value.row_count === value.rows.length
 }
 
+function isResearchMergeCandidateDto(value: unknown): boolean {
+  if (!isRecord(value)
+    || !exact(value, ["name", "row", "description", "matched_subject"])
+    || typeof value.name !== "string" || value.name.length === 0
+    || typeof value.row !== "number" || !Number.isInteger(value.row) || value.row < 1
+    || typeof value.description !== "string"
+    || !isRecord(value.matched_subject)) return false
+  const matched = value.matched_subject as Record<string, unknown>
+  return exact(matched, ["id", "name", "tracking_code"])
+    && typeof matched.id === "string" && matched.id.length > 0
+    && typeof matched.name === "string" && matched.name.length > 0
+    && (matched.tracking_code === null || typeof matched.tracking_code === "string")
+}
+
 export function isResearchImportResultDto(value: unknown): value is ResearchImportResultDto {
   return isRecord(value)
-    && exact(value, ["subjects", "imported_count", "project_version", "idempotent_replay"])
+    && exact(value, ["subjects", "imported_count", "project_version", "idempotent_replay", "merge_candidates"])
     && Array.isArray(value.subjects) && value.subjects.every(isResearchSubjectDto)
     && nonNegativeInteger(value.imported_count)
     && value.imported_count === value.subjects.length
     && positiveInteger(value.project_version)
     && typeof value.idempotent_replay === "boolean"
+    && Array.isArray(value.merge_candidates) && value.merge_candidates.every(isResearchMergeCandidateDto)
 }
 
 export function parseResearchImportErrorDetails(value: unknown): ResearchImportErrorDto[] | null {
