@@ -215,7 +215,12 @@ def _serialize_subjects(session: Session, project_id: str) -> dict[str, list[dic
         )
     )
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for subject_type in SUBJECT_TYPES:
+    # V3 T-O2b：分组键取行上的实际值——内置类型按 canonical 序在前，注册类型
+    #（含已 retired 的存量行）按名字母序跟随。retire 只禁新建不禁存量，按值
+    # 分组保证任何类型的对象都不会从文档快照静默消失。
+    present = {subject.subject_type for subject in subjects}
+    ordered_types = list(SUBJECT_TYPES) + sorted(present - set(SUBJECT_TYPES))
+    for subject_type in ordered_types:
         rows = [subject for subject in subjects if subject.subject_type == subject_type]
         if rows:
             grouped[subject_type] = [_serialize_subject(subject) for subject in rows]

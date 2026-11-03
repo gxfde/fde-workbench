@@ -189,6 +189,14 @@ def validate_mapping(scan: Any, mapping: Any, research_definition: Any) -> list[
         )
 
     forms_index = _research_forms_index(research_definition)
+    # V3 T-O2b：值域开放后允许域 = 内置五类 ∪ 已发布定义里声明的类型。来源
+    # 真值是已发布的 research definition（发布链已按注册表域校验），本函数
+    # 保持纯函数、不查项目注册表。
+    allowed_types = set(SUBJECT_TYPES) | {
+        declared
+        for form in forms_index.values()
+        if (declared := form.get("subject_type")) is not None
+    }
 
     # 2. Each declared research form key / subject type must exist.
     research_keys = mapping_dict.get("research_keys", [])
@@ -221,7 +229,7 @@ def validate_mapping(scan: Any, mapping: Any, research_definition: Any) -> list[
             continue
 
         if subject_type is not None:
-            if subject_type not in SUBJECT_TYPES:
+            if subject_type not in allowed_types:
                 issues.append(
                     MappingIssue(
                         "unsupported_subject_type",

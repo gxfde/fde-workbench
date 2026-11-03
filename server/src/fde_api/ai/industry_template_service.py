@@ -91,7 +91,11 @@ def generate_project_configuration(*, actor: User, payload: object, on_event: Ca
         )
         try:
             validate_generated_template(
-                raw, active_module_keys={item["module_key"] for item in catalog}
+                raw,
+                active_module_keys={item["module_key"] for item in catalog},
+                # V3 T-O2b：预校验与落库权威校验同域（全局注册表 active 行），
+                # 避免合法的全局注册类型在预筛被误拒后重试耗尽。
+                allowed_subject_types=_usable_subject_types(),
             )
             last_contract_error = None
             break
@@ -177,6 +181,21 @@ def _repair_chat_decision(raw: dict[str, Any], history: list[dict[str, str]]) ->
         "missing_fields": missing,
         "questions": questions,
     }
+
+
+def _usable_subject_types() -> set[str]:
+    """V3 T-O2b：全局注册表侧的可用对象类型域（内置 ∪ active 全局行）。
+
+    模板是行业级（无项目上下文），故 project_id=None；与落库权威校验
+    （templates/service.create_ai_template_draft）同域。
+    """
+    from fde_api.ontology.service import usable_subject_type_codes
+
+    session = db.session()
+    try:
+        return usable_subject_type_codes(session, project_id=None)
+    finally:
+        session.close()
 
 
 def _active_catalog() -> list[dict[str, Any]]:

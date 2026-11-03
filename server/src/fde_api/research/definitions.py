@@ -46,22 +46,38 @@ class DefinitionIssue:
     message: str
 
 
-def validate_research_definition(definition: dict) -> list[DefinitionIssue]:
-    """Return deterministic, user-addressable errors for one research definition."""
+def validate_research_definition(
+    definition: dict,
+    *,
+    allowed_subject_types: Iterable[str] | None = None,
+) -> list[DefinitionIssue]:
+    """Return deterministic, user-addressable errors for one research definition.
+
+    V3 T-O2b：allowed_subject_types 缺省=内置五类（模板/纯函数既有语义不变）；
+    注册表上下文的调用方传「内置 ∪ 注册表 active 行」
+    （ontology_service.usable_subject_type_codes），值域开放后注册类型可进表单定义。
+    """
     if not isinstance(definition, dict) or set(definition) != {"forms"}:
         return [_issue("invalid_definition", "", "A research definition must contain forms.")]
     forms = definition.get("forms")
     if not isinstance(forms, list):
         return [_issue("invalid_definition", "forms", "Forms must be a list.")]
 
-    issues = _validate_form_shapes(forms)
+    allowed = (
+        set(allowed_subject_types)
+        if allowed_subject_types is not None
+        else set(SUBJECT_TYPES)
+    )
+    issues = _validate_form_shapes(forms, allowed)
     issues.extend(_validate_unique_keys(forms))
     issues.extend(_validate_field_configs(forms))
     issues.extend(_validate_condition_trees(forms))
     return sorted(issues, key=lambda issue: (issue.path, issue.code))
 
 
-def _validate_form_shapes(forms: list[object]) -> list[DefinitionIssue]:
+def _validate_form_shapes(
+    forms: list[object], allowed_subject_types: set[str]
+) -> list[DefinitionIssue]:
     issues: list[DefinitionIssue] = []
     for form_index, form in enumerate(forms):
         form_path = f"forms[{form_index}]"
@@ -75,7 +91,7 @@ def _validate_form_shapes(forms: list[object]) -> list[DefinitionIssue]:
             form_path,
             "form",
         ))
-        if form.get("subject_type") not in SUBJECT_TYPES:
+        if form.get("subject_type") not in allowed_subject_types:
             issues.append(_issue("invalid_subject_type", f"{form_path}.subject_type", "Unsupported research subject type."))
         if form.get("module_key") is not None:
             issues.extend(_stable_key_issue(form.get("module_key"), f"{form_path}.module_key"))

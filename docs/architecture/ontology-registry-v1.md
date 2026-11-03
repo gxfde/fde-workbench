@@ -1,6 +1,6 @@
 # Ontology Registry v1 设计（P0）
 
-> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；**§2.3 `ontology_relation_types` 已于 2026-11-03 实施（T-O2，迁移 `b8d3f1a5c7e2`；3 条路由 GET/POST/retire，服务层 ∪ 接入 `_validate_link`；偏差见 backlog T-O2 实施记录——subject_type 值域本轮只落登记不开放使用）**；**§2.4 `ontology_change_sets` 已于 2026-11-03 实施（T-O3，迁移 `c9e3a7d1b5f8`；7 条路由=GET terms+change-sets 六条，验收分离+base 指纹并发防护；偏差见 backlog T-O3 实施记录与 §2.4 落地裁决）**。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
+> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；**§2.3 `ontology_relation_types` 已于 2026-11-03 实施（T-O2，迁移 `b8d3f1a5c7e2`；3 条路由 GET/POST/retire，服务层 ∪ 接入 `_validate_link`；偏差见 backlog T-O2 实施记录——subject_type 值域本轮只落登记不开放使用）**；**§2.4 `ontology_change_sets` 已于 2026-11-03 实施（T-O3，迁移 `c9e3a7d1b5f8`；7 条路由=GET terms+change-sets 六条，验收分离+base 指纹并发防护；偏差见 backlog T-O3 实施记录与 §2.4 落地裁决）**；**§2.3 的 subject_type 值域已于 2026-11-03 开放（T-O2b，迁移 `b5d9e3f7a1c6`——三处 CHECK 枚举→码格式+列宽 32→60；新建值域「内置 ∪ active 注册 − project」由单原语闸门把守，偏差见 backlog T-O2b 实施记录）**。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
 > 原则：不建平行实体体系。实体=既有 `project_research_subjects`；本设计只补 WB 完全缺失的三件：**术语治理、关系类型注册、变更集审核**，外加一等证据表（evidence，域 3 共享底座）。
 
 ## 1. 决策依据（对照任务书"决策 1/2"）
@@ -68,6 +68,8 @@
 子表 `ontology_term_aliases`：id / term_id FK CASCADE / alias VARCHAR(120) / UNIQUE(project_id, alias)（同项目别名唯一，防同名冲突累积——根治附录 D ⑨ 的导入重复问题）。
 
 ### 2.3 `ontology_relation_types`（类型注册，同时服务 subject_type 扩展）— **IMPLEMENTED（T-O2，2026-11-03，迁移 `b8d3f1a5c7e2`）**
+
+> **T-O2b 落地（2026-11-03，迁移 `b5d9e3f7a1c6`）**：subject_type 值域开放——research 侧三处 CHECK（subjects/templates/import_batches）枚举→码格式、列宽 32→60；新建值域=「内置 ∪ 注册表 active 行 − project」，闸门在 `create_subject_in_transaction`（人工+导入同闸）；retired 禁新建存量只读、draft 未拍板不入值域；注册类型本轮仅根级（无父级规则）、tracking_code=None；快照按行上实际类型分组不丢存量；AI 幻觉基线（缺省内置五类）与模板五类完整性基线不放开。
 
 | 列 | 类型 | 说明 |
 |---|---|---|

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any, Literal, TypedDict, cast
 
 from fde_api.auth.models import VALID_ROLES
@@ -93,7 +94,10 @@ def parse_chat_decision(value: object) -> ChatDecision:
 
 
 def validate_generated_template(
-    value: object, *, active_module_keys: set[str]
+    value: object,
+    *,
+    active_module_keys: set[str],
+    allowed_subject_types: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     required_fields = {"name", "industry_name", "description", "modules"}
     allowed_fields = {*required_fields, "research_definition"}
@@ -193,7 +197,9 @@ def validate_generated_template(
         }
     if not isinstance(definition, dict):
         raise AIContractError("invalid_research_definition", "research_definition", "调研表格式不正确。")
-    issues = validate_research_definition(definition)
+    # V3 T-O2b：allowed_subject_types 缺省=内置五类；调用方传全局注册表域时，
+    # 全局注册类型可进模板调研表。完整性基线不放开：五类内置调研表仍是必备。
+    issues = validate_research_definition(definition, allowed_subject_types=allowed_subject_types)
     if issues:
         issue = issues[0]
         raise AIContractError(issue.code, f"research_definition.{issue.path}", issue.message)

@@ -40,6 +40,11 @@ ResearchJSON: TypeAlias = str | int | float | bool | None | list[Any] | dict[str
 FIELD_TYPE_CHECK_SQL = "field_type IN (" + ", ".join(
     f"'{field_type}'" for field_type in FIELD_TYPES
 ) + ")"
+# V3 T-O2b：对象类型值域开放——物理边界从「内置五类枚举」改为「码格式」：
+# 小写字母开头、仅含小写字母/数字/下划线、最长 60（与 ontology_relation_types.code
+# 的列宽和 _CODE_PATTERN 对齐）。允许域的收窄（内置 ∪ 注册表 active 行、project
+# 根类型保留）由服务层闸门把守（subject_service / imports / ontology.service）。
+SUBJECT_TYPE_CHECK_SQL = "subject_type ~ '^[a-z][a-z0-9_]{0,59}$'"
 
 
 class ResearchImmutableError(ValueError):
@@ -64,7 +69,7 @@ class TemplateResearchForm(Base, TimestampMixin):
             name="uq_template_research_forms_version_key",
         ),
         CheckConstraint(
-            "subject_type IN ('project', 'department', 'role', 'process', 'opportunity')",
+            SUBJECT_TYPE_CHECK_SQL,
             name="ck_template_research_forms_subject_type",
         ),
     )
@@ -76,7 +81,7 @@ class TemplateResearchForm(Base, TimestampMixin):
     form_key: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    subject_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject_type: Mapped[str] = mapped_column(String(60), nullable=False)
     module_key: Mapped[str | None] = mapped_column(String(80))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -160,13 +165,12 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
             "tracking_code",
             name="uq_project_research_subjects_project_tracking_code",
         ),
-        # V3 T-O2：对象类型值域**冻结**（存量语义不动，见设计 §2.3 兼容边界）。
-        # 可注册的对象/关系类型落在 ontology_relation_types；本约束仍把守住
-        # 「调研对象类型只能是内置五类」这一物理边界——放开值域会连带
-        # template_research_forms / import_batches 两处同款约束与文档快照、
-        # 表单定义、AI 模板 schema 四处消费方，属独立一轮（backlog T-O2b）。
+        # V3 T-O2b：对象类型值域开放（接 T-O2 注册表）——DB 层只守码格式
+        # （SUBJECT_TYPE_CHECK_SQL），允许域「内置 ∪ 注册表 active 行、project
+        # 根类型保留」由服务层闸门把守（create_subject_in_transaction 单原语，
+        # 人工创建与导入 commit 同闸）。列宽 32→60 对齐注册表 code。
         CheckConstraint(
-            "subject_type IN ('project', 'department', 'role', 'process', 'opportunity')",
+            SUBJECT_TYPE_CHECK_SQL,
             name="ck_project_research_subjects_subject_type",
         ),
         CheckConstraint(
@@ -191,7 +195,7 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
     parent_subject_id: Mapped[str | None] = mapped_column(String(36))
-    subject_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject_type: Mapped[str] = mapped_column(String(60), nullable=False)
     subject_key: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -291,7 +295,7 @@ class ProjectResearchImportBatch(Base, TimestampMixin):
     __tablename__ = "project_research_import_batches"
     __table_args__ = (
         CheckConstraint(
-            "subject_type IN ('department', 'role', 'process', 'opportunity')",
+            SUBJECT_TYPE_CHECK_SQL,
             name="ck_project_research_import_batches_subject_type",
         ),
         CheckConstraint(
@@ -309,7 +313,7 @@ class ProjectResearchImportBatch(Base, TimestampMixin):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    subject_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject_type: Mapped[str] = mapped_column(String(60), nullable=False)
     expected_project_version: Mapped[int] = mapped_column(Integer, nullable=False)
     committed_project_version: Mapped[int] = mapped_column(Integer, nullable=False)
     result_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

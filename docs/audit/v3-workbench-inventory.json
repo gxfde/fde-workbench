@@ -2,9 +2,9 @@
  "route_count": 293,
  "blueprint_count": 36,
  "table_count": 105,
- "revision_count": 30,
+ "revision_count": 31,
  "heads": [
-  "c9e3a7d1b5f8"
+  "b5d9e3f7a1c6"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -76,6 +76,12 @@
     "project_tasks",
     "projects"
    ]
+  },
+  "b5d9e3f7a1c6": {
+   "file": "b5d9e3f7a1c6_v4_subject_type_domain_open.py",
+   "down_revision": "c9e3a7d1b5f8",
+   "create_tables": [],
+   "add_column_tables": []
   },
   "b7d9f1a3c5e2": {
    "file": "b7d9f1a3c5e2_v3_workflow_runs.py",

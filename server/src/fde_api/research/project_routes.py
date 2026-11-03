@@ -106,9 +106,12 @@ def preview_subject_import_route(project_id: str):
     if not upload.filename:
         return _invalid_request()
     try:
-        authorize_subject_import(g.current_user, project_id)
+        allowed = authorize_subject_import(g.current_user, project_id)
         preview = preview_subject_import(
-            upload.stream, upload.filename, request.form["subject_type"]
+            upload.stream,
+            upload.filename,
+            request.form["subject_type"],
+            allowed_subject_types=allowed,
         )
         stored = store_subject_import_preview(
             actor=g.current_user, project_id=project_id, preview=preview

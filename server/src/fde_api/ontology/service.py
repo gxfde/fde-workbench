@@ -474,6 +474,31 @@ def known_subject_type_codes(session: Session, *, project_id: str | None) -> set
     return codes
 
 
+def usable_subject_type_codes(session: Session, *, project_id: str | None) -> set[str]:
+    """当前可用于**新建**调研对象的对象类型码（V3 T-O2b 值域开放面）。
+
+    与 ``known_subject_type_codes``（引用解析，含 retired）不同：retire 语义是
+    「禁新建、存量只读」（同 T-O2 关系类型的存量边纪律），draft 是未拍板提案
+    ——两者都不得开新对象，故只收 active 行。
+    """
+    codes = set(BUILTIN_SUBJECT_TYPE_CODES)
+    query = select(OntologyRelationType.code).where(
+        OntologyRelationType.kind == "subject_type",
+        OntologyRelationType.status == "active",
+    )
+    if project_id:
+        query = query.where(
+            or_(
+                OntologyRelationType.project_id == project_id,
+                OntologyRelationType.project_id.is_(None),
+            )
+        )
+    else:
+        query = query.where(OntologyRelationType.project_id.is_(None))
+    codes.update(session.scalars(query).all())
+    return codes
+
+
 def find_relation_type(
     session: Session, *, project_id: str, kind: str, code: str
 ) -> OntologyRelationType | None:

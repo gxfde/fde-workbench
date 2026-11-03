@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O2b：对象类型值域开放（T-O2 注册表的 subject_type 真正可用于新建对象/表单/导入，2026-11-03）
+
+### 服务端（1 个迁移（零新表：三处 CHECK 放宽 + 三列放宽）/ 零路由 / 零桌面改动）
+
+- **值域从枚举到格式**：`project_research_subjects` / `template_research_forms` / `project_research_import_batches` 三处 subject_type CHECK 改码格式 `^[a-z][a-z0-9_]{0,59}$`、列宽 32→60（迁移 **`b5d9e3f7a1c6`**，31 rev；枚举 ⊂ 格式，存量全兼容；downgrade 收窄时超长注册码行被枚举 CHECK 挡下——保护语义）。
+- **单原语闸门**：新建调研对象只认「内置五类 ∪ 注册表 active 行（全局∪项目内）− project 根」，把守在 `create_subject_in_transaction`（人工创建与导入 commit 同闸）；retired=禁新建存量只读、draft=未拍板提案，都拦闸外（`usable_subject_type_codes`，与引用解析用的 `known_subject_type_codes` 两把尺子）。错误码新设 400 `unsupported_subject_type`。
+- **导入三闸一致**：authorize 带回项目可导入域 → preview/store 前置校验（缺省退回内置四类）→ commit 原语复核（覆盖 preview→commit 30 分钟 TTL 内 retire 窗口）。
+- **消费方对齐（防静默丢内容）**：文档快照按行上实际类型分组（注册/退役类型的存量对象不再被丢弃）；表单定义/AI 表单生成/模板四处校验器全部接「内置 ∪ active」；映射校验允许域从已发布 research definition 派生（保持纯函数）。
+- **两条基线不放开**：AI 生成表单缺省仍只认内置五类（防幻觉）；行业模板五类内置调研表必备（开放值域 ≠ 放弃底线）。
+- **注册类型对象语义**：无父级规则 → 本轮仅允许根级；无跟踪码前缀 → `tracking_code=null`；备忘录/合并功能域白名单（内置四类）冻结不动。
+- **测试**：新增 `test_ontology_subject_type_domain.py` **9 例**（usable 域作用域/状态、注册类型 HTTP 全链路+四类拒绝、retire 存量保留+快照、导入三闸、定义/AI/映射/模板域、内置码覆盖钉子）+ 迁移往返 **1 例**（双向列宽/CHECK/数据保留 + 存量行挡降级保护语义）；`HEAD_REVISION` → `b5d9e3f7a1c6`。服务端 **1818 收集 = 1812 passed + 6 skipped**（+10）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`（api/worker/scheduler 三镜像）。
+
 ## [未发布] — V3 实施 T-O3：变更集 ontology_change_sets（AI 候选唯一入口：propose→submit→confirm 人工拍板闭环，2026-11-03）
 
 ### 服务端（1 个迁移（一张新表，唯一 DDL）/ 7 条新路由 / 零桌面改动）

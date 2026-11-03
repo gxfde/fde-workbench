@@ -214,11 +214,25 @@ class ImportServiceError(Exception):
 
 
 def preview_subject_import(
-    stream: BinaryIO, filename: str, subject_type: str
+    stream: BinaryIO,
+    filename: str,
+    subject_type: str,
+    *,
+    allowed_subject_types: frozenset[str] | set[str] = _IMPORT_SUBJECT_TYPES,
 ) -> ImportPreview:
-    """Parse one bounded homogeneous CSV/XLSX import without persisting file bytes."""
-    if subject_type not in _IMPORT_SUBJECT_TYPES:
-        raise _invalid_request()
+    """Parse one bounded homogeneous CSV/XLSX import without persisting file bytes.
+
+    V3 T-O2b：allowed_subject_types 由调用方按项目注册表计算（内置 ∪ 注册表
+    active − project，见 authorize_subject_import）；缺省退回内置四类。commit
+    侧另有 create_subject_in_transaction 同闸复核，覆盖 preview→commit TTL 内
+    类型被 retired 的窗口。
+    """
+    if subject_type == "project" or subject_type not in allowed_subject_types:
+        raise ImportServiceError(
+            "unsupported_subject_type",
+            "The subject type is not supported for import in this project.",
+            400,
+        )
     extension = Path(filename or "").suffix.lower()
     if extension not in _SUPPORTED_EXTENSIONS:
         raise ImportServiceError(
@@ -239,7 +253,17 @@ def store_subject_import_preview(
     *, actor: User, project_id: str, preview: ImportPreview
 ) -> ImportPreview:
     """Authorize and bind a parsed preview to one project for thirty minutes."""
-    authorize_subject_import(actor, project_id)
+    allowed = authorize_subject_import(actor, project_id)
+    if (
+        preview.subject_type == "project"
+        or preview.subject_type not in allowed
+    ):
+        # 绑定点复核：preview 解析侧的类型域与授权侧可能来自不同时刻。
+        raise ImportServiceError(
+            "unsupported_subject_type",
+            "The subject type is not supported for import in this project.",
+            400,
+        )
     preview_id = token_hex(16)
     token = _serializer().dumps({"preview_id": preview_id, "project_id": project_id})
     state = {
@@ -311,9 +335,15 @@ def commit_subject_import(
                 expected_version=expected_version,
                 state=_load_state(state_key),
             )
-        except (ImportServiceError, ResearchSubjectServiceError):
+        except ImportServiceError:
             _reset_commit_state(lease)
             raise
+        except ResearchSubjectServiceError as error:
+            # V3 T-O2b：commit 侧注册表闸门（create_subject_in_transaction）可能
+            # 在 preview→commit TTL 内拒绝 retired/draft 类型；转成导入面错误，
+            # 路由契约保持只抛 ImportServiceError。
+            _reset_commit_state(lease)
+            raise ImportServiceError(error.code, error.message, error.status) from None
         except (IntegrityError, SQLAlchemyError):
             _reset_commit_state(lease)
             raise ImportServiceError(
@@ -479,8 +509,14 @@ def _result_from_database_receipt(
     return result
 
 
-def authorize_subject_import(actor: User, project_id: str) -> None:
-    """Reject callers without the shared project subject-write capability."""
+def authorize_subject_import(actor: User, project_id: str) -> frozenset[str]:
+    """Reject callers without the shared project subject-write capability.
+
+    V3 T-O2b：同时带回该项目的可导入类型域（内置 ∪ 注册表 active − project），
+    供 preview/store 前置校验；commit 侧由 create_subject_in_transaction 同闸
+    复核（三处同一闸门语义，防 30 分钟 TTL 内的 retire 窗口）。
+    """
+    from fde_api.ontology.service import usable_subject_type_codes
     from fde_api.research.subject_service import (
         ResearchSubjectServiceError,
         load_subject_project,
@@ -488,11 +524,13 @@ def authorize_subject_import(actor: User, project_id: str) -> None:
 
     session = db.session()
     try:
-        load_subject_project(session, actor, project_id)
+        project = load_subject_project(session, actor, project_id)
+        allowed = usable_subject_type_codes(session, project_id=project.id)
     except ResearchSubjectServiceError as error:
         raise ImportServiceError(error.code, error.message, error.status) from None
     finally:
         session.close()
+    return frozenset(allowed - {"project"})
 
 
 def _read_bounded(stream: BinaryIO) -> bytes:

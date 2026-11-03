@@ -368,19 +368,32 @@ def test_answers_are_unique_per_revision_and_field_key(db_session, confirmed_rev
         db_session.commit()
 
 
-def test_database_rejects_unknown_research_subject_type(db_session, confirmed_revision):
-    """Removing the subject type check would permit subjects no form can target."""
+def test_database_subject_type_check_is_format_not_enum(db_session, confirmed_revision):
+    """V3 T-O2b 值域开放：DB 层只守码格式（大写开头 → CHECK 违例）；格式合法的
+    注册表外码可落行——「内置 ∪ 注册表」允许域由服务层闸门把守（见
+    test_ontology_subject_type_domain），DB 不再是枚举守门员。"""
     db_session.add(
         ProjectResearchSubject(
             project=confirmed_revision.form.project,
-            subject_type="team",
-            subject_key="unknown-team",
-            name="未知对象",
+            subject_type="VendorSite",
+            subject_key="bad-format",
+            name="坏格式",
         )
     )
 
     with pytest.raises(DBAPIError):
         db_session.commit()
+
+    db_session.rollback()
+    subject = ProjectResearchSubject(
+        project=confirmed_revision.form.project,
+        subject_type="team",
+        subject_key="unknown-team",
+        name="未知对象",
+    )
+    db_session.add(subject)
+    db_session.commit()
+    assert subject.id is not None
 
 
 def test_research_database_exposes_history_indexes_and_restrict_foreign_keys(db_session):

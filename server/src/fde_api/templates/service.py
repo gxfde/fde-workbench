@@ -228,10 +228,14 @@ def create_ai_template_draft(
                 AIContractError,
                 validate_generated_template,
             )
+            from fde_api.ontology.service import usable_subject_type_codes
 
             try:
+                # V3 T-O2b：模板为行业级（project_id=None），全局注册表 active 行可进。
                 normalized = validate_generated_template(
-                    generated, active_module_keys=active_module_keys
+                    generated,
+                    active_module_keys=active_module_keys,
+                    allowed_subject_types=usable_subject_type_codes(session, project_id=None),
                 )
             except AIContractError as error:
                 raise TemplateServiceError(

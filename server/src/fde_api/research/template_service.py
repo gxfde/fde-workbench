@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
+from fde_api.ontology import service as ontology_service  # V3 T-O2b 值域开放
 from fde_api.research.definitions import DefinitionIssue, validate_research_definition
 from fde_api.research.models import (
     TemplateResearchField,
@@ -55,7 +56,13 @@ def create_research_form(
             _require_current_version(version, expected_version)
             definition = _snapshot_from_version(version)
             definition["forms"].append(form)
-            _raise_definition_issues(validate_research_definition(definition))
+            _raise_definition_issues(validate_research_definition(
+                definition,
+                # V3 T-O2b：模板为行业级——值域 = 内置 ∪ 全局注册表 active 行。
+                allowed_subject_types=ontology_service.usable_subject_type_codes(
+                    session, project_id=None
+                ),
+            ))
             _validate_definition_module_keys(session, version.id, definition)
             _insert_form(session, version.id, form)
             version.version += 1
@@ -89,7 +96,13 @@ def replace_research_definition(
             _assert_editable_version(version, template_id)
             assert version is not None
             _require_current_version(version, expected_version)
-            _raise_definition_issues(validate_research_definition(definition))
+            _raise_definition_issues(validate_research_definition(
+                definition,
+                # V3 T-O2b：模板为行业级——值域 = 内置 ∪ 全局注册表 active 行。
+                allowed_subject_types=ontology_service.usable_subject_type_codes(
+                    session, project_id=None
+                ),
+            ))
             _validate_definition_module_keys(session, version.id, definition)
             _assert_ids_keep_stable_keys(version, definition["forms"])
             _sync_forms(session, version, definition["forms"])
@@ -136,7 +149,13 @@ def delete_research_definition(
 
 def validate_persisted_research_definition(session: Session, version_id: str) -> None:
     definition = snapshot_research_definition(version_id=version_id, session=session)
-    _raise_definition_issues(validate_research_definition(definition))
+    _raise_definition_issues(validate_research_definition(
+                definition,
+                # V3 T-O2b：模板为行业级——值域 = 内置 ∪ 全局注册表 active 行。
+                allowed_subject_types=ontology_service.usable_subject_type_codes(
+                    session, project_id=None
+                ),
+            ))
     _validate_definition_module_keys(session, version_id, definition)
 
 
@@ -165,7 +184,13 @@ def insert_research_definition(
     session: Session, *, version_id: str, definition: dict[str, Any]
 ) -> None:
     """Validate and insert a complete definition inside the caller's transaction."""
-    _raise_definition_issues(validate_research_definition(definition))
+    _raise_definition_issues(validate_research_definition(
+                definition,
+                # V3 T-O2b：模板为行业级——值域 = 内置 ∪ 全局注册表 active 行。
+                allowed_subject_types=ontology_service.usable_subject_type_codes(
+                    session, project_id=None
+                ),
+            ))
     _validate_definition_module_keys(session, version_id, definition)
     for form in definition["forms"]:
         _insert_form(session, version_id, form)

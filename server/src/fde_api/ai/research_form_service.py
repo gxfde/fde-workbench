@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any, Callable
 
 from flask import current_app
@@ -13,6 +14,7 @@ from fde_api.ai.deepseek import DeepSeekClient, DeepSeekError
 from fde_api.ai.research_form_prompt import build_research_form_messages
 from fde_api.config import Settings
 from fde_api.extensions import db
+from fde_api.ontology import service as ontology_service  # V3 T-O2b 值域开放
 from fde_api.projects.permissions import project_access
 from fde_api.research.definitions import validate_research_definition
 from fde_api.research.models import (
@@ -81,6 +83,8 @@ def generate_research_form(payload: object, *, on_event: Callable[[dict[str, str
         }
         messages = build_research_form_messages(context)
         existing_keys = {item["form_key"] for item in existing}
+        # V3 T-O2b：模板侧值域 = 内置 ∪ 全局注册表 active 行。
+        allowed_types = ontology_service.usable_subject_type_codes(session, project_id=None)
         for attempt in range(2):
             try:
                 raw = _call_ai(messages, on_event=on_event)
@@ -90,7 +94,9 @@ def generate_research_form(payload: object, *, on_event: Callable[[dict[str, str
                     continue
                 raise
             normalized = _normalize_generated_form(raw)
-            if normalized is not None and _valid_generated_form(normalized, module_keys, existing_keys):
+            if normalized is not None and _valid_generated_form(
+                normalized, module_keys, existing_keys, allowed_subject_types=allowed_types
+            ):
                 return normalized
             if attempt == 0:
                 messages = _retry_messages(messages)
@@ -169,6 +175,8 @@ def generate_project_research_form(*, actor: User, payload: object, on_event: Ca
         messages = build_research_form_messages(context)
         module_keys = [module.module_catalog.module_key for module in active_modules]
         existing_keys = {item["form_key"] for item in existing}
+        # V3 T-O2b：项目侧值域 = 内置 ∪ 注册表 active（本项目∪全局）。
+        allowed_types = ontology_service.usable_subject_type_codes(session, project_id=project.id)
         for attempt in range(2):
             try:
                 raw = _call_ai(messages, on_event=on_event)
@@ -183,6 +191,7 @@ def generate_project_research_form(*, actor: User, payload: object, on_event: Ca
                 module_keys,
                 existing_keys,
                 required_subject_type=subject.subject_type,
+                allowed_subject_types=allowed_types,
             ):
                 return normalized
             if attempt == 0:
@@ -296,12 +305,20 @@ def _valid_generated_form(
     existing_keys: set[str],
     *,
     required_subject_type: str | None = None,
+    allowed_subject_types: Iterable[str] | None = None,
 ) -> bool:
     if not isinstance(value, dict) or set(value) != {
         "form_key", "name", "description", "subject_type", "module_key", "sections"
     }:
         return False
-    if value.get("subject_type") not in SUBJECT_TYPES:
+    # V3 T-O2b：缺省=内置五类（防 AI 幻觉基线不变）；模板/项目生成方按各自
+    # 注册表上下文传「内置 ∪ 注册表 active 行」。
+    allowed = (
+        set(allowed_subject_types)
+        if allowed_subject_types is not None
+        else set(SUBJECT_TYPES)
+    )
+    if value.get("subject_type") not in allowed:
         return False
     if required_subject_type is not None and value.get("subject_type") != required_subject_type:
         return False
@@ -325,7 +342,7 @@ def _valid_generated_form(
                 return False
             if field.get("type") not in FIELD_TYPES:
                 return False
-    return not validate_research_definition({"forms": [value]})
+    return not validate_research_definition({"forms": [value]}, allowed_subject_types=allowed)
 
 
 def _normalize_generated_form(

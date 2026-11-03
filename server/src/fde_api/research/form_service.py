@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
+from fde_api.ontology import service as ontology_service  # V3 T-O2b 值域开放
 from fde_api.projects import events as project_events
 from fde_api.projects.permissions import project_access
 from fde_api.research.answers import (
@@ -427,7 +428,13 @@ def update_project_form_definition(
                 )
             revision = _fork_working_revision(session, form, revision, previous_definition)
             definition = _opportunity_identification_definition(_make_fields_optional(_inject_definition_ids(form_input)))
-            _raise_definition_issues(validate_research_definition({"forms": [definition]}))
+            # V3 T-O2b：表单定义值域 = 内置 ∪ 注册表 active（本项目∪全局）。
+            _raise_definition_issues(validate_research_definition(
+                {"forms": [definition]},
+                allowed_subject_types=ontology_service.usable_subject_type_codes(
+                    session, project_id=project.id
+                ),
+            ))
             current_keys = set(_fields_by_key(definition))
             for answer in list(revision.answers):
                 if answer.field_key not in current_keys and answer.field_key not in retired_keys:
@@ -649,8 +656,14 @@ def create_project_form(
                     400,
                 )
             definition = _opportunity_identification_definition(_make_fields_optional(_inject_definition_ids(form_input)))
+            # V3 T-O2b：表单定义值域 = 内置 ∪ 注册表 active（本项目∪全局）。
             _raise_definition_issues(
-                validate_research_definition({"forms": [definition]})
+                validate_research_definition(
+                    {"forms": [definition]},
+                    allowed_subject_types=ontology_service.usable_subject_type_codes(
+                        session, project_id=project.id
+                    ),
+                )
             )
             project_form = ProjectResearchForm(
                 project_id=project.id,

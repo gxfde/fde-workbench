@@ -92,12 +92,23 @@
   - **状态取值域**：CHECK 含 `draft`（留给 T-O3 变更集：提出的类型先落 draft，confirm 转 active），本轮登记入口直落 `active`，`retired` 为终态（重复停用 409 `invalid_transition`）。
   - **口径**：**103→104 表**、迁移头 `b8d3f1a5c7e2`（**29 rev**）、路由 **283→286**（+3）、ENTRIES 94 不变（`research.link` 描述同步：端点约束按注册类型校验）、pytest **1798 收集 = 1792 passed + 6 skipped**（T-O2 +8：注册表 7 + 迁移往返 1）、vitest 730 不变（零桌面改动）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
 
-### T-O2b 对象类型值域开放（接 T-O2 注册表的 subject_type 一侧）— **TODO**
+### T-O2b 对象类型值域开放（接 T-O2 注册表的 subject_type 一侧）— **DONE（2026-11-03，分支 feat/v3-t-o2b-subject-type-domain，squash 合并至 fork/main）**
 - 目标：让 T-O2 登记的 `kind=subject_type` 真正可用于新建调研对象/表单/导入批次。
 - 前置：T-O2（注册表已登记对象类型并可被关系类型端点约束引用）。
 - 改动面：①三处 DB CheckConstraint 放宽（`project_research_subjects` / `template_research_forms` / `project_research_import_batches`）；②服务层白名单 `CLIENT_SUBJECT_TYPES`（subject_service）/ `_IMPORT_SUBJECT_TYPES`（imports）/ `SUBJECT_TYPES` 校验（research/definitions.py、ai/research_form_service.py）改「内置 ∪ 注册表」；③消费方对齐：`documents/mapping.py`、`documents/snapshots.py`（按 `SUBJECT_TYPES` 逐类型建快照——漏改即静默丢该类型内容）、`ai/industry_template_schema.py`（完整性校验）。
 - 风险：值域放宽是**存量语义变更**（约束从枚举变格式），须评估存量数据与历史导入的兼容；文档快照漏一类即静默丢内容。
 - 复杂度：**L**（超出 M，故与 T-O2 分轮）。
+- **实施记录（2026-11-03）**：
+  - **迁移 `b5d9e3f7a1c6`（31 rev）**：三处 subject_type CHECK 枚举→码格式 `^[a-z][a-z0-9_]{0,59}$`（对齐注册表 `_CODE_PATTERN`），三列宽 32→60（对齐 `ontology_relation_types.code`）。无数据改写——枚举值是格式的子集，存量全兼容；downgrade 收窄时超长注册码行会被枚举 CHECK 挡下（保护语义，测试钉住）。
+  - **两把尺子（ontology/service）**：`known_subject_type_codes`（引用解析，含 retired）不变；新增 `usable_subject_type_codes`——**新建**值域只收 active 行（draft=未拍板提案、retired=禁新建存量只读，都拦闸外），project_id=None 即全局域。
+  - **单原语闸门**：`create_subject_in_transaction` 里 `_ensure_subject_type_allowed`——人工创建与导入 commit 汇聚同一原语，一处把守「内置 ∪ active 注册 − project」；错误码新设 400 `unsupported_subject_type`（形状非法仍 invalid_request）。project 根类型永不可建（显式排除，注册表本就不得覆盖内置码）。
+  - **导入三闸一致**：`authorize_subject_import` 改为**带回**该项目可导入域（内置 ∪ active − project）→ preview 形参化（缺省退回内置四类，旧调用兼容）→ store 绑定点复核 → commit 侧由原语复核（覆盖 preview→commit 30 分钟 TTL 内 retire 窗口）；commit 的 `ResearchSubjectServiceError` 转 `ImportServiceError`，路由契约不变。
+  - **父级裁决**：注册类型无父级规则（`_PARENT_TYPES` 无条目）→ **本轮仅允许根级**（有 parent 即 `invalid_subject_parent`）；跟踪码无前缀 → `tracking_code=None`。层级规则留后续轮。
+  - **功能域白名单冻结**：`MEMO_SUBJECT_TYPES`（subject_service + memo_merge_service）是备忘录功能范围不是值域，注册类型对象暂不进备忘录/合并——零改动，注释钉住。
+  - **消费方对齐**：`documents/snapshots.py` 按**行上实际值**分组（内置 canonical 序在前、注册/退役类型按名字母序跟随）——retire 只禁新建不禁存量，快照永不丢类型；`documents/mapping.py` 允许域从**已发布 research definition 派生**（内置 ∪ 定义声明类型），保持纯函数不查注册表；`research/definitions.py` 加 `allowed_subject_types` 参（缺省=内置五类，纯函数语义不变）；`form_service` 两处、`ai/research_form_service` 两处生成器、`template_service` 四处、`validate_generated_template`（含 `templates/service` 落库权威校验与 AI 预筛同域）全部传「内置 ∪ active」。
+  - **AI 幻觉基线与完整性基线不放开**：AI 生成表单缺省仍只认内置五类（调用方显式传注册域才放宽）；行业模板**五类内置调研表必备**不变（开放值域 ≠ 放弃底线），全局注册类型可作第六类追加。
+  - **契约变化**：subject 创建/导入的「根类型/未知类型」错误码 `invalid_request`→`400 unsupported_subject_type`（旧契约测试同步改写）；零路由零桌面改动（ENTRIES 94、路由 293 不变）。
+  - **口径**：105 表不变、迁移头 `c9e3a7d1b5f8`→**`b5d9e3f7a1c6`**（30→**31 rev**）、业务路由 **293** 不变、ENTRIES **94** 不变、pytest **1818 收集 = 1812 passed + 6 skipped**（T-O2b +10：值域域测试 9 + 迁移往返 1）、vitest 730 不变。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
 
 ### T-O3 变更集 ontology_change_sets（候选→人工确认闭环）— **DONE（2026-11-03，分支 feat/v3-t-o3-change-sets，squash 合并至 fork/main）**
 - 目标：批量变更事务单元+diff 评审+base 指纹并发防护；AI 候选唯一入口。

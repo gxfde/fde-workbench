@@ -199,7 +199,7 @@ def test_subject_creation_requires_the_current_project_version(
 def test_client_cannot_create_root_or_unknown_subject_types(
     admin_client, published_template, leader_client, subject_type
 ):
-    """Delegating type validation to the database would return the wrong contract error."""
+    """T-O2b 值域开放后的闸门语义：project 根保留 + 注册表外的码 → unsupported_subject_type。"""
     project = _create_project(admin_client, published_template, leader_client.user)
 
     response = admin_client.post(
@@ -207,7 +207,7 @@ def test_client_cannot_create_root_or_unknown_subject_types(
         json=_subject_payload(subject_type, subject_key=f"{subject_type}_client"),
     )
 
-    _assert_error(response, 400, "invalid_request")
+    _assert_error(response, 400, "unsupported_subject_type")
 
 
 def test_subject_create_permissions_distinguish_assigned_engineer_and_viewer(

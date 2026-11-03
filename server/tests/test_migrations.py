@@ -20,7 +20,7 @@ import pytest
 from alembic import command
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError, DataError, IntegrityError
 
 from conftest import SERVER_ROOT, seed_reference_data
 
@@ -47,7 +47,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-O1：ontology_terms + ontology_term_aliases 两表（术语/别名治理底座）
 # V3 T-O2：ontology_relation_types 一表（关系/对象类型注册表）
 # V3 T-O3：ontology_change_sets 一表（变更集：批量事务单元 + base 指纹并发防护）
-HEAD_REVISION = "c9e3a7d1b5f8"
+# V3 T-O2b：对象类型值域开放——三处 subject_type CHECK 枚举→码格式 + 列宽 32→60
+HEAD_REVISION = "b5d9e3f7a1c6"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -875,6 +876,160 @@ def test_v3_change_set_table_roundtrip_preserves_projects(alembic_config, engine
     assert "ontology_change_sets" not in table_names(engine)
 
     command.upgrade(alembic_config, "head")
+    cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
+    # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
+    seed_reference_data(engine.url.render_as_string(hide_password=False))
+
+
+def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, engine):
+    """V3 T-O2b：值域开放——head 上 CHECK 是码格式（注册码过、坏格式拒）、列宽
+    60；downgrade 回枚举时存量注册码行会被枚举 CHECK 挡下（保护语义，删行后
+    降级才放行）；降级后列宽回 32、项目行不丢、注册码落行被拒；再 upgrade 存量
+    内置行原样保留（枚举值是格式的子集，双向兼容）。"""
+    # 自愈：上一轮本测试若中途崩溃会留下格式合法但非枚举的行，挡住后续
+    # 任何降级——先清掉这类行再开始（内置行不受影响）。
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM project_research_subjects WHERE subject_type NOT IN "
+                "('project', 'department', 'role', 'process', 'opportunity')"
+            )
+        )
+    command.downgrade(alembic_config, "b8d3f1a5c7e2")
+    ids = seed_user_and_template(engine, username="migration.v4-domain-keep")
+    project_id, sop_node_id = seed_project(engine, ids, project_code="FDE-V4-DOMAIN")
+
+    command.upgrade(alembic_config, "head")
+
+    # head：列宽 60，注册码（非内置枚举）可落行
+    character_max = scalar(
+        engine,
+        "SELECT character_maximum_length FROM information_schema.columns "
+        "WHERE table_name='project_research_subjects' AND column_name='subject_type'",
+    )
+    assert character_max == 60
+    subject_id = str(uuid4())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project_research_subjects "
+                "(id, project_id, subject_type, subject_key, name, description, memo, "
+                "status, version, sort_order, tracking_code, created_at, updated_at) "
+                "VALUES (:id, :project_id, 'vendor_site', 'vendor_site_main', "
+                "'供应商站点', '', '', 'active', 1, 0, NULL, now(), now())"
+            ),
+            {"id": subject_id, "project_id": project_id},
+        )
+    # head：坏格式被拒——大写开头是 CHECK 违例（IntegrityError）；
+    # 61 字符先撞列宽 varchar(60)（DataError）
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO project_research_subjects "
+                    "(id, project_id, subject_type, subject_key, name, description, memo, "
+                    "status, version, sort_order, tracking_code, created_at, updated_at) "
+                    "VALUES (:id, :project_id, 'VendorSite', 'bad_case', '坏码', '', '', "
+                    "'active', 1, 0, NULL, now(), now())"
+                ),
+                {"id": str(uuid4()), "project_id": project_id},
+            )
+    with pytest.raises(DataError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO project_research_subjects "
+                    "(id, project_id, subject_type, subject_key, name, description, memo, "
+                    "status, version, sort_order, tracking_code, created_at, updated_at) "
+                    "VALUES (:id, :project_id, :code, 'long_case', '超长码', '', '', "
+                    "'active', 1, 0, NULL, now(), now())"
+                ),
+                {"id": str(uuid4()), "project_id": project_id, "code": "a" * 61},
+            )
+
+    # 降级保护语义（迁移 downgrade 的第一撞）：存量注册码行在 → 重加枚举
+    # CHECK 被拒。用裸 SQL 事务复现同一 DB 语义（engine.begin 异常即回滚），
+    # 不把失败的 alembic 命令包进 pytest.raises——失败的迁移可能泄漏连接/锁，
+    # 挡死同一库上的后续迁移命令。
+    with pytest.raises(DBAPIError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE project_research_subjects DROP CONSTRAINT "
+                    "ck_project_research_subjects_subject_type"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE project_research_subjects ADD CONSTRAINT "
+                    "ck_project_research_subjects_subject_type CHECK (subject_type IN "
+                    "('project', 'department', 'role', 'process', 'opportunity'))"
+                )
+            )
+    assert (
+        scalar(
+            engine,
+            "SELECT subject_type FROM project_research_subjects WHERE id = :id",
+            {"id": subject_id},
+        )
+        == "vendor_site"
+    )
+
+    # 删掉注册码行后降级放行：列宽回 32，项目行保留，注册码再落行被枚举拒
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM project_research_subjects WHERE id = :id"),
+            {"id": subject_id},
+        )
+    command.downgrade(alembic_config, "b8d3f1a5c7e2")
+
+    character_max = scalar(
+        engine,
+        "SELECT character_maximum_length FROM information_schema.columns "
+        "WHERE table_name='project_research_subjects' AND column_name='subject_type'",
+    )
+    assert character_max == 32
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO project_research_subjects "
+                    "(id, project_id, subject_type, subject_key, name, description, memo, "
+                    "status, version, sort_order, tracking_code, created_at, updated_at) "
+                    "VALUES (:id, :project_id, 'vendor_site', 'vendor_down', '降级站点', '', '', "
+                    "'active', 1, 0, NULL, now(), now())"
+                ),
+                {"id": str(uuid4()), "project_id": project_id},
+            )
+
+    command.upgrade(alembic_config, "head")
+
+    # 再升级：内置类型存量行原样保留（枚举 ⊂ 格式，双向兼容）
+    builtin_id = str(uuid4())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project_research_subjects "
+                "(id, project_id, subject_type, subject_key, name, description, memo, "
+                "status, version, sort_order, tracking_code, created_at, updated_at) "
+                "VALUES (:id, :project_id, 'department', 'dept_main', '销售部', '', '', "
+                "'active', 1, 0, NULL, now(), now())"
+            ),
+            {"id": builtin_id, "project_id": project_id},
+        )
+    assert (
+        scalar(
+            engine,
+            "SELECT subject_type FROM project_research_subjects WHERE id = :id",
+            {"id": builtin_id},
+        )
+        == "department"
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM project_research_subjects WHERE id = :id"),
+            {"id": builtin_id},
+        )
     cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
     # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
     seed_reference_data(engine.url.render_as_string(hide_password=False))

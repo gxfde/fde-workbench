@@ -27,13 +27,20 @@ from fde_api.workbench.models import Project, ProjectMember
 
 
 TRACKING_PREFIX = {"role": "JOB", "opportunity": "OPP"}
+# V3 T-O2b：CLIENT_SUBJECT_TYPES 不再是创建面的允许域——创建闸门改为
+# 「内置 ∪ 注册表 active 行 − project」（_ensure_subject_type_allowed，取
+# ontology_service.usable_subject_type_codes）；本常量只剩内置客户端四类的
+# 语义标注价值（历史导入/文档引用），不作运行时校验。
 CLIENT_SUBJECT_TYPES = frozenset({"department", "role", "process", "opportunity"})
+# 备忘录/合并是功能域白名单而非值域（注册类型的对象暂不进个人备忘录功能）。
 MEMO_SUBJECT_TYPES = frozenset({"project", "department", "role", "process"})
 LINK_SUBJECT_TYPES = {
     "opportunity_role": ("opportunity", "role"),
     "opportunity_process": ("opportunity", "process"),
 }
 _STABLE_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
+# 与 ontology 注册表 code 同格式（_CODE_PATTERN）同宽（60）。
+_SUBJECT_TYPE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
 _TRACKING_CODE = re.compile(r"^(?P<prefix>[A-Z]+)-(?P<number>\d+)$")
 _PARENT_TYPES = {
     "department": frozenset({"project"}),
@@ -499,6 +506,9 @@ def create_subject_in_transaction(
 ) -> ProjectResearchSubject:
     """Create one subject inside the caller-owned project transaction."""
     values = _normalize_create(input)
+    # V3 T-O2b 注册表闸门：人工创建与导入 commit 都汇聚到本原语，一处把守
+    # 「内置 ∪ 注册表 active − project」。retired/draft 类型在此被拒（禁新建）。
+    _ensure_subject_type_allowed(session, project.id, values["subject_type"])
     parent = _parent_for_input(session, project.id, values["parent_subject_id"])
     _validate_parent_type(values["subject_type"], parent)
     subject = ProjectResearchSubject(
@@ -649,6 +659,23 @@ def _parent_for_input(
     return _load_subject(session, project_id, parent_subject_id, for_update=True)
 
 
+def _ensure_subject_type_allowed(
+    session: Session, project_id: str, subject_type: str
+) -> None:
+    """V3 T-O2b 值域闸门：内置 ∪ 注册表 active 行，且 project 根类型永不可建。
+
+    retired（禁新建、存量只读）与 draft（未拍板提案）都拦在闸外；形状不合法
+    的码已在 _normalize_create 拦为 invalid_request。
+    """
+    allowed = ontology_service.usable_subject_type_codes(session, project_id=project_id)
+    if subject_type == "project" or subject_type not in allowed:
+        raise ResearchSubjectServiceError(
+            "unsupported_subject_type",
+            "The subject type is not supported in this project.",
+            400,
+        )
+
+
 def _validate_parent_type(
     subject_type: str, parent: ProjectResearchSubject | None
 ) -> None:
@@ -751,7 +778,9 @@ def _normalize_create(input: Mapping[str, Any]) -> dict[str, Any]:
     try:
         subject_type = input["subject_type"]
         subject_key = _subject_key(input["subject_key"])
-        if subject_type not in CLIENT_SUBJECT_TYPES:
+        # 只做形状校验（码格式/宽度）；允许域（内置 ∪ 注册表 active − project）
+        # 由 create_subject_in_transaction 里的注册表闸门把守（T-O2b）。
+        if not isinstance(subject_type, str) or _SUBJECT_TYPE_CODE.fullmatch(subject_type) is None:
             raise ValueError("invalid subject type")
         values = {
             "subject_type": subject_type,
