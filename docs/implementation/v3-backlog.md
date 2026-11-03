@@ -123,8 +123,15 @@
   - 事件：`workflow_run_waiting_approval`（run 挂起）/ `workflow_run_approval_decided`（拍板落点）。
   - 测试：test_workflow_executor.py **19→26**（审批批准/拒绝/过期/等待中取消+迟到拍板中和/幂等重入 + agent 全闸/能力拒绝不重试/run 失败不叠加工作流重试；unsupported 用例改未知类型）+ test_workflow_definition.py +1（capability 白名单，system.* 排除）；test_migrations HEAD 钉 `d5b8e2f4a7c9`（往返含 downgrade 先清 workflow 审批行再恢复 NOT NULL）。
 
-### T-W5 cancel/resume + reconcile 收敛
+### T-W5 cancel/resume + reconcile 收敛 — **DONE（2026-11-03）**
 - 前置：T-W3。API：POST …/workflow-runs/{rid}/cancel。测试：§6 用例 8。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **HTTP 面 = 服务层两条路由挂接（零服务层改动、零 DDL 零迁移）**：POST `/api/v1/projects/{id}/workflow-runs/{rid}/cancel` 与 `…/resume`（均 can_manage，闸在 `load_project(manage=True)`；跨项目 404 不泄露存在性）。路由总数 276→**278**。标题里的「reconcile 收敛」已随 T-W3 落地（RECOVERABLE 增 `workflow.run` + worker-loss 钩子 `_fail_run_on_worker_loss` + 放弃时 run/悬挂节点 failed，测试钉住），本任务无残留。
+  - **cancel 幂等语义照服务层**：非终态 → 200 `cancelled=true`（未执行节点 cancelled，已执行外呼不回收）；重复取消 → 200 `cancelled=false`；终态 → 409 `already_terminal`；waiting_approval 可取消（pending 审批行不动，迟到拍板被 token 守卫中和——T-W4 语义）。
+  - **resume failed-only**：failed → 200 `reset_nodes`（failed/skipped 放回 pending、attempt 归零，重投 `workflow.run`）；其余状态 → 409 `not_resumable`（waiting_approval 提示先拍板或取消）。
+  - 测试：test_workflow_executor.py **26→27**（新增 `test_routes_cancel_and_resume_lifecycle_and_permissions`：viewer 403 / 幂等取消 / already_terminal / 跨项目 404 / failed-only 恢复+节点回 pending / not_resumable；服务层语义由既有用例 4/8 钉住，HTTP 用例直改状态造终态/失败场景）；test_migrations HEAD 不变。
+  - **同轮附带修复（CI 实测暴露的既有隐性 flake）**：`test_workflow_definition.py::test_definition_publish_locks_immutable_version_rows` 的事件断言裸查 `operation_events` **无 order_by**（堆物理序，PR #77 CI 同码双 run 一绿一红、实际 `[updated, published, created, published]`）→ 补 `order_by(occurred_at, id)` 定序（occurred_at=事务级时间戳各 commit 微秒互异；id 是 uuid4 不可作决胜键）。与本任务功能面无关，测试唯一改动。
+  - 桌面控制台（run 列表/取消/恢复按钮）随 T-W6；当前 HTTP 面即 API 完整面。
 
 ### T-R1 agent_tool_groups（域 7）
 - 目标：只读工具组目录（种子文件 `server/seeds/tool_groups.json`），allowed_tools 支持 group: 引用，resolve=交集。

@@ -1,4 +1,4 @@
-"""V3 T-W3/T-W4：workflow 执行器——四类节点、节点独立事务、断链不静默、幂等恢复。
+"""V3 T-W3/T-W4/T-W5：workflow 执行器——四类节点、节点独立事务、断链不静默、幂等恢复。
 
 覆盖设计 workflow-dag-v1 §6 用例 4-8、11（§5 路由与权限随本文件一起钉住）：
 - run 生命周期：published 闸 / 未知节点 422 / 幂等键同 run 返回（用例 5）/ 取消（用例 8）；
@@ -8,7 +8,8 @@
   （用例 6）；outbox→worker 全链与 reconcile 放弃钩子；
 - T-W4：agent 节点走 agents.start_run 全闸（拒绝不重试 / run 失败不叠加工作流重试）、
   human_approval 复用 automation_approvals（waiting→拍板→重投；拒绝/过期断链；
-  等待中取消；幂等重入不重复建审批）。
+  等待中取消；幂等重入不重复建审批）；
+- T-W5：cancel/resume 的 HTTP 面（幂等取消 / failed-only 恢复 / 权限与错误码）。
 """
 from __future__ import annotations
 
@@ -380,6 +381,71 @@ def test_platform_templates_route_admin_only_and_runs_in_project(db_session, set
 
     run, created = _start(db_session, leader.user, project, template)
     assert created and run.project_id == project.id
+
+
+def test_routes_cancel_and_resume_lifecycle_and_permissions(
+    db_session, settings, client
+):
+    """T-W5：cancel/resume 的 HTTP 面——幂等取消 / failed-only 恢复 / 权限与跨项目 404。
+
+    服务层语义（已执行保留、waiting 审批中和、重投 outbox）由本文件既有服务级用例
+    钉住；此处验证 §5 路由挂接、can_manage 闸与 §5 错误码。
+    """
+    leader = _client_for(client, db_session, settings, role="project_lead")
+    viewer = _client_for(client, db_session, settings, role="viewer")
+    project = _persist_project(db_session, leader.user, code=f"WE{uuid4().hex[:4]}")
+    _add_viewer_member(db_session, project, viewer.user)
+    definition = _make_definition(
+        db_session, leader.user, project, _node("gather"), publish=True
+    )
+
+    # 取消：viewer 403 → leader 200 cancelled=true（未执行节点 cancelled）；重复取消幂等
+    run, _ = _start(db_session, leader.user, project, definition)
+    cancel_url = f"/api/v1/projects/{project.id}/workflow-runs/{run.id}/cancel"
+    assert viewer.post(cancel_url, json={}).status_code == 403
+    cancelled = leader.post(cancel_url, json={})
+    assert cancelled.status_code == 200, cancelled.get_json()
+    assert cancelled.get_json()["data"]["cancelled"] is True
+    assert cancelled.get_json()["data"]["run"]["status"] == "cancelled"
+    again = leader.post(cancel_url, json={})
+    assert again.status_code == 200 and again.get_json()["data"]["cancelled"] is False
+
+    # 终态不可取消（§5 错误码 already_terminal）；跨项目 404 不泄露存在性
+    done, _ = _start(db_session, leader.user, project, definition)
+    done.status = "succeeded"  # 直改终态以验证 409 分支（check 约束内合法值）
+    db_session.commit()
+    done_response = leader.post(
+        f"/api/v1/projects/{project.id}/workflow-runs/{done.id}/cancel", json={}
+    )
+    assert done_response.status_code == 409
+    assert done_response.get_json()["error"]["code"] == "already_terminal"
+    other = _persist_project(db_session, leader.user, code=f"WF{uuid4().hex[:4]}")
+    assert (
+        leader.post(
+            f"/api/v1/projects/{other.id}/workflow-runs/{run.id}/cancel", json={}
+        ).status_code
+        == 404
+    )
+
+    # 恢复：仅 failed 可恢复 → running + failed 节点放回 pending；其余 409 not_resumable
+    failed, _ = _start(db_session, leader.user, project, definition)
+    nodes = _node_map(db_session, failed.id)
+    nodes["gather"].status = "failed"
+    nodes["gather"].error = "transient:临时失败。"
+    failed.status = "failed"  # 直改以验证 HTTP 面（服务层恢复语义已由用例 4 钉住）
+    db_session.commit()
+    resume_url = f"/api/v1/projects/{project.id}/workflow-runs/{failed.id}/resume"
+    assert viewer.post(resume_url, json={}).status_code == 403
+    resumed = leader.post(resume_url, json={})
+    assert resumed.status_code == 200, resumed.get_json()
+    payload = resumed.get_json()["data"]
+    assert payload["run"]["status"] == "running" and payload["reset_nodes"] == 1
+    assert payload["run"]["nodes"][0]["status"] == "pending"
+    non_resumable = leader.post(
+        f"/api/v1/projects/{project.id}/workflow-runs/{done.id}/resume", json={}
+    )
+    assert non_resumable.status_code == 409
+    assert non_resumable.get_json()["error"]["code"] == "not_resumable"
 
 
 # ---------------------------------------------------------------------------

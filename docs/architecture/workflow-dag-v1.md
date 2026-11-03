@@ -1,6 +1,6 @@
 # Workflow DAG v1 设计（P1）
 
-> 状态：**大半 IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`；automation_approvals 审批反链 2026-11-03 T-W4 迁移 `d5b8e2f4a7c9`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器四类节点全部实施（call/skill=2026-11-03 T-W3；agent/human_approval=2026-11-03 T-W4）与 §5 路由五条均已实施**（cancel/resume 路由随 T-W5；偏差见 backlog 实施记录）。§5 cancel/resume 路由仍 PROPOSED（T-W5）。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
+> 状态：**IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`；automation_approvals 审批反链 2026-11-03 T-W4 迁移 `d5b8e2f4a7c9`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器四类节点全部实施（call/skill=2026-11-03 T-W3；agent/human_approval=2026-11-03 T-W4）、§5 路由七条全部实施（2026-11-03 T-W3 五条 + T-W5 cancel/resume 两条）**；仅 §4 证据候选挂接（用例 12）随 T-G1。偏差见 backlog 实施记录。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
 > 核心决策（任务书"决策 3"）：**不复制队列**。workflow 是 background_jobs 的一个新 job_type（`workflow.run`），编排 handler 在一个 job 内驱动节点循环，复用 lease/token/续租/reconcile/failure-hook 全套机制。
 
 ## 1. 与现有体系的边界（决策 3 落实）
@@ -107,7 +107,7 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 - gate_service 仍是唯一状态机；decide 五道闸不感知 workflow；**Agent/工作流输出永不等于门禁通过**（现状 submit 唯一入口=真人会话，保持，F Q4 VERIFIED）。
 - human_approval 节点 ≠ 门禁拍板：它批准的是工具执行，不是 G 状态。
 
-## 5. API（五条 IMPLEMENTED 2026-11-03 随 T-W3；cancel 随 T-W5；平台模板创建走内部通道暂无路由）
+## 5. API（七条全部 IMPLEMENTED：2026-11-03 随 T-W3 五条 + T-W5 cancel/resume；平台模板创建走内部通道暂无路由）
 
 | Method/Path | 权限 | 说明 |
 |---|---|---|
@@ -115,10 +115,11 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 | POST …/workflows/{wid}/publish | admin | 发布新版本（锁版）✅ |
 | POST …/workflows/{wid}/runs | can_manage | {context, idempotency_key?} → 422 dag_invalid（含环/未知引用明细）✅（201/200 按幂等命中） |
 | GET …/workflow-runs/{rid} | can_view | run+节点态树 ✅ |
-| POST …/workflow-runs/{rid}/cancel | can_manage | 幂等（服务层已可用，HTTP 随 T-W5） |
+| POST …/workflow-runs/{rid}/cancel | can_manage | 幂等：重复取消 200 `cancelled=false`；终态 409 already_terminal ✅ T-W5 |
+| POST …/workflow-runs/{rid}/resume | can_manage | failed-only：failed/skipped 放回 pending 重投；其余 409 not_resumable ✅ T-W5 |
 | GET /api/v1/workflows（平台模板） | admin | ✅ |
 
-错误码：422 dag_invalid / 409 idempotency_conflict / 409 already_terminal / 403 permission_revoked（节点执行时）。
+错误码：422 dag_invalid / 409 idempotency_conflict / 409 already_terminal / 409 not_resumable / 403 permission_revoked（节点执行时）。
 
 ## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py——用例 1-11 均已随 T-W1/T-W3/T-W4 落地；用例 12 证据候选随 T-G1）
 

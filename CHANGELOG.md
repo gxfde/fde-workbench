@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W5：Workflow cancel/resume HTTP 面（服务端编排面收口，2026-11-03）
+
+### 服务端（2 条新路由 / 零新表零迁移 / 零服务层改动 / 零桌面改动）
+
+- **运行生命周期路由两条（276→278）**：POST `/api/v1/projects/{id}/workflow-runs/{rid}/cancel`（can_manage，幂等——重复取消 200 `cancelled=false`；终态 409 `already_terminal`；waiting_approval 可取消，pending 审批行不动）与 POST `…/resume`（can_manage，failed-only——failed/skipped 节点放回 pending 重投 `workflow.run`；其余 409 `not_resumable`）。服务层 `cancel_run`/`resume_run`（T-W3）直挂 HTTP，零服务层改动。
+- **reconcile 收敛**：标题项已随 T-W3 落地（RECOVERABLE 增 `workflow.run` + worker-loss 钩子），本任务无残留。
+- **测试**：`test_workflow_executor.py` **26→27**（HTTP 面：viewer 403 / 幂等取消 / already_terminal / 跨项目 404 / failed-only 恢复+节点回 pending / not_resumable）。
+- **口径**：业务表 **101 不变** / 迁移头 **`d5b8e2f4a7c9`（26 revision）不变** / 路由 **278（+2）** / pytest **1773 收集 = 1767 passed + 6 skipped** / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d`（**api/worker/scheduler 三镜像**；迁移头不变，无需 alembic）。
+
 ## [未发布] — V3 实施 T-W4：Workflow 执行器 agent/human_approval 节点（审批复用 automation_approvals，2026-11-03）
 
 ### 服务端（1 个迁移（唯一 DDL）/ 零新路由 / 执行器+control 审批链扩展 / 零桌面改动）

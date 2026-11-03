@@ -210,8 +210,13 @@ def test_definition_publish_locks_immutable_version_rows(db_session, settings):
     assert [row.version for row in versions] == [1, 2]
     assert versions[0].dag_json == dag1  # 旧版本行原样（跑动中定义被改不影响已固定版本的 run）
 
+    # 事件断言必须显式定序：operation_events 无 order_by 的裸查返回堆物理序（CI 实测
+    # 翻转过一次）；occurred_at 是事务级时间戳（各事件分属独立 commit，微秒互异），
+    # id 是 uuid4 随机不可作决胜键。
     events = db_session.scalars(
-        select(OperationEvent).where(OperationEvent.target_id == definition.id)
+        select(OperationEvent)
+        .where(OperationEvent.target_id == definition.id)
+        .order_by(OperationEvent.occurred_at, OperationEvent.id)
     ).all()
     assert [row.event_type for row in events] == [
         "workflow_definition_created", "workflow_definition_published",

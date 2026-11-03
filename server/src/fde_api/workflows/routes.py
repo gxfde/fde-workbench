@@ -1,8 +1,7 @@
-"""Workflow 路由（V3 T-W3，设计 workflow-dag-v1 §5）。
+"""Workflow 路由（V3 T-W3/T-W5，设计 workflow-dag-v1 §5）。
 
-§5 六条中随执行器开放五条；POST …/workflow-runs/{rid}/cancel 与 resume 的 HTTP
-面随 T-W5 开（服务层 executor.cancel_run / resume_run 本轮已可用）。平台模板定义
-（project_id NULL）的创建走内部/admin 通道，本轮只开放只读列表。
+§5 七条全部开放（T-W3 五条：定义/发布/发起/详情/平台模板；T-W5 两条：cancel/resume
+运行生命周期）。平台模板定义（project_id NULL）的创建走内部/admin 通道，只开放只读列表。
 """
 from __future__ import annotations
 
@@ -108,6 +107,20 @@ def start_workflow_run_route(project_id, definition_id):
 def get_workflow_run_route(project_id, run_id):
     """run + 节点态树（can_view）。"""
     return jsonify({"data": executor.get_run_detail(actor=g.current_user, project_id=project_id, run_id=run_id), "error": None})
+
+
+@workflows_blueprint.post("/api/v1/projects/<project_id>/workflow-runs/<run_id>/cancel")
+@require_auth
+def cancel_workflow_run_route(project_id, run_id):
+    """取消运行（can_manage，幂等）：未执行节点 cancelled，已执行外呼不回收。"""
+    return jsonify({"data": executor.cancel_run(actor=g.current_user, project_id=project_id, run_id=run_id), "error": None})
+
+
+@workflows_blueprint.post("/api/v1/projects/<project_id>/workflow-runs/<run_id>/resume")
+@require_auth
+def resume_workflow_run_route(project_id, run_id):
+    """恢复失败运行（can_manage）：failed/skipped 节点放回 pending，重投 workflow.run。"""
+    return jsonify({"data": executor.resume_run(actor=g.current_user, project_id=project_id, run_id=run_id), "error": None})
 
 
 @workflows_blueprint.get("/api/v1/workflows")
