@@ -302,19 +302,22 @@ def engagement_view() -> dict[str, Any]:
         has_data = row.openfde_synced_at is not None or row.fdeops_synced_at is not None
         if last_payload is not None and has_data and row.slug not in openfde_live and row.slug not in fdeops_live:
             flags.append("vanished")
-        if (
+        # C9：fdeops 轨单独断连也要报警——双轨独立采集，只看 openfde 时
+        # fdeops 文件探针停摆（如目录移走）不会黄标，投影悄然过期。
+        # 两条轨都可能判定 stale，但「采集断连」是一个状态而非两条事实：
+        # 重复 append 会让前端渲染出两个同名徽标（并触发 React 重复 key 警告），
+        # 故此处只判定一次——任一轨断连即 stale。
+        openfde_stale = (
             row.openfde_synced_at is not None
             and row.slug in openfde_live
             and (now - row.openfde_synced_at).total_seconds() > STALE_AFTER_MINUTES * 60
-        ):
-            flags.append("stale")
-        # C9：fdeops 轨单独断连也要报警——双轨独立采集，只看 openfde 时
-        # fdeops 文件探针停摆（如目录移走）不会黄标，投影悄然过期。
-        if (
+        )
+        fdeops_stale = (
             row.fdeops_synced_at is not None
             and row.slug in fdeops_live
             and (now - row.fdeops_synced_at).total_seconds() > STALE_AFTER_MINUTES * 60
-        ):
+        )
+        if openfde_stale or fdeops_stale:
             flags.append("stale")
         linked = openfde_links.get(row.slug, []) + [
             item for item in fdeops_links.get(row.slug, [])

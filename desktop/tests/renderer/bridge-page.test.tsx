@@ -242,3 +242,32 @@ it("surfaces clear failures without wiping the table", async () => {
   expect(alert).toHaveTextContent("清投影失败：文件仍存活")
   expect(screen.getByText("gone-engagement")).toBeVisible()
 })
+
+it("renders a duplicate flag only once", async () => {
+  // 服务端 flags 允许重复（双轨各自断连各报一次 stale）。前端渲染前必须去重，
+  // 否则会出现两个同名徽标，并因 key 重复触发 React 警告。
+  mocks.apiRequest.mockImplementation(async (path: string) => {
+    if (String(path) === "/api/v1/bridge/engagements") {
+      return bridgeView({
+        engagements: [
+          {
+            slug: "dup-flag-engagement",
+            openfde_synced_at: "2026-10-26T08:00:00+00:00",
+            openfde_status: {},
+            fdeops_synced_at: "2026-10-26T07:00:00+00:00",
+            fdeops_state: {},
+            linked_projects: [],
+            flags: ["stale", "stale", "unlinked"],
+          },
+        ],
+      })
+    }
+    if (String(path) === "/api/v1/bridge/status") return { runs: [] }
+    return {}
+  })
+  render(<BridgePage />)
+
+  await screen.findByText("dup-flag-engagement")
+  expect(screen.getAllByText("采集断连")).toHaveLength(1)
+  expect(screen.getAllByText("未绑定项目")).toHaveLength(1)
+})

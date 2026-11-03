@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="desktop/src/renderer/src/assets/logo.png" width="112" alt="FDE Workbench Logo" />
-  <h1>FDE Workbench</h1>
-  <p>面向 Forward Deployed Engineer 团队的开源项目工作台</p>
+  <img src="desktop/src/renderer/src/assets/logo.png" width="112" alt="蔡工FDE智能交付系统 Logo" />
+  <h1>蔡工FDE智能交付系统</h1>
+  <p>面向 Forward Deployed Engineer 团队的开源智能交付工作台</p>
   <p>
     <img src="https://img.shields.io/badge/version-v0.2.0-2d7dd2" alt="版本 v0.2.0" />
     <img src="https://img.shields.io/badge/license-MIT-22a06b" alt="MIT 许可证" />
@@ -22,7 +22,7 @@
 
 ---
 
-FDE Workbench 覆盖 FDE 交付全流程：项目、成员、任务、甘特、调研、AI 机会、方案、交付文档、文件库，以及 **G1–G9 交付门禁**和**报价/收款/合同**商务模块。它由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 PostgreSQL、Redis 和文件存储中；桌面端侧边栏内置「使用帮助」，随时可查各模块操作说明。
+蔡工FDE智能交付系统（FDE Workbench）覆盖 FDE 交付全流程：项目、成员、任务、甘特、调研、AI 机会、方案、交付文档、文件库，以及 **G1–G9 交付门禁**和**报价/收款/合同**商务模块。它由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 PostgreSQL、Redis 和文件存储中；桌面端侧边栏内置「使用帮助」，随时可查各模块操作说明。
 
 | 当前版本 | 你需要知道的事 |
 | --- | --- |

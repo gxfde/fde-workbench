@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 
-import logo from "../assets/logo-qiflow.svg"
+import logo from "../assets/logo-caigong-fde.svg"
+import { BRAND_NAME, BRAND_SUBTITLE } from "../brand"
 import { useAuth } from "../auth/AuthProvider"
 import { AIServerChat } from "../ai/AIServerChat"
 import { canLeaveDirtyWorkspace } from "../routing/navigationGuard"
@@ -43,10 +44,10 @@ export function AppShell({
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand-lockup">
-            <img className="brand-logo" src={logo} alt="蔡工FDE" />
+            <img className="brand-logo" src={logo} alt={BRAND_NAME} />
             <div className="brand-text">
-              <span className="brand-name">蔡工FDE</span>
-              <span className="brand-subtitle">项目工作台</span>
+              <span className="brand-name">{BRAND_NAME}</span>
+              <span className="brand-subtitle">{BRAND_SUBTITLE}</span>
             </div>
           </div>
         </div>

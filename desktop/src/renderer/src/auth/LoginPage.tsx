@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from "../../../shared/contracts"
+import { DEVICE_LABEL, PRODUCT_NAME } from "../brand"
 import { AuthUiError, useAuth } from "./AuthProvider"
 
 const LAST_USERNAME_KEY = "fde:last-username:v1"
@@ -48,7 +49,7 @@ export function LoginPage() {
       await login({
         username: normalizedUsername,
         password,
-        deviceLabel: "FDE Workbench Desktop",
+        deviceLabel: DEVICE_LABEL,
       })
       rememberUsername(normalizedUsername)
     } catch (caught) {
@@ -64,7 +65,7 @@ export function LoginPage() {
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="login-title">
         <p className="eyebrow">企业 AI 落地工作台</p>
-        <h1 id="login-title">FDE 工作台</h1>
+        <h1 id="login-title">{PRODUCT_NAME}</h1>
         <p className="supporting-copy">使用管理员分配的企业账号登录。</p>
         <form onSubmit={(event) => void submit(event)} noValidate>
           <div className="field">

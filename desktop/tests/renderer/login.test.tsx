@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { App } from "../../src/renderer/src/App"
+import { PRODUCT_NAME } from "../../src/renderer/src/brand"
 import {
   authResult,
   bridge,
@@ -49,7 +50,7 @@ describe("desktop authentication experience", () => {
     expect(screen.getByRole("status")).toHaveTextContent("正在加载工作台")
     expect(fde.auth.refresh).toHaveBeenCalledOnce()
     pending.resolve(ok(null))
-    expect(await screen.findByRole("heading", { name: "FDE 工作台" })).toBeVisible()
+    expect(await screen.findByRole("heading", { name: PRODUCT_NAME })).toBeVisible()
     expect(fde.auth.refresh).toHaveBeenCalledOnce()
   })
 
@@ -58,7 +59,7 @@ describe("desktop authentication experience", () => {
     const user = userEvent.setup()
     renderApp(<App />)
 
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
     await user.click(screen.getByRole("button", { name: "登录" }))
 
     expect(screen.getByText("请输入用户名。")).toBeVisible()
@@ -70,7 +71,7 @@ describe("desktop authentication experience", () => {
     installBridge(bridge())
     renderApp(<App />)
 
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     expect(screen.getByLabelText("用户名")).toHaveValue("engineer.li")
     // 密码框焦点由挂载后的 effect 落下：findByRole 解析到 heading 时该
@@ -83,7 +84,7 @@ describe("desktop authentication experience", () => {
     installBridge(bridge())
     const user = userEvent.setup()
     renderApp(<App />)
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     await user.type(screen.getByLabelText("用户名"), "  engineer.li  ")
     await user.type(screen.getByLabelText("密码"), "TempPass!2345")
@@ -98,7 +99,7 @@ describe("desktop authentication experience", () => {
     const user = userEvent.setup()
     renderApp(<App />)
 
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
     await user.tab()
     expect(screen.getByLabelText("用户名")).toHaveFocus()
     await user.tab()
@@ -117,7 +118,7 @@ describe("desktop authentication experience", () => {
     installBridge(fde)
     const user = userEvent.setup()
     renderApp(<App />)
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "WrongPass!234")
@@ -137,7 +138,7 @@ describe("desktop authentication experience", () => {
     }))
     const user = userEvent.setup()
     renderApp(<App />)
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "TempPass!2345")
@@ -151,7 +152,7 @@ describe("desktop authentication experience", () => {
     installBridge(bridge({ login: vi.fn().mockReturnValue(pending.promise) }))
     const user = userEvent.setup()
     renderApp(<App />)
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "TempPass!2345")
@@ -173,7 +174,7 @@ describe("desktop authentication experience", () => {
     )
     const user = userEvent.setup()
     renderApp(<App />)
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
 
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "TempPass!2345")
@@ -203,6 +204,6 @@ describe("desktop authentication experience", () => {
     ).toBeVisible()
     expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "退出登录" }))
-    expect(await screen.findByRole("heading", { name: "FDE 工作台" })).toBeVisible()
+    expect(await screen.findByRole("heading", { name: PRODUCT_NAME })).toBeVisible()
   })
 })

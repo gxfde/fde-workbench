@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 产品更名「蔡工FDE智能交付系统」+ 集成桥 stale 标记去重（2026-11-04）
+
+### 品牌统一（产品名口径 + 品牌素材）
+
+- **产品名统一为「蔡工FDE智能交付系统」**：新增 `desktop/src/renderer/src/brand.ts` 作为**产品名的唯一来源**（`PRODUCT_NAME` 全名 / `BRAND_NAME` 短名 / `BRAND_SUBTITLE` 副标题 / `DEVICE_LABEL` 登录设备标签），此前产品名散落在十余处硬编码，改名必然漏改——现全部改为引用常量。
+- **落地位置**：侧边栏品牌区（蔡工FDE / 智能交付系统）、登录页主标题、窗口标题（`index.html` 的 `<title>`，Electron 主窗口由此继承）、立创内置浏览器与查询跟踪窗口标题、`desktop/package.json` 的 `productName` / `description` / `author` / DMG 标题、服务端内置助手 system prompt、README 首屏标题与正文。
+- **品牌素材换新**：侧边栏与 favicon 换用蔡工FDE 标识（`logo-caigong-fde.svg` / `.png`），应用图标（`build/icon.png` / `.ico`）同步更新。
+- **有意未改**：便携版目录命名 `蔡工FDE-<version>-便携版-r<N>`（`fde-package-verify` 技能约定的交付口径，改动会破坏「旧目录永不覆盖」的回退约定）、`package.json` 的 `name` / `appId` / `artifactName`（机器标识与产物文件名口径，非用户可见名）。
+
+### 缺陷修复：集成桥 stale 标记重复
+
+- **根因**：服务端 `bridge/sync.py` 对 openfde 与 fdeops 两条采集轨**各自**判定断连并各 `append("stale")`，双轨同时断连时同一行出现**重复标记**——前端会渲染出**两个同名「采集断连」徽标**，并因 `key={flag}` 重复触发 React 警告（`Encountered two children with the same key`）。
+- **修复**：服务端改为「任一轨断连即 stale，只判定一次」（C9 的双轨独立报警语义不变：单轨断连仍照旧报警）；前端新增 `uniqueFlags()` 渲染前按出现顺序去重——`flags` 是可重复的观察项而非互斥枚举，前端不应假设其唯一。**两侧都修**，服务端收敛事实、前端兜底渲染。
+- **回归钉子**：服务端新增 `test_both_tracks_stale_yields_single_stale_flag`（双轨同时断连只报一次，且 flags 整体无重复）；桌面端新增「renders a duplicate flag only once」（重复 flag 只渲染一个徽标）。已实测：还原旧实现时新测试**确实失败**，修复后通过。
+- **口径**：服务端 pytest **1820 passed + 6 skipped**（+1）/ 桌面端 vitest **732/732**（+1）/ typecheck 通过。
 ## [未发布] — V3 实施 T-S2：Skill 效果统计 + 治理留痕（回滚已随 T-S1 落地，2026-11-03）
 
 ### 服务端（零迁移零新路由 / 零桌面改动）

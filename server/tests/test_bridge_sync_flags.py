@@ -100,6 +100,42 @@ def test_fdeops_track_disconnection_flags_stale(db_session, app, settings):
     assert "stale" in row["flags"], row["flags"]
 
 
+def test_both_tracks_stale_yields_single_stale_flag(db_session, app, settings):
+    """双轨同时断连只报一次 stale——「采集断连」是一个状态，不是两条事实。
+
+    回归钉子：此前两条轨各自 append("stale")，同一行出现重复标记，
+    前端会渲染出两个同名「采集断连」徽标，并因 key 重复触发 React 警告。
+    """
+    slug = "c9-both-stale"
+    apply_snapshot(_payload(slug), trigger="poller")
+    _age_fdeops_track(app, slug, hours=STALE_AFTER_MINUTES + 2)
+
+    from fde_api.extensions import db
+
+    with app.app_context():
+        session = db.session()
+        try:
+            session.execute(
+                text(
+                    "UPDATE bridge_engagements SET openfde_synced_at = :ts "
+                    "WHERE slug = :slug"
+                ),
+                {
+                    "ts": datetime.now(UTC) - timedelta(minutes=STALE_AFTER_MINUTES + 2),
+                    "slug": slug,
+                },
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    view = engagement_view()
+    row = next(item for item in view["engagements"] if item["slug"] == slug)
+    assert "stale" in row["flags"], row["flags"]
+    assert row["flags"].count("stale") == 1, row["flags"]
+    assert len(row["flags"]) == len(set(row["flags"])), row["flags"]
+
+
 def test_both_tracks_fresh_has_no_stale_flag(db_session, app, settings):
     slug = "c9-fresh-check"
     apply_snapshot(_payload(slug), trigger="poller")

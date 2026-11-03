@@ -64,6 +64,15 @@ const FLAG_LABELS: Record<string, { label: string; tone: "warning" | "muted" }> 
   missing_openfde_pointer: { label: "缺 openfde 指位", tone: "warning" },
 }
 
+/**
+ * 标记去重：服务端 flags 是「可重复出现的观察项」而非互斥枚举——同一行可能
+ * 带重复的 flag（如双轨各自断连各报一次 stale）。直接 map 渲染会出现两个
+ * 同名徽标，并因 key 重复触发 React 警告。故渲染前先按出现顺序去重。
+ */
+function uniqueFlags(flags: string[]): string[] {
+  return flags.filter((flag, index) => flags.indexOf(flag) === index)
+}
+
 function isBridgeView(value: unknown): value is BridgeView {
   if (typeof value !== "object" || value === null) return false
   const record = value as Record<string, unknown>
@@ -292,8 +301,8 @@ export function BridgePage() {
                       : "—"}
                   </td>
                   <td>
-                    {item.flags.length > 0
-                      ? item.flags.map((flag) => (
+                    {uniqueFlags(item.flags).length > 0
+                      ? uniqueFlags(item.flags).map((flag) => (
                           <span key={flag} className={`badge ${FLAG_LABELS[flag]?.tone ?? "muted"}`} style={{ marginRight: 4 }}>
                             {FLAG_LABELS[flag]?.label ?? flag}
                           </span>
@@ -337,7 +346,7 @@ export function BridgePage() {
                   <td>{item.openfde_engagement ?? "（缺）"}</td>
                   <td>{item.fdeops_workspace ?? "（缺）"}</td>
                   <td>
-                    {item.flags.map((flag) => (
+                    {uniqueFlags(item.flags).map((flag) => (
                       <span key={flag} className={`badge ${FLAG_LABELS[flag]?.tone ?? "warning"}`} style={{ marginRight: 4 }}>
                         {FLAG_LABELS[flag]?.label ?? flag}
                       </span>

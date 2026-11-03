@@ -209,7 +209,7 @@ async function start(): Promise<void> {
     }
     if (!lcscWindow || lcscWindow.isDestroyed()) {
       lcscWindow = new BrowserWindow({width: 1180, height: 820, minWidth: 800, minHeight: 600,
-        title: '立创商城 · FDE 工作台内置浏览器', webPreferences: {
+        title: '立创商城 · 蔡工FDE智能交付系统内置浏览器', webPreferences: {
           partition: 'fde-lcsc-browser', contextIsolation: true, sandbox: true,
           nodeIntegration: false, webviewTag: false, allowRunningInsecureContent: false,
         }})

@@ -2,8 +2,8 @@
   "name": "@fde-workbench/desktop",
   "private": true,
   "version": "0.2.0",
-  "description": "FDE 项目工作台桌面客户端",
-  "author": "FDE Workbench Contributors",
+  "description": "蔡工FDE智能交付系统桌面客户端",
+  "author": "蔡工FDE智能交付系统",
   "license": "MIT",
   "main": "./out/main/index.js",
   "scripts": {
@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "org.fdeworkbench.desktop",
-    "productName": "蔡工FDE",
+    "productName": "蔡工FDE智能交付系统",
     "artifactName": "FDE-Workbench-${version}-${arch}.${ext}",
     "asar": true,
     "files": [
@@ -86,7 +86,7 @@
       "installerHeaderIcon": "build/icon.ico"
     },
     "dmg": {
-      "title": "FDE 工作台 ${version}",
+      "title": "蔡工FDE智能交付系统 ${version}",
       "contents": [
         {
           "x": 150,

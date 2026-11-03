@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { App } from "../../src/renderer/src/App"
+import { PRODUCT_NAME } from "../../src/renderer/src/brand"
 import type { ApiResponse, BridgeResult } from "../../src/shared/contracts"
 import {
   adminUser,
@@ -350,7 +351,7 @@ describe("administrator user management", () => {
     installBridge(bridge({ refresh, apiRequest }))
     renderApp(<App />)
 
-    expect(await screen.findByRole("heading", { name: "FDE 工作台" })).toBeVisible()
+    expect(await screen.findByRole("heading", { name: PRODUCT_NAME })).toBeVisible()
     expect(apiRequest).toHaveBeenCalledOnce()
   })
 
@@ -380,7 +381,7 @@ describe("administrator user management", () => {
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
 
     await user.click(screen.getByRole("button", { name: "退出登录" }))
-    await screen.findByRole("heading", { name: "FDE 工作台" })
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "EngineerPass!234")
     await user.click(screen.getByRole("button", { name: "登录" }))

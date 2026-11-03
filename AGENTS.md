@@ -1,9 +1,10 @@
 # AGENTS.md — fde-workbench
 
-FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server/`）+ Electron·Vite·React 桌面端（`desktop/`），当前 v0.2.0。部署、命令全集、迁移与换机迁移清单以 **README.md** 为唯一权威，本文件只放 Agent 不看就会犯错的边界。
+**蔡工FDE智能交付系统**：FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server/`）+ Electron·Vite·React 桌面端（`desktop/`），当前 v0.2.0。部署、命令全集、迁移与换机迁移清单以 **README.md** 为唯一权威，本文件只放 Agent 不看就会犯错的边界。
 
 ## 红线（违反即事故）
 
+- **产品名只从 `desktop/src/renderer/src/brand.ts` 取**（`PRODUCT_NAME` 全名 / `BRAND_NAME` 短名 / `BRAND_SUBTITLE` 副标题 / `DEVICE_LABEL` 设备标签）。任何界面、窗口标题、提交文案里**不再硬编码产品名**——改名只改这一个文件。便携版目录名 `蔡工FDE-<version>-便携版-r<N>` 是 `fde-package-verify` 技能的交付口径（`package.json` 的 `name`/`appId`/`artifactName` 同理），**不随产品名改**。
 - 客户真实资料永不进 git 历史与远端：仓库和数据库只存代号（如 somwyn）；真实姓名、扫描件、回款凭证只留在本地 fdeops/openfde 工作目录（`D:\test\FDE\…`）。
 - 密钥不入 VCS：`.env`、`server/.env`（承载 FDE_DB_PASSWORD / FDE_JWT_SECRET / FDE_BRIDGE_TOKEN）永不提交，仓库只有 `*.env.example`；FDE_JWT_SECRET 是本地密钥加密根，换机迁移必须原样携带。
 - 门禁证据只存 `source_uri` 指针 + sha256 指纹；证据原件永远留在项目工作目录，不进仓库、不进数据库。
@@ -12,7 +13,7 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 
 ## 常用命令
 
-- 桌面端：`npm run typecheck`、`npm run test:desktop`（730 用例）；服务端：`npm run test:server`。
+- 桌面端：`npm run typecheck`、`npm run test:desktop`；服务端：`npm run test:server`（用例数等口径以「当前状态」台账为准，不在此重复）。
 - 服务端代码烤进镜像：改 `server/` 后必须 `docker compose build && docker compose up -d`，再执行 `alembic upgrade head`（只跑 up -d 无效）。
 - 集成桥手动采集：`schtasks //Run //TN "FDE-Bridge-Poll"`（Git Bash 下双斜杠），或桌面端集成桥页「立即采集」按钮（同一代码路径）。
 - 桌面改动交付：重打包便携版并做 asar 字节验证（README「打包桌面端」节）。
@@ -24,7 +25,7 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 - 本机 Windows/Git Bash；docker 经 `wsl -d Ubuntu-24.04 -- docker …`（配 `MSYS_NO_PATHCONV=1`）。
 - 代码检索优先用 CodeGraph：本仓库已索引（`.codegraph/` 是本地 SQLite，已 gitignore，勿提交）；`codegraph explore "<问题或符号>"`，大规模改码后 `codegraph sync` 重建增量。
 
-## 当前状态（2026-11-03，V3 T-S2 后）
+## 当前状态（2026-11-04，产品更名 + stale 去重 + V3 T-S2 后）
 
 - v0.2.0：门禁 G1–G9、报价/收款/合同、集成桥（宿主 4h 采集 + 手动采集按钮）、内嵌使用帮助；本地 main 允许落后——**权威=fork/main**（开新轮先 fetch 对齐）。
 - 版本号按发布列车同步 `desktop/package.json` 与 `server/pyproject.toml`，tag 打在 fork。
@@ -45,7 +46,8 @@ FDE（前端部署工程师）交付工作台：Flask + SQLAlchemy API（`server
 - V3 实施 T-O2b（2026-11-03）：**对象类型值域开放**（接 T-O2 注册表 subject_type 一侧；迁移 `b5d9e3f7a1c6` 31 rev，零新表零路由）。三处 subject_type CHECK 枚举→码格式 `^[a-z][a-z0-9_]{0,59}$` + 列宽 32→60（subjects/templates/import_batches；枚举⊂格式存量全兼容）。新建值域=「内置五类 ∪ 注册表 active 行（全局∪项目内）− project 根」——**单原语闸门**在 `create_subject_in_transaction`（人工创建与导入 commit 同闸），`usable_subject_type_codes` 只收 active（draft 未拍板/retired 禁新建存量只读，与引用解析的 known_subject_type_codes 两把尺子）；错误码新设 400 `unsupported_subject_type`。导入 authorize 带回值域→preview/store 前置→commit 原语复核（防 30 分钟 TTL 内 retire 窗口）。消费方对齐：快照按行上实际类型分组（retire 不丢存量）、映射从已发布定义派生允许域（纯函数）、定义/AI 表单/模板校验器全接 allowed_subject_types 参。两条基线不放开：AI 生成缺省仍内置五类（防幻觉）、行业模板五类必备。注册类型无父级规则→本轮仅根级、tracking_code=None；备忘录功能域白名单冻结。
 - V3 实施 T-O4（2026-11-03）：**导入别名去重**（imports.py；零迁移零路由，桌面端契约同步）。两把尺子：**文件内同名=致命行错误 `duplicate_name`**（preview 报/commit 复核同尺）；**文件 vs 项目既有 active 同名（同类型）=让位**——不再静默新建合成键对象（附录 D ⑨ 根治），改为合并候选 `merge_candidates`（说明无损保留；跟踪码只发真正新建的行；全让位=合法成功，重复导入幂等友好）。候选名无术语/别名占用且 ≤120 字时提案 `create_term`（draft，`captured_from=research_import:<preview_id>`）走 T-O3 submit→confirm 人工拍板；**不开 subject 合并动作**（T-O3 双轨裁决仍成立，L 级另行立项）。桌面 `isResearchImportResultDto` 精确键集 +`merge_candidates`。pytest +7 / vitest +1。
 - V3 实施 T-O3（2026-11-03）：**变更集 ontology_change_sets——AI 候选唯一入口**（`fde_api/ontology/`，迁移 `c9e3a7d1b5f8` 30 rev）。状态机 draft→submit(in_review，算 base_snapshot_sha256 受影响行快照指纹)→confirm(复核指纹+单事务逐项物化**全成全败**，409 base_conflict 并发漂移零物化)/reject(留 reason)；**验收分离**：拍板人≠提交人 403 `change_set_decider_conflict`（P0-5 纪律移植）。物化语义裁决：create_term 直落 confirmed；**update_term 同名=原行受控改写**（change-set confirm 是全系统唯一 definition 写路径，UNIQUE(project,term) 使同名新行不可共存）、改名=新行 confirmed+原行 superseded+原名转别名；merge_terms 走 T-O1 原语；register_relation_type 只登记项目内类型；create_subject/link_subjects 设计列有本轮不开放（propose 即 payload_schema 拒）。captured_from（如 agent_run:<id>）仅服务层原语可写、HTTP 拒收。路由 +7（GET terms（T-O1 欠账只读面） + change-sets propose/list/detail/submit/confirm/reject；submit 是设计 §4 表外补充——not_in_review 预设评审态），全部不进 api_catalog（红线钉子三面）。事件目标注册表 +ontology_change_set。
-- 口径数字（实测 2026-11-03，V3 T-S2 轮 / T-O4、T-O2b、T-O3、T-O2、T-O1、T-E3、T-S1、T-W5、T-W4、T-W3、T-W2、T-E1-E2、T-P0-1、goal-d14 顺延）：服务端 **105 张业务表**（不含 alembic_version；T-S2/T-O4/T-O2b 零新表；T-O3 +ontology_change_sets；T-O2 +ontology_relation_types；T-O1 +ontology_terms/+ontology_term_aliases）、迁移头 `b5d9e3f7a1c6`（**31 个 revision**，链条 …→ b8d3f1a5c7e2 → c9e3a7d1b5f8 → b5d9e3f7a1c6；T-S2/T-O4 零迁移）、蓝图路由 **293**（T-S2/T-O4/T-O2b 零路由；T-O3 +7：GET terms + change-sets 六条；T-O2 +3；T-S1 +5；T-W5 +2；T-W3 +5）、api_catalog ENTRIES **94**、服务端 pytest **1829 收集 = 1823 passed + 6 skipped**（T-S2 +4：治理留痕/chat 计数/usage 汇总/truncated；T-O4 +7：导入去重/合并候选；T-O2b +10；T-O3 +9；T-O2 +8；T-O1 +8；T-E3 +2；T-S1 +7；T-W5 +1；T-W4 +8；T-W3 +19；T-W2 +12；T-W1 +8；T-E1/E2 +8；T-P0-1 +5；d14 +6）、桌面端 vitest **731/731**（T-S2 零桌面改动；T-O4 +1：merge_candidates 契约，串行口径 --no-file-parallelism）。
+- 口径数字（实测 2026-11-04，产品更名 + stale 去重 / V3 T-S2 轮 / T-O4、T-O2b、T-O3、T-O2、T-O1、T-E3、T-S1、T-W5、T-W4、T-W3、T-W2、T-E1-E2、T-P0-1、goal-d14 顺延）：服务端 **105 张业务表**（不含 alembic_version；T-S2/T-O4/T-O2b 零新表；T-O3 +ontology_change_sets；T-O2 +ontology_relation_types；T-O1 +ontology_terms/+ontology_term_aliases）、迁移头 `b5d9e3f7a1c6`（**31 个 revision**，链条 …→ b8d3f1a5c7e2 → c9e3a7d1b5f8 → b5d9e3f7a1c6；T-S2/T-O4 零迁移）、蓝图路由 **293**（T-S2/T-O4/T-O2b 零路由；T-O3 +7：GET terms + change-sets 六条；T-O2 +3；T-S1 +5；T-W5 +2；T-W3 +5）、api_catalog ENTRIES **94**、服务端 pytest **1830 收集 = 1824 passed + 6 skipped**（本轮 +1：stale 去重回归；T-S2 +4：治理留痕/chat 计数/usage 汇总/truncated；T-O4 +7：导入去重/合并候选；T-O2b +10；T-O3 +9；T-O2 +8；T-O1 +8；T-E3 +2；T-S1 +7；T-W5 +1；T-W4 +8；T-W3 +19；T-W2 +12；T-W1 +8；T-E1/E2 +8；T-P0-1 +5；d14 +6）、桌面端 vitest **732/732**（本轮 +1：集成桥重复 flag 去重；T-S2 零桌面改动；T-O4 +1：merge_candidates 契约，串行口径 --no-file-parallelism）。
+- #85 视觉统一轮（2026-11-03）：**桌面设计令牌体系**（纯 CSS 零功能零服务端零测试增量）——补齐 `.page`/`.card`/`.page-heading`/`.muted` 等零规则样式类（7 页整页裸奔的根因）；`:root` 重写九层令牌并**保留 6 个旧变量名别名**（`--border`/`--accent` 等旧写法零改动可用）；组件硬编码色 250→82，**改桌面样式一律走令牌、不再新增硬编码色值**；4 套并存标签页收敛一套（`extension-tabs` 保留下划线式以区分层级）；新增 `desktop/gui-harness/shots.mjs` 逐页视觉走查（13 页，零 console error）。口径数字全部不变。
 - goal-d12 口径存档（2026-11-02）：96 表 / head `c3e7a9b1d5f4`（22 revision 零迁移）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 730。
 - goal-d11 口径存档（2026-11-01）：96 表 / head `c3e7a9b1d5f4`（22 revision 零新表）/ 路由 269 / ENTRIES 94 / pytest 1698 收集（1692 passed + 6 skipped）/ vitest 725。
 - goal-d10 口径存档（2026-11-01）：96 表 / head `a1d3f5b7c9e2`（21 revision 零新表）/ 路由 269 / ENTRIES 94 / pytest 1684 收集（1678 passed + 6 skipped）/ vitest 722。
