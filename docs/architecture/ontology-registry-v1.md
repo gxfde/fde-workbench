@@ -1,6 +1,6 @@
 # Ontology Registry v1 设计（P0）
 
-> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；relation_types / change_sets 仍 PROPOSED。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
+> 状态：**PROPOSED → 部分 IMPLEMENTED**——§2.1 `project_evidence` 与 §4 evidence 两行已于 2026-11-02 实施（T-E1/T-E2，迁移 `e1f3a5c7b9d2`；实现偏差见 backlog）；**§2.2 `ontology_terms`+`ontology_term_aliases` 已于 2026-11-03 实施（T-O1，迁移 `a3e7c1f9b5d2`；零路由，服务原语 create/confirm/merge 为 T-O3 confirm 的物化层，偏差见 backlog T-O1 实施记录——用例 1/2 的 HTTP 面随 T-O3 补齐）**；**§2.3 `ontology_relation_types` 已于 2026-11-03 实施（T-O2，迁移 `b8d3f1a5c7e2`；3 条路由 GET/POST/retire，服务层 ∪ 接入 `_validate_link`；偏差见 backlog T-O2 实施记录——subject_type 值域本轮只落登记不开放使用）**；change_sets 仍 PROPOSED。基于 VERIFIED 现状审计设计；现状证据见 docs/audit/appendix/workbench-D-ontology-research-raw.md。
 > 原则：不建平行实体体系。实体=既有 `project_research_subjects`；本设计只补 WB 完全缺失的三件：**术语治理、关系类型注册、变更集审核**，外加一等证据表（evidence，域 3 共享底座）。
 
 ## 1. 决策依据（对照任务书"决策 1/2"）
@@ -67,7 +67,7 @@
 
 子表 `ontology_term_aliases`：id / term_id FK CASCADE / alias VARCHAR(120) / UNIQUE(project_id, alias)（同项目别名唯一，防同名冲突累积——根治附录 D ⑨ 的导入重复问题）。
 
-### 2.3 `ontology_relation_types`（类型注册，同时服务 subject_type 扩展）
+### 2.3 `ontology_relation_types`（类型注册，同时服务 subject_type 扩展）— **IMPLEMENTED（T-O2，2026-11-03，迁移 `b8d3f1a5c7e2`）**
 
 | 列 | 类型 | 说明 |
 |---|---|---|
@@ -82,6 +82,12 @@
 | 约束 | UNIQUE(COALESCE(project_id,'全局'), kind, code) | |
 
 **实现注意（兼容边界）**：research/models.py 的 CheckConstraint(163-166) 与 subject_service.py:31-34 白名单**不动**（存量语义冻结）；注册表启用后服务层改为"注册表 ∪ 内置五类/两类"，新类型只经注册表进入。`_validate_link`（659-670）改读注册表端点约束。
+
+**T-O2 落地裁决（偏差明细见 backlog T-O2 实施记录）**：
+- **∪ 接入已生效**：`_validate_link` 改为「内置优先 + 注册表」——内置两类关系类型的端点约束是存量语义，注册表**不得覆盖内置码**（注册内置码一律 409 `duplicate_code`），因此「∪ 语义不得放开内置方向校验」的风险条由**机制**保证而非约定。
+- **作用域语义落地**：设计稿的 `UNIQUE(COALESCE(project_id,'全局'), kind, code)` 落为「项目内 UNIQUE(project_id, kind, code) + 全局部分唯一索引（project_id IS NULL）」两段；**项目内类型遮蔽同名全局类型**（端点约束可按项目定制），全局类型对所有项目生效。
+- **subject_type 值域本轮只落登记不开放使用**：登记 `kind=subject_type` 的行合法且可被关系类型的端点约束引用，但**新建调研对象仍只能取内置五类**——`project_research_subjects` / `template_research_forms` / `project_research_import_batches` 三处 CheckConstraint 冻结（设计兼容边界 + backlog 口径），放开值域会连带表单定义、文档映射、文档快照、AI 模板 schema 四处消费方（漏一处即静默丢数据），属独立一轮（backlog T-O2b）。
+- **HTTP 面**：设计 §4 的 `GET/POST /projects/{id}/ontology/relation-types` 已开，另加一条 `POST …/relation-types/{id}/retire`（让 §5 用例 7 的「retired 后建边 409」在人工路径上可达）；三条路由均**不进 api_catalog**（人工路径，AI 候选走 change_set）。
 
 ### 2.4 `ontology_change_sets`（批量变更事务单元 + diff 评审）
 
@@ -123,9 +129,12 @@ confirm 语义（服务层，PROPOSED）：事务内 ①校验 base 指纹 ②�
 | POST /projects/{id}/ontology/change-sets | can_manage | {title, proposed_json, description?} | {change_set(draft)} | 400 payload_schema | — |
 | POST /projects/{id}/ontology/change-sets/{csid}/confirm | can_manage（且提交人≠确认人，沿用拍板人≠执行人纪律） | {confirm: true} | {results[]} | 409 base_conflict / 409 not_in_review | — |
 | POST …/change-sets/{csid}/reject | can_manage | {reason} | — | 409 | — |
-| GET/POST /projects/{id}/ontology/relation-types | can_view / admin（全局） | {kind, code, label, allowed_*} | — | 409 duplicate_code | — |
+| GET/POST /projects/{id}/ontology/relation-types | can_view / can_manage（scope=global 另需 admin） | {kind, code, label?, description?, allowed_source_types?, allowed_target_types?, scope?} | {relation_type, created} | 409 duplicate_code / 409 / 400 invalid_request | — |
+| POST /projects/{id}/ontology/relation-types/{rtid}/retire | can_manage | — | {relation_type} | 409 invalid_transition | — |
 
 审批要求：confirm 必须真人会话（沿用 gate 纪律）；AI 无法触达这些路由（不进 api_catalog，同 signoff 纪律 test_signoff_never_in_catalog）。
+
+**T-O2 落地注**：上表 relation-types 三行已实施（T-O2，2026-11-03）；`scope` 字段区分项目内/全局登记（设计稿只说「全局=project_id 为空、仅 admin 可建」，未给落库入口，本轮以 scope 承载）。
 
 ## 5. 验收测试（server/tests/test_evidence_registry.py、test_ontology_registry.py，PROPOSED）
 
@@ -135,7 +144,7 @@ confirm 语义（服务层，PROPOSED）：事务内 ①校验 base 指纹 ②�
 4. 合并保留来源：merge_terms 后被并行 status=merged、canonical 指向保留行、alias 写入、operation_events 有逐项记录。
 5. 证据不可变历史：gate 证据二次提交 → evidence 表幂等唯一；gates 行 operation_events 保留旧指针记录。
 6. 变更影响分析（P2 扩展位）：term superseded 后，引用该 term 的 subjects/links 列表可查询（服务层 `impact_of_term`）。
-7. relation_types：注册新 link_type→建边成功；retired 后建边 409、存量边可读。
+7. relation_types：注册新 link_type→建边成功；retired 后建边 409、存量边可读。**（T-O2 已实施并覆盖）**
 
 ## 6. 复杂度与排期
 

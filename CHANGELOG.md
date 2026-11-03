@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O2：关系/对象类型注册表 ontology_relation_types（关系类型不再硬编码，2026-11-03）
+
+### 服务端（1 个迁移（一张新表，唯一 DDL）/ 3 条新路由 / 服务层 ∪ 接入 / 零桌面改动）
+
+- **注册表**：`ontology_relation_types`（`kind` ∈ subject_type/link_type；`code`/`label`/`description`；端点约束 `allowed_source_types`/`allowed_target_types`；`status` ∈ draft/active/retired；`project_id` 为空=全局类型、仅 admin 可建）。迁移 **`b8d3f1a5c7e2`**（29 rev，additive，含 downgrade）。把审计附录 D ②③ 的「对象类型 CheckConstraint 硬编码」「link_type 白名单硬编码 2 种」的扩展面搬进可注册表。
+- **∪ 接入（服务层）**：`research/subject_service.py` 的 `_validate_link` 改为「**内置优先** + 注册表」——内置两类关系类型的端点约束是存量语义，注册表**不得覆盖内置码**（注册内置码 409 `duplicate_code`），故「∪ 语义不得放开内置方向校验」由机制保证；注册类型按端点约束判方向（不符仍 422 `invalid_research_subject_link`）；**retired 类型禁新边 409 `link_type_retired`、存量边只读**；未知类型 422 且消息附当前可用类型清单。内置集合与注册表保留名单的一致性由测试钉住（防漂移）。
+- **作用域**：项目内类型**遮蔽**同名全局类型（端点约束可按项目定制）；项目内 `UNIQUE(project_id, kind, code)` + 全局部分唯一索引（`project_id IS NULL`）两段实现设计稿的「全局/项目内各自唯一」。
+- **HTTP 面（人工路径，不进 api_catalog）**：`GET/POST /projects/{id}/ontology/relation-types`（can_view / can_manage；`scope=global` 另需 admin）+ `POST …/relation-types/{id}/retire`（让「retired 后建边 409」在人工路径上可达）。登记/停用落 `ontology_relation_type_registered`/`_retired` 事件；事件目标注册表 +`ontology_relation_type`。
+- **边界（重要）**：`kind=subject_type` 本轮**只落登记不开放使用**——新建调研对象仍只能取内置五类（三处 DB CheckConstraint 按设计兼容边界冻结），放开值域会连带表单定义/文档映射/文档快照/AI 模板 schema 五处消费方，属独立一轮（T-O2b）。`research/models.py` 仅加注释不改约束。
+- **测试**：`test_ontology_registry.py` **7 例**（登记校验+内置码保护+作用域遮蔽 / 全局与项目遮蔽 / 内置冻结与漂移钉子 / DB 约束拒非法态 / HTTP 面与建边生命周期（注册→建边→方向不符→停用→禁新边→存量边可读）/ 全局类型登记与停用仅管理员 / api_catalog 钉子）+ `test_migrations.py` 迁移往返 **1 例**（全局部分唯一索引 + 项目内同名共存 + 端点约束 CHECK）；`HEAD_REVISION` → `b8d3f1a5c7e2`。
+- **口径**：业务表 **103→104**（+ontology_relation_types）/ 迁移头 **`b8d3f1a5c7e2`（29 revision，+1）** / 路由 **283→286**（+3） / api_catalog ENTRIES **94 不变**（`research.link` 描述同步端点约束口径）/ pytest **1798 收集 = 1792 passed + 6 skipped**（+8） / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（一张新表；**api/worker/scheduler 三个镜像都要 build**）。
+
 ## [未发布] — V3 实施 T-O1：术语表 ontology_terms+aliases（同项目一个名字一个概念，2026-11-03）
 
 ### 服务端（1 个迁移（两张新表，唯一 DDL）/ 零路由 / 零桌面改动）

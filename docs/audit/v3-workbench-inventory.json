@@ -1,10 +1,10 @@
 {
- "route_count": 283,
- "blueprint_count": 35,
- "table_count": 103,
- "revision_count": 28,
+ "route_count": 286,
+ "blueprint_count": 36,
+ "table_count": 104,
+ "revision_count": 29,
  "heads": [
-  "a3e7c1f9b5d2"
+  "b8d3f1a5c7e2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -93,6 +93,14 @@
    "add_column_tables": [
     "delivery_packages"
    ]
+  },
+  "b8d3f1a5c7e2": {
+   "file": "b8d3f1a5c7e2_v3_ontology_relation_types.py",
+   "down_revision": "a3e7c1f9b5d2",
+   "create_tables": [
+    "ontology_relation_types"
+   ],
+   "add_column_tables": []
   },
   "b8d4f2a6c0e8": {
    "file": "b8d4f2a6c0e8_circular_current_version_fks.py",

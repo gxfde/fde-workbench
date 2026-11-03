@@ -77,11 +77,27 @@
   - **一个名字一个概念**：create_term 预检**别名占用先于同名检查**（合并后名字既存 merged 行又存别名，「已并入 X」比「已存在」更有用）；merged 行名占位是设计语义（UNIQUE(project, term) 绝对 + 不可变历史）；DB 层 CHECK 拒 merged 无指向 / 非法 term_type / 非法 status。
   - **口径**：**101→103 表**、迁移头 `a3e7c1f9b5d2`（**28 rev**）、路由 283 不变、ENTRIES 94 不变、pytest **1790 收集 = 1784 passed + 6 skipped**（+8）；**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。花絮①：本地全量误带 `-p no:warnings` 使 SAWarning 泄入 CLI 捕获输出、`test_workbench_seed`「只打印计数」假红——canonical 调用（无该 flag）单文件复跑 10 绿，权威计数以 pre-commit 钩子全量为准。花絮②：`session.execute(update(...)).rowcount` 触发 mypy `Result[Any]` attr-defined——改 ORM 逐行重指，顺带把依赖行 version 递增补齐（语义更对）。
 
-### T-O2 关系/对象类型注册 ontology_relation_types + 接入
+### T-O2 关系/对象类型注册 ontology_relation_types + 接入 — **DONE（2026-11-03）**
 - 目标：subject_type 与 link_type 可注册（不动存量 CheckConstraint，服务层 ∪ 语义）。
 - 前置：T-O1。修改文件：ontology/models.py；`research/subject_service.py`（_validate_link 659-670 改读注册表端点约束；白名单变 ∪）；`research/models.py` 仅加注释不改约束。
 - DB：ontology_relation_types。测试：test_ontology_registry.py（注册类型/retired 禁新边/存量边可读）+ test_research_subjects_api 回归。
 - 风险：∪ 语义不得放开内置两类的方向校验。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **∪ 接入已生效（风险条由机制保证）**：`_validate_link` 改为「**内置优先** + 注册表」——内置两类关系类型的端点约束是存量语义，注册表**不得覆盖内置码**（注册 `opportunity_role`/`opportunity_process` 一律 409 `duplicate_code`），因此「∪ 语义不得放开内置方向校验」不靠约定靠机制；注册表类型按 `allowed_source_types`/`allowed_target_types` 判方向，方向不符仍 422 `invalid_research_subject_link`；retired 类型禁新边 409 `link_type_retired`（存量边只读，既有边行不动）；未知类型 422 且错误消息附当前可用类型清单（可行动）。内置集合与注册表保留名单的一致性由测试钉住（`SUBJECT_TYPES`/`LINK_SUBJECT_TYPES` ↔ `BUILTIN_*_CODES`，防漂移）。
+  - **作用域语义落地**：设计稿 `UNIQUE(COALESCE(project_id,'全局'), kind, code)` 落为「项目内 `UNIQUE(project_id, kind, code)` + 全局**部分唯一索引**（`project_id IS NULL`）」两段（COALESCE+uuid 混型不可行）；**项目内类型遮蔽同名全局类型**（端点约束可按项目定制），全局类型对所有项目生效；解析函数 `find_relation_type`/`list_relation_types` 统一按「项目内优先、全局兜底」。
+  - **subject_type 值域本轮只落登记不开放使用**（**最重要的边界**）：登记 `kind=subject_type` 的行合法、可被关系类型端点约束引用，但**新建调研对象仍只能取内置五类**——三处 DB CheckConstraint（`project_research_subjects` / `template_research_forms` / `project_research_import_batches`）按设计兼容边界冻结；放开值域会连带 `research/definitions.py`、`ai/research_form_service.py`、`documents/mapping.py`、`documents/snapshots.py`、`ai/industry_template_schema.py` 五处消费方（漏一处即静默丢数据），复杂度超出 M。**留 T-O2b 独立一轮**（值域开放 + 五处消费方对齐）。本轮 `research/models.py` 按口径**仅加注释不改约束**。
+  - **文件清单纠偏**：backlog 只列 models.py，但「retired 禁新边」需要可触达的人工停用路径 ⇒ 加 NEW `ontology/routes.py`（3 条路由）+ `ontology/service.py` 扩 HTTP 面（登记/停用/列表，人工路径，**不进 api_catalog**，钉子测试在位）；事件目标注册表 +`ontology_relation_type`（全局类型 project_id 为空 ⇒ 事件挂全局面，同平台模板定义先例）。
+  - **HTTP 面（§4 对齐 + 一条扩展）**：设计 §4 的 `GET/POST /projects/{id}/ontology/relation-types` 已开；另加 `POST …/relation-types/{id}/retire`——否则「retired 后建边 409」在人工路径上不可达（§5 用例 7 要求可触发）；全局登记入口设计稿未给（只说「project_id 为空、仅 admin 可建」），本轮以请求体 `scope=project|global` 承载，`global` 另需 admin。
+  - **登记入口是人工路径**：类型登记/停用直接落表并记 `ontology_relation_type_registered`/`_retired` 事件（与 T-O1 的「原语事件静默」不同——本轮的 HTTP 面不是 T-O3 change-set 的物化通道，不存在双写）；AI 候选路径仍只能走 change_set（T-O3）。
+  - **状态取值域**：CHECK 含 `draft`（留给 T-O3 变更集：提出的类型先落 draft，confirm 转 active），本轮登记入口直落 `active`，`retired` 为终态（重复停用 409 `invalid_transition`）。
+  - **口径**：**103→104 表**、迁移头 `b8d3f1a5c7e2`（**29 rev**）、路由 **283→286**（+3）、ENTRIES 94 不变（`research.link` 描述同步：端点约束按注册类型校验）、pytest **1798 收集 = 1792 passed + 6 skipped**（T-O2 +8：注册表 7 + 迁移往返 1）、vitest 730 不变（零桌面改动）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
+
+### T-O2b 对象类型值域开放（接 T-O2 注册表的 subject_type 一侧）— **TODO**
+- 目标：让 T-O2 登记的 `kind=subject_type` 真正可用于新建调研对象/表单/导入批次。
+- 前置：T-O2（注册表已登记对象类型并可被关系类型端点约束引用）。
+- 改动面：①三处 DB CheckConstraint 放宽（`project_research_subjects` / `template_research_forms` / `project_research_import_batches`）；②服务层白名单 `CLIENT_SUBJECT_TYPES`（subject_service）/ `_IMPORT_SUBJECT_TYPES`（imports）/ `SUBJECT_TYPES` 校验（research/definitions.py、ai/research_form_service.py）改「内置 ∪ 注册表」；③消费方对齐：`documents/mapping.py`、`documents/snapshots.py`（按 `SUBJECT_TYPES` 逐类型建快照——漏改即静默丢该类型内容）、`ai/industry_template_schema.py`（完整性校验）。
+- 风险：值域放宽是**存量语义变更**（约束从枚举变格式），须评估存量数据与历史导入的兼容；文档快照漏一类即静默丢内容。
+- 复杂度：**L**（超出 M，故与 T-O2 分轮）。
 
 ### T-O3 变更集 ontology_change_sets（候选→人工确认闭环）
 - 目标：批量变更事务单元+diff 评审+base 指纹并发防护；AI 候选唯一入口。

@@ -31,7 +31,10 @@ from fde_api.workbench.models import (
     ProjectTask,
     Quote,
 )
-from fde_api.ontology.models import OntologyTerm  # V3 T-O1（只引 models，无环）
+from fde_api.ontology.models import (  # V3 T-O1/T-O2（只引 models，无环）
+    OntologyRelationType,
+    OntologyTerm,
+)
 from fde_api.workflows.models import WorkflowDefinition, WorkflowRun  # V3 T-W1/T-W2（只引 models，无环）
 
 
@@ -61,6 +64,8 @@ EventTarget: TypeAlias = (
     | WorkflowRun
     # V3 T-O1：术语治理留痕（合并保留来源的逐项事件，项目内术语）
     | OntologyTerm
+    # V3 T-O2：类型注册留痕（登记/停用；全局类型 project_id 为空）
+    | OntologyRelationType
 )
 
 _TARGET_TYPES = {
@@ -84,6 +89,7 @@ _TARGET_TYPES = {
     WorkflowDefinition: "workflow_definition",
     WorkflowRun: "workflow_run",
     OntologyTerm: "ontology_term",  # V3 T-O1
+    OntologyRelationType: "ontology_relation_type",  # V3 T-O2
 }
 _SENSITIVE_KEY = re.compile(
     r"password|passwd|pwd|token|secret|credential|privatekey|apikey|"
@@ -140,6 +146,9 @@ def _project_id_for_target(session: Session, target: EventTarget) -> str | None:
         return target.project_id
     if isinstance(target, OntologyTerm):
         # 术语永远属于某个项目（V3 T-O1 项目内治理）
+        return target.project_id
+    if isinstance(target, OntologyRelationType):
+        # 类型可全局登记（project_id 为空）——事件挂全局面（同平台模板定义）
         return target.project_id
     if isinstance(target, DispatchOffer):
         # offer 只挂 package_id；project_id 经交付包反查（一次主键点查）

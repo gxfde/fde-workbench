@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
+from fde_api.ontology import service as ontology_service  # V3 T-O2 类型注册表
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.research.models import (
@@ -400,7 +401,13 @@ def link_subjects(
             target = _load_subject(session, project.id, target_id, for_update=True)
             if source.version != expected_source_version:
                 raise _stale_version()
-            _validate_link(source, target, normalized_link_type)
+            _validate_link(
+                session,
+                project_id=project.id,
+                source=source,
+                target=target,
+                link_type=normalized_link_type,
+            )
             link = ProjectResearchSubjectLink(
                 source_subject=source,
                 target_subject=target,
@@ -656,13 +663,73 @@ def _validate_parent_type(
         )
 
 
+def _available_link_types(session: Session, *, project_id: str) -> list[str]:
+    """当前项目可用的关系类型（内置两类 ∪ 注册表中生效的类型）——用于错误提示。"""
+    names = set(LINK_SUBJECT_TYPES)
+    for row in ontology_service.list_relation_types(session, project_id=project_id):
+        if row.kind == "link_type" and row.status == "active":
+            names.add(row.code)
+    return sorted(names)
+
+
+def _resolve_link_endpoints(
+    session: Session, *, project_id: str, link_type: str
+) -> tuple[frozenset[str], frozenset[str]]:
+    """解析关系类型的端点约束：内置优先（存量方向语义冻结），再查注册表。
+
+    注册表（V3 T-O2 ontology_relation_types）按「项目内遮蔽全局」解析；
+    retired 类型禁新边（409，存量边只读），draft 类型尚未启用（409）；
+    类型完全未知 → 422（与既有行为一致）。
+    """
+    builtin = LINK_SUBJECT_TYPES.get(link_type)
+    if builtin is not None:
+        # 内置优先：注册表不得放开内置两类的方向校验（backlog T-O2 风险条）
+        return frozenset({builtin[0]}), frozenset({builtin[1]})
+    row = ontology_service.find_relation_type(
+        session, project_id=project_id, kind="link_type", code=link_type
+    )
+    if row is None:
+        raise ResearchSubjectServiceError(
+            "invalid_research_subject_link",
+            "The research subject link type and direction are invalid. "
+            "Allowed link types: "
+            f"{', '.join(_available_link_types(session, project_id=project_id))}.",
+            422,
+        )
+    if row.status == "retired":
+        raise ResearchSubjectServiceError(
+            "link_type_retired",
+            "The research subject link type is retired; existing links stay readable "
+            "but no new link may be created.",
+            409,
+        )
+    if row.status != "active":
+        raise ResearchSubjectServiceError(
+            "link_type_inactive",
+            "The research subject link type is not active yet.",
+            409,
+        )
+    return (
+        frozenset(row.allowed_source_types or []),
+        frozenset(row.allowed_target_types or []),
+    )
+
+
 def _validate_link(
+    session: Session,
+    *,
+    project_id: str,
     source: ProjectResearchSubject,
     target: ProjectResearchSubject,
     link_type: str,
 ) -> None:
-    allowed_types = LINK_SUBJECT_TYPES.get(link_type)
-    if allowed_types != (source.subject_type, target.subject_type):
+    allowed_sources, allowed_targets = _resolve_link_endpoints(
+        session, project_id=project_id, link_type=link_type
+    )
+    if (
+        source.subject_type not in allowed_sources
+        or target.subject_type not in allowed_targets
+    ):
         raise ResearchSubjectServiceError(
             "invalid_research_subject_link",
             "The research subject link type and direction are invalid.",

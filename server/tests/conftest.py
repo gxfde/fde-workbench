@@ -354,6 +354,10 @@ def db_session(app) -> Session:
         # canonical（SET NULL），均先于 projects/users 清理
         __import__("fde_api.ontology.models", fromlist=["OntologyTermAlias"]).OntologyTermAlias,
         __import__("fde_api.ontology.models", fromlist=["OntologyTerm"]).OntologyTerm,
+        # V3 T-O2：类型注册表引用 projects（CASCADE）/users（SET NULL），先于两表清理
+        __import__(
+            "fde_api.ontology.models", fromlist=["OntologyRelationType"]
+        ).OntologyRelationType,
         # V3 T-W2：node_runs 引用 runs（CASCADE），runs 引用 definitions（RESTRICT，
         # 故必须先于 definitions 清理）与 projects/users
         __import__("fde_api.workflows.models", fromlist=["WorkflowNodeRun"]).WorkflowNodeRun,

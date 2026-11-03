@@ -17,7 +17,7 @@ ENTRIES = [
     ("templates.catalog", "GET", "/api/v1/industry-templates", "读取行业模板目录", ""),
     ("documents.templates", "GET", "/api/v1/document-templates", "读取可用业务文档模板和类型，禁止猜测不存在的 document_type", ""),
     ("projects.members", "GET", P + "/members", "读取项目成员及分配任务所需的账号 ID", ""),
-    ("research.link", "POST", R + "/subjects/{subject_id}/links", "将 AI 机会关联同项目岗位或流程", "version=来源机会对象当前版本,target_subject_id,link_type=opportunity_role 或 opportunity_process"),
+    ("research.link", "POST", R + "/subjects/{subject_id}/links", "将 AI 机会关联同项目岗位或流程", "version=来源机会对象当前版本,target_subject_id,link_type=opportunity_role 或 opportunity_process（或项目内登记的关系类型，方向按其端点约束校验）"),
     ("models.list", "GET", E + "/model-preferences", "查看公共和个人模型配置，不含密钥", ""),
     ("models.save", "POST", E + "/model-preferences", "创建或编辑模型配置；AI 不接收密钥，新模型保存为非默认草稿，由用户在模型管理填写 Key", "scope,name,provider,base_url,model,is_default=false,supports_tools；编辑时 id,version；禁止 api_key"),
     ("models.delete", "DELETE", E + "/model-preferences/{preference_id}", "删除模型配置，需当前账号密码确认", ""),

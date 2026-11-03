@@ -45,7 +45,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-W4：automation_approvals 审批复用——run_id 放开可空 + workflow_node_run_id 反链
 # V3 T-S1：skill 治理态——status 换 draft/in_review/published/deprecated + 版本契约/审核列
 # V3 T-O1：ontology_terms + ontology_term_aliases 两表（术语/别名治理底座）
-HEAD_REVISION = "a3e7c1f9b5d2"
+# V3 T-O2：ontology_relation_types 一表（关系/对象类型注册表）
+HEAD_REVISION = "b8d3f1a5c7e2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -701,6 +702,104 @@ def test_v3_ontology_tables_roundtrip_preserves_projects(alembic_config, engine)
         == "FDE-V3-TERM-KEEP"
     )
     assert not {"ontology_terms", "ontology_term_aliases"} & table_names(engine)
+
+    command.upgrade(alembic_config, "head")
+    cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
+    # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
+    seed_reference_data(engine.url.render_as_string(hide_password=False))
+
+
+def test_v3_relation_type_table_roundtrip_enforces_scopes(alembic_config, engine):
+    """V3 T-O2：类型注册表增量——downgrade 表消失、upgrade 回 head 重建；
+    全局行按 (kind, code) 唯一（project_id IS NULL 的部分唯一索引），
+    项目内行与全局行同名共存（项目遮蔽全局）；关系类型必须声明端点约束。"""
+    command.downgrade(alembic_config, "a3e7c1f9b5d2")
+    assert "ontology_relation_types" not in table_names(engine)
+    ids = seed_user_and_template(engine, username="migration.v3-type-keep")
+    project_id, sop_node_id = seed_project(engine, ids, project_code="FDE-V3-TYPE-KEEP")
+
+    command.upgrade(alembic_config, "head")
+
+    assert "ontology_relation_types" in table_names(engine)
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-TYPE-KEEP'",
+        )
+        == "FDE-V3-TYPE-KEEP"
+    )
+
+    global_id, scoped_id = str(uuid4()), str(uuid4())
+    with engine.begin() as connection:
+        # 全局行：project_id 为空
+        connection.execute(
+            text(
+                "INSERT INTO ontology_relation_types "
+                "(id, project_id, kind, code, label, description, "
+                "allowed_source_types, allowed_target_types, status, created_at, updated_at) "
+                "VALUES (:id, NULL, 'link_type', 'global_edge', '全局关系', NULL, "
+                "'[\"opportunity\"]', '[\"role\"]', 'active', now(), now())"
+            ),
+            {"id": global_id},
+        )
+        # 项目内行与全局行同名共存（不同作用域；项目内遮蔽全局）
+        connection.execute(
+            text(
+                "INSERT INTO ontology_relation_types "
+                "(id, project_id, kind, code, label, description, "
+                "allowed_source_types, allowed_target_types, status, created_at, updated_at) "
+                "VALUES (:id, :project_id, 'link_type', 'global_edge', '项目关系', NULL, "
+                "'[\"opportunity\"]', '[\"process\"]', 'active', now(), now())"
+            ),
+            {"id": scoped_id, "project_id": project_id},
+        )
+    assert (
+        scalar(
+            engine,
+            "SELECT allowed_target_types FROM ontology_relation_types WHERE id = :id",
+            {"id": scoped_id},
+        )
+        == ["process"]
+    )
+
+    # 全局作用域内同 (kind, code) 不可重复
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO ontology_relation_types "
+                    "(id, project_id, kind, code, label, description, "
+                    "allowed_source_types, allowed_target_types, status, created_at, updated_at) "
+                    "VALUES (:id, NULL, 'link_type', 'global_edge', '重复全局', NULL, "
+                    "'[\"opportunity\"]', '[\"role\"]', 'active', now(), now())"
+                ),
+                {"id": str(uuid4())},
+            )
+
+    # 关系类型必须声明端点约束（空数组被 CHECK 拒）
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO ontology_relation_types "
+                    "(id, project_id, kind, code, label, description, "
+                    "allowed_source_types, allowed_target_types, status, created_at, updated_at) "
+                    "VALUES (:id, :project_id, 'link_type', 'no_endpoints', NULL, NULL, "
+                    "'[]', '[]', 'active', now(), now())"
+                ),
+                {"id": str(uuid4()), "project_id": project_id},
+            )
+
+    command.downgrade(alembic_config, "a3e7c1f9b5d2")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-TYPE-KEEP'",
+        )
+        == "FDE-V3-TYPE-KEEP"
+    )
+    assert "ontology_relation_types" not in table_names(engine)
 
     command.upgrade(alembic_config, "head")
     cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)

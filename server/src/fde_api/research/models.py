@@ -160,6 +160,11 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
             "tracking_code",
             name="uq_project_research_subjects_project_tracking_code",
         ),
+        # V3 T-O2：对象类型值域**冻结**（存量语义不动，见设计 §2.3 兼容边界）。
+        # 可注册的对象/关系类型落在 ontology_relation_types；本约束仍把守住
+        # 「调研对象类型只能是内置五类」这一物理边界——放开值域会连带
+        # template_research_forms / import_batches 两处同款约束与文档快照、
+        # 表单定义、AI 模板 schema 四处消费方，属独立一轮（backlog T-O2b）。
         CheckConstraint(
             "subject_type IN ('project', 'department', 'role', 'process', 'opportunity')",
             name="ck_project_research_subjects_subject_type",
@@ -355,6 +360,9 @@ class ProjectResearchSubjectLink(Base, TimestampMixin):
     target_subject_id: Mapped[str] = mapped_column(
         String(36), nullable=False
     )
+    # V3 T-O2：link_type 无 DB CheckConstraint（原本就靠服务层白名单）——现在白名单
+    # 变成「内置两类 ∪ 注册表」（ontology_relation_types），方向校验读注册表的端点
+    # 约束；内置两类的方向语义冻结，注册表不得覆盖。
     link_type: Mapped[str] = mapped_column(String(60), nullable=False)
 
     source_subject: Mapped[ProjectResearchSubject] = relationship(

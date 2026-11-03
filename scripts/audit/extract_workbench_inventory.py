@@ -68,6 +68,7 @@ from fde_api.control.task_board import task_board_blueprint
 from fde_api.evidence.routes import evidence_blueprint
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
+from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
 from fde_api.translator.routes import translator_blueprint
 from fde_api.workbench.routes import workbench_blueprint
 from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
@@ -91,6 +92,7 @@ BLUEPRINTS = [
     project_documents_blueprint,
     solutions_blueprint,
     evidence_blueprint,
+    ontology_blueprint,  # V3 T-O2
     workflows_blueprint,
     dispatch_blueprint,
     guidance_blueprint,
