@@ -12,6 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import joinedload
 
 from fde_api.auth.models import User
+from fde_api.auth.passwords import verify_password
 from fde_api.control.access import ACCESS_RANK, CAPABILITY_REQUIREMENTS, capabilities_for_level, effective_ai_access
 from fde_api.control.models import (
     AIModelConfig,
@@ -20,6 +21,7 @@ from fde_api.control.models import (
     PluginInstallation,
     PluginInstallationRevision,
     PluginPackage,
+    SKILL_STATUSES,
     SkillDefinition,
     SkillVersion,
 )
@@ -145,17 +147,29 @@ def save_personal_skill(*, user: User, payload: dict[str, Any]) -> dict[str, Any
     return _save_skill(user=user, payload=payload, scope="personal")
 
 
-def save_public_skill(*, user: User, payload: dict[str, Any]) -> dict[str, Any]:
+def save_public_skill(
+    *, user: User, payload: dict[str, Any], initial_status: str | None = None
+) -> dict[str, Any]:
+    """公共 Skill 保存（system_operator）。
+
+    initial_status 仅限服务端种子路径（builtin 内容可信，直接 published）；
+    HTTP 面不传 → 公共 Skill 一律落 draft 走治理工作流（T-S1）。
+    """
     level, _ = effective_ai_access(user)
     if level != "system_operator":
         raise ControlServiceError("forbidden", "只有管理员可以发布公共 Skill。", 403)
-    return _save_skill(user=user, payload=payload, scope="public")
+    if initial_status is not None and initial_status not in SKILL_STATUSES:
+        raise ControlServiceError("invalid_skill", "Skill 参数无效。", 400)
+    return _save_skill(user=user, payload=payload, scope="public", initial_status=initial_status)
 
 
-def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str, Any]:
+def _save_skill(
+    *, user: User, payload: dict[str, Any], scope: str, initial_status: str | None = None
+) -> dict[str, Any]:
     level, _ = effective_ai_access(user)
     required = {"key", "name", "description", "instructions", "manifest", "required_capabilities"}
-    if set(payload) != required:
+    optional = {"input_schema", "output_schema", "test_report"}
+    if not required <= set(payload) <= required | optional:
         raise ControlServiceError("invalid_skill", "Skill 参数无效。", 400)
     key = payload["key"]
     name = payload["name"]
@@ -163,6 +177,9 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
     instructions = payload["instructions"]
     manifest = payload["manifest"]
     capabilities = payload["required_capabilities"]
+    input_schema = payload.get("input_schema")
+    output_schema = payload.get("output_schema")
+    test_report = payload.get("test_report")
     if (
         not isinstance(key, str)
         or not _SKILL_KEY.fullmatch(key)
@@ -182,10 +199,20 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
             ACCESS_RANK[level] < ACCESS_RANK[CAPABILITY_REQUIREMENTS[item]]
             for item in capabilities
         )
+        or any(value is not None and not isinstance(value, dict) for value in (input_schema, output_schema, test_report))
     ):
         raise ControlServiceError("invalid_skill", "Skill 参数无效。", 400)
+    # 指纹覆盖全部发布材料（instructions/manifest/capabilities + 契约 schema + 测试报告）：
+    # 任一材料变化都开新版本——版本行不可变的语义以「整份发布材料」为单位。
     canonical = json.dumps(
-        {"instructions": instructions, "manifest": manifest, "required_capabilities": capabilities},
+        {
+            "instructions": instructions,
+            "manifest": manifest,
+            "required_capabilities": capabilities,
+            "input_schema": input_schema,
+            "output_schema": output_schema,
+            "test_report": test_report,
+        },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -194,6 +221,13 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
     digest = sha256(canonical.encode("utf-8")).hexdigest()
     namespace_key = user.id if scope == "personal" else "public"
     owner_user_id = user.id if scope == "personal" else None
+    # 治理态（T-S1）：个人 Skill 自发布（owner 自治，四闸只对公共 Skill）；
+    # 公共 Skill 落 draft 走 draft→in_review→published→deprecated（initial_status 仅种子路径）。
+    if scope == "personal" or initial_status == "published":
+        status_value = "published"
+        published_by, published_at = user.id, datetime.now(UTC)
+    else:
+        status_value, published_by, published_at = "draft", None, None
     session = db.session()
     try:
         with session.begin():
@@ -213,9 +247,11 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
                     skill_key=key,
                     name=name.strip(),
                     description=description.strip(),
-                    status="active",
+                    status=status_value,
                     current_version_number=1,
                     created_by_user_id=user.id,
+                    published_by_user_id=published_by,
+                    published_at=published_at,
                 )
                 session.add(skill)
                 session.flush()
@@ -228,17 +264,24 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
                     )
                 )
                 if current is not None and current.content_sha256 == digest:
-                    if skill.name != name.strip() or skill.description != description.strip() or skill.status != "active":
+                    # 同内容重存：只同步名称/描述；个人 Skill 自愈回 published，
+                    # 公共 Skill 的治理态不被重存改写（deprecated 不因重存复活）。
+                    if scope == "personal":
+                        skill.status = "published"
+                        skill.published_by_user_id = published_by
+                        skill.published_at = published_at
+                    if skill.name != name.strip() or skill.description != description.strip():
                         skill.name = name.strip()
                         skill.description = description.strip()
-                        skill.status = "active"
                         skill.version += 1
                     return _serialize_skill(skill, user)
                 version_number = skill.current_version_number + 1
                 skill.current_version_number = version_number
                 skill.name = name.strip()
                 skill.description = description.strip()
-                skill.status = "active"
+                skill.status = status_value
+                skill.published_by_user_id = published_by
+                skill.published_at = published_at
                 skill.version += 1
             session.add(
                 SkillVersion(
@@ -249,12 +292,189 @@ def _save_skill(*, user: User, payload: dict[str, Any], scope: str) -> dict[str,
                     required_capabilities=capabilities,
                     content_sha256=digest,
                     created_by_user_id=user.id,
+                    input_schema_json=input_schema,
+                    output_schema_json=output_schema,
+                    test_report_json=test_report,
                 )
             )
             session.flush()
             return _serialize_skill(skill, user)
     finally:
         session.close()
+
+
+def submit_skill_review(*, user: User, skill_id: str) -> dict[str, Any]:
+    """提交审核（draft→in_review；公共 Skill；system_operator）。"""
+    _require_system_operator(user, "只有管理员可以提交公共 Skill 审核。")
+    with db.session() as session, session.begin():
+        skill = _load_governed_skill(session, skill_id)
+        if skill.status != "draft":
+            raise ControlServiceError(
+                "not_submittable", "只有草稿（draft）状态的 Skill 可以提交审核。", 409
+            )
+        skill.status = "in_review"
+        skill.version += 1
+        session.flush()
+        return _serialize_skill(skill, user)
+
+
+def publish_skill(*, user: User, skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """发布（in_review→published）。四条闸：admin / 密码确认 / in_review / 测试报告或显式 waive。
+
+    版本行不可变：发布只置定义态与发布人戳，并把版本行 reviewed_by 落为发布人
+    （发布即审核背书）；无测试报告时必须给 waive_reason（≤500 字），诚实留痕。
+    """
+    _require_system_operator(user, "只有管理员可以发布公共 Skill。")
+    password, waive_reason = _lifecycle_payload(payload, optional={"waive_reason"})
+    with db.session() as session, session.begin():
+        skill = _load_governed_skill(session, skill_id)
+        if skill.status != "in_review":
+            raise ControlServiceError(
+                "not_in_review", "只有待审核（in_review）的 Skill 可以发布；请先提交审核。", 409
+            )
+        version = session.scalar(
+            select(SkillVersion).where(
+                SkillVersion.skill_id == skill.id,
+                SkillVersion.version_number == skill.current_version_number,
+            )
+        )
+        if version is None:
+            raise ControlServiceError("version_not_found", "Skill 版本不存在。", 404)
+        if not verify_password(user.password_hash, password):
+            raise ControlServiceError("invalid_password", "当前账号密码不正确。", 403)
+        if version.test_report_json is None and not waive_reason:
+            raise ControlServiceError(
+                "test_report_required",
+                "该版本没有测试报告；如确需跳过请携带 waive_reason 说明理由。",
+                409,
+            )
+        skill.status = "published"
+        skill.published_by_user_id = user.id
+        skill.published_at = datetime.now(UTC)
+        version.reviewed_by_user_id = user.id
+        skill.version += 1
+        session.flush()
+        return _serialize_skill(skill, user)
+
+
+def rollback_skill(*, user: User, skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """回滚（published 内把当前版本指回旧版本行；同密码+材料闸）。
+
+    版本行不可变 ⇒ 回滚=改指 current_version_number，历史版本原样保留；
+    目标版本同样要有测试报告或 waive（旧版本当年怎么过的闸，今天就怎么复核）。
+    """
+    _require_system_operator(user, "只有管理员可以回滚公共 Skill。")
+    password, waive_reason = _lifecycle_payload(payload, optional={"waive_reason"}, require_version=True)
+    target_number = payload["version"]
+    with db.session() as session, session.begin():
+        skill = _load_governed_skill(session, skill_id)
+        if skill.status != "published":
+            raise ControlServiceError(
+                "not_rollbackable", "只有已发布（published）的 Skill 可以回滚。", 409
+            )
+        if not isinstance(target_number, int) or target_number < 1:
+            raise ControlServiceError("invalid_request", "version 必须是正整数。", 400)
+        if target_number == skill.current_version_number:
+            raise ControlServiceError(
+                "already_current", f"版本 {target_number} 已是当前版本。", 409
+            )
+        version = session.scalar(
+            select(SkillVersion).where(
+                SkillVersion.skill_id == skill.id,
+                SkillVersion.version_number == target_number,
+            )
+        )
+        if version is None:
+            raise ControlServiceError("version_not_found", "Skill 版本不存在。", 404)
+        if not verify_password(user.password_hash, password):
+            raise ControlServiceError("invalid_password", "当前账号密码不正确。", 403)
+        if version.test_report_json is None and not waive_reason:
+            raise ControlServiceError(
+                "test_report_required",
+                "目标版本没有测试报告；如确需跳过请携带 waive_reason 说明理由。",
+                409,
+            )
+        skill.current_version_number = target_number
+        skill.published_by_user_id = user.id
+        skill.published_at = datetime.now(UTC)
+        version.reviewed_by_user_id = user.id
+        skill.version += 1
+        session.flush()
+        return _serialize_skill(skill, user)
+
+
+def deprecate_skill(*, user: User, skill_id: str) -> dict[str, Any]:
+    """弃用（published→deprecated；从 MCP 工具面与工作流白名单退出）。
+
+    弃用保留 published_by/at 作历史；复活路径=重新编辑（新版本回 draft 走治理）。
+    """
+    _require_system_operator(user, "只有管理员可以弃用公共 Skill。")
+    with db.session() as session, session.begin():
+        skill = _load_governed_skill(session, skill_id)
+        if skill.status != "published":
+            raise ControlServiceError(
+                "not_deprecatable", "只有已发布（published）的 Skill 可以弃用。", 409
+            )
+        skill.status = "deprecated"
+        skill.version += 1
+        session.flush()
+        return _serialize_skill(skill, user)
+
+
+def list_skill_versions(*, user: User, skill_id: str) -> dict[str, Any]:
+    """版本治理视图（公共 Skill 任何登录用户可读，与扩展中心可见性同口径；个人仅 owner）。"""
+    with db.session() as session:
+        skill = session.get(SkillDefinition, skill_id)
+        if skill is None or (
+            skill.scope == "personal" and skill.owner_user_id != user.id
+        ):
+            raise ControlServiceError("skill_not_found", "Skill 不存在。", 404)
+        rows = list(
+            session.scalars(
+                select(SkillVersion)
+                .where(SkillVersion.skill_id == skill.id)
+                .order_by(SkillVersion.version_number)
+            )
+        )
+        versions = [
+            {
+                "version": row.version_number,
+                "content_sha256": row.content_sha256,
+                "created_by_user_id": row.created_by_user_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "reviewed_by_user_id": row.reviewed_by_user_id,
+                "has_test_report": row.test_report_json is not None,
+                "input_schema": row.input_schema_json,
+                "output_schema": row.output_schema_json,
+                "is_current": row.version_number == skill.current_version_number,
+            }
+            for row in rows
+        ]
+        return {"skill": _serialize_skill(skill, user), "versions": versions}
+
+
+def _load_governed_skill(session: Any, skill_id: str) -> SkillDefinition:
+    """治理操作只落公共 Skill（个人 Skill 自发布，无治理态可操作）。"""
+    skill = session.get(SkillDefinition, skill_id)
+    if skill is None or skill.scope != "public":
+        raise ControlServiceError("skill_not_found", "Skill 不存在。", 404)
+    return skill
+
+
+def _lifecycle_payload(
+    payload: dict[str, Any], *, optional: set[str], require_version: bool = False
+) -> tuple[str, str]:
+    """生命周期请求体校验：password 必带（1–1024 字符）；waive_reason 可选（≤500）。"""
+    required = {"password", "version"} if require_version else {"password"}
+    if not required <= set(payload) <= required | optional:
+        raise ControlServiceError("invalid_request", "请求参数无效。", 400)
+    password = payload["password"]
+    if not isinstance(password, str) or not 1 <= len(password) <= 1024:
+        raise ControlServiceError("invalid_request", "请求参数无效。", 400)
+    waive = payload.get("waive_reason")
+    if waive is not None and (not isinstance(waive, str) or len(waive.strip()) > 500):
+        raise ControlServiceError("invalid_request", "请求参数无效。", 400)
+    return password, (waive.strip() if isinstance(waive, str) else "")
 
 
 def save_ai_provider(*, user: User, payload: dict[str, Any]) -> dict[str, Any]:
@@ -550,6 +770,7 @@ def _serialize_skill(skill: SkillDefinition, user: User) -> dict[str, Any]:
         "description": skill.description,
         "status": skill.status,
         "current_version": skill.current_version_number,
+        "published_at": skill.published_at.isoformat() if skill.published_at else None,
         "can_edit": (skill.scope == "personal" and skill.owner_user_id == user.id) or (skill.scope == "public" and effective_ai_access(user)[0] == "system_operator"),
     }
 
@@ -623,15 +844,46 @@ def get_skill_detail(*, user: User, skill_id: str) -> dict[str, Any]:
 
 
 def update_skill_status(*, user: User, skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    if set(payload) != {"status"} or payload["status"] not in {"active", "disabled"}:
+    """既有启用/停用开关（PATCH）与治理态的调和（T-S1）。
+
+    旧值域 active/disabled 继续接受（桌面端零改动兼容），并等价映射到治理态：
+    - published（旧 active）：个人 Skill=owner 自愈发布（幂等）；公共 Skill 拒绝——
+      发布必须走 submit-review/publish 四闸，开关不得旁路（409 governance_required）。
+    - deprecated（旧 disabled）：published → deprecated 下架（两 scope 皆可）；
+      已 deprecated 幂等 no-op；草稿/待审核先回退语义不成立 → 409。
+    """
+    aliases = {"active": "published", "disabled": "deprecated"}
+    raw = payload.get("status")
+    if set(payload) != {"status"} or (raw not in aliases and raw not in SKILL_STATUSES):
         raise ControlServiceError("invalid_skill", "Skill 状态无效。", 400)
+    target = aliases.get(raw, raw)
     with db.session() as session, session.begin():
         item = session.scalar(select(SkillDefinition).where(SkillDefinition.id == skill_id).with_for_update())
         if item is None:
             raise ControlServiceError("skill_not_found", "Skill 不存在。", 404)
         if not _serialize_skill(item, user)["can_edit"]:
             raise ControlServiceError("forbidden", "无权管理此 Skill。", 403)
-        item.status = payload["status"]
+        if target == "published":
+            if item.scope != "personal":
+                raise ControlServiceError(
+                    "governance_required",
+                    "公共 Skill 已启用治理流程：发布请走 submit-review/publish（四闸），开关不能旁路。",
+                    409,
+                )
+            if item.status != "published":
+                item.status = "published"
+                item.published_by_user_id = user.id
+                item.published_at = datetime.now(UTC)
+                item.version += 1
+            return _serialize_skill(item, user)
+        # target == "deprecated"
+        if item.status == "deprecated":
+            return _serialize_skill(item, user)
+        if item.status != "published":
+            raise ControlServiceError(
+                "not_deprecatable", "只有已发布（published）的 Skill 可以停用。", 409
+            )
+        item.status = "deprecated"
         item.version += 1
         return _serialize_skill(item, user)
 

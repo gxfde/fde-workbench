@@ -148,7 +148,7 @@ def test_both_skills_upgrade_without_overwriting_custom_text():
     current={s[0]:s for s in SKILLS}
     for key,old in _LCSC_V1.items():
         assert '独立核验' in current[key][-1] and '1.1.0' in current[key][-1]
-        skill=SimpleNamespace(name=old[1],description=old[2],status='active')
+        skill=SimpleNamespace(name=old[1],description=old[2],status='published')
         version=SimpleNamespace(instructions_text=old[-1],required_capabilities=[],manifest_json={'version':'1.0.0','source':'fde-workbench','read_only':True})
         assert _is_unchanged_builtin(skill,version,old)
         version.instructions_text+='custom'

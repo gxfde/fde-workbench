@@ -23,12 +23,12 @@ def test_new_public_skills_follow_saved_solution_export():
 def test_builtin_upgrade_preserves_admin_edits_and_inactive_skills():
     previous = next(x for x in LEGACY_SKILLS if x[0] == "delivery-scope-documents")
     key, name, description, capabilities, instructions = previous
-    skill = SimpleNamespace(name=name, description=description, status="active")
+    skill = SimpleNamespace(name=name, description=description, status="published")
     version = SimpleNamespace(instructions_text=instructions, required_capabilities=capabilities,
         manifest_json={"version": "1.0.0", "source": "fde-workbench", "read_only": False})
     assert _is_unchanged_builtin(skill, version, previous)
     version.instructions_text += "管理员定制内容"
     assert not _is_unchanged_builtin(skill, version, previous)
     version.instructions_text = instructions
-    skill.status = "inactive"
+    skill.status = "deprecated"
     assert not _is_unchanged_builtin(skill, version, previous)

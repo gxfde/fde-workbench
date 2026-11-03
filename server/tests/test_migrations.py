@@ -43,7 +43,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-W1：workflow_definitions + workflow_definition_versions 两表
 # V3 T-W2：workflow_runs + workflow_node_runs 两表（run 固定版本 + 幂等键）
 # V3 T-W4：automation_approvals 审批复用——run_id 放开可空 + workflow_node_run_id 反链
-HEAD_REVISION = "d5b8e2f4a7c9"
+# V3 T-S1：skill 治理态——status 换 draft/in_review/published/deprecated + 版本契约/审核列
+HEAD_REVISION = "c1e5f9a3d7b2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

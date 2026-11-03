@@ -19,6 +19,8 @@ SCHEDULE_KINDS = ("once", "calendar", "interval", "event")
 AUTOMATION_RUN_STATUSES = ("queued", "running", "waiting_approval", "succeeded", "failed", "cancelled", "skipped")
 AUTOMATION_APPROVAL_STATUSES = ("pending", "approved", "rejected", "expired", "executed")
 SKILL_SCOPES = ("public", "personal")
+# T-S1：skill 治理态（draft→in_review→published→deprecated）；plugin/provider/model 仍用 EXTENSION_STATUSES
+SKILL_STATUSES = ("draft", "in_review", "published", "deprecated")
 EXTENSION_STATUSES = ("active", "disabled")
 PLUGIN_INSTALLATION_STATUSES = ("installed", "disabled", "removed")
 PLUGIN_CHANGE_ACTIONS = ("install", "upgrade", "rollback", "disable", "remove")
@@ -206,7 +208,7 @@ class SkillDefinition(Base, TimestampMixin, VersionedMixin):
     __tablename__ = "skill_definitions"
     __table_args__ = (
         CheckConstraint(f"scope IN {SKILL_SCOPES!r}", name="ck_skill_definitions_scope"),
-        CheckConstraint(f"status IN {EXTENSION_STATUSES!r}", name="ck_skill_definitions_status"),
+        CheckConstraint(f"status IN {SKILL_STATUSES!r}", name="ck_skill_definitions_status"),
         UniqueConstraint("namespace_key", "skill_key", name="uq_skill_definitions_namespace_key"),
         Index("ix_skill_definitions_scope_status", "scope", "status"),
     )
@@ -218,12 +220,15 @@ class SkillDefinition(Base, TimestampMixin, VersionedMixin):
     skill_key: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     current_version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    published_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
     owner: Mapped[User | None] = relationship(foreign_keys=[owner_user_id])
     created_by: Mapped[User] = relationship(foreign_keys=[created_by_user_id])
+    published_by: Mapped[User | None] = relationship(foreign_keys=[published_by_user_id])
 
 
 class SkillVersion(Base, TimestampMixin):
@@ -241,9 +246,14 @@ class SkillVersion(Base, TimestampMixin):
     required_capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    input_schema_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    output_schema_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    test_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
 
     skill: Mapped[SkillDefinition] = relationship(foreign_keys=[skill_id])
     created_by: Mapped[User] = relationship(foreign_keys=[created_by_user_id])
+    reviewed_by: Mapped[User | None] = relationship(foreign_keys=[reviewed_by_user_id])
 
 
 class PluginPackage(Base, TimestampMixin, VersionedMixin):

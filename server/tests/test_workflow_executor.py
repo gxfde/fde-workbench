@@ -163,7 +163,7 @@ def _seed_skill(db_session, leader, *, key: str, versions: list[str]) -> SkillDe
         skill_key=key,
         name="测试技能",
         description="",
-        status="active",
+        status="published",
         current_version_number=len(versions),
         created_by_user_id=leader.id,
     )

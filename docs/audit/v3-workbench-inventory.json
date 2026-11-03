@@ -1,10 +1,10 @@
 {
- "route_count": 278,
+ "route_count": 283,
  "blueprint_count": 35,
  "table_count": 101,
- "revision_count": 26,
+ "revision_count": 27,
  "heads": [
-  "d5b8e2f4a7c9"
+  "c1e5f9a3d7b2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -90,6 +90,15 @@
    "down_revision": "f7a2c9e4b1d3",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "c1e5f9a3d7b2": {
+   "file": "c1e5f9a3d7b2_v3_skill_governance_states.py",
+   "down_revision": "d5b8e2f4a7c9",
+   "create_tables": [],
+   "add_column_tables": [
+    "skill_definitions",
+    "skill_versions"
+   ]
   },
   "c3e7a9b1d5f4": {
    "file": "c3e7a9b1d5f4_t6_review_project_toggle.py",

@@ -86,7 +86,7 @@
 - 前置：无（校验器纯函数）。修改文件：NEW `server/src/fde_api/workflows/{__init__,models,definition_service}.py`。
 - DB：两表。测试：NEW test_workflow_definition.py（§6 用例 1-3,5,7 的定义侧）。
 - 验收：环/未知引用/非白名单 call.ref 一律 422 带明细。复杂度：**M**。
-- **实施记录**：迁移 `f2a4c6e8b1d3`（两表，含 downgrade）；校验规则 1–8 全部阻断、规则 9（外部副作用须审批）按设计 P1 **只告警**（工具目录 effect 结构化在 T-R2 后转强制）；call.ref 白名单=api_catalog ENTRIES 全集（含只读），执行时还叠 `api_execute` 同闸（T-W3）；skill 白名单=active skill 既有版本（T-S1 后收敛 published 语义）；运行上下文键暂 `project_id/run_id/initiated_by_user_id`；事件目标注册表新增 `workflow_definition`（platform 模板 project_id=NULL）。**零路由**（§5 的 6 条路由随 T-W3 执行器+runs 一起开，避免先开无执行器的空面）。
+- **实施记录**：迁移 `f2a4c6e8b1d3`（两表，含 downgrade）；校验规则 1–8 全部阻断、规则 9（外部副作用须审批）按设计 P1 **只告警**（工具目录 effect 结构化在 T-R2 后转强制）；call.ref 白名单=api_catalog ENTRIES 全集（含只读），执行时还叠 `api_execute` 同闸（T-W3）；skill 白名单=active skill 既有版本（**已随 T-S1 收敛 published 语义**）；运行上下文键暂 `project_id/run_id/initiated_by_user_id`；事件目标注册表新增 `workflow_definition`（platform 模板 project_id=NULL）。**零路由**（§5 的 6 条路由随 T-W3 执行器+runs 一起开，避免先开无执行器的空面）。
 
 ### T-W2 runs/node_runs 表+迁移 — **DONE（2026-11-03）**
 - 前置：T-W1。DB：workflow_runs、workflow_node_runs。复杂度：**S**。
@@ -97,7 +97,7 @@
 - 前置：T-W1/T-W2/T-S1（skill published 语义）。修改文件：NEW workflows/executor.py；EXTEND jobs/handlers.py、jobs/reconcile.py（RECOVERABLE 增 workflow.run）。
 - 测试：test_workflow_executor.py（§6 用例 4-8,11）。复杂度：**M**。
 - **实施记录（与设计的偏差，按主报告纪律回写）**：
-  - **T-S1 前置按 T-W1 先例悬置**：skill 节点执行沿用 active 版本语义（与 T-W1 校验白名单同口径），T-S1 落地后收敛 published；skill 执行 = pinned 版本 `instructions_text` 作 system_prompt 的确定性 AI 调用（`execute_ai_prompt(use_tools=False)`，不签发 MCP token——skill 只做文本变换，工具面属于 call 节点），`execution_id=wfnode-{node 行 id}` 跨重试/恢复稳定可审计。
+  - **T-S1 前置按 T-W1 先例悬置（已清偿，2026-11-03 T-S1 落地）**：skill 节点执行与定义期白名单均已收敛 published 语义（executor._dispatch_skill / published_skill_refs）；skill 执行 = pinned 版本 `instructions_text` 作 system_prompt 的确定性 AI 调用（`execute_ai_prompt(use_tools=False)`，不签发 MCP token——skill 只做文本变换，工具面属于 call 节点），`execution_id=wfnode-{node 行 id}` 跨重试/恢复稳定可审计。
   - **§5 路由开五条**（271→276）：POST projects/{id}/workflows（can_manage，建草稿）、POST …/{wid}/publish（admin，锁版）、POST …/{wid}/runs（can_manage，201/200 按幂等命中）、GET projects/{id}/workflow-runs/{rid}（can_view，节点按拓扑序）、GET /api/v1/workflows（admin 平台模板）；**POST …/workflow-runs/{rid}/cancel 与 resume 的 HTTP 面随 T-W5**（服务层 cancel_run/resume_run 本轮已可用并有测试钉住）。
   - **用例 4 的「paused→resume」精确化为 failed + resume_run**（§3 终态语义优先：有 failed → run failed，修 FV-F1 不静默 done）；resume 把 failed/skipped 节点放回 pending（attempt 归零=计数按每轮恢复重置），已完成节点产物原样复用。
   - **agent/human_approval 节点在 start_run 即 422 `unsupported_node_type`**（不留必死 run；T-W4 开放时移除）。
@@ -141,11 +141,22 @@
 ### T-R2 工具目录结构化 effect/risk（域 9，含 WB-DEF-10）
 - 修改文件：`control/mcp_gateway.py`（TOOLS 元组扩 effect/risk）、`control/api_catalog.py`（ENTRY 扩字段；export_sow/documents.generate 标 confirmation）。测试：test_ai_tool_loop/test_control_plane_api 扩展（目录扫描断言/写类确认流）。复杂度：**S**。
 
-### T-S1 Skill 治理态扩展（域 8）
+### T-S1 Skill 治理态扩展（域 8）— **DONE（2026-11-03）**
 - 目标：status draft/in_review/published/deprecated；publish 四条闸；_skills 只回 published。
 - 修改文件：`control/models.py`、`extensions_service.py`、`builtin_skills.py`、`mcp_gateway.py`。DB：skill_definitions 加 published_by/at（+status 枚举扩展需迁移）；skill_versions 加 input_schema/output_schema/test_report_json/reviewed_by。
 - API：submit-review/publish/rollback/versions（agent-policy-v1 §2.4）。测试：NEW test_skill_lifecycle.py（§2.5 七用例）。
 - 回滚：downgrade+revert。风险：存量 14 个 builtin 种子状态迁移（seed 直接 published）。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **状态机（定义级）**：`draft →(submit-review)→ in_review →(publish)→ published →(deprecate)→ deprecated`；编辑已发布公共 Skill → 新版本行 + 定义回 draft（重走治理，复活路径天然存在）；迁移 `c1e5f9a3d7b2`（head 26→**27 rev**，本任务唯一 DDL）：CHECK 换值域 + 存量数据迁移（**active→published**（published_by 暂记 created_by、published_at=now）、**disabled→deprecated**）+ skill_definitions.published_by/at + skill_versions.input_schema_json/output_schema_json/test_report_json/reviewed_by_user_id（全可空；版本行不可变语义不变）。
+  - **发布四闸落地**：①admin（system_operator）②**密码确认**（verify_password，`invalid_password` 403，沿 solutions 弃用先例）③状态须 in_review（否则 409 `not_in_review`）④**测试报告或显式 waive**（版本行 test_report_json 非空或 waive_reason ≤500 字，否则 409 `test_report_required`）。发布只置定义态+发布人戳并把版本行 reviewed_by 落为发布人（发布即审核背书）。
+  - **个人 Skill 豁免治理工作流（自发布语义）**：保存即 published（owner 自治；个人技能本就 owner-only 可见），四闸只对公共 Skill 生效——审计 B12/B13 的治理缺口针对的是公共面。
+  - **种子兼容**：`save_public_skill` 增服务端内部参数 `initial_status`（仅种子路径传 `"published"`，HTTP 面不暴露）；`_is_unchanged_builtin` 升级判定随治理态收敛 `status=="published"`；存量种子由迁移升为 published，下次 seed 升级链路不断。
+  - **指纹扩展**：content_sha256 canonical 覆盖 instructions+manifest+capabilities+**input_schema+output_schema+test_report**（发布材料整体不可变；补一份测试报告也开新版本重走治理）。
+  - **API 五条（278→283）**：POST `…/extensions/skills/{id}/submit-review`、`…/publish`{password, waive_reason?}、`…/rollback`{version, password, waive_reason?}、`…/deprecate`、GET `…/versions`（公共任何登录用户可读，个人 owner-only；回滚=published 内改指 current_version_number 到旧版本行，同密码+材料闸——agent-policy §2.4 四条 API 之外补 deprecate，因状态机需要显式出口）。
+  - **消费方收敛（T-W1/T-W3 挂账清偿）**：`mcp_gateway._skills`、`published_skill_refs`（定义期 skill.ref 白名单）、`executor._dispatch_skill` 三处 `status=="active"` 全部收敛 `"published"`。
+  - **既有 PATCH 开关调和（backlog 未列的隐藏面）**：桌面扩展页「停用/启用」走 `PATCH /extensions/skills/{id}`{status: active|disabled}——零桌面改动前提下保留旧值域作别名（active↔published / disabled↔deprecated）：个人 Skill=owner 自愈发布（幂等 no-op）；公共 Skill 的发布向开关 **409 `governance_required`**（开关不得旁路四闸），停用向照旧可用。桌面治理 UI（submit-review/publish 按钮）挂后续轮。
+  - **迁移实现教训**：首轮把数据 UPDATE 写在 add_column 之前（引用尚不存在的列）——conftest 每会话 downgrade base→upgrade head 即红，测试库先于 CI 暴露；列先行→约束换值→迁数据的顺序才对。
+  - 测试：NEW test_skill_lifecycle.py **7 例**（四闸逐一可见/契约+报告免 waive/编辑回 draft 重走治理+公共开关防旁路/回滚材料闸+already_current+404/弃用退出+复活封路/个人自发布+PATCH 幂等/CHECK 状态域自检）+ 修 5 处 active 语义既有用例（chat_mcp make_skill、executor _seed_skill、solution_skills/lcsc_other 的 _is_unchanged_builtin 自测、extension_management 的「建→停→改名重存」PATCH 流改治理语义）；test_migrations HEAD 钉 `c1e5f9a3d7b2`（往返含数据迁移双向归位）。
 
 ### T-S2 Skill 回滚+效果统计
 - 前置：T-S1。复杂度：**S**。

@@ -126,13 +126,25 @@ def test_plugin_registration_waits_for_verified_runtime_result(authorized_client
 
 
 def test_public_skill_can_be_edited_disabled_and_read_back(authorized_client_factory):
+    """T-S1 治理语义：公共 Skill 建为 draft（不可直接停用）→ 发布后可停用（deprecated）；
+    重启用被防旁路闸拦（须走发布流）；同内容改名重存不开新版本。"""
     admin = authorized_client_factory("admin")
     payload = {"key": "public-summary", "name": "项目总结", "description": "", "instructions": "只依照项目资料总结", "manifest": {}, "required_capabilities": ["project.read"]}
     created = admin.post("/api/v1/extensions/skills/public", json=payload).json["data"]
-    assert created["can_edit"] is True
+    assert created["can_edit"] is True and created["status"] == "draft"
     detail = admin.get(f"/api/v1/extensions/skills/{created['id']}").json["data"]
     assert detail["instructions"] == payload["instructions"]
-    assert admin.patch(f"/api/v1/extensions/skills/{created['id']}", json={"status": "disabled"}).json["data"]["status"] == "disabled"
+    # draft 不可停用（治理态 CHECK 语义）
+    early = admin.patch(f"/api/v1/extensions/skills/{created['id']}", json={"status": "disabled"})
+    assert early.status_code == 409 and early.json["error"]["code"] == "not_deprecatable"
+    # 走治理流发布（无测试报告 → waive）
+    assert admin.post(f"/api/v1/extensions/skills/{created['id']}/submit-review", json={}).status_code == 200
+    published = admin.post(f"/api/v1/extensions/skills/{created['id']}/publish", json={"password": "InitialPass!234", "waive_reason": "治理语义回归用例"})
+    assert published.status_code == 200 and published.json["data"]["status"] == "published"
+    # 停用 = deprecated；重启用被防旁路闸拦（公共发布必须走 submit-review/publish）
+    assert admin.patch(f"/api/v1/extensions/skills/{created['id']}", json={"status": "disabled"}).json["data"]["status"] == "deprecated"
+    blocked = admin.patch(f"/api/v1/extensions/skills/{created['id']}", json={"status": "active"})
+    assert blocked.status_code == 409 and blocked.json["error"]["code"] == "governance_required"
     updated = admin.post("/api/v1/extensions/skills/public", json={**payload, "name": "新版项目总结"}).json["data"]
     assert updated["current_version"] == 1
     assert updated["name"] == "新版项目总结"

@@ -91,9 +91,10 @@ def _project(session, user, claims, project_id):
 
 
 def _skills(session, user, allowed):
+    # T-S1：只回 published（draft/in_review 未过发布闸，deprecated 已退出）
     rows = session.execute(select(SkillDefinition, SkillVersion).join(SkillVersion,
         (SkillVersion.skill_id == SkillDefinition.id) & (SkillVersion.version_number == SkillDefinition.current_version_number))
-        .where(SkillDefinition.status == "active", or_(SkillDefinition.scope == "public", SkillDefinition.owner_user_id == user.id)))
+        .where(SkillDefinition.status == "published", or_(SkillDefinition.scope == "public", SkillDefinition.owner_user_id == user.id)))
     return [(skill, version) for skill, version in rows if set(version.required_capabilities).issubset(allowed)]
 
 

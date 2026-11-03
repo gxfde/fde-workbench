@@ -89,7 +89,7 @@ def make_skill(session, owner, *, scope="personal", capabilities=None, name="Per
     key = uuid4().hex
     skill = SkillDefinition(scope=scope, namespace_key="public" if scope == "public" else owner.id,
         owner_user_id=owner.id if scope == "personal" else None, skill_key=key, name=name,
-        description="Test skill", created_by_user_id=owner.id, current_version_number=1, status="active")
+        description="Test skill", created_by_user_id=owner.id, current_version_number=1, status="published")
     session.add(skill)
     session.flush()
     session.add(SkillVersion(skill_id=skill.id, version_number=1, instructions_text=f"Private instructions for {name}",

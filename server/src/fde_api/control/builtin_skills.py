@@ -112,7 +112,8 @@ SKILLS = [(key, name,
 
 
 def _is_unchanged_builtin(skill, current, previous, version='1.0.0'):
-    if not current or not previous or skill.status != "active":
+    # T-S1：种子升级判定随治理态收敛——只升级未被动过且仍处于 published 的内置 Skill
+    if not current or not previous or skill.status != "published":
         return False
     _, name, description, capabilities, instructions = previous
     return (skill.name == name and skill.description == description
@@ -141,9 +142,10 @@ def seed_public_skills():
     for key, name, description, capabilities, instructions in SKILLS:
         if key in existing and key not in upgradable:
             continue
+        # 内置种子内容可信：initial_status="published" 直发布（免人工审核闸，服务端内部参数）
         save_public_skill(user=admin, payload={"key": key, "name": name, "description": description,
             "instructions": instructions, "manifest": {"version": "1.2.0" if key in _SOLUTION_SKILLS else "1.1.4" if key in _LCSC_V1 else "1.0.0", "source": "fde-workbench", "read_only": "workbench.write" not in capabilities},
-            "required_capabilities": capabilities})
+            "required_capabilities": capabilities}, initial_status="published")
         created += 1
     return created
 

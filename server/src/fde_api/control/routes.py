@@ -27,12 +27,17 @@ from fde_api.control.service import (
 from fde_api.control.clawbot_gateway import verify_gateway_token
 from fde_api.control.extensions_service import (
     decide_plugin_change,
+    deprecate_skill,
     extensions_center,
+    list_skill_versions,
+    publish_skill,
     request_plugin_change,
+    rollback_skill,
     save_ai_model,
     save_ai_provider,
     save_personal_skill,
     save_public_skill,
+    submit_skill_review,
 )
 from fde_api.control.dsh_market import search_dsh_market, sync_dsh_market
 from fde_api.control.access import authorize_ai_capability
@@ -70,6 +75,67 @@ def public_skill_route():
         return _invalid_request()
     try:
         return jsonify({"data": save_public_skill(user=g.current_user, payload=payload), "error": None}), 201
+    except ControlServiceError as error:
+        return _service_error(error)
+
+
+@control_blueprint.post("/extensions/skills/<skill_id>/submit-review")
+@require_auth
+def skill_submit_review_route(skill_id):
+    """提交审核（draft→in_review；admin；T-S1 治理态）。"""
+    try:
+        data = submit_skill_review(user=g.current_user, skill_id=skill_id)
+        return jsonify({"data": data, "error": None})
+    except ControlServiceError as error:
+        return _service_error(error)
+
+
+@control_blueprint.post("/extensions/skills/<skill_id>/publish")
+@require_auth
+def skill_publish_route(skill_id):
+    """发布（in_review→published；admin+密码确认+测试报告或显式 waive）。"""
+    payload = _json_payload()
+    if payload is None:
+        return _invalid_request()
+    try:
+        data = publish_skill(user=g.current_user, skill_id=skill_id, payload=payload)
+        return jsonify({"data": data, "error": None})
+    except ControlServiceError as error:
+        return _service_error(error)
+
+
+@control_blueprint.post("/extensions/skills/<skill_id>/rollback")
+@require_auth
+def skill_rollback_route(skill_id):
+    """回滚到既有版本（published 内改指当前版本；admin+密码确认+材料闸）。"""
+    payload = _json_payload()
+    if payload is None:
+        return _invalid_request()
+    try:
+        data = rollback_skill(user=g.current_user, skill_id=skill_id, payload=payload)
+        return jsonify({"data": data, "error": None})
+    except ControlServiceError as error:
+        return _service_error(error)
+
+
+@control_blueprint.post("/extensions/skills/<skill_id>/deprecate")
+@require_auth
+def skill_deprecate_route(skill_id):
+    """弃用（published→deprecated；admin；复活=重新编辑走治理）。"""
+    try:
+        data = deprecate_skill(user=g.current_user, skill_id=skill_id)
+        return jsonify({"data": data, "error": None})
+    except ControlServiceError as error:
+        return _service_error(error)
+
+
+@control_blueprint.get("/extensions/skills/<skill_id>/versions")
+@require_auth
+def skill_versions_route(skill_id):
+    """版本治理视图（公共任何登录用户可读；个人仅 owner）。"""
+    try:
+        data = list_skill_versions(user=g.current_user, skill_id=skill_id)
+        return jsonify({"data": data, "error": None})
     except ControlServiceError as error:
         return _service_error(error)
 

@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-S1：Skill 治理态（draft/in_review/published/deprecated + 发布四闸，2026-11-03）
+
+### 服务端（1 个迁移（唯一 DDL）/ 5 条新路由 / extensions_service 治理化 / 零桌面改动）
+
+- **治理状态机**：`draft →(submit-review)→ in_review →(publish)→ published →(deprecate)→ deprecated`；编辑已发布公共 Skill 开新版本行并回 draft 重走治理。迁移 **`c1e5f9a3d7b2`**：`skill_definitions.status` 从扩展共用值域（active/disabled）切到治理四态（CHECK 换值域），存量 **active→published**（发布人暂记创建人）、**disabled→deprecated**；skill_definitions 加 published_by/at、skill_versions 加 input/output schema + test_report_json + reviewed_by（全可空，版本行不可变不变）。
+- **发布四闸**：admin（system_operator）/ 密码确认（`invalid_password` 403）/ 状态须 in_review / 测试报告或显式 waive（`test_report_required` 409）；发布把版本行 `reviewed_by` 落为发布人（发布即审核背书）。回滚 = published 内改指旧版本行（版本行不可变），同密码+材料闸。
+- **个人 Skill 自发布豁免**：保存即 published（owner 自治）；四闸只对公共 Skill。内置种子走服务端内部参数 `initial_status="published"` 直发布（内容可信），`_is_unchanged_builtin` 升级判定同步收敛。
+- **消费方收敛（T-W1/T-W3 挂账清偿）**：MCP 工具面（`mcp_gateway._skills`）、工作流 skill.ref 定义期白名单（`published_skill_refs`）、执行器 skill 节点分派三处全部只认 `published`。
+- **API 五条（278→283）**：submit-review / publish / rollback / deprecate / versions；content_sha256 指纹扩展覆盖全部发布材料（schema/测试报告变更即新版本）。
+- **兼容**：既有 PATCH 启停开关保留旧值域作别名——个人 Skill 自愈发布（幂等）；公共 Skill 发布向 409 `governance_required`（开关不得旁路四闸），停用向照旧。桌面治理 UI（审核/发布按钮）挂后续轮。
+- **测试**：NEW `test_skill_lifecycle.py` **7 例** + 修 5 处 active 语义既有用例（chat_mcp/executor/solution_skills/lcsc_other/extension_management PATCH 流）；`test_migrations.HEAD_REVISION` → `c1e5f9a3d7b2`。
+- **口径**：业务表 **101 不变** / 迁移头 **`c1e5f9a3d7b2`（27 revision，+1）** / 路由 **283（+5）** / pytest **1780 收集 = 1774 passed + 6 skipped**（全量实跑 1209s） / vitest 730 沿用（零桌面改动）。
+- **部署**：`docker compose build && up -d` 后 **`alembic upgrade head`**（skill 两表列变更 + 存量状态迁移；**api/worker/scheduler 三个镜像都要 build**）。
+
 ## [未发布] — V3 实施 T-W5：Workflow cancel/resume HTTP 面（服务端编排面收口，2026-11-03）
 
 ### 服务端（2 条新路由 / 零新表零迁移 / 零服务层改动 / 零桌面改动）

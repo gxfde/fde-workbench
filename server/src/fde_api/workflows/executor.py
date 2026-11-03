@@ -867,7 +867,7 @@ def _dispatch_skill(
             )
             .where(
                 SkillDefinition.skill_key == key_part,
-                SkillDefinition.status == "active",
+                SkillDefinition.status == "published",
             )
             .order_by(SkillDefinition.scope.desc(), SkillDefinition.created_at, SkillDefinition.id)
             .limit(1)
@@ -875,7 +875,7 @@ def _dispatch_skill(
         if rows is None:
             raise _NodeFailure(
                 "skill_ref_unavailable",
-                f"skill 版本不可用：{spec['ref']}（与定义期校验同口径，T-S1 后收敛 published）。",
+                f"skill 版本不可用：{spec['ref']}（只接受已发布（published）技能，与定义期白名单同口径）。",
                 retryable=False,
             )
         _skill, version = rows

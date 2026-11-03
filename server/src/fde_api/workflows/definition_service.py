@@ -418,11 +418,11 @@ def catalog_call_refs() -> frozenset[str]:
 
 
 def published_skill_refs(session: Session) -> frozenset[str]:
-    """skill.ref 白名单 = active skill 的既有版本号 `skill_key@version_number`（T-S1 起收敛为 published 语义）。"""
+    """skill.ref 白名单 = published skill 的既有版本号 `skill_key@version_number`（T-W1 挂账已随 T-S1 收敛）。"""
     rows = session.execute(
         select(SkillDefinition.skill_key, SkillVersion.version_number)
         .join(SkillVersion, SkillVersion.skill_id == SkillDefinition.id)
-        .where(SkillDefinition.status == "active")
+        .where(SkillDefinition.status == "published")
     ).all()
     return frozenset(f"{skill_key}@{version}" for skill_key, version in rows)
 
