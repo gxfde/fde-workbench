@@ -2,6 +2,8 @@
 
 §5 七条全部开放（T-W3 五条：定义/发布/发起/详情/平台模板；T-W5 两条：cancel/resume
 运行生命周期）。平台模板定义（project_id NULL）的创建走内部/admin 通道，只开放只读列表。
+V3 T-W6 桌面控制台补两条只读列表挂件（项目定义列表 / run 列表，均 can_view）——
+§5 设计面不变，见 backlog T-W6 实施记录偏差注记。
 """
 from __future__ import annotations
 
@@ -100,6 +102,40 @@ def start_workflow_run_route(project_id, definition_id):
             "created": created,
         }
     return jsonify({"data": data, "error": None}), (201 if created else 200)
+
+
+@workflows_blueprint.get("/api/v1/projects/<project_id>/workflows")
+@require_auth
+def list_project_workflows_route(project_id):
+    """项目内定义列表（can_view，新者在前）——V3 T-W6 桌面控制台补面（§5 七条之外的只读挂件）。"""
+    with db.session() as session:
+        project = executor.load_project(session, g.current_user, project_id, manage=False)
+        data = {"items": definition_service.list_definitions(session, project_id=project.id)}
+    return jsonify({"data": data, "error": None})
+
+
+@workflows_blueprint.get("/api/v1/projects/<project_id>/workflow-runs")
+@require_auth
+def list_workflow_runs_route(project_id):
+    """项目内 run 列表（can_view，新者在前，有界）——T-W6 补面；列表行不带 nodes。"""
+    raw = request.args.get("limit")
+    if raw is None:
+        limit = executor.RUN_LIST_LIMIT_DEFAULT
+    else:
+        try:
+            limit = int(raw)
+        except ValueError:
+            raise WorkflowRunError("invalid_request", "limit 必须是整数。", 400)
+        if not 1 <= limit <= executor.RUN_LIST_LIMIT_MAX:
+            raise WorkflowRunError(
+                "invalid_request", f"limit 须在 1..{executor.RUN_LIST_LIMIT_MAX}。", 400
+            )
+    return jsonify(
+        {
+            "data": executor.list_project_runs(actor=g.current_user, project_id=project_id, limit=limit),
+            "error": None,
+        }
+    )
 
 
 @workflows_blueprint.get("/api/v1/projects/<project_id>/workflow-runs/<run_id>")

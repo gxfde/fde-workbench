@@ -3,6 +3,7 @@ import { aiCapabilityLabels } from "../ai/accessLabels"
 import { useAuth } from "../auth/AuthProvider"
 import { ModelPreferencesPanel } from "./ModelPreferencesPanel"
 import { LcscToolCard } from "./LcscToolCard"
+import { SkillVersionsPage } from "./SkillVersionsPage"
 import "./extensions.css"
 
 interface Skill { id: string; scope: "public" | "personal"; key: string; name: string; description: string; status: string; current_version: number; can_edit: boolean }
@@ -30,6 +31,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
   const [editingSkill, setEditingSkill] = useState(false)
   const [skillScope, setSkillScope] = useState<"personal" | "public">("personal")
   const [pluginDetail, setPluginDetail] = useState<PluginDetail | null>(null)
+  const [versionsSkill, setVersionsSkill] = useState<Skill | null>(null)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [busy, setBusy] = useState(false)
@@ -41,11 +43,11 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
   }
   useEffect(() => { void load().catch((caught) => setError(messageOf(caught))) }, [])
   useEffect(() => {
-    if (!editingSkill && !pluginDetail) return
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) { setEditingSkill(false); setPluginDetail(null) } }
+    if (!editingSkill && !pluginDetail && !versionsSkill) return
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) { setEditingSkill(false); setPluginDetail(null); setVersionsSkill(null) } }
     window.addEventListener("keydown", close)
     return () => window.removeEventListener("keydown", close)
-  }, [editingSkill, pluginDetail, busy])
+  }, [editingSkill, pluginDetail, versionsSkill, busy])
   async function perform(action: () => Promise<void>): Promise<void> {
     if (busy) return
     setBusy(true); setError(""); setNotice("")
@@ -89,7 +91,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
         {canManage ? <button className="secondary-button" onClick={() => { setDraft(emptySkill); setSkillScope("public"); setEditingSkill(true) }}>新建公共 Skill</button> : null}
         {data.permissions.can_manage_personal_skills ? <button className="primary-button" onClick={() => { setDraft(emptySkill); setSkillScope("personal"); setEditingSkill(true) }}>新建个人 Skill</button> : null}
       </div></div><div className="extension-card-grid">{data.skills.length ? data.skills.map((skill) => <article key={skill.id} className="extension-item"><div><span className={`extension-scope ${skill.scope}`}>{skill.scope === "public" ? "公共" : "个人"}</span><strong>{skill.name}</strong>{skill.status === "disabled" ? <span className="extension-scope">已停用</span> : null}</div><p>{skill.description || "暂无说明"}</p><small>{skill.key} · v{skill.current_version}</small>
-        {skill.can_edit ? <div className="plugin-actions"><button className="secondary-button" disabled={busy} onClick={() => void editSkill(skill)}>编辑</button><button className="secondary-button" disabled={busy} onClick={() => void perform(async () => { await apiRequest(`/api/v1/extensions/skills/${skill.id}`, { method: "PATCH", body: { status: skill.status === "active" ? "disabled" : "active" } }); await load() })}>{skill.status === "active" ? "停用" : "启用"}</button></div> : null}
+        <div className="plugin-actions"><button className="secondary-button" disabled={busy} onClick={() => setVersionsSkill(skill)}>版本</button>{skill.can_edit ? <><button className="secondary-button" disabled={busy} onClick={() => void editSkill(skill)}>编辑</button><button className="secondary-button" disabled={busy} onClick={() => void perform(async () => { await apiRequest(`/api/v1/extensions/skills/${skill.id}`, { method: "PATCH", body: { status: skill.status === "active" ? "disabled" : "active" } }); await load() })}>{skill.status === "active" ? "停用" : "启用"}</button></> : null}</div>
       </article>) : <p className="empty-copy">还没有 Skill，可以新建一个。</p>}</div></section> : null}
       {tab === "tools" ? <section id="tools-panel" role="tabpanel" aria-labelledby="tools-tab" className="panel extension-panel">
         <div className="panel-heading"><div><h2>工具 / 插件</h2><p>点击「立即使用」进入工具详情页，执行操作并查看结果与日志；其余能力可通过 AI 对话调用。</p></div></div>
@@ -102,6 +104,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
       </section> : null}
     </div>}
     {editingSkill ? <div className="dialog-backdrop"><section className="dialog extension-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-editor-title"><h2 id="skill-editor-title">{skillScope === "public" ? "公共" : "个人"} Skill</h2><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await apiRequest(`/api/v1/extensions/skills/${skillScope}`, { method: "POST", body: draft }); setDraft(emptySkill); setEditingSkill(false); setNotice("Skill 已保存，历史版本保留。"); await load() }) }}><div className="skill-editor"><label className="field"><span>标识</span><input autoFocus aria-label="Skill 标识" required value={draft.key} onChange={(event) => setDraft({ ...draft, key: event.target.value })} /></label><label className="field"><span>名称</span><input aria-label="Skill 名称" required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label className="field full"><span>说明</span><input aria-label="Skill 说明" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label><label className="field full"><span>SKILL.md 指令</span><textarea aria-label="SKILL.md 指令" required rows={9} value={draft.instructions} onChange={(event) => setDraft({ ...draft, instructions: event.target.value })} /></label></div><div className="dialog-actions"><button className="secondary-button" disabled={busy} type="button" onClick={() => setEditingSkill(false)}>取消</button><button className="primary-button" disabled={busy} type="submit">保存 Skill</button></div></form></section></div> : null}
+    {versionsSkill ? <SkillVersionsPage skill={{ id: versionsSkill.id, name: versionsSkill.name }} onClose={() => setVersionsSkill(null)} onChanged={load} /> : null}
     {pluginDetail ? <div className="dialog-backdrop"><section className="dialog extension-dialog" role="dialog" aria-modal="true" aria-labelledby="plugin-detail-title"><h2 id="plugin-detail-title">{pluginDetail.name}</h2><p>{pluginDetail.description || "暂无说明"}</p><dl className="plugin-detail-list"><dt>发布者</dt><dd>{pluginDetail.publisher}</dd><dt>分类</dt><dd>{pluginDetail.category || "未分类"}</dd><dt>安装状态</dt><dd>{pluginDetail.installation_status === "installed" ? `已安装 v${pluginDetail.installed_version}` : pluginDetail.installation_status === "disabled" ? "已停用" : "未安装"}</dd><dt>权限</dt><dd>{pluginDetail.capabilities.length ? pluginDetail.capabilities.map((item) => aiCapabilityLabels[item] || "扩展能力").join("、") : "安装时由运行环境校验插件清单"}</dd></dl><p className="supporting-copy">第三方插件由其发布者维护。安装由隔离运行环境执行，只有执行成功才会标记为已安装。</p><div className="dialog-actions"><button className="secondary-button" disabled={busy} onClick={() => setPluginDetail(null)}>关闭</button>{pluginDetail.install_available ? pluginDetail.installation_status === "installed" || pluginDetail.installation_status === "disabled" ? <button className="secondary-button" disabled={busy} onClick={() => void changePlugin(pluginDetail.id, "remove")}>{canManage ? "卸载插件" : "申请卸载"}</button> : <button className="primary-button" disabled={busy} onClick={() => void changePlugin(pluginDetail.id, "install")}>{canManage ? "安装插件" : "申请安装"}</button> : <span className="supporting-copy">插件运行环境暂不可用</span>}</div></section></div> : null}
   </section>
 }

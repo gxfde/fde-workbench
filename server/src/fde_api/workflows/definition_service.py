@@ -574,6 +574,22 @@ def list_versions(session: Session, definition_id: str) -> list[WorkflowDefiniti
     )
 
 
+def list_definitions(session: Session, *, project_id: str) -> list[dict[str, Any]]:
+    """项目内定义列表（V3 T-W6 桌面控制台补面，新者在前）。
+
+    项目内定义天然少量（草稿+已发布），无分页参数；权限闸在路由层
+    load_project(can_view)。dag_json 原样随行——桌面端只读概览不解析校验。
+    """
+    rows = list(
+        session.scalars(
+            select(WorkflowDefinition)
+            .where(WorkflowDefinition.project_id == project_id)
+            .order_by(WorkflowDefinition.created_at.desc(), WorkflowDefinition.id.desc())
+        )
+    )
+    return [serialize_definition(row) for row in rows]
+
+
 def serialize_definition(definition: WorkflowDefinition) -> dict[str, Any]:
     """定义行序列化（路由面共用；dag_json 原样输出——校验明细在创建时已 422 过）。"""
     return {

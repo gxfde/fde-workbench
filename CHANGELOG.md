@@ -2,6 +2,26 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W6：桌面控制台三面——工作流 / 术语表 / Skill 版本治理（2026-11-04）
+
+### 服务端（零迁移；两条只读列表路由为桌面控制台最小补面）
+
+- **偏差回写**：workflow-dag-v1 §5 设计七条不变；控制台要「run 列表/取消/恢复」就得能枚举，故补两条 can_view 只读挂件——`GET /projects/{id}/workflows`（定义列表，新者在前，项目内定义天然少量无分页）与 `GET /projects/{id}/workflow-runs?limit=`（run 列表，默认 50 上限 200 有界扫描，`truncated=true` 诚实标注）。**列表行不带 nodes**（N+1 不可取），节点树走既有详情路由按需展开。
+- 路由总数 293→**295**；ENTRIES 94 不变；迁移头 `b5d9e3f7a1c6` 不变。
+
+### 桌面端（三张新页，页面仅呈现、写操作全走既有服务层闸）
+
+- **WorkflowConsole**（`workflows/WorkflowConsole.tsx`，项目详情新 tab「工作流」）：定义卡片（状态/版本/节点数概览）+ run 列表（七态标签/错误摘要/`truncated` 提示）+ 按需展开节点态树（八态标签/attempt/错误）；**取消**（非终态可点，幂等语义照服务层——终态 409 `already_terminal` 原样呈现）与**恢复**（仅 failed，409 `not_resumable` 同）按钮挂 canManage。
+- **GlossaryPage**（`ontology/GlossaryPage.tsx`，项目详情新 tab「术语表」）：术语只读清单（q 搜索按规范名/别名）+ 关系类型只读清单（登记/停用走管理通道，全局行需运维员——lesson 15 口径）+ **变更集评审**：状态过滤五态、载荷展开（动作明细 + base 指纹）、draft→提交评审 / in_review→确认物化 / 否决需理由；服务端「≠提交人」403 原样呈现不吞。
+- **SkillVersionsPage**（`extensions/SkillVersionsPage.tsx`，扩展中心每张 Skill 卡新增「版本」按钮的治理对话框）：版本历史（指纹前缀/测试报告有无/当前标记）+ **效果统计**（消费 T-S2 `usage` 块：total/chat/workflow/last_used_at/by_version/truncated——by_version 正是回滚决策依据）+ 治理动作：draft→提交评审、in_review→发布（密码确认+豁免说明）、published→回滚（选目标版本+密码+豁免）/弃用；权限外只读（「只有公共 Skill 运维员或个人 Skill 属主可以执行治理动作」）。
+- 项目详情 tab 枚举扩展：`overview/tasks/gates/commercial/research/delivery` + **`workflow` + `ontology`** + `library/management`（路由哈希与 tab 同步，无 legacy 映射需求）。
+
+### 测试与口径
+
+- 服务端 pytest **1831 收集 = 1825 passed + 6 skipped**（+1：定义/run 列表路由权限·排序·截断·400 界）。
+- 桌面端 vitest **750/750**（+18：workflow-console 5 / glossary-page 6 / skill-versions-page 7）+ typecheck 通过。
+- 用例钉住诚实语义：failed 本就是终态不显示取消；取消竞态 409、自确认 403、错密码 403 全部原样呈现；无密码/无回滚目标客户端侧先拦；无治理权只读提示。
+
 ## [未发布] — 产品更名「蔡工FDE智能交付系统」+ 集成桥 stale 标记去重（2026-11-04）
 
 ### 品牌统一（产品名口径 + 品牌素材）

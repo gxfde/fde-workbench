@@ -262,6 +262,42 @@ def get_run_detail(*, actor: User, project_id: str, run_id: str) -> dict[str, An
         return {"run": serialize_run(run, ordered_nodes(session, run))}
 
 
+# run 列表有界扫描（V3 T-W6 桌面控制台补面）：默认 50、上限 200，超出如实 truncated
+RUN_LIST_LIMIT_DEFAULT = 50
+RUN_LIST_LIMIT_MAX = 200
+
+
+def serialize_run_summary(run: WorkflowRun) -> dict[str, Any]:
+    """run 列表行：serialize_run 去 nodes——列表瘦身，节点树随详情按需取。"""
+    data = serialize_run(run, ())
+    data.pop("nodes")
+    return data
+
+
+def list_project_runs(
+    *, actor: User, project_id: str, limit: int = RUN_LIST_LIMIT_DEFAULT
+) -> dict[str, Any]:
+    """项目内 run 列表（can_view，新者在前，有界扫描）——V3 T-W6 桌面控制台最小补面。
+
+    truncated=True 表示已扫到 limit 上限、可能还有更早的 run（诚实标记不静默截断）；
+    列表行不带 nodes（N+1 不可取），节点树走 get_run_detail 按需展开。
+    """
+    with db.session() as session:
+        project = load_project(session, actor, project_id, manage=False)
+        rows = list(
+            session.scalars(
+                select(WorkflowRun)
+                .where(WorkflowRun.project_id == project.id)
+                .order_by(WorkflowRun.created_at.desc(), WorkflowRun.id.desc())
+                .limit(limit)
+            )
+        )
+        return {
+            "items": [serialize_run_summary(row) for row in rows],
+            "truncated": len(rows) >= limit,
+        }
+
+
 def cancel_run(*, actor: User, project_id: str, run_id: str) -> dict[str, Any]:
     """取消（can_manage）：停未执行节点，已执行外呼不回收（诚实呈现）。幂等。
 

@@ -448,6 +448,60 @@ def test_routes_cancel_and_resume_lifecycle_and_permissions(
     assert non_resumable.get_json()["error"]["code"] == "not_resumable"
 
 
+def test_routes_list_definitions_and_runs_permissions_and_bounds(
+    db_session, settings, client
+):
+    """T-W6 桌面控制台补面：定义列表 + run 列表（can_view 闸 / 排序 / 截断诚实标记）。
+
+    两条只读路由在 §5 设计七条之外（偏差已回写 backlog 与 workflow-dag-v1 §5 注记）：
+    控制台要「run 列表/取消/恢复」就得能枚举；列表行不带 nodes（N+1 不可取）。
+    """
+    leader = _client_for(client, db_session, settings, role="project_lead")
+    viewer = _client_for(client, db_session, settings, role="viewer")
+    outsider = _client_for(client, db_session, settings, role="project_lead")
+    project = _persist_project(db_session, leader.user, code=f"WE{uuid4().hex[:4]}")
+    _add_viewer_member(db_session, project, viewer.user)
+
+    draft = _make_definition(db_session, leader.user, project, _node("gather"))
+    published = _make_definition(
+        db_session, leader.user, project, _node("deliver"), publish=True
+    )
+
+    # 定义列表：can_view 可读（viewer 含草稿）、局外人 403、跨项目隔离
+    list_url = f"/api/v1/projects/{project.id}/workflows"
+    assert (
+        outsider.get(list_url).status_code == 403
+    )  # 非成员 → load_project forbidden（404 仅在项目不存在时）
+    viewer_list = viewer.get(list_url)
+    assert viewer_list.status_code == 200, viewer_list.get_json()
+    items = viewer_list.get_json()["data"]["items"]
+    assert [row["status"] for row in items] == ["published", "draft"]  # 新者在前
+    assert {row["id"] for row in items} == {draft.id, published.id}
+
+    # run 列表：行不带 nodes；?limit= 截断诚实；非法 limit 400；权限闸同定义列表
+    run_a, _ = _start(db_session, leader.user, project, published)
+    run_b, _ = _start(db_session, leader.user, project, published)
+    runs_url = f"/api/v1/projects/{project.id}/workflow-runs"
+    assert outsider.get(runs_url).status_code == 403
+    assert viewer.get(f"{runs_url}?limit=0").status_code == 400
+    assert viewer.get(f"{runs_url}?limit=nope").status_code == 400
+    assert viewer.get(f"{runs_url}?limit=201").status_code == 400
+    capped = viewer.get(f"{runs_url}?limit=1")
+    assert capped.status_code == 200, capped.get_json()
+    capped_payload = capped.get_json()["data"]
+    assert capped_payload["truncated"] is True and len(capped_payload["items"]) == 1
+    assert "nodes" not in capped_payload["items"][0]
+    full = viewer.get(runs_url)
+    full_payload = full.get_json()["data"]
+    assert full_payload["truncated"] is False
+    assert {row["id"] for row in full_payload["items"]} == {run_a.id, run_b.id}
+    assert {row["definition_id"] for row in full_payload["items"]} == {published.id}
+    assert full_payload["items"][0]["status"] in (
+        "queued",
+        "running",
+    )  # 无执行器消费（测试环境）保持初值
+
+
 # ---------------------------------------------------------------------------
 # 执行循环：链路 / 占位符 / 版本钉住（§6 用例 7）
 # ---------------------------------------------------------------------------

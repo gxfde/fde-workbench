@@ -13,6 +13,8 @@ import { ProjectOverview } from "./ProjectOverview"
 import { isProjectMemberDto, isProjectTaskDto } from "./projectRuntimeValidation"
 import { TaskTable } from "./TaskTable"
 import { ProjectLibrary } from "../library/ProjectLibrary"
+import { WorkflowConsole } from "../workflows/WorkflowConsole"
+import { GlossaryPage } from "../ontology/GlossaryPage"
 import { ResearchWorkspace } from "../research/ResearchWorkspace"
 import { SolutionDesign } from "../solutions/SolutionDesign"
 import { allowNextHashNavigation, registerHashNavigationGuard } from "../routing/navigationGuard"
@@ -28,6 +30,8 @@ const tabs: Array<{ id: ProjectDetailTab; label: string }> = [
   { id: "commercial", label: "报价收款" },
   { id: "research", label: "调研" },
   { id: "delivery", label: "方案设计" },
+  { id: "workflow", label: "工作流" },
+  { id: "ontology", label: "术语表" },
   { id: "library", label: "文件库" },
   { id: "management", label: "项目管理" },
 ]
@@ -174,6 +178,8 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
           {tab === "gates" ? <GateBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "commercial" ? <CommercialBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "management" ? <ProjectManagement project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} /> : null}
+          {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} /> : null}
+          {tab === "ontology" ? <GlossaryPage projectId={project.id} canManage={canManage} /> : null}
           {tab === "library" ? <ProjectLibrary projectId={project.id} canManage={canManage} /> : null}
           {tab === "research" ? <ResearchWorkspace project={project} canFill={canFillResearch} canManage={canManage} onDirtyChange={setResearchDirty} initialOpportunityId={opportunityId} /> : null}
           {tab === "delivery" ? <SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} /> : null}

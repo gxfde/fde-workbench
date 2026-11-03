@@ -119,6 +119,8 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 | POST …/workflow-runs/{rid}/resume | can_manage | failed-only：failed/skipped 放回 pending 重投；其余 409 not_resumable ✅ T-W5 |
 | GET /api/v1/workflows（平台模板） | admin | ✅ |
 
+> **T-W6 桌面控制台补面（2026-11-04，设计七条之外的两条只读挂件，均已 IMPLEMENTED）**：`GET /api/v1/projects/{id}/workflows`（定义列表，can_view，新者在前，无分页）与 `GET /api/v1/projects/{id}/workflow-runs?limit=`（run 列表，can_view，默认 50 上限 200 有界扫描，`truncated` 诚实标注；**列表行不带 nodes** 防 N+1，节点树走详情路由按需展开）——控制台要「run 列表/取消/恢复」就得能枚举，设计表无列表面故按实现偏差纪律回写本注记。
+
 错误码：422 dag_invalid / 409 idempotency_conflict / 409 already_terminal / 409 not_resumable / 403 permission_revoked（节点执行时）。
 
 ## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py——用例 1-11 均已随 T-W1/T-W3/T-W4 落地；用例 12 证据候选随 T-G1）

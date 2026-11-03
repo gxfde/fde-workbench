@@ -192,6 +192,16 @@
   - **同轮附带修复（CI 实测暴露的既有隐性 flake）**：`test_workflow_definition.py::test_definition_publish_locks_immutable_version_rows` 的事件断言裸查 `operation_events` **无 order_by**（堆物理序，PR #77 CI 同码双 run 一绿一红、实际 `[updated, published, created, published]`）→ 补 `order_by(occurred_at, id)` 定序（occurred_at=事务级时间戳各 commit 微秒互异；id 是 uuid4 不可作决胜键）。与本任务功能面无关，测试唯一改动。
   - 桌面控制台（run 列表/取消/恢复按钮）随 T-W6；当前 HTTP 面即 API 完整面。
 
+### T-W6 桌面控制台（域 16）— **DONE（2026-11-04，分支 feat/v3-t-w6-desktop-console，squash 合并至 fork/main）**
+- 前置：T-W3/T-W5/T-S1/T-S2/#85（样式令牌）。复杂度：**S**（设计稿口径；实际 S+，见偏差）。
+- **实施记录**：
+  - **三张新页全 NEW**（gap-matrix 域 16 目标文件兑现）：`workflows/WorkflowConsole.tsx`（项目 tab「工作流」）、`ontology/GlossaryPage.tsx`（项目 tab「术语表」）、`extensions/SkillVersionsPage.tsx`（扩展中心 Skill 卡「版本」对话框）。页面仅呈现；写操作（cancel/resume/change-set submit/confirm/reject/skill 治理四动作）全走既有 require_auth+服务层闸，403/409 原样呈现不吞。
+  - **实现偏差（§5 设计面之外补两条只读路由，已回写 workflow-dag-v1 §5 注记）**：T-W5 挂账句「当前 HTTP 面即 API 完整面」对「run 列表」不成立——控制台要枚举就得有列表面。补 `GET /projects/{id}/workflows`（定义列表 can_view，无分页——项目内定义天然少量）与 `GET /projects/{id}/workflow-runs?limit=`（run 列表 can_view，默认 50 上限 200 有界扫描 + `truncated` 诚实标注；**列表行不带 nodes** 防 N+1，节点树走既有详情路由按需展开）。路由 293→**295**。权限语义：非成员 403 forbidden（load_project），项目不存在才 404。
+  - **usage 块消费**（T-S2 数据源闭环）：SkillVersionsPage 呈现 total/chat/workflow/last_used_at/by_version/truncated——by_version 直接服务回滚决策（旧版本还在被 workflow pinned 引用吗）。
+  - **诚实语义钉进测试**：failed 本就是终态不显示取消（TERMINAL_RUN_STATUSES）；取消竞态 409 already_terminal / resume 非 failed 409 not_resumable / 自确认 403 / 错密码 403 全部 alert 呈现；无密码/无回滚目标客户端侧先拦（不发无效请求）；无治理权只读提示。
+  - 测试：服务端 +1（`test_routes_list_definitions_and_runs_permissions_and_bounds`：can_view 闸/局外人 403/排序/limit 0·非整数·201 三种 400/截断诚实/行无 nodes）；桌面 vitest **731→749**（workflow-console 5 / glossary-page 6 / skill-versions-page 7）+ typecheck 绿。服务端 pytest **1830 收集 = 1824 passed + 6 skipped**。零迁移（head `b5d9e3f7a1c6` 不变）/ ENTRIES 94 不变。
+  - 项目 tab 枚举 8→10（+workflow/+ontology），`PROJECT_DETAIL_TABS` 与 tab 栏同源，无 legacy 映射需求。
+
 ### T-R1 agent_tool_groups（域 7）
 - 目标：只读工具组目录（种子文件 `server/seeds/tool_groups.json`），allowed_tools 支持 group: 引用，resolve=交集。
 - 修改文件：`agents/models.py`（或纯种子无表——**采用种子文件方案，零新表**）、`agents/tools.py`。测试：test_agents_fallback_chain 扩展（组不放宽/组引用未知工具拒绝）。
