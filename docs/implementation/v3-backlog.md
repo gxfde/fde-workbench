@@ -215,10 +215,17 @@
   - 测试：服务端 +1（`test_routes_list_definitions_and_runs_permissions_and_bounds`：can_view 闸/局外人 403/排序/limit 0·非整数·201 三种 400/截断诚实/行无 nodes）；桌面 vitest **731→749**（workflow-console 5 / glossary-page 6 / skill-versions-page 7）+ typecheck 绿。服务端 pytest **1830 收集 = 1824 passed + 6 skipped**。零迁移（head `b5d9e3f7a1c6` 不变）/ ENTRIES 94 不变。
   - 项目 tab 枚举 8→10（+workflow/+ontology），`PROJECT_DETAIL_TABS` 与 tab 栏同源，无 legacy 映射需求。
 
-### T-R1 agent_tool_groups（域 7）
+### T-R1 agent_tool_groups（域 7）— **DONE（2026-11-04）**
 - 目标：只读工具组目录（种子文件 `server/seeds/tool_groups.json`），allowed_tools 支持 group: 引用，resolve=交集。
 - 修改文件：`agents/models.py`（或纯种子无表——**采用种子文件方案，零新表**）、`agents/tools.py`。测试：test_agents_fallback_chain 扩展（组不放宽/组引用未知工具拒绝）。
 - 风险：低。复杂度：**S**。
+- **实施记录**：
+  - **纯种子零新表兑现**：`server/seeds/tool_groups.json`（`_comment` 锚注 + 两行组：`research-readonly` 9 工具 = read_file+项目/门禁/报价/本体/API 目录检索面；`ops-readonly` 6 工具 = 系统状态/动作留痕/立创运行史/技能只读/帮助；行含 `description`/`is_active`——停用组=代码侧空贡献开关，装载即不暴露）。首批组有意不收写类/会议面/插件锚点工具——前两类被 run 面恒剥，插件类按发起人实时安装态另判，种子保持「纯只读」自描述。
+  - **解析=交集（组永不扩大，V3-R4「只收窄」代码化）**：`resolve_tool_groups` 把 `group:<name>` 展开并入声明集（保序去重，直接项+组贡献并集）后走既有三重交集管线——组贡献与直接声明同权过 平台 deny ∖ 写类/会议面 ∩ 发起人档位地板 ∩ 插件安装态，组引用本身不新增任何旁路。未知/停用组贡献为空（只收缩不放宽、运行面不崩溃）。
+  - **fail-fast 种子校验**：组引用未知工具装载即 RuntimeError（分母=`KNOWN_TOOL_NAMES`=网关 TOOLS ∪ MEETING_AGENT_TOOLS ∪ 沙箱生态 `SANDBOX_TOOL_NAMES`{read_file}；嵌套 `group:` 引用因不在全集内同拒）；沿 agents.json 校验先例（进程级 lru_cache，坏种子宁可起不起来）。
+  - **报因补口（backlog 未列的隐藏面）**：`_unavailability` 原以解析后分母判「声明过 run 面」——纯未知组声明解析为空会被当「没声明过」静默放行空名单 run。新增 `declares_run_tools`（解析前原样判定，组引用也算声明）作报因闸：声明过但解析+三重闸后全灭 → `tools_unavailable`。空声明/仅会议面 agent 行为不变。
+  - **测试注入链**：`run_face_declared`/`effective_run_tools` 增 `groups=` 注入参（生产恒走种子，仅供测试整链替换）——注入组贡献能穿透 effective_run_tools 验三重闸。`list_agents` 序列化仍展示原始声明（组引用自描述，解析留 run 时刻冻结语义不变：在跑 run 不重算）。
+  - 测试：test_agents_fallback_chain **+4**（真种子装载+未知工具/嵌套引用 fail-fast / 组不放宽三闸齐验：写类剥除·档位地板 project_lead 拒 lcsc_search·插件目录声明未安装 admin 也剥 / 未知组收缩+tools_unavailable 报因+混合声明不受污染 / 真种子混合声明保序去重+停用组空贡献）；pytest **1847→1851 收集（1845 passed + 6 skipped）**。零迁移（head `c7e1a9f3b5d8` 不变）/ 路由 296 不变 / ENTRIES 94 不变 / mypy 基线 273 不变 / 桌面零改动（vitest 755 不变）。
 
 ### T-R2 工具目录结构化 effect/risk（域 9，含 WB-DEF-10）
 - 修改文件：`control/mcp_gateway.py`（TOOLS 元组扩 effect/risk）、`control/api_catalog.py`（ENTRY 扩字段；export_sow/documents.generate 标 confirmation）。测试：test_ai_tool_loop/test_control_plane_api 扩展（目录扫描断言/写类确认流）。复杂度：**S**。

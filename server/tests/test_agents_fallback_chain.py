@@ -5,15 +5,18 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import select
 
 from test_agents_d4_harness import (
     FakeClock,
     ScriptedEvents,
     api_client,
+    make_user,
     prime_run,
     seed_agent,
 )
@@ -22,7 +25,15 @@ from test_document_drafts_api import _add_viewer_member, _persist_project
 from test_goal_d2_s0_closeout import _confirmed_guidance
 
 from fde_api.agents.models import AgentArtifact, AgentRegistry, AgentRun, SolutionReviewCheckpoint
-from fde_api.agents.tools import effective_run_tools, run_face_declared
+from fde_api.agents.service import _unavailability
+from fde_api.agents.tools import (
+    KNOWN_TOOL_NAMES,
+    _load_tool_groups,
+    effective_run_tools,
+    load_tool_groups,
+    resolve_tool_groups,
+    run_face_declared,
+)
 from fde_api.control.models import PluginInstallation, PluginPackage
 from fde_api.meetings.templates import MEETING_AGENT_TOOLS
 from fde_api.solutions.models import ProjectSolution
@@ -326,3 +337,102 @@ def test_recover_fresh_window_and_terminal_states(db_session, d4_client, d4_app,
     body = peer.post(f"/api/v1/agents/runs/{stale.id}/recover")
     assert body.status_code == 403 and body.json["error"]["code"] == "agent_recover_forbidden"  # 成员但非发起人
     assert other.post(f"/api/v1/agents/runs/{stale.id}/recover").status_code == 200  # admin 兜底
+
+
+# ---------------------------------------------------------------------------
+# T-R1（agent-policy P1-R1 ToolGroup）：只读工具组目录——group: 引用解析
+# ---------------------------------------------------------------------------
+
+
+def test_tool_group_seed_loads_and_rejects_unknown_tool(tmp_path) -> None:
+    """真种子装载干净且全部组工具 ∈ 已知全集；组引用未知工具 fail-fast。"""
+    groups = load_tool_groups()
+    assert set(groups) == {"research-readonly", "ops-readonly"}
+    for name, tools in groups.items():
+        assert tools, f"组 {name} 非空"
+        assert set(tools) <= KNOWN_TOOL_NAMES, f"组 {name} 引用未知工具"
+    # 坏种子：组引用未知工具 → RuntimeError（沿 agents.json 校验先例，宁拒不缩）
+    bad = tmp_path / "tool_groups.json"
+    bad.write_text(
+        json.dumps({"tool_groups": [{"name": "bad", "tools": ["ghost_tool"], "is_active": True}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="unknown tools"):
+        _load_tool_groups(bad)
+    # 嵌套组引用（group: 前缀不是工具名）同样被未知工具校验拒绝
+    nested = tmp_path / "tool_groups.json"
+    nested.write_text(
+        json.dumps({"tool_groups": [{"name": "nest", "tools": ["group:other"]}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="unknown tools"):
+        _load_tool_groups(nested)
+
+
+def test_tool_group_reference_never_widens(db_session) -> None:
+    """组不放宽：组贡献与直接声明同权过三重闸——写类/会议面恒剥、档位地板
+    恒生效、插件锚点未安装即剥（V12 同构）；组引用绝不绕过任何一腿。"""
+    groups = {"bundle": ("read_file", "api_execute", "meeting_convene", "lcsc_search")}
+    admin = make_user(db_session, "admin")
+    lead = make_user(db_session, "project_lead")
+    declared = ["group:bundle"]
+    # 会议面在分母即剥（run_face_declared 语义不变，只是先解析组引用）
+    assert run_face_declared(declared, groups=groups) == frozenset(
+        {"read_file", "api_execute", "lcsc_search"}
+    )
+    # admin（system_operator）：写类剥除，lcsc.browse 地板放行（无插件目录 → 非插件类）
+    assert effective_run_tools(db_session, allowed_tools=declared, actor=admin, groups=groups) == frozenset(
+        {"read_file", "lcsc_search"}
+    )
+    # project_lead（project_manager < system_operator）：lcsc_search 档位地板剥除——组不放宽
+    assert effective_run_tools(db_session, allowed_tools=declared, actor=lead, groups=groups) == frozenset(
+        {"read_file"}
+    )
+    # 插件目录声明 lcsc.browse 而发起人未安装 → 即使 admin 也实时剥（V12 安装态闸）
+    db_session.add(
+        PluginPackage(
+            plugin_key=f"lcsc-{uuid4().hex[:6]}",
+            name="立创插件",
+            current_version="1.0.0",
+            package_sha256="0" * 64,
+            created_by_user_id=admin.id,
+            manifest_json={"capabilities": ["lcsc.browse"]},
+        )
+    )
+    db_session.commit()
+    assert effective_run_tools(db_session, allowed_tools=declared, actor=admin, groups=groups) == frozenset(
+        {"read_file"}
+    )
+
+
+def test_tool_group_unknown_group_shrinks_only(db_session, d4_settings) -> None:
+    """只收窄：未知/停用组引用贡献为空——纯组声明 run 面空 → 明确报因
+    tools_unavailable（不静默放空跑）；混入直接声明不受污染。"""
+    assert run_face_declared(["group:ghost"]) == frozenset()
+    assert resolve_tool_groups(["group:ghost", "read_file"]) == ["read_file"]
+    admin = make_user(db_session, "admin")
+    dead = seed_agent(db_session, d4_settings, name="死组智能体", allowed_tools=("group:ghost",))
+    assert _unavailability(db_session, dead, admin) == "tools_unavailable"
+    mixed = seed_agent(
+        db_session,
+        d4_settings,
+        name="混声明智能体",
+        credential_ref=f"zcode-{uuid4().hex[:6]}",
+        allowed_tools=("group:ghost", "read_file"),
+    )
+    assert _unavailability(db_session, mixed, admin) is None
+
+
+def test_tool_group_real_seed_mixed_declaration(db_session) -> None:
+    """真种子端到端：组声明解析出完整白名单；混合声明保序去重（直接项
+    与组贡献并集）；有效面走完整管线（admin 档位全放行）。"""
+    research = list(load_tool_groups()["research-readonly"])
+    assert resolve_tool_groups(["read_file", "group:research-readonly"]) == research
+    # 组贡献去重：read_file 既是直接声明又在组内 → 只出现一次（保序）
+    assert resolve_tool_groups(["read_file", "group:research-readonly"]).count("read_file") == 1
+    admin = make_user(db_session, "admin")
+    effective = effective_run_tools(db_session, allowed_tools=["group:research-readonly"], actor=admin)
+    assert effective == frozenset(research)
+    # 停用组（is_active=false）装载即不可见 → 解析贡献为空；注入的活跃组照常展开
+    assert resolve_tool_groups(["group:retired"], groups={}) == []
+    assert resolve_tool_groups(["group:retired"], groups={"retired": ("read_file",)}) == ["read_file"]

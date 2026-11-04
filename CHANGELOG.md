@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-R1：agent_tool_groups 只读工具组目录——`group:` 引用声明糖，resolve=交集组永不扩大（2026-11-04）
+
+### 服务端（纯种子零新表：`seeds/tool_groups.json`；零迁移零路由）
+
+- **组目录**（agent-policy P1-R1 ToolGroup / gap-matrix 域 7）：种子随代码发布（非用户可写），首批两组只读白名单——`research-readonly`（文件+项目/门禁/报价/本体/API 目录，9 工具）、`ops-readonly`（系统状态/动作留痕/立创运行史/技能只读/帮助，6 工具）；行含 `description`/`is_active`（停用=代码侧空贡献开关）。
+- **声明解析**（`agents/tools.py::resolve_tool_groups`）：`agent_registry.allowed_tools` 支持 `"group:<name>"` 引用，解析为组工具集并入声明集（保序去重，直接项与组贡献并集）；**只收窄语义**——组贡献与直接声明同权进入既有三重交集管线（平台 deny ∖ 写类/会议面 ∩ 发起人档位地板 ∩ 插件安装态），组引用绝不绕过任何一腿。未知/停用组贡献为空（只收缩不放宽、运行面不崩溃）。
+- **fail-fast 种子校验**：组引用未知工具装载即 `RuntimeError`（校验分母 = 网关 `TOOLS` ∪ 会议面 ∪ 沙箱生态 `read_file`，嵌套 `group:` 引用同拒）；沿 agents.json 种子校验先例，坏种子宁可起不起来不静默缩空。
+- **报因补口**（`agents/service.py::_unavailability`）：声明判定改走解析前原样（`declares_run_tools`，组引用也算声明）——纯未知组声明解析为空面时明确报因 `tools_unavailable`，不静默放行空名单 run；空声明/仅会议面声明 agent 行为不变。
+- `run_face_declared`/`effective_run_tools` 增 `groups` 注入参（仅测试用，生产恒走种子）；`list_agents` 序列化仍展示原始声明（组引用自描述，运行面解析留 run 时刻）。
+
+### 测试与口径
+
+- 服务端 pytest **1851 收集 = 1845 passed + 6 skipped**（本轮 +4：种子校验+未知工具/嵌套引用 fail-fast / 组不放宽三闸齐验（写类剥除·档位地板·插件安装态）/ 未知组收缩+报因 / 真种子混合声明保序去重）。
+- 口径：105 表不变、迁移头 `c7e1a9f3b5d8` 不变（零迁移）、路由 296 不变、ENTRIES 94 不变、mypy 基线 273 不变；桌面端零改动（vitest 755 不变）。
+
 ## [未发布] — V3 实施 T-G1：任务产物→门禁证据候选——WB-DEF-8 双口径脱钩的候选闭环（2026-11-04）
 
 ### 服务端（迁移 `c7e1a9f3b5d8`：gates +`evidence_candidates` 可空 JSON 列；零新路由）

@@ -31,7 +31,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
 
@@ -45,6 +48,95 @@ AGENT_WRITE_DENIED_TOOLS: frozenset[str] = frozenset({"api_execute", "file_send_
 
 # run 面恒剥集合：写类 + 会议面（会中只读面另有判定，不入沙箱 ctx）
 RUN_FACE_DENIED_TOOLS: frozenset[str] = AGENT_WRITE_DENIED_TOOLS | MEETING_AGENT_TOOLS
+
+# ---------------------------------------------------------------------------
+# T-R1（agent-policy P1-R1 ToolGroup）：只读工具组目录——种子随代码发布
+# （seeds/tool_groups.json，非用户可写，零新表），allowed_tools 支持
+# ``group:<name>`` 引用。解析=交集（组永不扩大）：组贡献与直接声明同权进入
+# 下方三重交集管线，组引用本身绝不绕过任何闸；未知/停用组贡献为空（只收缩
+# 不放宽、运行面不崩溃）。组引用未知工具在装载时拒绝（fail-fast）。
+# ---------------------------------------------------------------------------
+
+GROUP_REF_PREFIX = "group:"
+
+_SEEDS_DIR = Path(__file__).resolve().parents[3] / "seeds"
+
+# 沙箱生态工具名（server 侧无 capability 锚点、run 面直通——d4 语义，
+# 由声明集 + adapter 逐调用判定承载；当前 read_file 一项，随生态演进扩充）
+SANDBOX_TOOL_NAMES: frozenset[str] = frozenset({"read_file"})
+
+# 组种子校验分母（组引用未知工具拒绝的「已知工具」全集）
+KNOWN_TOOL_NAMES: frozenset[str] = frozenset(TOOLS) | MEETING_AGENT_TOOLS | SANDBOX_TOOL_NAMES
+
+
+@lru_cache(maxsize=1)
+def load_tool_groups() -> dict[str, tuple[str, ...]]:
+    """种子目录（进程级缓存，沿 agents.json 首访装载先例）：组名 → 工具名元组。
+
+    仅返回 ``is_active=true`` 的组（停用组=解析贡献为空的代码侧开关）；
+    全部行（含停用）都过校验。
+    """
+    return _load_tool_groups(_SEEDS_DIR / "tool_groups.json")
+
+
+def _load_tool_groups(path: Path) -> dict[str, tuple[str, ...]]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError) as error:
+        raise RuntimeError("tool_groups.json seed unavailable") from error
+    rows = payload.get("tool_groups") if isinstance(payload, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("tool_groups.json seed empty")
+    groups: dict[str, tuple[str, ...]] = {}
+    for row in rows:
+        name = row.get("name") if isinstance(row, dict) else None
+        tools_raw = row.get("tools") if isinstance(row, dict) else None
+        if not isinstance(name, str) or not name or name.startswith(GROUP_REF_PREFIX):
+            raise RuntimeError("tool_groups.json seed row invalid")
+        if name in groups:
+            raise RuntimeError("tool_groups.json seed duplicate group")
+        if (
+            not isinstance(tools_raw, list)
+            or not tools_raw
+            or not all(isinstance(tool, str) and tool for tool in tools_raw)
+        ):
+            raise RuntimeError("tool_groups.json seed row invalid")
+        # 组引用未知工具拒绝（P1-R1 fail-fast；嵌套 group: 引用因不在工具
+        # 全集内同样在此被拒）——坏种子宁可起不来也不静默缩空组
+        unknown = sorted(set(tools_raw) - KNOWN_TOOL_NAMES)
+        if unknown:
+            raise RuntimeError(f"tool group {name} references unknown tools: {','.join(unknown)}")
+        if bool(row.get("is_active", True)):
+            groups[name] = tuple(dict.fromkeys(tools_raw))
+    return groups
+
+
+def resolve_tool_groups(
+    allowed_tools: list[Any] | None,
+    *,
+    groups: Mapping[str, Sequence[str]] | None = None,
+) -> list[str]:
+    """声明解析：``group:<name>`` 引用展开为组工具集并入声明集（保序去重）。
+
+    只收窄语义（P1-R1「resolve=交集，组永不扩大」）：组贡献只是声明糖，
+    与直接声明同权进入下游三重交集管线；未知/停用组贡献为空。``groups``
+    供测试注入；None = 读种子目录。
+    """
+    source = load_tool_groups() if groups is None else groups
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for entry in allowed_tools or []:
+        if not isinstance(entry, str) or not entry:
+            continue
+        candidates: Sequence[str] = (entry,)
+        if entry.startswith(GROUP_REF_PREFIX):
+            candidates = source.get(entry[len(GROUP_REF_PREFIX):], ())
+        for tool in candidates:
+            if tool and tool not in seen:
+                seen.add(tool)
+                resolved.append(tool)
+    return resolved
 
 
 def _plugin_capabilities(session: Any) -> set[str]:
@@ -74,16 +166,45 @@ def _actor_plugin_caps(session: Any, user_id: str) -> set[str]:
     return caps
 
 
-def run_face_declared(allowed_tools: list[Any] | None) -> frozenset[str]:
-    """声明集中的 run 面候选（剥会议面；不判合法性）——不可用判定的分母。"""
-    return frozenset(
-        tool for tool in (allowed_tools or []) if isinstance(tool, str) and tool and tool not in MEETING_AGENT_TOOLS
+def declares_run_tools(allowed_tools: list[Any] | None) -> bool:
+    """声明侧是否声明过 run 面工具（解析前原样判定：非空字符串且非会议面）。
+
+    T-R1：``group:`` 引用也算声明——纯未知组声明在服务层报因
+    ``tools_unavailable``，而不是把空解析面当成「没声明过 run 面」静默放行。
+    """
+    return any(
+        isinstance(tool, str) and tool and tool not in MEETING_AGENT_TOOLS
+        for tool in (allowed_tools or [])
     )
 
 
-def effective_run_tools(session: Any, *, allowed_tools: list[Any] | None, actor: Any) -> frozenset[str]:
-    """发起时刻的 run 白名单：声明集 ∖ 平台 deny ∖ 能力不可行（V3/V12）。"""
-    declared = run_face_declared(allowed_tools) - RUN_FACE_DENIED_TOOLS
+def run_face_declared(
+    allowed_tools: list[Any] | None, *, groups: Mapping[str, Sequence[str]] | None = None
+) -> frozenset[str]:
+    """声明集解析后的 run 面候选（剥会议面；不判合法性）——不可用判定的分母。
+
+    T-R1：``group:`` 引用先解析为组工具集（只收窄；未知/停用组贡献为空），
+    组引用字符串本身不再当伪工具混进分母。
+    """
+    return frozenset(
+        tool
+        for tool in resolve_tool_groups(allowed_tools, groups=groups)
+        if tool not in MEETING_AGENT_TOOLS
+    )
+
+
+def effective_run_tools(
+    session: Any,
+    *,
+    allowed_tools: list[Any] | None,
+    actor: Any,
+    groups: Mapping[str, Sequence[str]] | None = None,
+) -> frozenset[str]:
+    """发起时刻的 run 白名单：声明集 ∖ 平台 deny ∖ 能力不可行（V3/V12）。
+
+    ``groups`` 仅测试注入用（沿组解析链整体替换种子目录）；生产恒走种子。
+    """
+    declared = run_face_declared(allowed_tools, groups=groups) - RUN_FACE_DENIED_TOOLS
     if not declared:
         return frozenset()
     level, _reason = effective_ai_access(actor)
@@ -106,4 +227,14 @@ def effective_run_tools(session: Any, *, allowed_tools: list[Any] | None, actor:
     return frozenset(effective)
 
 
-__all__ = ["AGENT_WRITE_DENIED_TOOLS", "RUN_FACE_DENIED_TOOLS", "effective_run_tools", "run_face_declared"]
+__all__ = [
+    "AGENT_WRITE_DENIED_TOOLS",
+    "KNOWN_TOOL_NAMES",
+    "RUN_FACE_DENIED_TOOLS",
+    "SANDBOX_TOOL_NAMES",
+    "declares_run_tools",
+    "effective_run_tools",
+    "load_tool_groups",
+    "resolve_tool_groups",
+    "run_face_declared",
+]

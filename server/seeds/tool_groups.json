@@ -1,0 +1,34 @@
+{
+  "_comment": "V3 T-R1（agent-policy P1-R1 ToolGroup）：只读工具组目录——种子随代码发布（非用户可写，零新表）。allowed_tools 支持 \"group:<name>\" 引用；解析=交集（组永不扩大）：组贡献与直接声明同权进入 run 面三重交集管线（平台 deny ∖ 写类/会议面 ∩ 发起人档位地板 ∩ 插件安装态）。组引用未知工具在装载时拒绝（fail-fast，沿 agents.json 先例，校验分母=网关 TOOLS ∪ 会议面 ∪ 沙箱生态 read_file）。组内不收写类（api_execute/file_send_wechat）、会议面（meeting_convene/meeting_get_minutes）与插件锚点（lcsc_search）工具——前两者被 run 面恒剥，后者按发起人实时安装态另判。",
+  "tool_groups": [
+    {
+      "name": "research-readonly",
+      "description": "研究面只读组：文件读取与项目/门禁/报价/本体/API 目录检索（售前·方案·部署模块的预打包白名单）",
+      "is_active": true,
+      "tools": [
+        "read_file",
+        "project_list",
+        "project_read",
+        "gates_read",
+        "quote_list",
+        "ontology_read",
+        "api_catalog",
+        "file_search",
+        "file_read"
+      ]
+    },
+    {
+      "name": "ops-readonly",
+      "description": "运维面只读组：系统状态/动作留痕/立创运行史/技能目录与帮助（质量守卫·知识模块的预打包白名单）",
+      "is_active": true,
+      "tools": [
+        "system_status",
+        "action_status",
+        "lcsc_runs_read",
+        "skill_list",
+        "skill_read",
+        "help_fetch"
+      ]
+    }
+  ]
+}

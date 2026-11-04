@@ -73,7 +73,7 @@ from fde_api.agents.sandbox import (
 )
 from fde_api.agents.signoff import ensure_pending_signoff
 from fde_api.agents import pilot, quota as seat_quota
-from fde_api.agents.tools import effective_run_tools, run_face_declared
+from fde_api.agents.tools import declares_run_tools, effective_run_tools
 from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
 from fde_api.extensions import db
@@ -190,7 +190,9 @@ def _unavailability(session: Any, agent: AgentRegistry, actor: User) -> str | No
     # V12（自动交付 §2.4）：run 面声明工具经三重交集收紧后全部失效 → agent
     # 明确报因不可用，而不是让新 run 拿着空白名单静默失败
     # （仅会议面声明的 agent 不受影响——会议面由 meetings 工具面判定）
-    if run_face_declared(list(agent.allowed_tools or [])) and not effective_run_tools(
+    # T-R1：声明判定走解析前原样（group: 引用也算声明）——纯未知/停用组
+    # 声明解析为空面时同样报因，不静默放行空名单 run
+    if declares_run_tools(list(agent.allowed_tools or [])) and not effective_run_tools(
         session, allowed_tools=list(agent.allowed_tools), actor=actor
     ):
         return "tools_unavailable"
