@@ -4,10 +4,11 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 desktop_dir="$(cd "$script_dir/.." && pwd -P)"
 build_dir="$desktop_dir/build"
-iconset_dir="$(mktemp -d "${TMPDIR:-/tmp}/fde-workbench-icon.XXXXXX")/icon.iconset"
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/fde-workbench-icon.XXXXXX")"
+iconset_dir="$work_dir/icon.iconset"
 
 cleanup() {
-  rm -rf "$(dirname "$iconset_dir")"
+  rm -rf "$work_dir"
 }
 trap cleanup EXIT
 
@@ -15,10 +16,13 @@ mkdir -p "$iconset_dir"
 base_png="$iconset_dir/icon_512x512@2x.png"
 # Generate a transparent, rounded macOS icon before producing the ICNS. This
 # keeps the installed icon rounded on older systems that do not apply a mask.
+# Render into the temp work dir only: the Windows icon files under build/ are
+# maintained as brand assets and must never be rewritten by the macOS pipeline.
+rendered_png="$work_dir/rendered.png"
 swift "$script_dir/render-macos-icon.swift" \
   "$desktop_dir/src/renderer/src/assets/logo.png" \
-  "$build_dir/icon.png"
-sips -s format png "$build_dir/icon.png" --out "$base_png" >/dev/null
+  "$rendered_png"
+sips -s format png "$rendered_png" --out "$base_png" >/dev/null
 
 render_size() {
   local pixels="$1"

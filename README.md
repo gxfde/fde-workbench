@@ -310,7 +310,7 @@ npm run package:mac
 
 - 界面品牌资源在 `desktop/src/renderer/src/assets/`：[`logo-caigong-fde.svg`](desktop/src/renderer/src/assets/logo-caigong-fde.svg)（侧边栏、favicon 及本 README 页首）、`logo-caigong-fde-full.png`（带字全标）、`logo-caigong-fde-light.svg`（浅色底变体）。产品名一律取 `desktop/src/renderer/src/brand.ts`，不在代码里硬编码。
 - Windows 构建图标使用 [`desktop/build/icon.png`](desktop/build/icon.png) 与 [`desktop/build/icon.ico`](desktop/build/icon.ico)（安装器图标三处同源）。
-- macOS 图标由 `npm run icon:mac`（`desktop/scripts/generate-icon.sh`）从 `assets/logo.png` 渲染圆角图标并生成 `build/icon.icns`，`npm run package:mac` 会先自动执行；换 Logo 时需同步更新该源图并重新生成图标。
+- macOS 图标由 `npm run icon:mac`（`desktop/scripts/generate-icon.sh`）从 `assets/logo.png` 渲染圆角图标并生成 `build/icon.icns`（渲染只写临时目录，**不回写** `build/icon.png` / `icon.ico` 等 Windows 图标文件），`npm run package:mac` 会先自动执行；换 Logo 时需同步更新该源图并重新生成图标。
 
 ## 数据与安全
 
