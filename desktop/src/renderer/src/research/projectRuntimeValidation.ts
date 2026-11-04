@@ -11,13 +11,14 @@ export function isResearchSubjectListDto(value: unknown): value is { items: Rese
 
 export function isResearchSubjectDto(value: unknown): value is ResearchSubjectDto {
   return isRecord(value)
-    && exact(value, ["id", "project_id", "parent_subject_id", "subject_type", "subject_key", "name", "description", "sort_order", "status", "tracking_code", "version", "links"], ["project_version", "opportunity_profile"])
+    && exact(value, ["id", "project_id", "parent_subject_id", "subject_type", "subject_key", "name", "description", "sort_order", "status", "tracking_code", "version", "links"], ["project_version", "opportunity_profile", "merged_into_subject_id"])
     && strings(value, ["id", "project_id", "subject_key", "name", "description"])
     && nullableString(value.parent_subject_id)
     && RESEARCH_SUBJECT_TYPES.some((item) => item === value.subject_type)
     && Number.isInteger(value.sort_order)
     && (value.status === "active" || value.status === "archived")
     && nullableString(value.tracking_code)
+    && (value.merged_into_subject_id === undefined || nullableString(value.merged_into_subject_id))
     && positiveInteger(value.version)
     && (value.project_version === undefined || positiveInteger(value.project_version))
     && Array.isArray(value.links)

@@ -152,6 +152,7 @@ def test_project_creation_creates_the_root_research_subject(
         "sort_order": 0,
         "status": "active",
         "tracking_code": None,
+        "merged_into_subject_id": None,  # V3 T-O4b：序列化契约新增合并指向
             "version": 1,
             "opportunity_profile": None,
             "links": [],

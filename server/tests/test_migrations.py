@@ -48,7 +48,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-O2：ontology_relation_types 一表（关系/对象类型注册表）
 # V3 T-O3：ontology_change_sets 一表（变更集：批量事务单元 + base 指纹并发防护）
 # V3 T-O2b：对象类型值域开放——三处 subject_type CHECK 枚举→码格式 + 列宽 32→60
-HEAD_REVISION = "b5d9e3f7a1c6"
+HEAD_REVISION = "d4e6f8a2c7b9"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

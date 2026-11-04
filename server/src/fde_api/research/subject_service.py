@@ -15,6 +15,9 @@ from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.research.models import (
     ProjectAIOpportunityProfile,
+    ProjectResearchAnswer,
+    ProjectResearchForm,
+    ProjectResearchFormRevision,
     ProjectResearchPersonalMemo,
     ProjectResearchSubject,
     ProjectResearchSubjectLink,
@@ -383,6 +386,330 @@ def archive_subject(
         raise _mutation_failed() from None
     finally:
         session.close()
+
+
+def merge_subject(
+    *,
+    actor: User,
+    project_id: str,
+    source_subject_id: str,
+    target_subject_id: str,
+    expected_source_version: int,
+) -> dict[str, Any]:
+    """V3 T-O4b：把 source 合并进 target（同项目同类型，单事务全成全败）。
+
+    表单/答案/链接/子对象/个人备忘录/机会画像按下述纪律搬迁；跟踪码不回收
+    （归档行永久占号，新号接既有最大值）。业务对象不走 change_set 双轨
+    （T-O3 裁决维持），本原语是唯一合并入口、仅人工路由可达。
+    """
+    try:
+        target_id = _required_text(target_subject_id, 36)
+    except (TypeError, ValueError):
+        raise _invalid_request() from None
+    if target_id == source_subject_id:
+        raise _invalid_request()
+    session = db.session()
+    try:
+        with session.begin():
+            project = _load_project(session, actor, project_id, for_update=True)
+            _require_subject_write(actor, project)
+            source = _load_subject(session, project.id, source_subject_id, for_update=True)
+            target = _load_subject(session, project.id, target_id, for_update=True)
+            if source.version != expected_source_version:
+                raise _stale_version()
+            if source.subject_type == "project" or target.subject_type == "project":
+                raise ResearchSubjectServiceError(
+                    "research_subject_root_immutable",
+                    "The project research subject cannot be merged.",
+                    409,
+                )
+            if source.subject_type != target.subject_type:
+                raise ResearchSubjectServiceError(
+                    "merge_subject_type_mismatch",
+                    "Research subjects of different types cannot be merged.",
+                    409,
+                )
+            if source.status != "active":
+                raise ResearchSubjectServiceError(
+                    "merge_source_not_active",
+                    "Only active research subjects can be merged.",
+                    409,
+                )
+            if target.status != "active":
+                raise ResearchSubjectServiceError(
+                    "merge_target_not_active",
+                    "Research subjects can only be merged into an active subject.",
+                    409,
+                )
+            summary = _relocate_subject_surfaces(session, project.id, source, target)
+            source.status = "archived"
+            source.merged_into_subject_id = target.id
+            source.version += 1
+            target.version += 1
+            record_event(
+                session,
+                actor,
+                "project_research_subject_merged",
+                source,
+                {
+                    "target_subject_id": target.id,
+                    "target_subject_key": target.subject_key,
+                    "target_tracking_code": target.tracking_code,
+                    "source_tracking_code": source.tracking_code,
+                    **summary,
+                },
+            )
+            session.flush()
+            # 序列化前让关系视图失效：搬迁（链接重指/画像迁入）可能改写了
+            # target 的集合，缓存里的旧值会漏掉刚搬进来的内容。
+            session.expire(target, ["outgoing_links", "opportunity_profile"])
+            result = {"subject": _serialize_subject(target), "merge_summary": summary}
+        return result
+    except ResearchSubjectServiceError:
+        raise
+    except IntegrityError:
+        raise ResearchSubjectServiceError(
+            "merge_conflict",
+            "The merge collided with existing data. Refresh and try again.",
+            409,
+        ) from None
+    except SQLAlchemyError:
+        raise _mutation_failed() from None
+    finally:
+        session.close()
+
+
+def _relocate_subject_surfaces(
+    session: Session, project_id: str, source: ProjectResearchSubject, target: ProjectResearchSubject
+) -> dict[str, Any]:
+    """Merge every dependent surface of *source* onto *target* inside the caller's transaction."""
+    summary: dict[str, Any] = {}
+
+    # ① 表单：键不撞 → 整表搬迁（连修订与答案随外键同行）；撞键且源从未
+    #    采集过答案 → 让位删除；撞键且源有答案 → 409 点名（绝不静默丢采集）。
+    target_form_keys = set(
+        session.scalars(
+            select(ProjectResearchForm.form_key).where(
+                ProjectResearchForm.project_id == project_id,
+                ProjectResearchForm.subject_id == target.id,
+            )
+        )
+    )
+    source_forms = list(
+        session.scalars(
+            select(ProjectResearchForm).where(
+                ProjectResearchForm.project_id == project_id,
+                ProjectResearchForm.subject_id == source.id,
+            )
+        )
+    )
+    answered_form_ids = set(
+        session.scalars(
+            select(ProjectResearchFormRevision.form_id)
+            .join(
+                ProjectResearchAnswer,
+                ProjectResearchAnswer.revision_id == ProjectResearchFormRevision.id,
+            )
+            .where(
+                ProjectResearchFormRevision.form_id.in_(
+                    [form.id for form in source_forms]
+                )
+            )
+            .distinct()
+        )
+    ) if source_forms else set()
+    conflicting_form_keys = sorted(
+        form.form_key
+        for form in source_forms
+        if form.form_key in target_form_keys and form.id in answered_form_ids
+    )
+    if conflicting_form_keys:
+        raise ResearchSubjectServiceError(
+            "merge_form_conflict",
+            "Both subjects have answered forms with the same form key: "
+            f"{', '.join(conflicting_form_keys)}. Resolve them before merging.",
+            409,
+        )
+    forms_moved = forms_dropped = 0
+    for form in source_forms:
+        if form.form_key not in target_form_keys:
+            form.subject_id = target.id
+            forms_moved += 1
+        elif form.id not in answered_form_ids:
+            form.current_revision_id = None
+            session.flush()
+            for revision in list(form.revisions):
+                session.delete(revision)
+            session.flush()
+            session.delete(form)
+            forms_dropped += 1
+    summary["forms_moved"] = forms_moved
+    summary["forms_dropped"] = forms_dropped
+
+    # ② 链接：边重指到 target；会变自环或与存续边重复的让位删除。
+    surviving_edges = {
+        (link.source_subject_id, link.target_subject_id, link.link_type)
+        for link in session.scalars(
+            select(ProjectResearchSubjectLink).where(
+                ProjectResearchSubjectLink.project_id == project_id,
+                ProjectResearchSubjectLink.source_subject_id != source.id,
+                ProjectResearchSubjectLink.target_subject_id != source.id,
+            )
+        )
+    }
+    touching_edges = list(
+        session.scalars(
+            select(ProjectResearchSubjectLink).where(
+                ProjectResearchSubjectLink.project_id == project_id,
+                (ProjectResearchSubjectLink.source_subject_id == source.id)
+                | (ProjectResearchSubjectLink.target_subject_id == source.id),
+            )
+        )
+    )
+    links_repointed = links_dropped = 0
+    for link in touching_edges:
+        new_source = (
+            target.id if link.source_subject_id == source.id else link.source_subject_id
+        )
+        new_target = (
+            target.id if link.target_subject_id == source.id else link.target_subject_id
+        )
+        if (
+            new_source == new_target
+            or (new_source, new_target, link.link_type) in surviving_edges
+        ):
+            session.delete(link)
+            links_dropped += 1
+        else:
+            link.source_subject_id = new_source
+            link.target_subject_id = new_target
+            surviving_edges.add((new_source, new_target, link.link_type))
+            links_repointed += 1
+    summary["links_repointed"] = links_repointed
+    summary["links_dropped"] = links_dropped
+
+    # ③ 子对象随迁（同类型 ⇒ 父类型规则天然成立）；既有合并链一跳化。
+    children = list(
+        session.scalars(
+            select(ProjectResearchSubject).where(
+                ProjectResearchSubject.project_id == project_id,
+                ProjectResearchSubject.parent_subject_id == source.id,
+            )
+        )
+    )
+    for child in children:
+        child.parent_subject_id = target.id
+        child.version += 1
+    summary["children_reparented"] = len(children)
+    prior_merged = list(
+        session.scalars(
+            select(ProjectResearchSubject).where(
+                ProjectResearchSubject.project_id == project_id,
+                ProjectResearchSubject.merged_into_subject_id == source.id,
+            )
+        )
+    )
+    for row in prior_merged:
+        row.merged_into_subject_id = target.id
+        row.version += 1
+    summary["merged_rows_repointed"] = len(prior_merged)
+
+    # ④ 共享备忘录：非空则带来源头并入（与编辑闸同尺 20 000，超长显式截断）。
+    memo_appended = False
+    if source.memo.strip():
+        header = f"（合并自 {source.name}）"
+        if source.tracking_code:
+            header = f"（合并自 {source.name} {source.tracking_code}）"
+        combined = f"{target.memo}\n\n{header}\n{source.memo}".lstrip("\n")
+        if len(combined) > 20_000:
+            marker = "\n…（合并内容超长截断）"
+            combined = combined[: 20_000 - len(marker)] + marker
+        target.memo = combined
+        memo_appended = True
+    summary["memo_appended"] = memo_appended
+
+    # ⑤ 个人备忘录：目标无同人记录 → 重指；双方都有 → 带头并入后删源行；空文本直接让位。
+    personal_moved = personal_appended = personal_dropped = 0
+    source_memos = list(
+        session.scalars(
+            select(ProjectResearchPersonalMemo).where(
+                ProjectResearchPersonalMemo.project_id == project_id,
+                ProjectResearchPersonalMemo.subject_id == source.id,
+            )
+        )
+    )
+    if source_memos:
+        target_memos = {
+            memo_row.user_id: memo_row
+            for memo_row in session.scalars(
+                select(ProjectResearchPersonalMemo).where(
+                    ProjectResearchPersonalMemo.project_id == project_id,
+                    ProjectResearchPersonalMemo.subject_id == target.id,
+                )
+            )
+        }
+        for memo_row in source_memos:
+            peer = target_memos.get(memo_row.user_id)
+            if peer is None:
+                memo_row.subject_id = target.id
+                personal_moved += 1
+            elif memo_row.memo.strip():
+                header = f"（合并自 {source.name}）"
+                if source.tracking_code:
+                    header = f"（合并自 {source.name} {source.tracking_code}）"
+                combined = f"{peer.memo}\n\n{header}\n{memo_row.memo}".lstrip("\n")
+                if len(combined) > 20_000:
+                    marker = "\n…（合并内容超长截断）"
+                    combined = combined[: 20_000 - len(marker)] + marker
+                peer.memo = combined
+                peer.version += 1
+                session.delete(memo_row)
+                personal_appended += 1
+            else:
+                session.delete(memo_row)
+                personal_dropped += 1
+    summary["personal_memos_moved"] = personal_moved
+    summary["personal_memos_appended"] = personal_appended
+    summary["personal_memos_dropped"] = personal_dropped
+
+    # ⑥ 机会画像（仅 opportunity）：目标无 → 整行迁入；双方都有 → 目标留任，
+    #    源画像字段随事件留档后删除（机会画像创建即有，留任是唯一可行语义）。
+    summary["opportunity_profile"] = None
+    source_profile = session.get(ProjectAIOpportunityProfile, source.id)
+    if source_profile is not None:
+        target_profile = session.get(ProjectAIOpportunityProfile, target.id)
+        if target_profile is None:
+            session.add(
+                ProjectAIOpportunityProfile(
+                    subject_id=target.id,
+                    target_audience=source_profile.target_audience,
+                    owner_user_id=source_profile.owner_user_id,
+                    opportunity_status=source_profile.opportunity_status,
+                    priority=source_profile.priority,
+                    business_value_score=source_profile.business_value_score,
+                    feasibility_score=source_profile.feasibility_score,
+                    data_readiness_score=source_profile.data_readiness_score,
+                    risk_level=source_profile.risk_level,
+                    next_action=source_profile.next_action,
+                    evidence_json=source_profile.evidence_json,
+                    ai_generated=source_profile.ai_generated,
+                )
+            )
+            session.delete(source_profile)
+            summary["opportunity_profile"] = "moved"
+        else:
+            summary["dropped_opportunity_profile"] = {
+                "opportunity_status": source_profile.opportunity_status,
+                "priority": source_profile.priority,
+                "business_value_score": source_profile.business_value_score,
+                "feasibility_score": source_profile.feasibility_score,
+                "data_readiness_score": source_profile.data_readiness_score,
+                "risk_level": source_profile.risk_level,
+                "next_action": source_profile.next_action,
+            }
+            session.delete(source_profile)
+            summary["opportunity_profile"] = "dropped"
+    return summary
 
 
 def link_subjects(
@@ -934,6 +1261,7 @@ def _serialize_subject(subject: ProjectResearchSubject) -> dict[str, Any]:
         "sort_order": subject.sort_order,
         "status": subject.status,
         "tracking_code": subject.tracking_code,
+        "merged_into_subject_id": subject.merged_into_subject_id,
         "version": subject.version,
         "opportunity_profile": _serialize_opportunity_profile(subject.opportunity_profile),
         "links": [

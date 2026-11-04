@@ -186,8 +186,26 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
             name="fk_project_research_subjects_parent",
             ondelete="RESTRICT",
         ),
+        # V3 T-O4b subject 合并原语：被合并方归档后指向存续方（服务层
+        # merge_subject 单事务搬迁表单/答案/链接/子对象/个人备忘录/机会画像，
+        # 跟踪码不回收——归档行永久占号）。DB 只钉「指向 = 已归档」与不自指。
+        ForeignKeyConstraint(
+            ["project_id", "merged_into_subject_id"],
+            ["project_research_subjects.project_id", "project_research_subjects.id"],
+            name="fk_project_research_subjects_merged_into",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "merged_into_subject_id IS NULL OR id <> merged_into_subject_id",
+            name="ck_project_research_subjects_merge_not_self",
+        ),
+        CheckConstraint(
+            "merged_into_subject_id IS NULL OR status = 'archived'",
+            name="ck_project_research_subjects_merge_archived",
+        ),
         Index("ix_project_research_subjects_project_id", "project_id"),
         Index("ix_project_research_subjects_subject_type", "subject_type"),
+        Index("ix_project_research_subjects_merged_into", "merged_into_subject_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -203,6 +221,8 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     tracking_code: Mapped[str | None] = mapped_column(String(40))
+    # V3 T-O4b：非空 ⇔ 本行因合并让位（status=archived）；指向同项目存续方。
+    merged_into_subject_id: Mapped[str | None] = mapped_column(String(36))
 
     project: Mapped["Project"] = relationship(back_populates="research_subjects")
     forms: Mapped[list[ProjectResearchForm]] = relationship(

@@ -138,6 +138,19 @@
   - **测试**：`test_research_imports.py` +7（批内致命/让位+提案+跟踪码钉子/全让位+回放/术语占用不提案/confirm 闭环+验收分离/跨类型不去重/超长截断）；桌面 +1。有界查询测试上限 1→2（T-O4 恒定 +1 次同名扫描，反乘法不变量保持）。
   - **口径**：105 表不变、**零迁移**（head `b5d9e3f7a1c6` 31 rev 不变）、路由 293 不变、ENTRIES 94 不变、pytest **1825 收集 = 1819 passed + 6 skipped**（+7）、vitest **731**（+1）。零部署迁移（改 server 仍须 rebuild 三镜像 + up -d，无需 alembic）。
 
+### T-O4b subject 合并原语（T-O4 遗留候选收口，L）— **DONE（2026-11-04，分支 feat/v3-t-o4b-subject-merge，squash 合并至 fork/main）**
+- 目标：同名重复调研对象的唯一治理出口——source 并入 target，牵动表单/答案/链接/子对象/备忘录/机会画像/跟踪码的原子搬迁；T-O3「业务对象不走 change_set 双轨」裁决维持（合并不进变更集，也不进 api_catalog）。
+- 前置：T-O4（导入让位产生合并候选）。修改文件：`research/models.py`（+`merged_into_subject_id` 列）、`research/subject_service.py`（merge_subject + _relocate_subject_surfaces + 序列化键）、`research/project_routes.py`（+1 路由）。
+- DB：迁移 `d4e6f8a2c7b9`（31→**32 rev**）——可空列 + 复合外键（RESTRICT 自引用）+ 两条 CHECK（不自指；指向即必归档）+ 索引，含 downgrade。
+- **实施记录（2026-11-04）**：
+  - **六面搬迁纪律**：①表单——键不撞整表搬迁（修订+答案随外键同行）、撞键且源无答案让位删除（current_revision 指针先摘再删，RESTRICT 顺序）、**撞键且源有答案 409 `merge_form_conflict` 点名键**（绝不静默丢采集）；②链接——边重指 target，自环/与存续边重复者删除（搬迁前先把「不触 source 的全量边」建成集合，重指后即时并集去重）；③子对象随迁（同类型 ⇒ 父类型规则天然成立，含归档子行），既有合并链一跳化（沿 T-O1 术语合并先例，依赖行 version 递增）；④共享 memo 与个人备忘录带「（合并自 名字 跟踪码）」头并入（与编辑闸同尺 20 000 超长显式截断；个人备忘录目标无同人行则整行重指）；⑤机会画像目标无→整行迁入、双有→**目标留任+源画像字段随事件留档**（画像创建即有，留任是唯一可行语义，为裁决点）；⑥**跟踪码不回收**——归档行永久占号，`allocate_tracking_codes` 扫全量行天然越过。
+  - **闸序**：自指 400 → stale_version → project 根 409 `research_subject_root_immutable`（**先于类型检查**，根对象永不参与合并）→ 类型一致 409 → 双方 active 409 → 表单冲突 409。source 让位 = archived + `merged_into` 指向 + version+1；subject_key/跟踪码原地保留占位（UNIQUE 绝对，同 T-O1 merged 术语语义——同名重建仍被让位行挡住，归档行即历史）。
+  - **路由 +1（295→296）**：`POST /projects/{id}/research/subjects/{source_id}/merge`，body `{version, target_subject_id}`，`_require_subject_write` 同档案闸（can_manage or can_update_assigned_tasks）；**有意不进 api_catalog**（钉子测试 `test_merge_route_never_in_catalog`），非成员 404 `project_not_found`（调研域隐藏存在性口径）、viewer 403。事件 `project_research_subject_merged` 挂 source，载荷带全部计数+双跟踪码+被弃画像摘要。
+  - **序列化契约**：`_serialize_subject` +`merged_into_subject_id`（恒输出，null=未让位）——服务端契约钉（test_research_subjects_api 根对象用例）与桌面 `ResearchSubjectDto` 可选键+运行时校验双同步（旧载荷缺键兼容，T-O4 桌面契约同步先例重演）。
+  - **测试**：NEW `test_research_subject_merge.py` 7 例（全表面搬迁+响应摘要计数+列表序列化+占号验证 / 撞键 409→人工处置→重试成功且零残留 / 根·类型·自指·stale·归档源·归档目标六拒绝 / 链一跳化 / 画像迁入与留任双分支+事件留档 / viewer 403·非成员 404 / catalog 钉子）；`test_migrations` HEAD `d4e6f8a2c7b9`；conftest 清理序 +「merged_into 置空」（同表自引用先解除再删行）。
+  - **口径**：105 表不变（列级增量）、迁移头 `b5d9e3f7a1c6`→**`d4e6f8a2c7b9`**（**32 rev**）、业务路由 295→**296**（+1）、ENTRIES 94 不变、pytest **1838 收集 = 1832 passed + 6 skipped**（+7）、vitest **752**（+2）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
+  - **遗留（后续轮可选）**：桌面端「合并」入口（导入结果的 merge_candidates 卡片一键发起合并、对象树右键合并、归档行「已并入 X」回链显示）——本轮只交付服务端原语+契约，桌面 UI 另行立项。
+
 ## P1（可控自动化）
 
 ### T-W1 workflow 定义+版本表+DAG 校验器（域 5）— **DONE（2026-11-02）**

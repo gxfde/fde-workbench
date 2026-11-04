@@ -2,6 +2,31 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O4b：subject 合并原语——表单/答案/链接/子对象/备忘录/画像单事务搬迁（2026-11-04）
+
+### 服务端（迁移 `d4e6f8a2c7b9`：+`merged_into_subject_id` 可空列；一条人工路由 295→296）
+
+- **合并原语 `merge_subject`**（`research/subject_service.py`，T-O4 遗留候选收口）：source 并入 target（同项目同类型、双方 active、非 project 根，单事务全成全败）。六面搬迁纪律：
+  - **表单/答案**：form_key 不撞 → 整表搬迁（修订+答案随外键同行）；撞键且源从未采集过答案 → 让位删除；**撞键且源有答案 → 409 `merge_form_conflict` 点名键**（绝不静默丢采集，人工先处置再重试）。
+  - **链接**：边重指到 target；会变自环或与存续边重复的让位删除（唯一边约束永不违反）。
+  - **子对象**：随迁（同类型 ⇒ 父类型规则天然成立，含归档子行）；**既有合并链一跳化**（曾并入 source 的行重指 target）。
+  - **备忘录**：共享 memo 与个人备忘录均带「（合并自 名字 跟踪码）」头并入（与编辑闸同尺 20 000，超长显式截断标记）；目标无同人个人备忘录则整行重指。
+  - **机会画像**：目标无 → 整行迁入；双方都有 → **目标留任**（机会画像创建即有，留任是唯一可行语义），源画像关键字段随事件留档。
+  - **跟踪码不回收**：source 归档后永久占号（`merged_into` 指向存续方），新号接既有最大值——`allocate_tracking_codes` 扫全量行天然兼容。
+- **DB**：`project_research_subjects` + `merged_into_subject_id`（复合外键 RESTRICT 自引用 + 两条 CHECK：不自指、指向即必归档 + 索引）；归档行保留 subject_key/跟踪码占位（UNIQUE 绝对，语义同 T-O1 merged 术语）。
+- **路由**：`POST /projects/{id}/research/subjects/{source_id}/merge`（body `{version, target_subject_id}`，`_require_subject_write` 同档案闸）；**有意不进 api_catalog**（业务对象不走 change_set 双轨，T-O3 裁决维持；钉子测试在位）。
+- 事件 `project_research_subject_merged` 挂 source 行，载荷带全部搬迁计数与双跟踪码。
+- 序列化契约 +`merged_into_subject_id`（旧载荷无键向后兼容）；根检查先于类型检查（根对象永不参与合并）。
+
+### 桌面端（仅契约同步，零新页面）
+
+- `ResearchSubjectDto` + 可选 `merged_into_subject_id?: string | null`；`isResearchSubjectDto` 运行时校验同步（缺键旧载荷/带键新载荷都收，非法形状拒收）。
+
+### 测试与口径
+
+- 服务端 pytest **1838 收集 = 1832 passed + 6 skipped**（+7：全表面搬迁+占号 / 撞键 409→处置后成功 / 类型·根·自指·stale·归档源目标拒绝 / 链一跳化 / 画像迁入与留任 / 权限（viewer 403、非成员 404））+ 迁移往返 1 例（HEAD `d4e6f8a2c7b9`，32 rev）。
+- 桌面端 vitest **752/752**（+2：合并指向键兼容性）+ typecheck 通过。
+- 口径：105 表不变、路由 **296**、ENTRIES 94 不变、mypy 基线不变（新代码零新增）。
 ## [未发布] — 修复 mac 图标管线回写 Windows 图标（2026-11-04）
 
 - `desktop/scripts/generate-icon.sh` 原本把 swift 渲染结果写回 `build/icon.png`——Windows 图标源会在 macOS 构建时被静默覆盖（产品更名轮手工替换的新图标跑一次 `package:mac` 即丢失）。改为渲染只进临时目录：`build/icon.png` / `icon.ico` 由品牌资产独立维护，macOS 管线只产出 `icon.icns`。

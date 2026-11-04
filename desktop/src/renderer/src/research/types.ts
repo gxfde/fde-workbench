@@ -217,6 +217,8 @@ export interface ResearchSubjectDto {
   sort_order: number
   status: "active" | "archived"
   tracking_code: string | null
+  // V3 T-O4b：非空 ⇔ 本行因合并让位（指向同项目存续方）；旧载荷无此键。
+  merged_into_subject_id?: string | null
   version: number
   links: ResearchSubjectLinkDto[]
   opportunity_profile?: AIOpportunityProfileDto | null

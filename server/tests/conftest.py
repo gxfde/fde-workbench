@@ -398,6 +398,10 @@ def db_session(app) -> Session:
             connection.execute(
                 text("UPDATE project_research_subjects SET parent_subject_id = NULL")
             )
+            # V3 T-O4b：合并指向是同表自引用外键（RESTRICT），清理先解除再删行。
+            connection.execute(
+                text("UPDATE project_research_subjects SET merged_into_subject_id = NULL")
+            )
             connection.execute(
                 text("UPDATE project_files SET current_version_id = NULL")
             )

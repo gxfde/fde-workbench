@@ -12,6 +12,7 @@ from fde_api.research.subject_service import (
     list_subject_personal_memos,
     link_subjects,
     list_subjects,
+    merge_subject,
     update_subject,
     update_subject_memo,
     update_own_subject_personal_memo,
@@ -271,6 +272,34 @@ def archive_subject_route(project_id: str, subject_id: str):
             expected_version=payload["version"],
         )
         return jsonify({"data": subject, "error": None})
+    except ResearchSubjectServiceError as error:
+        return _service_error(error)
+
+
+@project_research_blueprint.post("/<project_id>/research/subjects/<subject_id>/merge")
+@require_auth
+def merge_subject_route(project_id: str, subject_id: str):
+    # V3 T-O4b：subject 合并原语的唯一人工入口——有意不进 api_catalog
+    # （业务对象不走 change_set 双轨，AI 也不可执行合并；钉子测试在位）。
+    payload = _json_payload()
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"version", "target_subject_id"}
+        or type(payload.get("version")) is not int
+        or payload["version"] < 1
+        or not isinstance(payload.get("target_subject_id"), str)
+        or not payload["target_subject_id"]
+    ):
+        return _invalid_request()
+    try:
+        result = merge_subject(
+            actor=g.current_user,
+            project_id=project_id,
+            source_subject_id=subject_id,
+            target_subject_id=payload["target_subject_id"],
+            expected_source_version=payload["version"],
+        )
+        return jsonify({"data": result, "error": None})
     except ResearchSubjectServiceError as error:
         return _service_error(error)
 

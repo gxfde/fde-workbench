@@ -3,8 +3,26 @@ import { describe, expect, it } from "vitest"
 import {
   isProjectResearchFormDto,
   isResearchImportResultDto,
+  isResearchSubjectDto,
   parseResearchImportErrorDetails,
 } from "../../src/renderer/src/research/projectRuntimeValidation"
+
+function validSubject(): Record<string, unknown> {
+  return {
+    id: "subject-1",
+    project_id: "project-1",
+    parent_subject_id: null,
+    subject_type: "role",
+    subject_key: "role_a",
+    name: "岗位甲",
+    description: "",
+    sort_order: 0,
+    status: "active",
+    tracking_code: "JOB-0004",
+    version: 1,
+    links: [],
+  }
+}
 
 function validForm(): Record<string, unknown> {
   const fields = [
@@ -185,5 +203,18 @@ describe("project research response guards", () => {
     expect(parseResearchImportErrorDetails({ errors: [{ row: 0, column: "父级", code: "bad", message: "raw" }] })).toBeNull()
     expect(parseResearchImportErrorDetails({ errors: [{ row: 3, column: 7, code: "bad", message: "raw" }] })).toBeNull()
     expect(parseResearchImportErrorDetails({ errors: [], leaked: "raw" })).toBeNull()
+  })
+})
+
+describe("isResearchSubjectDto merged_into_subject_id (V3 T-O4b)", () => {
+  it("accepts legacy payloads without the merge pointer", () => {
+    expect(isResearchSubjectDto(validSubject())).toBe(true)
+  })
+
+  it("accepts null and string merge pointers and rejects other shapes", () => {
+    expect(isResearchSubjectDto({ ...validSubject(), status: "archived", merged_into_subject_id: null })).toBe(true)
+    expect(isResearchSubjectDto({ ...validSubject(), status: "archived", merged_into_subject_id: "subject-2" })).toBe(true)
+    expect(isResearchSubjectDto({ ...validSubject(), merged_into_subject_id: 3 })).toBe(false)
+    expect(isResearchSubjectDto({ ...validSubject(), merged_into: "subject-2" })).toBe(false)
   })
 })
