@@ -294,8 +294,13 @@
   - **测试**：NEW `server/tests/test_gate_evidence_candidates.py` 6 例（挂接+序列化契约+事件载荷 / 三缺一（未完成·缺挂点·缺指纹）不挂 / 次序无关+同指纹幂等（候选与事件都不重复）/ 采纳剪除+清单项 claimed+evidence_id（hash 大写提交验证忽略大小写）/ 部分采纳保留他者 / 拍板零感知（候选在场过门照常、未采纳候选不剪））；`test_migrations` HEAD `c7e1a9f3b5d8`。桌面 `gate-board.test.tsx` +3（渲染+采纳流走提交闸 / viewer 只读+旧载荷无键兼容 / 非法形状拒收）。
   - **口径**：105 表不变（列级增量）、迁移头 `d4e6f8a2c7b9`→**`c7e1a9f3b5d8`**（**33 rev**）、路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1847 收集 = 1841 passed + 6 skipped**（本轮 +6；相对上轮报口径 1832 的 +9 中 +3 为 #93 skill 两闸用例）、vitest **755**（+3）、mypy 基线不变（新代码零新增）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`。
 
-### T-G2 template_hash 漂移呈现（WB-DEF-5）
+### T-G2 template_hash 漂移呈现（WB-DEF-5）— **DONE（2026-11-04）**
 - 修改文件：gate_service._serialize_gate（比对存储值 vs 当前 gates.json sha256，响应加 template_outdated: bool）。测试：test_gates_api。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - 按设计落`_serialize_gate`：`template_outdated = bool(gate.template_hash) and gate.template_hash != _gates_file_hash()`（冻结哈希 vs 现行镜像内 seeds/gates.json 的 sha256，后者进程级缓存——文件烘进镜像只读）。**NULL=未知出处判 false 不误报**（列可空；迁移 `f7a2c9e4b1d3` 后实际不再有 NULL，语义只为防御）。
+  - **漂移即存量事实**：回填常量 `f52afe88…` ≠ 现行文件哈希 ⇒ 既有项目 9 门全量 true，符合风险册 F-2 预期（呈现即修复，不做自动刷新实例——清单冻结语义不动，是否重挂新模板留给人工轮）。
+  - list/GET、证据提交、拍板响应共用同一序列化器四调用面自动携带；桌面 GateBoard 类型守卫只验必填键零破坏（桌面呈现消费留待 UI 轮，本轮范围=后端字段）。
+  - 测试：test_gates_api **+1**（懒实例化首访全不漂移 / 冻结哈希改写 → true / NULL → false；注意**首个 gates 访问才触发懒实例化**，前置 UPDATE 会落空——先 GET 再改哈希复 GET）；pytest **1863 收集（1857 passed + 6 skipped，本轮 +1）**——基线即 fork/main `6cccedb` 实测 collect-only 1862（1856+6s）：T-R2 记录 1855 是其自轮 `e1568d6` 运行面（基于 ef34ce0 不含 #98），squash `6cccedb` 基于 `e3b8350` 并入 #98 goal-c3 的 +7 测试（G8-stop ×2 / 报价数值闸 ×3 / signoff 并发 ×2），diff 实测归因闭合。零迁移（head `c7e1a9f3b5d8` 不变）/ 路由 296 不变 / ENTRIES 94 不变 / mypy 基线 279 不变（104 distinct）/ 桌面零改动（vitest 755 不变）。
 
 ### T-D1 文档血缘补洞（WB-DEF-6/7）
 - 修改文件：`documents/snapshots.py`（confirmed_research_values 加 revision_id 键）、`documents/ai_content.py`+`generator.py`（request_id 落 generation job 行并回写版本）、快照含 gates 摘要。

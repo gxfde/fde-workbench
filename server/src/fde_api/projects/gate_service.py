@@ -685,6 +685,9 @@ def _serialize_gate(
         "decision_semantics": template.get("decision_semantics") if template else None,
         "template_source_uri": template.get("source_uri") if template else None,
         "template_hash": gate.template_hash,
+        # V3 T-G2（WB-DEF-5）：冻结哈希 vs 现行 gates.json 比对呈现；NULL=未知出处不误报
+        "template_outdated": bool(gate.template_hash)
+        and gate.template_hash != _gates_file_hash(),
         "next_node_keys": node.next_node_keys if node else [],
     }
 

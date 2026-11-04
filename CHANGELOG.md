@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-G2：template_hash 漂移呈现——门禁序列化比对冻结哈希 vs 现行 gates.json（2026-11-04）
+
+### 服务端（零迁移零路由；gap-matrix WB-DEF-5 / 风险册 F-2）
+
+- **`_serialize_gate` 响应新增 `template_outdated: bool`**：比对 Gate 行实例化时冻结的 `template_hash`（seeds/gates.json 文件级 sha256）与现行镜像内文件的哈希，不一致即标注——存量行（迁移 `f7a2c9e4b1d3` 回填 `f52afe88…` ≠ 现行文件）响应即为 true，呈现即修复 WB-DEF-5「存量哈希与现行模板漂移、无比对呈现」；`template_hash=NULL`（未知出处）判 false 不误报。
+- list/GET、证据提交、拍板四类响应共用同一序列化器，自动携带；哈希读取走进程级缓存（文件烘进镜像只读）。桌面 GateBoard 类型守卫只验必填键，新增键纯增量（桌面呈现消费留待 UI 轮）。
+
+### 测试与口径
+
+- 服务端 pytest **1863 收集 = 1857 passed + 6 skipped**（本轮 +1：懒实例化首访全不漂移 / 冻结哈希改写 → true / NULL → false 不误报；基线即 fork/main `6cccedb` 实测 1862 = 1856 + 6s——T-R2 记录的 1855 为其自轮 `e1568d6` 运行面，squash 并入 #98 携 +7 测试）。
+- 口径：105 表不变、迁移头 `c7e1a9f3b5d8` 不变（零迁移）、路由 296 不变、ENTRIES 94 不变、mypy 基线 279 不变（104 distinct，实测零新增）；桌面端零改动（vitest 755 不变）。
+
 ## [未发布] — V3 实施 T-R2：工具目录结构化 effect/risk——目录权威外效判定 + WB-DEF-10 确认面补口（2026-11-04）
 
 ### 服务端（零迁移零路由；agent-policy P1-R2 / gap-matrix 域 9 / 风险册 WB-DEF-10）

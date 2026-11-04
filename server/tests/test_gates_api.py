@@ -15,13 +15,14 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.evidence.models import ProjectEvidence
 from fde_api.workbench.models import (
+    Gate,
     IndustryTemplate,
     IndustryTemplateVersion,
     OperationEvent,
@@ -320,3 +321,38 @@ def test_g8_stop_without_settlement_row_only_records_event(admin_client, gate_pr
     ).first()
     assert event is not None
     assert event.changes["flagged"] is False
+
+
+def test_template_outdated_flags_drift_and_tolerates_unknown(
+    admin_client, gate_project, db_session
+):
+    """V3 T-G2（WB-DEF-5）：序列化比对冻结 template_hash vs 现行 gates.json sha256。
+
+    存量行（迁移 f7a2c9e4b1d3 回填 f52afe88…）与现行模板已漂移 → template_outdated=true；
+    按现行文件实例化的行 → false；template_hash=NULL（未知出处）→ false 不误报。
+    """
+    project, gates_url, _leader_client = gate_project
+    # 首次访问触发懒实例化：按现行 gates.json 冻结 → 全部不漂移
+    gates = admin_client.get(gates_url).json["data"]["gates"]
+    assert len(gates) == 9
+    assert all(gate["template_outdated"] is False for gate in gates)
+
+    db_session.execute(
+        update(Gate)
+        .where(Gate.project_id == project["id"], Gate.gate_key == "G1")
+        .values(template_hash="0" * 64)
+    )
+    db_session.execute(
+        update(Gate)
+        .where(Gate.project_id == project["id"], Gate.gate_key == "G2")
+        .values(template_hash=None)
+    )
+    db_session.commit()
+
+    by_key = {
+        gate["gate_key"]: gate
+        for gate in admin_client.get(gates_url).json["data"]["gates"]
+    }
+    assert by_key["G1"]["template_outdated"] is True
+    assert by_key["G2"]["template_outdated"] is False
+    assert by_key["G3"]["template_outdated"] is False
