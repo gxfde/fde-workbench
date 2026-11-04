@@ -14,7 +14,9 @@
 | c3 | 交付主链（projects/solutions/documents/guidance/templates/evidence/files/storage/mailing/translator） | **已完成 2026-11-04**（隔离矩阵 86 路由全绿；CR-008/010 P1 修 + CR-009 P2 补测试→PR #98 已合并 `e3b8350`；CR-011 P3 登记） | docs/goal-c3-代码审查.md |
 | c4 | 智能体执行域（agents/ai/skills/jobs/meetings） | **已完成 2026-11-04**（CR-012/015/017 当轮修→PR #103 已合并 `c8aa08a`；CR-014 P1 划归 c5；CR-013/016 登记；3 子代理分审） | docs/goal-c4-代码审查.md |
 | c5 | 工作流+本体（workflows/ontology/research） | **已完成 2026-11-05**（CR-014/019/020 P1 当轮修→PR；7 项 P2/P3 登记不修；3 子代理分审+变异验证） | docs/goal-c5-代码审查.md |
-| c6–c8 | 见上 | 未开始 | — |
+| c6 | 派单/桥/工作台/指标/模块（dispatch/bridge/workbench/metrics/modules） | **已完成 2026-11-05**（纯登记轮：冻结区零命中；CR-027/028 P2 + CR-029/030/031/033/034 P3 登记不修；C6-06 convene-billing 候选驳回） | docs/goal-c6-代码审查.md |
+| c7 | 桌面端（desktop/main/renderer/tests/gui-harness） | **已完成 2026-11-05**（纯登记轮：T-O2b 桌面五类滞后升 P2（CR-032）；CR-035~040 P3 登记；CR-001 复测 5 处全在补记；新-project 同型 sync-hash P3） | docs/goal-c7-代码审查.md |
+| c8 | 基建/脚本/GUI 回归/收口 | 未开始 | — |
 
 ## 发现总表
 
@@ -45,6 +47,20 @@
 | CR-024 | P3 | open（登记不修） | 调研导入同文件多级造数：`_load_parent_candidates`（imports.py:420）在行创建前扫描父级候选——文件内新建的部门/流程对本批后续行 role 的「父级」列不可见 → preview 零报错、commit 确定性 `parent_not_found`（非静默错数据，preview 体验缺口） | research/imports.py:420/1445 | c5 |
 | CR-025 | P3 | open（登记不修） | `update_definition_dag`（definition_service.py:525）零 HTTP 路由——已发布定义无修订出口（`publish_definition` 对 published 行 409 `already_published` 且无编辑路由），docstring 承诺「修改定义会自动开新草稿版本」面缺失；模块 docstring 与路由面漂移 | workflows/definition_service.py:525-551 | c5 |
 | CR-026 | P3 | open（登记不修） | 变更集 `register_relation_type` 物化端点校验仅在 confirm 才跑（propose 只查形状）——AI 多条目变更集一条坏端点码即全事务回滚 409（设计内「全成全败」，但人工路由同操作 propose 期等价校验更早，两侧不对称） | ontology/service.py:1182-1203/826-842 | c5 |
+| CR-027 | P2 | open（登记不修，c8/备案轮裁决） | 派单规则版本激活 `activate_due_versions` 零生产调用方（仅测试引用）→ 版本永不 published→active → `active_rule_version` 恒 None → 自动撮合恒 422 `rule_version_required`（§11.1 降级态变永久）；claim 闸 cities 侧认 published 故未死，仅撮合死 | dispatch/rules.py:110/138-146 | c6 |
+| CR-028 | P2 | open（登记不修，口径=B-③法务区） | 累计预扣 `compute_withholding`：①年过滤 `extract(year, created_at)==now.year` 用 UTC 日历年非自然税法年；②减除月份集 `{...}∪{now.month}` 用调用时月非验收月（G8 回填七月算五月验收 → 多算一档 5000 减除少扣税）。税率表本就 2025-16 待确认占位，口径未定前不动码 | dispatch/settlements.py:138/145 | c6 |
+| CR-029 | P3 | open（登记） | 集成桥 `captured_at` 单向采信宿主钟：`_parse_captured_at` 只校验格式不比对服务端钟，4h/360min stale 标记两侧都从宿主时间推 → NTP 前漂或带 token 方伪造快照可永久遮「采集断连」 | bridge/sync.py:190/212/310-321 | c6 |
+| CR-030 | P3 | open（登记） | 4h 热路径 `_sync_bridge_evidence` 全表 `select(Project)` 全量 ORM 水合（实只用 3 列）+ `_city_order_rank` 全局包表 join 内 N+1 `session.get`（O(P×N)）——本地单用户量级无实害，纯性能卫生 | bridge/sync.py:108 / dispatch/settlements.py:82-92 | c6 |
+| CR-031 | P3 | open（登记） | 演练 run（`rehearsal:` 前缀、token_cost=0）未排除出指标面：`metrics` 的 `run_cost_median_units`/`draft_generation_p50_ms`/`run_degraded_share`/`run_first_pass_rate` 全含演练行（pilot 闸口面已排除，持续观测面未排 → 口径不齐） | metrics/service.py:77/146/158/173 | c6 |
+| CR-032 | P2 | open（登记，T-O2b 桌面同步面） | 桌面调研侧 subject_type 值域钉死内置五类（`RESEARCH_SUBJECT_TYPES`），服务端 T-O2b 已开放「内置∪注册表 active−project 根」：注册类型落库后桌面**读路径**（projectRuntimeValidation/runtimeValidation 五类守卫）整体校验失败 → 调研 tab 全不可读；写路径（导入/定义/表单 builder）注册类型不可选 | desktop/…/research/{types.ts:1,projectRuntimeValidation.ts:17,66,runtimeValidation.ts:48,ResearchImportDialog.tsx:11,ResearchDefinitionEditor.tsx:487/1009,ProjectResearchFormBuilder.tsx:233} | c7 |
+| CR-033 | P3 | open（登记） | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
+| CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
+| CR-035 | P3 | open（登记） | GlossaryPage 术语搜索每键入触发全量重取且无序列/取消守卫：后发先至旧响应覆盖新结果 + `setLoading` 反复清空闪空（单租户 127.0.0.1，乱序窗口极小，纯体验） | desktop/…/ontology/GlossaryPage.tsx:112-143 | c7 |
+| CR-036 | P3 | open（登记） | ResearchWorkspace 导出轮询 effect 无序列守卫（同文件 `loadResearch` 有 `sequence`、`ProjectDocuments` 有 `sequenceRef`，唯此缺）：在途 poll 期间表单新增导出 → 旧闭包 stale `active` 快照回写可让已完成条目「复活」为 pending（下轮自愈） | desktop/…/research/ResearchWorkspace.tsx:248-287 | c7 |
+| CR-037 | P3 | open（登记） | `ResearchOpportunity.tsx`（193 行：AI 机会删除/画像编辑/表单联动 + `validateOpportunityProfile` 7 条校验 + 错误码映射）零 vitest 覆盖；T-W6 三新页反而各有测试 | desktop/tests/renderer/（无 opportunityProfile 命中） | c7 |
+| CR-038 | P3 | open（登记，CR-007 同型残留） | `new-project.test.tsx:279` `expect(location.hash).toBe(…)` 同步读——创建成功路径当前同步写 hash 不翻车，但一旦 hash 写异步化即复发（与 CR-007 修复前同型），改 `waitFor` 一行 | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
+| CR-039 | P3 | open（登记） | `gui-harness/shots.mjs` 13 页走查未含 T-W6 三面（WorkflowConsole/GlossaryPage 为项目详情子 tab 需真实 fixture、SkillVersionsPage 为 #extensions 内展开子视图，默认截图态不展开）——功能面已有三 vitest 兜住，纯视觉走查缺口 | desktop/gui-harness/shots.mjs:19-34 | c7 |
+| CR-040 | P3 | open（登记） | GlossaryPage `TERM_STATUS_LABEL` 含 `candidate/retired` 键但服务端 `TERM_STATUSES=(draft,confirmed,superseded,merged)` 无此二值、反缺 `draft/superseded` → fallback 原值回显：术语表状态列出现英文 draft/superseded，中文「候选」「已退役」永不显示（T-W6 新代码自带小口径漂移） | desktop/…/ontology/GlossaryPage.tsx:50-55/67-69 | c7 |
 
 ---
 
@@ -333,8 +349,118 @@
 - **证据等级**：E1（行号直读；未实测 30 条目变更集）。
 - **修复 PR**：—
 
+## CR-027 · P2 · 派单规则版本激活零生产调用方（自动撮合永久降级态）
+
+- **状态**：open（登记不修；激活接线属备案/月度 job 轮，非 c6 范围）
+- **file:line**：`dispatch/rules.py:110`（`activate_due_versions`，全仓唯一 `published→active` 写点，E0 grep 生产零调用方，仅 `test_dispatch_p0_r2.py:873/902/932/934` 测试引用）；`matching.py:266`（`active_rule_version` 恒 None → 422 `rule_version_required`）。
+- **意图锚**：matching.py:7「§11.1 降级态前置：自动撮合要求存在 published/active 规则版本（=权重已公示）」；rules.py:111 docstring「到点生效（月度 jobs / 请求路径惰性触发均可）」。
+- **触发路径**：`publish_package` 成功 → 规则版本停 published → 无 job/路由/scheduler 调 `activate_due_versions` → `active_rule_version`=None → `match_package` 422；claim 闸（cities.py:137-144 认 published 即可）未死，仅撮合死——即「claim 关、撮合永远回退人工排序」的备案期状态被永久化。
+- **驳斥记录**：「激活本就挂账月度 job / 备案定后开闸」——docstring 明写「均可」但两条都没建，功能面=永久降级；「cities 认 published 所以整体没死」——claim 面活但撮合面死，正是台账 B-①「需备案/名单≠开闸」的另一实例。定级 P2（功能缺失非数据损坏）。
+- **建议修法**：`dispatch.maintenance` 24h job 内加惰性 `activate_due_versions`（或月度 job）；归备案开闸轮与 B-① 一并裁决。
+
+## CR-028 · P2 · 累计预扣 UTC 年 + 调用时月（两处实算误差，口径未定区）
+
+- **状态**：open（登记不修；税率表 2025-16 待确认占位，口径=法务区）
+- **file:line**：`dispatch/settlements.py:138`（`extract(year, created_at)==now.year` UTC 日历年）+ `:145`（`{past 月} ∪ {now.month}` 调用时月）。
+- **意图锚**：settlements.py:125 docstring「月份数 = 这些结算的验收月（含本月）去重计数」+ 累计预扣法（自然税法年 Asia/Shanghai）。
+- **触发路径**：G8 验收五月通过、七月才跑 `accrue_settlements_for_project`（payment_service.py:287-294 回填路径）→ 月份集={May,Jul} 非 {May} → `_MONTHLY_DEDUCTION` 多算一档少扣税；跨 12/1 月验收则 UTC 年错位 → 累计基数静默重置。
+- **驳斥记录**：「税率/减除额本就待 2025-16 口径确认（B-③），整函数占位」——成立，故登记不动码；「本月=now.month 是 docstring 字面」——docstring 说「验收月（含本月）」，代码取的却是调用时月，回填场景二者已背离。P2（口径未定区内的实算误差）。
+- **建议修法**：税率口径拍板时一并修——年过滤改结算所在自然年、月份集改用该结算行 `accepted_at.month` 而非 `now.month`。
+
+## CR-029 · P3 · 集成桥 captured_at 单向采信宿主钟（NTP 前漂/伪造遮「断连」）
+
+- **状态**：open（登记）
+- **file:line**：`bridge/sync.py:190/212`（`synced_at=captured` 宿主供值）/`:310-321`（freshness 从被污染值算）/`:38-49`（`_parse_captured_at` 只查格式）；`runner.py:131` 仅查 ≤40 字符。
+- **触发路径**：宿主 NTP 前漂 >6h 或带 FDE_BRIDGE_TOKEN 方伪造 `captured_at` → 全 engagement 盖未来时戳 → 4h/360min stale 标永不亮（文件盘上持续腐仍显「新鲜」）。后漂/过去无害（只会更早触发）。
+- **驳斥记录**：「桥 token 与宿主同机=信任管线，非对抗场景」——威胁模型自洽，故 P3 登记；「手动采集与 4h 轮询共享同一 apply 面」——成立，P3 在检测数学非路径分叉。
+- **建议修法**：`apply_snapshot` 内加 `abs(now - captured) < 90min` 服务端钟 sanity（越界降级为 stale），不盲信宿主钟。
+
+## CR-030 · P3 · 4h 热路径全表 Project 水合 + _city_order_rank N+1
+
+- **状态**：open（登记；本地量级无实害，纯性能卫生）
+- **file:line**：`bridge/sync.py:108`（`select(Project)` 全量 ORM，实用 3 列）/`dispatch/settlements.py:82-92`（`_city_order_rank` 全局 join + 循环内 `session.get(Project)`）。
+- **驳斥记录**：sync.py:98 docstring 自称「4h 关键路径」优化但此处全表水合；「50 engagement/数百项目量级」——成立，P4 级性能卫生升 P3 登记（O(P×N) 随规模放大）。
+- **建议修法**：改 `select(Project.id, Project.openfde_engagement, Project.fdeops_workspace)`；`_city_order_rank` 预取字典替代循环 get。
+
+## CR-031 · P3 · 演练 run 未排除出指标持续观测面
+
+- **状态**：open（登记）
+- **file:line**：`metrics/service.py:77`（`draft_generation_p50_ms` 全含 0ms 演练）/`:146`（`run_first_pass_rate` 含 L2 演练 failed）/`:158-164`（`run_degraded_share` 含 L1 演练 degraded）/`:173-179`（`run_cost_median_units` 全含 token_cost=0 演练）。
+- **意图锚**：agents/service.py:1026 docstring「演练 run 可排除（rehearsal: 前缀）」——pilot 闸口面（pilot.py:76）已排除，持续观测面未排，两侧口径不齐。
+- **驳斥记录**：「演练仅 admin 触发（rehearsal_forbidden），量小」——成立，但中位数/降级率是「持续观测」红线指标，零成本 token 拉低中位数、L1 degraded 抬高降级率（30% 红线）会误触发扩权暂停。P3 登记（加一行 `notlike("rehearsal:%")` 即可修）。
+- **建议修法**：metrics 四个 AgentRun 查询统一加 `idempotency_key.notlike("rehearsal:%")`（与 pilot.py:76 同尺）。
+
+## CR-032 · P2 · 桌面调研 subject_type 五类钉死（T-O2b 开放域滞后）
+
+- **状态**：open（登记；T-O2b 桌面同步面，非 c7 纯审范围→单独开）
+- **file:line**：`desktop/src/renderer/src/research/types.ts:1`（`RESEARCH_SUBJECT_TYPES` 五类）+ `projectRuntimeValidation.ts:17/66`（读路径 isResearchSubjectDto/ImportPreviewDto 五类守卫）+ `runtimeValidation.ts:48`（isResearchFormDto 五类）+ 写路径 `ResearchImportDialog.tsx:11`（四内置类 select）/`ResearchDefinitionEditor.tsx:487/1009`/`ProjectResearchFormBuilder.tsx:233`/`types.ts:21`（CHILD_TYPES_BY_PARENT）。
+- **意图锚**：服务端 T-O2b（`7f30ad0` #83）新建/表单/导入值域=「内置五类 ∪ 注册表 active − project 根」，`form_service.py:434/663`/`ai/research_form_service.py:87`/`industry_template_service.py:196` 均接受注册类型。
+- **触发路径**：某表单/对象 `subject_type` 落为注册类型（如 `vendor`）→ 桌面 `ResearchWorkspace.loadResearch`（:222）`isProjectResearchFormListDto` 失败 → 抛 "invalid research dto" → **整个调研 tab「数据格式异常」，项目内正常数据全不可读**；导入预览、创建/合并/重命名返回体同闸。
+- **驳斥记录**：「T-O2b 提交写『零桌面改动』是分阶段设计」——成立，但增量路径一走过（注册+建对象/表单）即触发全 tab 不可读，有具体可复现用户路径，故 P2 登记；「AI 生成缺省仍五类、模板五类必备两条基线不放开」——对，但手工注册类型+建对象是合法已开放面。
+- **建议修法**：桌面读路径五类守卫改收服务端 `usable_subject_type_codes`（或至少放宽为非空小写字母格式 `^[a-z][a-z0-9_]{0,59}$`，与 T-O2b CHECK 同尺）；写路径下拉补注册类型。归 T-O2b 桌面面后续轮。
+
+## CR-033 · P3 · lcsc 规格书下载 iframe 检测表达式畸变（恒 false 缺件）
+
+- **状态**：open（登记；疑压缩误删括号，一行修）
+- **file:line**：`desktop/src/main/lcsc-runner.ts:147-148`：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成 boolean，外层 `includes(boolean)` 实查 src 是否含字面 `"true"`/`"false"` → 对真实 PDF URL 恒 false。
+- **触发路径**：查询勾选 `datasheet` → 弹窗开正常（:118-123 独立）→ 下载步 `waitFor` 25s 超时 → `missing.push('规格书下载未完成')`；`savePdf`（:216）到不了。
+- **驳斥记录**：「外层 try/catch 兜住仅字段级缺失不崩」——成立，P3 非 P1；「意图显然缺一个右括号」（`includes('atta.szlcsc.com')&&includes('.pdf')`）——一行修。
+- **建议修法**：补回内层 `includes('atta.szlcsc.com')` 的右括号；补一条 `savePdf`/iframe 检测单测。
+
+## CR-034 · P3 · 主进程 activeMutations 死计数器（保护未接线）
+
+- **状态**：open（登记；dead code）
+- **file:line**：`desktop/src/main/index.ts:35/161/168`——`activeMutations++/--` 全仓零读取点（`window-all-closed`/`app.quit` 均不查它）。
+- **驳斥记录**：「单用户桌面关窗时在途写概率极低」——成立，P3；要么原设计「在途写不退出」未落地要么残留，归主进程整理轮。
+- **建议修法**：接 `app.before-quit` 检查 `activeMutations>0` 时延迟退出，或删计数器。
+
+## CR-035 · P3 · GlossaryPage 术语搜索无序列守卫（键入闪空+后发先至）
+
+- **状态**：open（登记；单租户体验缺口）
+- **file:line**：`desktop/src/renderer/src/ontology/GlossaryPage.tsx:112-143`（`load` 依赖 `termQuery` 每键入重跑 + `setLoading(true)` 命中 :189 early return 闪空，无 sequence/AbortController）。
+- **驳斥记录**：「127.0.0.1 乱序窗口极小」——成立，P3；对照同仓 `ResearchWorkspace.loadResearch`（:212 sequence）/`ProjectDocuments`（:79 sequenceRef）已有守卫，唯此缺。
+- **建议修法**：加 `requestSeq` ref 守卫（同 loadResearch 范式）。
+
+## CR-036 · P3 · ResearchWorkspace 导出轮询 effect 无序列守卫（stale 快照回写）
+
+- **状态**：open（登记）
+- **file:line**：`desktop/src/renderer/src/research/ResearchWorkspace.tsx:248-287`（旧 effect 闭包 `active` + 在途 poll 期间表单新增导出 → stale 快照把已完成条目写回 pending，下轮自愈）。
+- **驳斥记录**：「下轮 poll 自愈、单用户毫秒窗」——成立，P3；同文件 :212 `loadResearch` 有 `sequence`，此处唯一缺。
+- **建议修法**：导出轮询 effect 加 `sequence` 守卫（与 loadResearch 同范式）。
+
+## CR-037 · P3 · ResearchOpportunity.tsx 零 vitest 覆盖（193 行主链组件）
+
+- **状态**：open（登记；深度不足非完全裸奔）
+- **file:line**：`desktop/src/renderer/src/research/ResearchOpportunity.tsx`（`OpportunityDetail`/`OpportunityProfileFields` 10 字段表单/`opportunityProfileInput`/`validateOpportunityProfile` 7 规则/`opportunityProfileErrorMessage` 错误码映射）；`tests/renderer/` 零命中（`ai-opportunity-discovery`/`opportunity-adjustment` 测的是另两个组件）。
+- **驳斥记录**：「`project-research.test.tsx`（75 例）覆盖 workspace 主流程间接路径」——成立，是深度缺口；纯函数已 export 可单测，成本最低的一条 P3。
+- **建议修法**：补 `validateOpportunityProfile`/`opportunityProfileErrorMessage`/`draftErrorMessage` 三纯函数单测 + OpportunityDetail 删除/编辑联动用例。
+
+## CR-038 · P3 · new-project.test.tsx:279 同步读 location.hash（CR-007 同型残留）
+
+- **状态**：open（登记；一行修）
+- **file:line**：`desktop/tests/renderer/new-project.test.tsx:279`（`expect(location.hash).toBe("#projects/created-project")` 同步读；当前 `NewProjectPage.tsx:243` 同步写 hash 不翻车，一旦异步化即复发——与 CR-007 修复前 CI 间歇红同型）。
+- **驳斥记录**：「React 18 合成事件同步提交下稳定」——成立故 P3；`navigation.test.tsx` 已修 5 处，此文件是漏网同型。
+- **建议修法**：改 `await waitFor(() => expect(location.hash).toBe(...))`（同 CR-007 修法）。
+
+## CR-039 · P3 · gui-harness/shots.mjs 13 页走查未含 T-W6 三面
+
+- **状态**：open（登记；纯视觉走查缺口，功能面已有三 vitest）
+- **file:line**：`desktop/gui-harness/shots.mjs:19-34`（ROUTES 仍 13 顶级页；WorkflowConsole/GlossaryPage 是项目详情子 tab 需真实项目 fixture、SkillVersionsPage 是 #extensions 内展开子视图默认截图态不展开）。
+- **驳斥记录**：「T-W6 三面各带 vitest（workflow-console/skill-versions-page/glossary-page）」——成立，仅视觉走查缺口；走查需新增项目 fixture 才能进子 tab。
+- **建议修法**：shots.mjs 加项目级 fixture 后补三面截图（或注记「子 tab 视觉走查挂账」）。
+
+## CR-040 · P3 · GlossaryPage 术语状态标签值域漂移（T-W6 自带）
+
+- **状态**：open（登记；一行口径对齐）
+- **file:line**：`desktop/src/renderer/src/ontology/GlossaryPage.tsx:50-55`（`TERM_STATUS_LABEL` 含 `candidate/retired`）vs 服务端 `ontology/models.py:46`（`TERM_STATUSES=(draft,confirmed,superseded,merged)` 无 candidate/retired、反缺 draft/superseded）→ `:67-69` fallback 原值回显：术语表状态列显示英文 `draft`/`superseded`，中文「候选」「已退役」永不渲染。
+- **驳斥记录**：「fallback 不崩」——成立，P3；是 T-W6 新代码自带小漂移（桌面枚举与服务端值域未同步）。
+- **建议修法**：`TERM_STATUS_LABEL` 对齐 `TERM_STATUSES` 四值（draft/confirmed/superseded/merged）。
+
 ## 驳回/观察记录（不占编号）
 
+- **C6-06 convene-billing「独立提交被 _finalize 绝对赋值覆写」候选——dismissed（c6）**：三处 convene 路径（`create_meeting` agent_mode L552 / `dispatch_agent_tool` L1171 / 共享 `_billing_and_quota` L472-512）的 `run.token_cost += MEETING_CONVENE_COST_UNITS`（meetings/service.py:502）全部在**同一 session/事务**内（无 commit 夹在中间），随会议创建事务一起提交，`_finalize` 绝对赋值（agents/service.py:440）触达不到——因 convene 工具面（`dispatch_agent_tool`）不入 adapter 事件循环（tools.py:12 明文「会议面由 meetings 工具面判定」，E0 grep 零生产调用点，仅测试）。`test_whitelisted_convene_bills_the_run`（test_meeting_tools.py:134）钉 `token_cost==2`。
+- **api_catalog 缺 `meetings.create`——非 c6 缺陷（冻结区）**：`api_catalog.py:108-114` 有 meetings.get/minutes/cost 无 meetings.create，与 solutions/service.py:322「人工拍板面永不收编」红线一致——会议召集人工面不走 API 目录，登记为有意设计不修。
+- **C6-07 `meeting_get_minutes` 工具面缺 initiator 一致性断言（纵深防御）——P3 观察并入 CR-034 类**：`meeting_get_minutes`（meetings/service.py:1210-1232）owner-check 用 `convened_by_agent_id`（同 agent 防跨 agent 读），但未断言 `actor` == run 发起人/项目成员；因工具面 `dispatch_agent_tool` 零生产路由（E0 仅测试调用），实际不可达，纵深缺口登记不修。
 - **旧产品名残留扫描**：`qiflow` 命中 7 个 tracked 文件（README.md / compose.yaml / server/Dockerfile / scripts/check-pseudonymization.sh / scripts/verify/run-verify.sh / docs/代码评审-G5.md / docs/验证脚本-G8.md）——逐条核对全部是**外部基建资源名**（`automation_qiflow-net` docker 网络、`qiflow-twenty-db` 容器、WSL `qiflow-outbound` 目录、历史验证记录引用），非产品名界面面；改名会破坏现网部署。**dismissed**。
 - **audit §14 行内自相矛盾**：「新增 8 表……（9 张）」同句自我修正，实义无歧义，cosmetic。**dismissed**。
 - **共享测试库拉锯战实录**（CR-002 佐证）：2026-11-04 上午主工作区与 t-o4b worktree 三组 pytest 并存，advisory lock（全程持有）保证了持锁会话结果可信，排队会话将因戳漂移失败——已并入 CR-002 证据。
