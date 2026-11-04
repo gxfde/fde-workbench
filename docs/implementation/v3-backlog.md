@@ -150,7 +150,17 @@
   - **测试**：NEW `test_research_subject_merge.py` 7 例（全表面搬迁+响应摘要计数+列表序列化+占号验证 / 撞键 409→人工处置→重试成功且零残留 / 根·类型·自指·stale·归档源·归档目标六拒绝 / 链一跳化 / 画像迁入与留任双分支+事件留档 / viewer 403·非成员 404 / catalog 钉子）；`test_migrations` HEAD `d4e6f8a2c7b9`；conftest 清理序 +「merged_into 置空」（同表自引用先解除再删行）。
   - **口径**：105 表不变（列级增量）、迁移头 `b5d9e3f7a1c6`→**`d4e6f8a2c7b9`**（**32 rev**）、业务路由 295→**296**（+1）、ENTRIES 94 不变、pytest **1838 收集 = 1832 passed + 6 skipped**（+7）、vitest **752**（+2）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
   - **桌面 UI 补轮（2026-11-04，分支 feat/v3-t-o4b-merge-ui，遗留 UI 轮收口）**：对象树操作栏「合并」入口（选中非根对象且 canFill；对话框挑**同类型启用对象**为目标 → 密码确认 → `POST /research/subjects/{source_id}/merge`）+ 树底「已归档（N）」折叠组（归档行不可选中、不进 treeitem 键盘导航；合并让位行「已并入 X」回链——目标仍启用=可点击跳选，已停用=纯文本；普通停用行一并可见）；契约 `ResearchMergeResultDto` + `isResearchMergeResultDto`，`subjectMutationError` 补 4 错误码映射（root_immutable/type_mismatch/source|target_not_active）。测试 +6（树 3 / 工作区合并流+错误映射 2 / 契约 1），vitest **761**（基线 `8340e89` 实测 755），typecheck 绿；服务端零改动（pytest 1863 / 105 表 / head `c7e1a9f3b5d8` / 路由 296 / ENTRIES 94 / mypy 279 全不变，无需 rebuild），便携版重打包 r13 + asar 字节验证。
-  - **实施偏差（记录在案）**：①「导入结果 merge_candidates 卡片一键合并」**前置缺失**——桌面端调研数据导入 UI 未立项（`/research/subjects/imports/preview|commit` 端点与桌面 DTO 校验器在、零 UI 消费），留待「调研数据导入 UI」独立轮；②「对象树右键合并」以操作栏行内「合并」按钮替代（与既有停用同位同模式），避免引入整套右键菜单系统。
+  - **实施偏差（记录在案）**：①「导入结果 merge_candidates 卡片一键合并」**前置缺失**——桌面端调研数据导入 UI 未立项（`/research/subjects/imports/preview|commit` 端点与桌面 DTO 校验器在、零 UI 消费），留待「调研数据导入 UI」独立轮（已于同日收口，见下节）；②「对象树右键合并」以操作栏行内「合并」按钮替代（与既有停用同位同模式），避免引入整套右键菜单系统。
+
+### 调研数据导入 UI（T-O4b 偏差①新立候选收口，M）— **DONE（2026-11-04，分支 feat/v3-research-import-ui，squash 合并至 fork/main）**
+- 目标：`imports/preview|commit` 端点（T-O4，d14 前）的桌面消费面——CSV/XLSX 批量创建调研对象 + 导入结果 `merge_candidates` 卡片（T-O4「同名让位」语义的人工回溯面），补齐 T-O4b 桌面轮挂账的前置缺失。
+- 修改文件：NEW `research/ResearchImportDialog.tsx`；EXTEND `research/ResearchWorkspace.tsx`（入口/结果卡片/stale 刷新）、`styles.css`；服务端零改动。
+- **实施记录（2026-11-04）**：
+  - **对话框两段式**：类型（内置四类非 project）+ 文件（CSV/XLSX ≤10MB 客户端预检）→ `POST /research/subjects/imports/preview`（复用桌面结构化 multipart 通道 `kind:"multipart_file"`：`fields.subject_type` + `file.bytes`，AI 预调研/文档模板同源）→ 预览表（行/名称/说明/父级）+ 行错误清单；存在校验错误即禁提交（服务端本就 422 `invalid_research_import`，`details.errors` 与预览内联错误共用同一展示区）→ `POST …/imports/commit`（`{preview_token, version}`），错误行 ≤8 条点名、超出计数。
+  - **工作区接线**：标题行「导入对象」入口（canFill）；导入完成 → 结果卡片（新建 N + 幂等回放标注 + merge_candidates 让位回溯：行号/同名既有对象（类型+跟踪码）/文件中说明 + 「查看 X」跳选既有对象）；`stale_version` 时 `onStale` 触发 `loadResearch`，对话框内提示重新解析再提交。
+  - **复用零改动**：`isResearchImportPreviewDto` / `isResearchImportResultDto` / `parseResearchImportErrorDetails`——T-O4 桌面契约同步轮预置的校验器首次接线，零消费欠账清偿；`researchImportError` 映射 15 个导入面错误码。
+  - **jsdom 适配**：File 无 `arrayBuffer()`（jsdom 26 实测）→ `readFileBytes` 双路径（真环境快路径 + FileReader 兜底），真机与测试同一组件代码。
+  - **测试 +4**（导入主路径含让位卡片回链 + multipart body 契约断言 / 行错误禁提交零 commit / 预览拒绝映射（415 仅支持 CSV/XLSX）/ stale 提交触发刷新），vitest **765**（基线 fork/main `65a40c5` 实测 761，+4），typecheck 绿；服务端零改动（pytest 1863 收集 = 1857 passed + 6 skipped / 105 表 / head `c7e1a9f3b5d8` / 路由 296 / ENTRIES 94 / mypy 279 全不变，无需 rebuild），便携版重打包 r14 + asar 字节验证。
 
 ## P1（可控自动化）
 

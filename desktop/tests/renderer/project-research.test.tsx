@@ -299,6 +299,11 @@ interface RenderResearchOptions {
   opportunityPatchError?: { code: string; status?: number }
   documentCreateError?: { code: string; status?: number }
   mergeError?: { code: string; status?: number }
+  importPreviewNames?: string[]
+  importPreviewErrors?: Array<{ row: number; column: string; code: string; message: string }>
+  previewError?: { code: string; status?: number }
+  importError?: { code: string; status?: number }
+  importMergeCandidates?: Array<{ name: string; row: number; description: string; matched_subject: { id: string; name: string; tracking_code: string | null } }>
   malformedForms?: boolean
   patchErrorOnce?: boolean
   createStaleOnce?: boolean
@@ -595,6 +600,43 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
       }
       forms = [...forms, created]
       return apiOk(created, 201)
+    }
+    if (path.endsWith("/research/subjects/imports/preview") && request.method === "POST") {
+      // V3 T-O4 桌面面：导入预览——multipart 结构化 body（fields.subject_type + file）
+      if (options.previewError) return apiError(options.previewError.code, options.previewError.status ?? 400)
+      const body = request.body as { kind: string; fields: { subject_type: string }; file: { name: string } }
+      const names = options.importPreviewNames ?? ["华东销售部", "华南销售部"]
+      const errors = options.importPreviewErrors ?? []
+      return apiOk({
+        preview_token: "preview-token-1",
+        subject_type: body.fields.subject_type,
+        row_count: names.length,
+        rows: names.map((name, index) => ({ row: index + 1, name, description: `负责区域 ${index + 1}`, parent_name: index === 0 ? "销售部" : null })),
+        errors,
+        expires_in_seconds: 1800,
+      })
+    }
+    if (path.endsWith("/research/subjects/imports/commit") && request.method === "POST") {
+      if (options.importError) return apiError(options.importError.code, options.importError.status ?? 409)
+      const body = request.body as { preview_token: string; version: number }
+      if (body.version !== currentProject.version) return apiError("stale_version", 409)
+      const names = options.importPreviewNames ?? ["华东销售部", "华南销售部"]
+      const created = names.map((name, index) => ({
+        ...departmentSubject,
+        id: `subject-import-${index + 1}`,
+        subject_key: `department_import_${index + 1}`,
+        name,
+        version: 1,
+      }))
+      subjects = [...subjects, ...created]
+      currentProject = { ...currentProject, version: currentProject.version + 1 }
+      return apiOk({
+        subjects: created,
+        imported_count: created.length,
+        project_version: currentProject.version,
+        idempotent_replay: false,
+        merge_candidates: options.importMergeCandidates ?? [],
+      }, 201)
     }
     if (path.includes("/research/subjects/") && path.endsWith("/merge") && request.method === "POST") {
       // V3 T-O4b：合并原语——source 停用归档 + merged_into 指向 target，双方 version+1
@@ -1393,6 +1435,91 @@ describe("project research workspace", () => {
     await user.click(within(confirmDialog).getByRole("button", { name: "合并" }))
 
     expect(await screen.findByText(/只能把对象并入同类型的调研对象/)).toBeVisible()
+  })
+
+  it("imports subjects from a CSV file and lists merge candidates with a backlink", async () => {
+    // V3 T-O4 桌面面：文件 → 解析预览 → 提交 → 导入结果卡片让位回溯 + 查看回链
+    const apiRequest = renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject],
+      importPreviewNames: ["华东销售部", "华南销售部"],
+      importMergeCandidates: [
+        { name: "销售部", row: 2, description: "原表中的团队职责说明", matched_subject: { id: departmentSubject.id, name: "销售部", tracking_code: null } },
+      ],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
+    await user.click(screen.getByRole("button", { name: "导入对象" }))
+    const dialog = await screen.findByRole("dialog", { name: "导入调研对象" })
+    await user.upload(within(dialog).getByLabelText("导入文件"), new File(["名称,说明,父级\n华东销售部,负责华东,\n销售部,原表中的团队职责说明,"], "departments.csv", { type: "text/csv" }))
+    await user.click(within(dialog).getByRole("button", { name: "解析预览" }))
+    expect(await within(dialog).findByText("华东销售部")).toBeVisible()
+    await user.click(within(dialog).getByRole("button", { name: "确认导入" }))
+
+    expect(await screen.findByText(/已导入 2 个调研对象/)).toBeVisible()
+    expect(mutationBodies(apiRequest, "/research/subjects/imports/commit", "POST")).toContainEqual({ preview_token: "preview-token-1", version: 5 })
+    expect(screen.getByText(/已让位未新建/)).toBeVisible()
+    expect(screen.getByText(/文件中的说明：原表中的团队职责说明/)).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "查看销售部" }))
+    expect(await waitFor(() => document.querySelector('button[data-research-subject-id="subject-sales"]'))).toHaveAttribute("aria-selected", "true")
+    await waitFor(() => expect(mutationBodies(apiRequest, "/research/subjects/imports/preview", "POST")).toEqual([
+      expect.objectContaining({ fields: { subject_type: "department" } }),
+    ]))
+  })
+
+  it("blocks commit while preview rows have validation errors", async () => {
+    const apiRequest = renderProjectResearch({
+      initialSubjects: [rootSubject],
+      importPreviewErrors: [{ row: 2, column: "名称", code: "empty_name", message: "名称不能为空。" }],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /星河调研项目/ }))
+    await user.click(screen.getByRole("button", { name: "导入对象" }))
+    const dialog = await screen.findByRole("dialog", { name: "导入调研对象" })
+    await user.upload(within(dialog).getByLabelText("导入文件"), new File(["名称\n华东销售部\n"], "departments.csv", { type: "text/csv" }))
+    await user.click(within(dialog).getByRole("button", { name: "解析预览" }))
+
+    expect(await within(dialog).findByText("第 2 行 · 名称：名称不能为空。")).toBeVisible()
+    expect(within(dialog).getByRole("button", { name: "确认导入" })).toBeDisabled()
+    expect(mutationBodies(apiRequest, "/research/subjects/imports/commit", "POST")).toHaveLength(0)
+  })
+
+  it("maps a rejected preview to an actionable error", async () => {
+    renderProjectResearch({
+      initialSubjects: [rootSubject],
+      previewError: { code: "unsupported_import_format", status: 415 },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /星河调研项目/ }))
+    await user.click(screen.getByRole("button", { name: "导入对象" }))
+    const dialog = await screen.findByRole("dialog", { name: "导入调研对象" })
+    await user.upload(within(dialog).getByLabelText("导入文件"), new File(["名称\n华东销售部\n"], "notes.xlsx", { type: "application/octet-stream" }))
+    await user.click(within(dialog).getByRole("button", { name: "解析预览" }))
+
+    expect(await within(dialog).findByText("仅支持 CSV 或 XLSX 文件。")).toBeVisible()
+    expect(within(dialog).queryByRole("button", { name: "确认导入" })).not.toBeInTheDocument()
+  })
+
+  it("refreshes research data when the commit hits a stale version", async () => {
+    const apiRequest = renderProjectResearch({
+      initialSubjects: [rootSubject],
+      importError: { code: "stale_version", status: 409 },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /星河调研项目/ }))
+    await user.click(screen.getByRole("button", { name: "导入对象" }))
+    const dialog = await screen.findByRole("dialog", { name: "导入调研对象" })
+    await user.upload(within(dialog).getByLabelText("导入文件"), new File(["名称\n华东销售部\n"], "departments.csv", { type: "text/csv" }))
+    await user.click(within(dialog).getByRole("button", { name: "解析预览" }))
+    await within(dialog).findByText("华东销售部")
+    await user.click(within(dialog).getByRole("button", { name: "确认导入" }))
+
+    expect(await within(dialog).findByText(/已被其他操作更新，已刷新调研数据/)).toBeVisible()
+    const subjectReloads = apiRequest.mock.calls.filter(([path]) => String(path).endsWith("/research/subjects")).length
+    expect(subjectReloads).toBeGreaterThanOrEqual(2)
   })
 
   it("creates a project-scoped research form bound to a selected node (no template)", async () => {

@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O4 桌面消费面：调研数据导入 UI + 导入结果让位回溯卡片（2026-11-04）
+
+### 桌面端（服务端零改动：零迁移零路由、无需 rebuild 镜像）
+
+- **导入对话框（两段式）**：项目调研标题行新增「导入对象」（可填写时出现）→ 选对象类型（部门/岗位/流程/AI 机会）+ CSV/XLSX 文件（≤10MB）→「解析预览」走 `POST /research/subjects/imports/preview`（桌面结构化 multipart 通道，AI 预调研同源）→ 预览表 + 行错误清单（422 `details.errors` 与内联错误同区，≤8 条点名）→「确认导入」走 `POST …/imports/commit`（30 分钟一次性 token + 期望版本）。
+- **导入结果卡片**：导入完成显示新建数量 + 幂等回放标注；`merge_candidates` 让位行逐条回溯——行号、同名既有对象（类型+跟踪码）、文件中说明（T-O4「同名让位不新建」的人工拍板面），「查看 X」跳选既有对象；卡片可关闭。`stale_version` 时自动刷新调研数据并提示重新解析。
+- **复用与适配**：T-O4 桌面契约同步轮预置的 `isResearchImportPreviewDto` / `isResearchImportResultDto` / `parseResearchImportErrorDetails` 首次接线（零消费欠账清偿）；15 个导入面错误码映射；jsdom File 无 `arrayBuffer()` → `readFileBytes` 双路径（真环境快路径 + FileReader 兜底），真机与测试同一代码。
+
+### 测试与口径
+
+- vitest **765**（+4：导入主路径含让位卡片回链+multipart 契约断言 / 行错误禁提交零 commit / 预览拒绝映射 / stale 提交刷新；串行口径 `--no-file-parallelism`；基线 `65a40c5` 实测 761）；`npm run typecheck` 绿。
+- 服务端零改动：pytest 1863 收集（1857 passed + 6 skipped）不变、105 表/迁移头 `c7e1a9f3b5d8`（33 rev）/业务路由 296/ENTRIES 94/mypy 279 全部不变，**无需 rebuild 三镜像**；桌面改动交付=便携版重打包（r14）+ asar 字节验证。
+
 ## [未发布] — V3 实施 T-O4b 桌面合并 UI：subject 合并原语上 UI + 归档行回链（2026-11-04）
 
 ### 桌面端（服务端零改动：零迁移零路由、无需 rebuild 镜像）

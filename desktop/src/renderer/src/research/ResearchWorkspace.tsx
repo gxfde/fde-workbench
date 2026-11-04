@@ -10,10 +10,11 @@ import type { ProjectDto } from "../workbench/types"
 import { isProjectResearchFormListDto, isResearchMergeResultDto, isResearchSubjectDto, isResearchSubjectListDto } from "./projectRuntimeValidation"
 import { createEmptyOpportunityProfile, OpportunityDetail, OpportunityListPanel, OpportunityProfileFields, opportunityProfileInput, validateOpportunityProfile } from "./ResearchOpportunity"
 import { AIOpportunityDiscoveryDialog } from "./AIOpportunityDiscoveryDialog"
+import { ResearchImportDialog } from "./ResearchImportDialog"
 import { ProjectResearchFormBuilder, type ProjectResearchFormDraft } from "./ProjectResearchFormBuilder"
 import { ResearchForm } from "./ResearchForm"
 import { ResearchSubjectTree } from "./ResearchSubjectTree"
-import { CHILD_TYPES_BY_PARENT, RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_LABELS, RESEARCH_SUBJECT_TYPES, type AIOpportunityProfileDto, type ProjectResearchFormDto, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
+import { CHILD_TYPES_BY_PARENT, RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_LABELS, RESEARCH_SUBJECT_TYPES, type AIOpportunityProfileDto, type ProjectResearchFormDto, type ResearchImportResultDto, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
 
 interface ResearchWorkspaceProps {
   initialOpportunityId?: string
@@ -162,6 +163,9 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
   // V3 T-O4b：对象合并入口——source 固定为发起对象，target 在同类型启用对象中挑选。
   const [mergeSource, setMergeSource] = useState<ResearchSubjectDto | null>(null)
   const [mergeTargetId, setMergeTargetId] = useState("")
+  // V3 T-O4 桌面面：批量导入入口与结果卡片——同名让位行（merge_candidates）在此回溯。
+  const [importOpen, setImportOpen] = useState(false)
+  const [importOutcome, setImportOutcome] = useState<ResearchImportResultDto | null>(null)
   const [memoDraft, setMemoDraft] = useState("")
   const [memoSaved, setMemoSaved] = useState("")
   const [memoSaving, setMemoSaving] = useState(false)
@@ -584,6 +588,16 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     }
   }
 
+  async function finishImport(result: ResearchImportResultDto): Promise<void> {
+    setImportOpen(false)
+    clearDirtyRegistry()
+    resetDetailViews()
+    setImportOutcome(result)
+    setProjectVersion((current) => Math.max(current, result.project_version))
+    await loadResearch()
+    setNotice(`已导入 ${result.imported_count} 个调研对象${result.merge_candidates.length ? `；${result.merge_candidates.length} 行与既有对象同名已让位，见下方导入结果。` : "。"}${result.idempotent_replay ? "（重复提交，已回放上次结果）" : ""}`)
+  }
+
   function beginRenameSubject(subject: ResearchSubjectDto): void {
     if (!["department", "role", "process"].includes(subject.subject_type)) return
     setRenameSubject(subject)
@@ -978,10 +992,21 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
   }
 
   return <div className="research-workspace">
-    <div className="research-workspace-heading"><div><h2>项目调研</h2><p className="supporting-copy">按企业、部门、岗位、流程和 AI 机会维护内部调研记录。</p></div></div>
+    <div className="research-workspace-heading"><div><h2>项目调研</h2><p className="supporting-copy">按企业、部门、岗位、流程和 AI 机会维护内部调研记录。</p></div>{canFill ? <button type="button" className="secondary-button compact" onClick={() => setImportOpen(true)}>导入对象</button> : null}</div>
     {error ? <p className="form-error banner" role="alert">{error}</p> : null}
     {exportPollError ? <p className="form-error banner" role="status">{exportPollError}</p> : null}
     {notice ? <p className="notice" role="status">{notice}</p> : null}
+    {importOutcome ? <section className="panel research-import-outcome" aria-labelledby="research-import-outcome-title">
+      <div className="research-import-outcome-heading"><h3 id="research-import-outcome-title">导入结果：新建 {importOutcome.imported_count} 个调研对象</h3><button type="button" className="secondary-button compact" onClick={() => setImportOutcome(null)}>关闭</button></div>
+      {importOutcome.merge_candidates.length ? <ul className="research-import-candidates">{importOutcome.merge_candidates.map((candidate) => {
+        const matched = subjects.find((subject) => subject.id === candidate.matched_subject.id && subject.status === "active") ?? null
+        return <li key={`${candidate.row}:${candidate.matched_subject.id}`}>
+          <span>第 {candidate.row} 行「{candidate.name}」与既有{matched ? subjectLabels[matched.subject_type] : ""}「{candidate.matched_subject.name}」{candidate.matched_subject.tracking_code ? `（${candidate.matched_subject.tracking_code}）` : ""}同名，已让位未新建。</span>
+          {candidate.description.trim() ? <span className="research-import-candidate-note">文件中的说明：{candidate.description}</span> : null}
+          {matched ? <button type="button" className="research-merged-link" onClick={() => { setImportOutcome(null); selectSubject(matched) }}>查看{matched.name}</button> : null}
+        </li>
+      })}</ul> : null}
+    </section> : null}
     {loading ? <p role="status">正在加载调研数据…</p> : <div className="research-workspace-grid">
       <div className="research-subject-column">
         <ResearchSubjectTree subjects={subjects} selectedId={selectedId} canFill={canFill} onSelect={selectSubject} onCreate={beginCreate} onRename={beginRenameSubject} onArchive={(subject) => void archiveSubject(subject)} onMerge={(subject) => beginMergeSubject(subject)} onReorder={async (ordered) => {
@@ -1048,6 +1073,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
         <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setMergeSource(null)}>取消</button><button type="button" className="primary-button" disabled={busy || !mergeTargetId} onClick={() => void submitMerge()}>{busy ? "正在合并" : "确认合并"}</button></div>
       </section>
     </div> : null}
+    {importOpen ? <ResearchImportDialog projectId={project.id} projectVersion={projectVersion} apiRequest={apiRequest} onClose={() => setImportOpen(false)} onStale={() => void loadResearch()} onImported={(result) => void finishImport(result)} /> : null}
     {renameSubject ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setRenameSubject(null) }}>
       <section className="dialog research-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="research-rename-title">
         <div className="dialog-heading"><div><h3 id="research-rename-title">编辑{subjectLabels[renameSubject.subject_type]}</h3><p className="supporting-copy compact-copy">修改名称或说明，已有调研表和填写内容都会保留。</p></div></div>

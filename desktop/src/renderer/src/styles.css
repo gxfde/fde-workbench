@@ -810,6 +810,24 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .research-merged-link { flex: 0 0 auto; padding: 0; border: 0; background: transparent; color: var(--brand-blue); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .research-merged-link:hover { text-decoration: none; }
 .research-merged-link.static { color: var(--muted); text-decoration: none; cursor: default; }
+/* V3 T-O4 桌面面：批量导入对话框与导入结果卡片（merge_candidates 让位回溯）。 */
+.research-import-dialog { max-width: 680px; }
+.research-import-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.research-import-error-count { color: var(--danger); font-weight: 600; }
+.research-import-rows { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.research-import-rows table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.research-import-rows th, .research-import-rows td { padding: 6px 9px; text-align: left; border-bottom: 1px solid var(--line); }
+.research-import-rows th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-weight: 600; white-space: nowrap; }
+.research-import-rows tbody tr:last-child td { border-bottom: 0; }
+.research-import-errors { margin: 8px 0 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); font-size: 12px; color: var(--muted); }
+.research-import-errors p { margin: 0 0 4px; font-weight: 600; color: var(--text); }
+.research-import-errors ul { display: grid; gap: 3px; margin: 0; padding: 0 0 0 16px; }
+.research-import-outcome { display: grid; gap: 8px; border-left: 3px solid var(--brand-blue); }
+.research-import-outcome-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.research-import-outcome-heading h3 { margin: 0; font-size: 14px; }
+.research-import-candidates { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.research-import-candidates li { display: grid; gap: 3px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.research-import-candidate-note { color: var(--muted); font-size: 12px; }
 .research-rename-button { display: inline-grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; margin-right: 5px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-rename-button:hover { background: var(--surface); color: var(--brand-blue); }
 .research-rename-button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
