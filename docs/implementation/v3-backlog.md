@@ -325,9 +325,17 @@
   - **测试**：test_document_snapshots **+2**（最新 confirmed revision 指向+反查 / gates 摘要形状+排序+无清单键）+ 既有全量用例扩 2 断言（revision_id 类型、空 gates）；test_document_generator **+2**（AI 血缘闭环：伪造客户端捕获 request_id → 版本冻结+job 落列+`ai_call_audits` 反查+幂等再生成不重铸 / 非 AI 生成 job 列保持 NULL 且 content_snapshot 无键）；`test_migrations` HEAD `e2c6a8f4d1b3`。
   - **口径**：105 表不变（列级增量）、迁移头 `c7e1a9f3b5d8`→**`e2c6a8f4d1b3`**（**34 rev**）、业务路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1871 收集 = 1865 passed + 6 skipped**（本轮 +4；基线 `c8aa08a` 实测 collect 1867——#103 goal-c4 较 #102 的 1863 +4）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`。
 
-### T-C1 Delivery Compiler 最小闭环（P2 尾）
+### T-C1 Delivery Compiler 最小闭环（P2 尾）— **DONE（2026-11-05）**
 - 目标：change_set confirmed 后的"编译预览"：从 confirmed 本体+模板生成方案草稿骨架（复用 solutions /skeleton 路径）与 workflow 定义草稿（dag_json 模板化）。
 - 前置：T-O3、T-W1。修改文件：NEW `server/src/fde_api/workflows/compiler.py`（纯函数：本体→dag 模板）。测试：compiler 快照测试。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **输入合同**：`compile_delivery_preview(change_set, *, industry_template, gates, research_skill_ref, approval_capability="workbench.write")`——change_set 取 serialize_change_set 形状且 status 必须 confirmed（编译预览只对已坐实本体负责）；industry_template 取已发布行业模板版本（industry_name/version_number/modules，None=无匹配走待补）；gates 沿 T-D1 `_serialize_gates` 形状（只消费 gate_key/status/decision，坏行跳过不炸整个预览）。
+  - **「复用 /skeleton 路径」的落法**：复用其**文本合同与六段布局**（TEXT_FIELDS 七键、限长同尺 160/40000/16000、每段保留「待补」、模块按 sort_order 排序），不跨包 import solutions 私有助手——骨架 payload 经合并运行期 opportunity_ids 后原样可过 `_normalize`（测试动态钉死），落库走 POST /solutions 人工端点；溯源行随 design_markdown 头部落档（变更集标题·确认时刻·采集来源），另附 provenance 段（agent_trace 式逐字段来源指认）。
+  - **dag 三节点裁决**：调研=skill（**ref 注入制**——published 白名单在 DB，纯函数不查库，沿 validate_dag 白名单注入制先例；SKILL_REF_PATTERN 与 APPROVAL_CAPABILITIES 复用 definition_service 常量前置校验）；方案=call `solutions.create`（编译期骨架字段全量携带=「模板化」本义，唯一运行期字段 opportunity_ids 留 `{{research_brief.opportunity_ids}}` 占位——执行器整值替换原类型不字符串化）；审阅=human_approval（capability 白名单校验，system.* 不开放）。`solutions.create` 目录 effect=write_db ⇒ rule 9 不触发（告警面只盯 external），审阅节点按设计保留为人工收口而非 rule 9 补丁。
+  - **骨架语义映射**：create/update 术语入「已确认本体」段（update 以 new_term 为准并标注原名）；**指标型术语（term_type=metric）入验收标准候选**（本体即验收口径来源）；merge_terms 入风险与依赖段（旧名不再使用=交付物措辞依赖）；register_relation_type 只进 provenance 计数不产骨架行。
+  - **零路由零 DDL**：编译预览无 HTTP 面（接线待后续编排/UI 轮）；输出确定性（不读时钟/随机源）支撑整树快照测试。
+  - **测试**：NEW `test_delivery_compiler.py` 6 例（整树快照 / 三节点 dag 真实目录白名单全绿零告警+拓扑序 (research, solution, review) / 非 confirmed+五类坏载荷点名拒绝 / 无模板无门禁待补回退+坏门禁行跳过 / 坏 skill ref·capability 拒绝 / 骨架 payload 过 `_normalize` 合同）。
+  - **口径**：105 表不变（零 DDL）、迁移头 `e2c6a8f4d1b3`（34 rev）不变、业务路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1877 收集 = 1871 passed + 6 skipped**（本轮 +6；基线 `1ef3a42` 实测 1871）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server（零迁移）⇒ rebuild 三镜像。
 
 ### T-I1 本体变更影响分析（域 2 §5 用例 6 扩展）
 - 目标：impact_of_term(term_id) → 引用它的 subjects/links/forms/gates 证据列表。前置：T-O1。复杂度：**S**。

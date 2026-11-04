@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-C1：Delivery Compiler 最小闭环——confirmed 本体→方案骨架 + workflow 定义草稿纯函数编译预览（2026-11-05）
+
+### 服务端（NEW `workflows/compiler.py` 纯函数；零迁移零路由零桌面改动）
+
+- **`compile_delivery_preview(change_set, *, industry_template, gates, research_skill_ref, approval_capability)`**：confirmed 变更集（serialize_change_set 形状，非 confirmed 一律拒绝）+ 已发布行业模板 + 门禁状态摘要（T-D1 `_serialize_gates` 形状）→ 确定性编译预览（不读时钟/随机源，快照测试钉死）；落库一律走人工确认端点——骨架 → `solutions.create`、定义 → workflow 定义创建路由。
+- **① 方案骨架 payload**：与 `solutions.create` 文本合同逐键对齐（TEXT_FIELDS 七键 name+六段、限长同尺 160/40000/16000，`_normalize` 原样可过）；六段布局沿 `/skeleton`「每段保留待补、责任主体永远是人」——本体段（create/update 术语含修订标注，update 以 new_term 为准）、指标术语入验收标准候选、模板模块（sort_order 排序）驱动设想/路径/交付物/排期、门禁摘要与术语合并入风险与依赖；来源行随 design_markdown 头部落档（变更集标题·确认时刻·采集来源）。
+- **② workflow 定义草稿**：dag_json 模板化「调研→方案→审阅」三节点——调研 skill（ref 由调用方注入，published 白名单在 DB、纯函数不查库，沿 validate_dag 白名单注入制）→ 方案 call `solutions.create`（携带编译期骨架字段，唯一运行期字段 `opportunity_ids` 留 `{{research_brief.opportunity_ids}}` 占位，执行器整值替换原类型不字符串化）→ 审阅 human_approval（capability 默认 `workbench.write`，system.* 不开放）。产出的 dag 在真实 api_catalog 白名单下全绿零告警（`solutions.create` effect=write_db 不触发 rule 9）。
+- **provenance（agent_trace 式来源标注）**：逐字段指认来源（`ontology_change_set:<id>` / `industry_template:<行业>@v<版本>` / `gates` / `delivery-compiler/v1`），落库后可回链编译输入。
+- **不做全自动「本体→代码」**（主报告 §12 裁决）：编译器只产草稿，绝不写库、绝不绕过人工确认端点。
+
+### 测试与口径
+
+- pytest **1877 收集（1871 passed + 6 skipped，本轮 +6；基线 `1ef3a42` 实测 1871）**：整树快照（本体段/模板排序/指标入验收/门禁排序/provenance）/ 三节点 dag 真实目录白名单全绿零告警+拓扑序 / 非 confirmed+坏载荷点名拒绝（非数组·非对象项·未知动作·缺必填）/ 无模板无门禁待补回退+坏门禁行跳过 / 坏 skill ref 与坏 capability 拒绝 / 骨架 payload 过 solutions.create `_normalize` 合同。
+- 105 表不变 / 迁移头 `e2c6a8f4d1b3`（34 rev）不变 / 业务路由 296 不变 / ENTRIES 94 不变 / mypy 基线 279 不变（新代码零新增）/ 桌面 vitest 765 不变（零改动，无需重打包）；改 server（零迁移）⇒ **rebuild 三镜像**（`alembic upgrade head` 幂等空跑校验 current）。
+
 ## [未发布] — V3 实施 T-D1：文档血缘补洞——快照 revision_id + 门禁摘要 + AI 调用 request_id 落库（2026-11-04）
 
 ### 服务端（审计 WB-DEF-6/7；1 列级迁移、零路由零桌面改动）
