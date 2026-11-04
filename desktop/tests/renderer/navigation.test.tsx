@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import React from "react"
-import { cleanup, screen } from "@testing-library/react"
+import { cleanup, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { App } from "../../src/renderer/src/App"
@@ -134,7 +134,7 @@ describe("role-aware project workbench navigation", () => {
     renderAuthenticatedApp("project_lead")
 
     expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
-    expect(location.hash).toBe("#projects")
+    await waitFor(() => expect(location.hash).toBe("#projects"))
   })
 
   it("redirects non-admin away from the extensions center (J6)", async () => {
@@ -144,7 +144,7 @@ describe("role-aware project workbench navigation", () => {
     renderAuthenticatedApp("project_lead")
 
     expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
-    expect(location.hash).toBe("#projects")
+    await waitFor(() => expect(location.hash).toBe("#projects"))
   })
 
   it("redirects non-admin away from the pilot report (goal-d12, d11 挂账④)", async () => {
@@ -154,7 +154,7 @@ describe("role-aware project workbench navigation", () => {
     renderAuthenticatedApp("project_lead")
 
     expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
-    expect(location.hash).toBe("#projects")
+    await waitFor(() => expect(location.hash).toBe("#projects"))
   })
 
   it("keeps the pilot report for admin", async () => {
@@ -170,7 +170,7 @@ describe("role-aware project workbench navigation", () => {
     renderAuthenticatedApp(role)
 
     expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
-    expect(location.hash).toBe("#projects")
+    await waitFor(() => expect(location.hash).toBe("#projects"))
   })
 
   it("normalizes a blank history entry and follows later hashchange navigation", async () => {
@@ -178,7 +178,7 @@ describe("role-aware project workbench navigation", () => {
     renderAuthenticatedApp("admin")
 
     expect(await screen.findByRole("heading", { name: "项目工作台" })).toBeVisible()
-    expect(location.hash).toBe("#projects")
+    await waitFor(() => expect(location.hash).toBe("#projects"))
 
     location.hash = "#templates"
     window.dispatchEvent(new HashChangeEvent("hashchange"))
