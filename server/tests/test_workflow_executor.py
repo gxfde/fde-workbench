@@ -156,16 +156,25 @@ def _zero_backoff(monkeypatch) -> None:
     monkeypatch.setattr(executor, "_RETRY_BACKOFF_BASE_SECONDS", 0)
 
 
-def _seed_skill(db_session, leader, *, key: str, versions: list[str]) -> SkillDefinition:
+def _seed_skill(
+    db_session,
+    leader,
+    *,
+    key: str,
+    versions: list[str],
+    scope: str = "public",
+    required_capabilities: list[str] | None = None,
+) -> SkillDefinition:
     skill = SkillDefinition(
-        scope="public",
-        namespace_key="test",
+        scope=scope,
+        namespace_key="test" if scope == "public" else f"personal:{leader.id}",
         skill_key=key,
         name="测试技能",
         description="",
         status="published",
         current_version_number=len(versions),
         created_by_user_id=leader.id,
+        owner_user_id=leader.id,
     )
     db_session.add(skill)
     db_session.flush()
@@ -176,7 +185,7 @@ def _seed_skill(db_session, leader, *, key: str, versions: list[str]) -> SkillDe
                 version_number=index,
                 instructions_text=instructions,
                 manifest_json={},
-                required_capabilities=[],
+                required_capabilities=required_capabilities or [],
                 content_sha256=_sha(f"{key}:{index}:{instructions}"),
                 created_by_user_id=leader.id,
             )
@@ -643,6 +652,121 @@ def test_skill_node_uses_pinned_version_instructions(db_session, settings, monke
     assert len(usage) == 1
     assert usage[0].actor_user_id == leader.id
     assert usage[0].changes == {"surface": "workflow", "version": 1}
+
+
+def test_skill_node_denies_initiator_below_required_capabilities(db_session, settings, monkeypatch):
+    """CR-005 消费面档位闸：发起人 AI 档位低于技能 required_capabilities 时拒绝。
+
+    授权档位独立于角色（admin 可随时下调）：project_lead 显式降为 assistant_read
+    后，required_capabilities 含 project_operator 档能力的技能在工作流中不得消费
+    （agent-policy-v1 §T-S1 消费面契约，与 mcp_gateway._skills 同口径）。
+    """
+    from fde_api.control.models import UserAIAccessGrant
+
+    leader = make_user(db_session, "project_lead")
+    db_session.add(
+        UserAIAccessGrant(
+            user_id=leader.id,
+            access_level="assistant_read",
+            granted_by_user_id=leader.id,
+        )
+    )
+    db_session.commit()
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    skill = _seed_skill(
+        db_session,
+        leader,
+        key="tiered",
+        versions=["指令"],
+        required_capabilities=["agent.plan.generate"],  # project_operator 档
+    )
+    ai_calls: list = []
+    _install_fake_ai(monkeypatch, ai_calls)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "draft", "type": "skill", "ref": "tiered@1", "output": "hint"},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["draft"].status == "failed"
+    assert nodes["draft"].error is not None and "ai_access_insufficient" in nodes["draft"].error
+    assert ai_calls == []  # 闸在消费前，AI 从未被调用
+    usage = db_session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "skill_definition",
+            OperationEvent.target_id == skill.id,
+            OperationEvent.event_type == "skill_used_workflow",
+        )
+    ).all()
+    assert usage == []  # 分派失败不计消费（T-S2 语义）
+
+
+def test_skill_node_denies_other_users_personal_skill(db_session, settings, monkeypatch):
+    """CR-005 消费面所有权闸：个人技能仅所有者可在工作流中消费。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    _seed_skill(db_session, leader, key="private-hint", versions=["私有指令"], scope="personal")
+    ai_calls: list = []
+    _install_fake_ai(monkeypatch, ai_calls)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "draft", "type": "skill", "ref": "private-hint@1", "output": "hint"},
+        publish=True,
+    )
+    admin = make_user(db_session, "admin")
+    run, _ = _start(db_session, admin, project, definition)
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["draft"].status == "failed"
+    assert nodes["draft"].error is not None and "skill_ref_forbidden" in nodes["draft"].error
+    assert ai_calls == []  # 所有者的私有指令不进任何 AI 调用
+
+
+def test_skill_node_allows_owner_personal_skill_within_tier(db_session, settings, monkeypatch):
+    """CR-005 对照：所有者本人消费个人技能且档位覆盖 required_capabilities → 正常执行。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    _seed_skill(
+        db_session,
+        leader,
+        key="own-hint",
+        versions=["私有指令"],
+        scope="personal",
+        required_capabilities=["agent.code.write"],  # project_manager 档 = leader 角色默认
+    )
+    ai_calls: list = []
+    _install_fake_ai(monkeypatch, ai_calls)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "draft", "type": "skill", "ref": "own-hint@1", "output": "hint"},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["draft"].status == "succeeded"
+    assert nodes["draft"].output_json == {"text": "润色结果"}
+    assert len(ai_calls) == 1
 
 
 # ---------------------------------------------------------------------------

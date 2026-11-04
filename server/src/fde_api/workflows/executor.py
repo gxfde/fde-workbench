@@ -884,6 +884,7 @@ def _dispatch_skill(
     use_tools=False：不签发 MCP token，skill 只做文本变换；工具面属于 call 节点。
     execution_id = wfnode-{node 行 id}（跨重试/恢复稳定，审计可回溯）。
     """
+    from fde_api.control.access import capabilities_for_level, effective_ai_access
     from fde_api.control.ai_server_client import execute_ai_prompt
     from fde_api.control.dsh_runtime import DSHRuntimeError
     from fde_api.control.models import SkillDefinition, SkillVersion
@@ -918,8 +919,28 @@ def _dispatch_skill(
         instructions = version.instructions_text
         skill_id = _skill.id
         initiator_id, project_id = run.initiated_by_user_id, run.project_id
-    if not initiator_id:
-        raise _NodeFailure("initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False)
+        # agent-policy-v1 §T-S1 消费面两闸（与 mcp_gateway._skills 同口径）：
+        # 个人技能仅所有者可消费；required_capabilities ⊆ 发起人实时 AI 档位。
+        initiator = session.get(User, initiator_id) if initiator_id else None
+        if initiator is None or not initiator.is_active:
+            raise _NodeFailure(
+                "initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False
+            )
+        initiator_id = initiator.id
+        if _skill.scope != "public" and _skill.owner_user_id != initiator.id:
+            raise _NodeFailure(
+                "skill_ref_forbidden",
+                f"技能 {spec['ref']} 为个人技能，仅所有者可在工作流中消费。",
+                retryable=False,
+            )
+        allowed = capabilities_for_level(effective_ai_access(initiator)[0])
+        missing = sorted(set(version.required_capabilities or []) - set(allowed))
+        if missing:
+            raise _NodeFailure(
+                "ai_access_insufficient",
+                f"发起人 AI 档位不足以消费该技能（缺少：{'、'.join(missing)}）。",
+                retryable=False,
+            )
     prompt = json.dumps(input_snapshot, ensure_ascii=False)
     try:
         answer = execute_ai_prompt(
