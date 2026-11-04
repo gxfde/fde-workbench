@@ -130,6 +130,43 @@ def test_redact_patterns_handles_plain_text_and_invalid_items() -> None:
     assert raised.value.code == "invalid_context_item"
 
 
+def test_source_refs_pass_through_pattern_masking() -> None:
+    """goal-c CR-017：source_refs 与正文同尺——毒化引用（盘符路径）不得原样进
+    渲染文本与 problem_refs；良形代号引用（src-1）行为不变。"""
+    rendered = _render(
+        [
+            {
+                "text": "诊断依据见引用材料",
+                "classification": "数据",
+                "source_refs": ["C:\\客户\\材料\\扫描件.pdf", "D:/backup/历史.zip", "src-1"],
+                "confirmed": True,
+            }
+        ]
+    )
+    body = rendered.text
+    # 盘符原文零命中，占位符在位（两条不同盘符引用同遮一个占位符，去重后渲染一处）
+    assert "C:\\客户" not in body and "D:/backup" not in body
+    assert "[REDACTED_PATH]" in body and "src-1" in body
+    # problem_refs 收已遮蔽形态（与产物校验对账同规），良形代号引用原样保留
+    assert rendered.problem_refs == ("[REDACTED_PATH]", "src-1")
+    assert "src-1" in rendered.problem_refs and "C:\\客户" not in rendered.problem_refs
+
+
+def test_source_refs_masking_counts_redactions() -> None:
+    """CR-017：引用遮蔽计入 redactions（防「引用面漏遮但计数看不出」的回归形态）。"""
+    rendered = _render(
+        [
+            {
+                "text": "问题描述",
+                "classification": "数据",
+                "source_refs": ["C:\\x\\y.pdf"],
+                "confirmed": True,
+            }
+        ]
+    )
+    assert rendered.redactions == 1
+
+
 from test_agents_d4_harness import d4_app, d4_client, d4_settings  # noqa: F401  (pytest fixture)
 
 

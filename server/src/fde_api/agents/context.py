@@ -151,10 +151,18 @@ def render_masked_context(
         classification, hits = _clean(item.get("classification", ""), forbidden_terms)
         total_hits += hits
         raw_refs = item.get("source_refs")
-        item_refs = [ref for ref in raw_refs if isinstance(ref, str)] if isinstance(raw_refs, list) else []
-        for ref in item_refs:
-            if ref not in refs:
-                refs.append(ref)
+        item_refs = []
+        for ref in raw_refs if isinstance(raw_refs, list) else []:
+            if not isinstance(ref, str):
+                continue
+            # goal-c CR-017：引用与正文同尺——source_ref 是数据不是纯标识，
+            # 可能携带盘符/凭证形态（毒化时点不同来源同一路径）：先过模式遮蔽，
+            # 再进 problem_refs（产物校验对账只比对已遮蔽形态，两侧同规）。
+            masked_ref, ref_hits = redact_patterns(ref)
+            total_hits += ref_hits
+            if masked_ref not in refs:
+                refs.append(masked_ref)
+                item_refs.append(masked_ref)
         extras = ""
         severity = item.get("severity")
         module = item.get("module")

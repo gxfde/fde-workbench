@@ -152,6 +152,25 @@ def test_spawn_sandbox_error_propagates_as_class_a() -> None:
         _run(_ctx(), handle, ScriptedEvents([]))
 
 
+class _ExplodingProvider:
+    """goal-c CR-015：事件源抛非 SandboxError（如 ndjson 解析炸）——异常路径。"""
+
+    def poll(self):
+        raise RuntimeError("event provider blew up")
+
+
+def test_non_sandbox_exception_still_reclaims_sandbox() -> None:
+    """goal-c CR-015：非 SandboxError 异常逃出监听段 → 沙箱仍被回收（kill 走 finally）。
+
+    修复前 kill 在 try 之外顺序执行，事件源异常路径 kill_count=0（容器 sleep
+    infinity 悬挂）；变异验证：还原旧顺序本用例必红。
+    """
+    handle = FakeHandle()
+    with pytest.raises(RuntimeError, match="event provider blew up"):
+        _run(_ctx(), handle, _ExplodingProvider(), scanner=FakeScanner([]))
+    assert handle.kill_count == 1
+
+
 # ---------------------------------------------------------------------------
 # V1：注册表可见性（GET /agents 含不可用原因）
 # ---------------------------------------------------------------------------

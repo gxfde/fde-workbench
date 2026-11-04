@@ -947,6 +947,16 @@ def retry_run(*, actor: User, run_id: str, payload: dict[str, Any]) -> tuple[dic
                 409,
                 detail={"attempts": len(family)},
             )
+        # 平台月度预算闸在 retry 通道同样生效（goal-c CR-012）：start 的月度封顶
+        # 若只对新建 run 生效，跨月失败 run 的 retry 会绕过「下月再试」语义
+        # （V8 家族重试是原 start 的延续，预算口径不豁免）。
+        budget = int(settings.agent_monthly_budget or 0)
+        if budget > 0 and _platform_month_spent(session) >= budget:
+            raise _error(
+                "agent_budget_exhausted",
+                "本月智能体用量已达平台预算上限，请联系管理员或下月再试。",
+                409,
+            )
         # U4 修订回路（技术文档 §6 第 4 条）：门拦截后的会外修订以纪要为准——
         # 家族最新已封存强制纪要存在未决分歧（disputes 非空）时不再自动修订，
         # 升级人工（ai_manual_handoff）

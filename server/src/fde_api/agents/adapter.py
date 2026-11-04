@@ -131,8 +131,34 @@ class ZcodeAdapter:
 
         # ① spawn：AGENTS.md 纪律已由 service 写入 workspace；此处拉起 CLI
         sandbox.exec(ctx.credentials, spawn_argv(cli_command=self.cli_command, task_file=self.task_file, output_dir=self.output_dir))
+        try:
+            return self._listen_and_reclaim(
+                ctx,
+                sandbox,
+                started=started,
+                event_provider=event_provider,
+                output_scanner=output_scanner,
+                clock=clock,
+                sleeper=sleeper,
+            )
+        finally:
+            # goal-c CR-015：回收走 finally——监听段任何非 SandboxError 异常
+            # （事件流解析炸 / 扫描器 IO 异常）逃出时，容器（sleep infinity）
+            # 不悬挂；正常路径 kill 唯一发生在此（幂等，V2-④）。
+            sandbox.kill()
 
-        # ② 监听：结构化事件 → 状态；超时/预算熔断
+    def _listen_and_reclaim(
+        self,
+        ctx: AgentRunContext,
+        sandbox: SandboxHandle,
+        *,
+        started: float,
+        event_provider: RunEventProvider,
+        output_scanner: OutputScanner,
+        clock: Callable[[], float],
+        sleeper: Callable[[float], None],
+    ) -> AgentRunResult:
+        """② 监听（超时/预算熔断）→ ③ 产物扫描；回收 kill 由调用方 finally 保证。"""
         deadline = started + ctx.timeout_ms / 1000
         token_cost = 0
         tool_calls: list[ToolCallRecord] = []
@@ -175,8 +201,8 @@ class ZcodeAdapter:
 
         duration_ms = int((clock() - started) * 1000)
 
-        # ③ 回收：kill 沙箱（幂等）；只有 completed 才认产物（B-1 超时产物不入库）
-        sandbox.kill()
+        # ③ 只有 completed 才认产物（B-1 超时产物不入库）；回收 kill 由调用方
+        # finally 保证（goal-c CR-015）——此处异常逃出同样安全。
         artifacts: tuple[ArtifactFile, ...] = ()
         if status == "completed":
             artifacts = tuple(output_scanner.scan())
