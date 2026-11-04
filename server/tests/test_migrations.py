@@ -22,7 +22,13 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, DataError, IntegrityError
 
-from conftest import SERVER_ROOT, seed_reference_data
+from conftest import (
+    SERVER_ROOT,
+    _current_alembic_stamp,
+    _known_alembic_revisions,
+    _reconcile_test_schema,
+    seed_reference_data,
+)
 
 
 # f7a2c9e4b1d3 迁移时刻的 gates.json 文件哈希（历史回填值，冻结不随种子演进
@@ -1036,3 +1042,41 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
     cleanup_seeded_rows(engine, ids, project_id=project_id, sop_node_id=sop_node_id)
     # 回到 head 后重灌引用种子（幂等），保证后续用例面对标准状态。
     seed_reference_data(engine.url.render_as_string(hide_password=False))
+
+
+# ---------------------------------------------------------------------------
+# goal-c CR-002：conftest 外来戳自愈（_reconcile_test_schema 三分支）回归钉
+# 共享测试库被另一 worktree 盖成本树之外的 revision 时，downgrade base 会报
+# "Can't locate revision" 致全量 DB 用例 setup 即 E。conftest 现按「空/base→
+# upgrade、链内→roundtrip、外来→DROP SCHEMA 重建+upgrade」三分支自愈；本两条
+# 钉住「本树 revision 集判定」与「外来戳识别」两个纯函数面（不依赖 live DB，
+# 故 CI/多 worktree 并发下也稳定）。
+# ---------------------------------------------------------------------------
+
+
+def test_known_alembic_revisions_covers_current_head(test_settings):
+    """本树判定基准必须包含当前 HEAD_REVISION（含 34 个迁移文件全集）。"""
+    from alembic.config import Config
+
+    config = Config(str(SERVER_ROOT / "alembic.ini"))
+    known = _known_alembic_revisions(config)
+    assert HEAD_REVISION in known
+    assert len(known) == 34  # 与 inventory revision_count 对齐
+    # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
+    for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
+        assert historical in known, historical
+
+
+def test_foreign_stamp_recognized_as_outside_tree(engine, test_settings):
+    """外来戳（本树 34 revision 之外）必被判为外来；当前 live 头在集内。"""
+    from alembic.config import Config
+
+    config = Config(str(SERVER_ROOT / "alembic.ini"))
+    known = _known_alembic_revisions(config)
+    # 构造一个本树必然不存在的 revision 形
+    foreign = "9" * 12
+    assert foreign not in known
+    # live DB 当前戳（会话 fixture 已迁移到 head）必在集内
+    live_stamp = _current_alembic_stamp(engine.connect())
+    assert live_stamp is not None
+    assert live_stamp in known

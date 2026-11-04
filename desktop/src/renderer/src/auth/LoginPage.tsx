@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from "../../../shared/contracts"
-import { DEVICE_LABEL, PRODUCT_NAME } from "../brand"
+import { DEVICE_LABEL, PRODUCT_NAME } from "../../../shared/brand"
 import { AuthUiError, useAuth } from "./AuthProvider"
 
 const LAST_USERNAME_KEY = "fde:last-username:v1"

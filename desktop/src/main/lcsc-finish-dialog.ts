@@ -1,5 +1,6 @@
 import {BrowserWindow} from 'electron'
 import {LCSC_WARNING_SVG} from './lcsc-warning-icon'
+import {PRODUCT_NAME} from '../shared/brand'
 
 export function finishDialogHtml(status: string) {
   const success=status==='succeeded'
@@ -13,7 +14,7 @@ export function finishDialogHtml(status: string) {
 }
 
 export function showLcscFinishDialog(browser: BrowserWindow, status: string) {
-  const popup=new BrowserWindow({parent:browser,modal:true,width:440,height:330,resizable:false,minimizable:false,maximizable:false,title:'蔡工FDE智能交付系统 · 查询结束',show:false,
+  const popup=new BrowserWindow({parent:browser,modal:true,width:440,height:330,resizable:false,minimizable:false,maximizable:false,title:`${PRODUCT_NAME} · 查询结束`,show:false,
     webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}})
   popup.setMenu(null)
   popup.webContents.setWindowOpenHandler(()=>({action:'deny'}))

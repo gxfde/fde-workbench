@@ -8,7 +8,9 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/src/renderer/src/assets/logo-caigong-fde.svg" />
-    <title>蔡工FDE智能交付系统</title>
+    <!-- 红线①：产品名不在此硬编码。首帧占位，main.tsx 载入后经 shared/brand.ts
+         的 PRODUCT_NAME 运行时设置 document.title（改名只改 shared/brand.ts + 服务端 config）。 -->
+    <title>工作台</title>
   </head>
   <body>
     <div id="root"></div>

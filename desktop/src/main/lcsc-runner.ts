@@ -1,6 +1,7 @@
 import { app, BrowserWindow, type Session } from 'electron'
 import {showLcscFinishDialog} from './lcsc-finish-dialog'
 import { pointAt, OBSERVE_BROWSER, type BrowserObservation } from './lcsc-browser-ui'
+import { PRODUCT_NAME } from '../shared/brand'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -65,7 +66,7 @@ export async function executeDesktopLcsc(input: { accessToken: string; body: unk
   }
   try {
     run = await api('/start', body)
-    win = new BrowserWindow({ width: 1180, height: 820, show: body.track, title: '立创查询执行跟踪 · 蔡工FDE智能交付系统',
+    win = new BrowserWindow({ width: 1180, height: 820, show: body.track, title: `立创查询执行跟踪 · ${PRODUCT_NAME}`,
       webPreferences: { session: browserSession, contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false } })
     await step('navigate', '打开立创商城首页', () => go(HOME))
     await step('fill', `输入搜索内容：${body.query}`, async () => {

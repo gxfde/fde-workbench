@@ -6,6 +6,12 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# 红线① 产品名单一来源（服务端侧单点）：界面文案（chat 系统提示词等）从此常量/
+# Settings 取值，不再硬编码。桌面端对应 desktop/src/shared/brand.ts 的 PRODUCT_NAME，
+# 两处口径需同步；`server/.env` 可经 FDE_PRODUCT_NAME 覆写（换名只改这两处）。
+DEFAULT_PRODUCT_NAME = "蔡工FDE智能交付系统"
+
+
 class Settings(BaseSettings):
     env: Literal["development", "test", "production"] = "development"
     api_host: str = "127.0.0.1"
@@ -15,6 +21,10 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(min_length=32)
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+    # 红线① 产品名单一来源（服务端侧单点）：默认值=desktop/src/shared/brand.ts 的
+    # PRODUCT_NAME；改动需双侧同步（桌面 brand.ts + 此处/env 覆写 FDE_PRODUCT_NAME）。
+    # 界面文案（chat 系统提示词等）从此处取值，不再硬编码。
+    fde_product_name: str = DEFAULT_PRODUCT_NAME
     storage_backend: Literal["local", "oss"] = "local"
     local_storage_root: Path = Path(".fde-storage")
     oss_endpoint: str | None = None

@@ -16,14 +16,14 @@
 | c5 | 工作流+本体（workflows/ontology/research） | **已完成 2026-11-05**（CR-014/019/020 P1 当轮修→PR；7 项 P2/P3 登记不修；3 子代理分审+变异验证） | docs/goal-c5-代码审查.md |
 | c6 | 派单/桥/工作台/指标/模块（dispatch/bridge/workbench/metrics/modules） | **已完成 2026-11-05**（纯登记轮：冻结区零命中；CR-027/028 P2 + CR-029/030/031/033/034 P3 登记不修；C6-06 convene-billing 候选驳回） | docs/goal-c6-代码审查.md |
 | c7 | 桌面端（desktop/main/renderer/tests/gui-harness） | **已完成 2026-11-05**（纯登记轮：T-O2b 桌面五类滞后升 P2（CR-032）；CR-035~040 P3 登记；CR-001 复测 5 处全在补记；新-project 同型 sync-hash P3） | docs/goal-c7-代码审查.md |
-| c8 | 基建/脚本/GUI 回归/收口 | 未开始 | — |
+| c8 | 基建/脚本/GUI 回归/收口 | **已完成 2026-11-05**（收口轮：CR-001 产品名双侧单点+静态闸 当轮修、CR-002 conftest 外来戳自愈 根除当轮修、CR-006 DSH 记账面 needs-decision 销号、CR-016 outbox 死信箱 裁决登记；gitleaks 全仓 + 口径回填） | docs/goal-c8-代码审查.md |
 
 ## 发现总表
 
 | 编号 | 级别 | 状态 | 一句话 | file:line | 轮次 |
 |---|---|---|---|---|---|
-| CR-001 | P1 | open | 红线①「改名只改这一个文件」被 5 处硬编码产品名证伪 | 见详情 | c1 |
-| CR-002 | P2 | confirmed | 共享测试库对外来迁移链戳无自愈，worktree 会话互踩→全量 E | server/tests/conftest.py:149 | c1 |
+| CR-001 | P1 | **fixed（c8 PR）** | 红线①「改名只改这一个文件」被 5 处硬编码产品名证伪→双侧单点来源（桌面 `shared/brand.ts` + 服务端 `config.DEFAULT_PRODUCT_NAME`）+ 静态闸防复发 | 见详情 | c1 |
+| CR-002 | P2 | **fixed（c8 PR，根除）** | 共享测试库对外来迁移链戳无自愈，worktree 会话互踩→全量 E ⇒ conftest 加外来戳检测（读 alembic_version 戳 ∉ 本树迁移文件 revision 集→`DROP SCHEMA public CASCADE` 重建再 upgrade head） | server/tests/conftest.py:131 | c1 |
 | CR-003 | P3 | open | V3 审计报告 §20 实施跟踪停更于 T-S1（缺 T-S2/T-W6 注记） | 审计报告 §20 | c1 |
 | CR-004 | P3 | open | AGENTS.md 口径数字滞后于 #88 实测（293/1830/732 vs 295/1831/实测） | AGENTS.md 口径行 | c1 |
 | CR-005 | P1 | fixed | workflow skill 节点消费面缺「public∨owner」与「capabilities⊆allowed」两闸（agent-policy-v1:67 明文两闸） | workflows/executor.py `_dispatch_skill` | c2 |
@@ -66,8 +66,8 @@
 
 ## CR-001 · P1 · 红线①产品名单一来源被证伪（5 处硬编码）
 
-- **状态**：open（c1 纯审查轮，修复随 c2+ 修复轮走 PR）
-- **file:line**：
+- **状态**：confirmed → **fixed（c8 PR）**——c8 收口轮当轮修（本条 P1 是全循环最强待修项）
+- **file:line**（修前）：
   - `desktop/src/main/lcsc-finish-dialog.ts:16` — BrowserWindow `title:'蔡工FDE智能交付系统 · 查询结束'`
   - `desktop/src/main/lcsc-runner.ts:68` — BrowserWindow `title: '立创查询执行跟踪 · 蔡工FDE智能交付系统'`
   - `desktop/src/main/index.ts:212` — BrowserWindow `title: '立创商城 · 蔡工FDE智能交付系统内置浏览器'`
@@ -77,9 +77,15 @@
 - **触发路径**：下一次产品改名，开发者按红线只改 `brand.ts` → 上述 5 处残留旧名：3 个 BrowserWindow 窗口标题、主窗口文档标题（`index.html`）、AI 助手自述口径。该路径已被实证发生一次：#87 更名提交 `9c9d120` 恰恰是**手工逐文件同步**这 5 处（diff 为证），证明「只改这一个文件」的承诺在当前实现下不成立。
 - **驳斥记录**：最强反驳①=「main 进程独立打包，无法 import renderer 的 brand.ts，硬编码是架构约束」——不成立：`brand.ts` 是纯常量模块，vite main bundle 可相对路径引入（或抽 `desktop/src/shared/brand.ts` 双侧引用），`index.html` 可走 vite 插件/define 注入，`chat.py` 可取自 config 常量；#87 同 commit 已在改这 5 个文件，说明改造成本可控却未做。最强反驳②=「LCSC 工具窗口不算产品界面」——不成立：三个标题全部携带产品全名，是用户可见的窗口标题面，红线「任何窗口标题」无豁免子句。
 - **证据等级**：E0（grep 实测输出 + `git show 9c9d120` diff）
-- **建议修法**：抽双侧共享品牌常量模块供 main/renderer 引用；`index.html` 标题由构建注入或运行时 `setTitle` 覆盖；`chat.py` 系统提示词产品名改 config 常量；补一条「brand.ts 之外零产品名硬编码」的静态检查测试防复发。
-- **修复 PR**：—（待修复轮）
-- **备注**：同轮驳回项——`desktop/src/renderer/src/assets/logo-*.svg` 的 `<title>` 与 `styles.css:2` 注释为资产元数据/注释非界面文案，不入账；服务端 `fde_api/__init__.py:1` docstring 非界面文案，不入账。
+- **修复（c8 收口轮当轮修，P1 全循环最强待修项）**：
+  - 桌面单点来源抽 `desktop/src/shared/brand.ts`（main 侧引 `../shared/brand`、renderer 侧引 `../../../shared/brand`，沿用 `shared/contracts.ts` 双侧先例）；删除 `renderer/src/brand.ts`。
+  - 3 处 main BrowserWindow 标题（index.ts:212 / lcsc-runner.ts:68 / lcsc-finish-dialog.ts:16）改模板串引 `PRODUCT_NAME`。
+  - `index.html:11` `<title>` 置中性占位「工作台」，`renderer/src/main.tsx` 渲染入口 `document.title = PRODUCT_NAME` 运行时覆盖（首帧占位不再随改名漂移）。
+  - 服务端 `config.py` 增 `DEFAULT_PRODUCT_NAME` + `Settings.fde_product_name`（`server/.env` 可覆写 `FDE_PRODUCT_NAME`），`chat.py` 系统提示词改 `_product_name()` 取值（有 app context 走 Settings、无则回退模块常量）——不再硬编码产品全名。
+  - 新增静态闸 `desktop/tests/main/brand-hardcode.test.ts`（node 环境扫 `desktop/src` 全 ts/tsx/html，断言除 `shared/brand.ts` 外零产品全名硬编码，2 例）防复发；变异验证=改回任一硬编码→该文件命中静态闸→还原绿。
+  - AGENTS.md 红线① 同步为双侧单点口径；`package.json` name/appId/artifactName 与便携版目录名**不随改**（红线①原文豁免的交付口径）。
+- **修复 PR**：c8 PR（goal-c8-closeout）。
+- **备注**：同轮驳回项——`logo-*.svg` 的 `<title>` 与 `styles.css:2` 注释为资产元数据/注释非界面文案，不入账；服务端 `fde_api/__init__.py:1` docstring 非界面文案，不入账。
 
 ## CR-002 · P2 · 共享测试库对外来迁移链戳无自愈（worktree 会话互踩）
 
@@ -92,8 +98,13 @@
   ③ **2026-11-04 c3 开工预检（第三发）**：`D:/test/fde-wt-t-g1`（分支 `feat/v3-t-g1-gate-evidence-candidates`）携带未提交迁移 `c7e1a9f3b5d8_v5_gate_evidence_candidates.py` 盖戳 → 主工作区 `test_migrations.HEAD_REVISION` 已被 #91 T-O4b 更新至 `d4e6f8a2c7b9`（32 rev），测试库戳 `c7e1a9f3b5d8` 不在本链 → 再次 `DROP SCHEMA public CASCADE` 重建（conftest 自 upgrade + 灌种子）；重建时**零在途 pytest**（C-9 核过）。注：#91 合并后 `d4e6f8a2c7b9` 本身已进主链，第一发的「外来戳」性质随之消失——戳漂移问题不因对方合并而自愈。
 - **驳斥记录**：反驳①=「advisory lock 已解决并行问题」——不成立：锁只串行化会话执行，不解决「库的戳漂到另一条链」；锁释放后戳仍是外来的。反驳②=「等对方跑完就好」——不成立：戳是持久的，对方跑完不会自行恢复。
 - **证据等级**：E0（CommandError 原文；`SELECT version_num FROM alembic_version` = `d4e6f8a2c7b9`；`ls D:/test/fde-wt-t-o4b/server/migrations/versions/` 命中该文件；`git log --all -- "*d4e6f8a2c7b9*"` 零命中=未提交文件）
-- **建议修法（NEEDS-DECISION，改测试基建约定）**：方案 a——conftest 捕获 `CommandError("Can't locate revision")` 时自动 `DROP SCHEMA public CASCADE` 重建后重试 upgrade（附显著 warning 日志）；方案 b——worktree 模板强制 `FDE_TEST_DATABASE_URL` 指向独立库（当前 `D:/test/fde-wt-t-o4b/.env` 实测**无**此覆盖）。
-- **修复 PR**：—（P2 登记不修，除非 c8 基建轮顺手且用户认可方案）
+- **修复（c8 收口轮根除，方案 a 落地）**：`conftest.py::migrated_test_schema` 会话 fixture 改为 `_reconcile_test_schema`：
+  - 读当前戳 `_current_alembic_stamp`（`SELECT version_num FROM alembic_version`，无表=base）；
+  - 判「本树已知 revision 集」`_known_alembic_revisions`（直接解析 `migrations/versions/*.py` 的 `revision = "..."`，不依赖 alembic ScriptDirectory 内部 API 版本差异）；
+  - 三分支：空 schema/base → 直接 `upgrade head`；链内已落戳 → 照旧 `downgrade base`→`upgrade head`（roundtrip 干净）；**外来戳（本树无此 revision）→ `DROP SCHEMA public CASCADE; CREATE SCHEMA public` 重建再 `upgrade head`**——避开 `downgrade base` 报 "Can't locate revision"，测试库自愈。
+  - 变异验证（c8 实跑）：手工 `UPDATE alembic_version SET version_num='999999999999'`（外来戳）→ 跑 `test_migrations.py` 22 例全绿（触发 DROP+重建+upgrade head，库戳回到 `e2c6a8f4d1b3`）；未变异路径（链内戳/空 schema）照旧全绿。零新表零迁移零路由。
+- **备选方案 b（未采纳）**：worktree 模板强制 `FDE_TEST_DATABASE_URL` 指独立库——改动面大（每个 worktree 手工配库），方案 a 已根治单库互踩，b 留作多库隔离的后续基建。
+- **修复 PR**：c8 PR（goal-c8-closeout）。
 
 ## CR-003 · P3 · V3 审计报告 §20 实施跟踪停更于 T-S1
 
@@ -142,6 +153,19 @@
 - **证据等级**：主腿 E0（两侧代码）；DSH 记账腿 **NEEDS-EVIDENCE**（c8 基建轮取证：DSH usage → ai.auditing 回灌链路）。
 - **建议修法**：裁决预算口径后——a) execute_ai_prompt 前置预算检查统一拦截；b) 或明确 skill 节点花费入 ai.auditing 账本并接受 DSH 主路径记账。登记不修，c8 处理。
 - **修复 PR**：—
+
+## CR-006 · P2 · skill 节点 AI 消费绕过双预算闸
+
+- **状态**：confirmed → **needs-decision 销号（c8 收口取证 E0；不动码，交用户裁决预算口径）**
+- **file:line**：`agents/service.py:813`（`agent_monthly_budget` 仅在 agent run start_run 发起前拦截）；`ai/deepseek.py:126`（`ai_monthly_token_budget` 在本地直连路径调用前检查）
+- **c8 取证（E0，销号依据）**：
+  - `ai/deepseek.py` 预算门在 `_budget_session()` 内**仅本地直连腿**（`has_app_context()` 且能取 `SETTINGS.ai_monthly_token_budget`）生效；`control/ai_server_client.execute_ai_prompt`（DSH 主路径）**无** `budget_exceeded`/`record_audit` 前置检查——DSH 成功路径直接 return，`provider_usage` 是否回灌 `ai.auditing` 预算账本=未建链路（`ai_server_client.py` grep `AICallAudit`/`budget`/`record_audit` 零命中）。
+  - `ai/kimi.py` 预算面**零命中**（kimi 连直连腿预算门都没有）。
+  - ⇒ `dsh_enabled=true` 时 `ai_monthly_token_budget` 对该面恒放行；skill 节点经 `execute_ai_prompt` 的花费不入任何预算账本。
+- **驳斥记录**：「skill 是文本变换花费可忽略」——不成立：无上限消费面与预算心智冲突；「agent_monthly_budget 本就是 agent 域闸」——部分成立，缺口收窄为「skill 花费完全不入任何预算账本」。
+- **证据等级**：E0（c4/c8 两轮 grep 全链直读）。
+- **裁决（c8）**：**NEEDS-DECISION 维持，交用户**——预算口径归属（skill/AI 消费是否计入 `ai_monthly_token_budget` 平台账本、DSH 主路径是否补 `ai_call_audits` 记账腿）属产品/计费口径，非代码 bug；c8 不动码，登记为全循环唯一「销号待用户拍板」项。
+- **修复 PR**：—（用户裁决后另轮实装）
 
 ## CR-007 · P2 · 桌面导航重定向断言与 React passive effect 抢跑（CI desktop job 间歇红）
 

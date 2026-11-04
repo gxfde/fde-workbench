@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { App } from "../../src/renderer/src/App"
-import { PRODUCT_NAME } from "../../src/renderer/src/brand"
+import { PRODUCT_NAME } from "../../src/shared/brand"
 import {
   authResult,
   bridge,

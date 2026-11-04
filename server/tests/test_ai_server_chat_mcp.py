@@ -390,6 +390,34 @@ def test_thinking_flag_is_persisted_forwarded_and_idempotent(ai_context):
     assert execute.call_args.kwargs["deep_thinking"] is True
 
 
+def test_system_prompt_uses_configured_product_name(app, settings):
+    """goal-c CR-001：chat 系统提示词产品名取自 `Settings.fde_product_name`
+    （`server/.env` 可覆写 FDE_PRODUCT_NAME），不再硬编码「蔡工FDE智能交付系统」——
+    改产品名只改 config 单点 + 桌面 shared/brand.ts，此处随配置走。"""
+    from fde_api.control.chat import _workbench_system_prompt
+
+    settings_obj = app.config["SETTINGS"]
+    original = settings_obj.fde_product_name
+    try:
+        settings_obj.fde_product_name = "试验工作台产品"
+        with app.app_context():
+            prompt = _workbench_system_prompt()
+        assert "试验工作台产品" in prompt
+        assert "蔡工FDE智能交付系统" not in prompt
+    finally:
+        settings_obj.fde_product_name = original
+
+
+def test_product_name_falls_back_to_default_without_app_context():
+    """goal-c CR-001：无应用上下文（测试直调 / 启动早期）`_product_name` 回退
+    模块常量 `DEFAULT_PRODUCT_NAME`，不抛错、不回空串。"""
+    from fde_api.config import DEFAULT_PRODUCT_NAME
+    from fde_api.control.chat import _product_name
+
+    assert _product_name() == DEFAULT_PRODUCT_NAME
+    assert _product_name() == "蔡工FDE智能交付系统"
+
+
 def test_progress_cannot_be_read_by_another_account(ai_context, client, settings):
     users, _ = ai_context
     turn = create_turn(user=users["alice"], payload=new_message())

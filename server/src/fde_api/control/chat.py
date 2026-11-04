@@ -47,6 +47,28 @@ class AIChatTurn(Base, TimestampMixin):
 chat_blueprint = Blueprint("ai_chat", __name__, url_prefix="/api/v1/ai/chat")
 
 
+def _product_name() -> str:
+    """产品名单一来源（服务端侧）：红线①「任何提交文案/界面文案不硬编码产品名」。
+
+    取值优先走运行中 app 的 `Settings.fde_product_name`（`server/.env` 可覆写
+    FDE_PRODUCT_NAME）；无应用上下文（测试直调 / 启动早期）回退 `Settings` 字段
+    默认值——两处都指向 `config.py` 单点，桌面端对应 `shared/brand.ts`，
+    改名只改这两处不再散点硬编码。
+    """
+    from flask import current_app, has_app_context
+
+    if has_app_context():
+        try:
+            value = current_app.config["SETTINGS"].fde_product_name
+            if value:
+                return value
+        except Exception:  # noqa: BLE001 - 设施异常不阻塞（fail-open 到默认值）
+            pass
+    from fde_api.config import DEFAULT_PRODUCT_NAME
+
+    return DEFAULT_PRODUCT_NAME
+
+
 def _workbench_system_prompt() -> str:
     """Compact grounding for the assistant: it does not see the desktop UI.
 
@@ -56,8 +78,9 @@ def _workbench_system_prompt() -> str:
     help_fetch tool and the bundled manual, not from here.
     """
     from fde_api.control.help_bundle import section_titles
+    product_name = _product_name()
     lines = [
-        "你是蔡工FDE智能交付系统的内置智能助手。你运行在服务端，看不到桌面界面的画面；工作台《操作使用手册》可以通过 "
+        f"你是{product_name}的内置智能助手。你运行在服务端，看不到桌面界面的画面；工作台《操作使用手册》可以通过 "
         "help_fetch 工具读取（桌面端「使用帮助」页与本手册同源；不传参数返回开头与章节目录；"
         "传章节标题关键词定位；next_offset 非空时传 offset 翻页）。",
         "用户问「怎么用/在哪里/点了没反应/流程怎么走」时，先 help_fetch 再作答，并依据手册原文，不凭印象编造。",

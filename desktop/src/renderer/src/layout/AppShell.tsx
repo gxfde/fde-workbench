@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 
 import logo from "../assets/logo-caigong-fde.svg"
-import { BRAND_NAME, BRAND_SUBTITLE } from "../brand"
+import { BRAND_NAME, BRAND_SUBTITLE } from "../../../shared/brand"
 import { useAuth } from "../auth/AuthProvider"
 import { AIServerChat } from "../ai/AIServerChat"
 import { canLeaveDirtyWorkspace } from "../routing/navigationGuard"

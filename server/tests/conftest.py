@@ -146,8 +146,7 @@ def migrated_test_schema(test_settings):
     try:
         config = Config(str(SERVER_ROOT / "alembic.ini"))
         config.attributes["settings"] = test_settings
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
+        _reconcile_test_schema(config, lock_conn)
         # 项目建行的 projects.sop_phase 外键指向 sop_nodes.node_key，生产环境由
         # load_seeds.py 灌入 SOP 快照；测试库迁移后同样灌入，保证同一行为。
         seed_reference_data(test_settings.database_url)
@@ -156,6 +155,65 @@ def migrated_test_schema(test_settings):
         lock_conn.execute(text(f"SELECT pg_advisory_unlock(hashtext('{_SESSION_LOCK_KEY}'))"))
         lock_conn.close()
         lock_engine.dispose()
+
+
+def _current_alembic_stamp(conn) -> str | None:
+    """当前测试库 alembic_version 戳（无表=空 schema→None=base）。"""
+    try:
+        row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).first()
+        return str(row[0]) if row else None
+    except Exception:  # noqa: BLE001 - 表未建（空 schema）即 base
+        return None
+
+
+def _known_alembic_revisions(config) -> set[str]:
+    """本树迁移链全部 revision（从磁盘迁移文件解析 `revision = "..."` / `revision: str = '...'`）。
+
+    外来戳判定基准=本树 `migrations/versions/` 里实际存在的 revision 集合。
+    直接解析文件（不依赖 alembic ScriptDirectory 内部 API——`versions`/
+    `iterate_revisions` 在不同 alembic 版有差异）：任一被其它 worktree 盖成
+    本树没有的 revision 的戳即判为外来。兼容两种声明形态：
+      revision = "d4e6f8a2c7b9"          （无注解）
+      revision: str = 'b4e8c1a7d2f6'     （带类型注解，单引号）
+    """
+    import re
+
+    versions_dir = SERVER_ROOT / "migrations" / "versions"
+    known: set[str] = set()
+    for path in versions_dir.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        # 匹配 `revision` 声明行，兼容：
+        #   revision = "d4e6f8a2c7b9"            （无注解）
+        #   revision: str = 'b4e8c1a7d2f6'       （带类型注解，单引号）
+        # `[:=]` 吃到 `:` 或 `=`，随后可选注解类型名（`str`）+ 分隔 `=`，再取引号内 id。
+        for match in re.findall(r'^revision(?::\s*\w+)?\s*=\s*["\']([a-f0-9]+)["\']', text, flags=re.MULTILINE):
+            known.add(match)
+    return known
+
+
+def _reconcile_test_schema(config, lock_conn) -> None:
+    """迁移到 head；对外来迁移链戳自愈（goal-c CR-002 根治）。
+
+    共享测试库可能被另一个 worktree 会话盖成**本树迁移链之外**的 revision
+    （其未提交/已合并但本地树滞后时）。此时 `downgrade base` 报
+    "Can't locate revision" 使全部 DB 用例 setup 即 E。检测法：读当前戳，若不在
+    本树 `script.versions`（含多 head 各支）内→`DROP SCHEMA public CASCADE` 重建
+    （alembic_version 一并删除）再 `upgrade head`；base（无戳/空戳）直接 upgrade；
+    链内任意已落戳照旧 `downgrade base`→`upgrade head`（roundtrip 干净）。
+    """
+    stamp = _current_alembic_stamp(lock_conn)
+    if not stamp:  # 空 schema 或 base：无外来戳，直接升级到 head
+        command.upgrade(config, "head")
+        return
+    if stamp in _known_alembic_revisions(config):
+        command.downgrade(config, "base")
+        command.upgrade(config, "head")
+        return
+    # 外来戳（本树无此 revision）：重建 schema 再升级，避开 "Can't locate revision"。
+    lock_conn.execute(text("DROP SCHEMA public CASCADE"))
+    lock_conn.execute(text("CREATE SCHEMA public"))
+    lock_conn.commit()
+    command.upgrade(config, "head")
 
 
 def seed_reference_data(database_url: str) -> None:
