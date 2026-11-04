@@ -48,7 +48,9 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-O2：ontology_relation_types 一表（关系/对象类型注册表）
 # V3 T-O3：ontology_change_sets 一表（变更集：批量事务单元 + base 指纹并发防护）
 # V3 T-O2b：对象类型值域开放——三处 subject_type CHECK 枚举→码格式 + 列宽 32→60
-HEAD_REVISION = "d4e6f8a2c7b9"
+# V3 T-O4b：project_research_subjects +merged_into_subject_id（合并指向，复合外键+CHECK）
+# V3 T-G1：gates +evidence_candidates JSON 可空列（任务产物→门禁证据候选，建议性）
+HEAD_REVISION = "c7e1a9f3b5d8"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

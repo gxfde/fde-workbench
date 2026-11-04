@@ -1810,6 +1810,12 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .gate-checklist .gate-check-label { flex: 1 1 auto; }
 .gate-checklist li.claim-claimed .gate-check-label { color: var(--warning); }
 .gate-evidence-uri { flex-basis: 100%; color: var(--muted); font-size: var(--font-caption); word-break: break-all; }
+/* V3 T-G1：任务产物候选区（建议性提示 + 采纳到清单） */
+.gate-candidates { border-top: 1px dashed var(--line-dashed); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.gate-candidates ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gate-candidate-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gate-candidate-row .gate-check-label { flex: 1 1 auto; }
+.gate-candidate-adopt { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .gate-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0; }
 .gate-meta dt { color: var(--muted); font-size: var(--font-caption); }
 .gate-meta dd { margin: 0; font-size: var(--font-label); }

@@ -2,6 +2,26 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-G1：任务产物→门禁证据候选——WB-DEF-8 双口径脱钩的候选闭环（2026-11-04）
+
+### 服务端（迁移 `c7e1a9f3b5d8`：gates +`evidence_candidates` 可空 JSON 列；零新路由）
+
+- **候选挂接**（`gate_service.attach_task_evidence_candidate`）：任务 `status=completed` 且自带门禁挂点（G1–9）+ 证据指针+指纹（T-E3 已把任务证据登记为一等证据行）→ 该产物登记为目标门禁的**候选**（task_id/task_key/task_name、指纹统一小写、提议人、提议时间）。建议性：清单项 claim_status 与门禁状态机一概不动，领用永远由人完成；同 (uri, hash, task_key) 幂等；上限 20 条丢最旧；门禁行未实例化时懒初始化（幂等）。
+- **挂接点**（`task_service.update_project_task`）：乐观锁通过后按 effective 值（变更键 ∪ 既有任务字段）判定——三要素任意更新次序凑齐即挂（完成在后/在前皆可）；stale 版本零副作用。create 路径任务恒 not_started，天然不触发。
+- **采纳即闭环**（`submit_gate_evidence`）：提交指纹命中候选（hash 忽略大小写）即剪除对应候选，面板不再重复提示；未命中者保留。
+- 序列化契约 +`evidence_candidates`（恒输出，旧行 NULL→[] 读时合并）；事件 `gate_evidence_candidate_attached` 挂 gate 行并入门禁事件流（GATE_EVENT_TYPES 扩展）。
+- **workflow 产物候选挂起**：run/节点产物（`output_json`）尚无「指针+sha256」形状，待产物 schema 立项后零改挂入（挂接函数已按通用形设计，收 (uri, hash, 来源粒度)）——偏差已回写 backlog T-G1 实施记录。
+
+### 桌面端（GateBoard）
+
+- 清单项下新增「任务产物候选」区：候选出任务键/名与指针+指纹，选目标清单项一键「采纳到清单」（走既有提交闸，服务端命中剪除）；evidence 态也可补采纳（部分采纳流）；viewer 只读；旧载荷无键兼容、非法形状整板拒渲染（fail-loud）。
+
+### 测试与口径
+
+- 服务端 pytest **1847 收集 = 1841 passed + 6 skipped**（本轮 +6：挂接+契约+事件 / 三缺一不挂 / 次序无关+幂等 / 采纳剪除+claimed / 部分采纳保留 / 拍板零感知；上轮口径差 +3 为 #93 skill 两闸用例）+ 迁移往返（HEAD `c7e1a9f3b5d8`，33 rev）。
+- 桌面端 vitest **755/755**（+3：候选渲染+采纳流 / viewer 只读+旧载荷兼容 / 非法形状拒收）+ typecheck 通过。
+- 口径：105 表不变（列级增量）、路由 296 不变、ENTRIES 94 不变、mypy 基线不变（新代码零新增）。
+
 ## [未发布] — docs：archify 整套架构图入库——五视角交互式证据图 + 复跑回执（2026-11-04，纯文档零代码零迁移）
 
 - 新增 `docs/architecture/archify-diagrams/`：用 archify（v3.0.1）从本仓库真实代码取证生成的**五视角**架构图，每张独立 standalone HTML（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、路径/透镜视图）：

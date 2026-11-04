@@ -22,6 +22,18 @@ interface ChecklistItem {
   content_hash: string | null
 }
 
+// V3 T-G1：任务产物候选（服务端建议性提示；采纳走既有提交闸）。可选键——
+// 旧服务端载荷不带此键时照常渲染（读时兼容）。
+interface GateEvidenceCandidate {
+  source_uri: string
+  content_hash: string
+  task_id: string
+  task_key: string
+  task_name: string
+  proposed_by_user_id: string
+  proposed_at: string
+}
+
 interface GateDto {
   gate_key: string
   status: string
@@ -29,6 +41,7 @@ interface GateDto {
   submitted_at: string | null
   decided_at: string | null
   checklist: ChecklistItem[]
+  evidence_candidates?: GateEvidenceCandidate[]
   gate_name: string | null
   node_key: string | null
   exit_condition: string | null
@@ -70,10 +83,24 @@ const EVENT_LABEL: Record<string, string> = {
   gates_instantiated: "门禁实例化",
   gate_evidence_submitted: "提交证据",
   gate_decided: "门禁拍板",
+  gate_evidence_candidate_attached: "挂候选证据",
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isGateEvidenceCandidate(value: unknown): value is GateEvidenceCandidate {
+  return (
+    isRecord(value) &&
+    typeof value.source_uri === "string" &&
+    typeof value.content_hash === "string" &&
+    typeof value.task_id === "string" &&
+    typeof value.task_key === "string" &&
+    typeof value.task_name === "string" &&
+    typeof value.proposed_by_user_id === "string" &&
+    typeof value.proposed_at === "string"
+  )
 }
 
 function isGatesView(value: unknown): value is GatesView {
@@ -87,7 +114,11 @@ function isGatesView(value: unknown): value is GatesView {
       Array.isArray(gate.checklist) &&
       gate.checklist.every(
         (item) => isRecord(item) && typeof item.label === "string",
-      ),
+      ) &&
+      // V3 T-G1：候选可选键——旧载荷缺省合法；在场则必须形状齐全
+      (gate.evidence_candidates === undefined ||
+        (Array.isArray(gate.evidence_candidates) &&
+          gate.evidence_candidates.every(isGateEvidenceCandidate))),
   )
 }
 
@@ -254,8 +285,13 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
   const [result, setResult] = useState<string>("pass")
   const [g8Decision, setG8Decision] = useState<string>("proceed")
   const [note, setNote] = useState("")
+  // V3 T-G1：候选采纳的目标清单项选择（键 = task_key|uri|hash 复合）
+  const [candidateLabels, setCandidateLabels] = useState<Record<string, string>>({})
 
   const submittable = gate.status === "pending" || gate.status === "failed"
+  // 采纳允许到 evidence 态：部分采纳后再补其余清单项与「重新提交」同一条服务端闸
+  const adoptable = canManage && gate.status !== "passed" && gate.status !== "conditional_pass"
+  const candidates = gate.evidence_candidates ?? []
   const decidable = gate.status === "evidence"
   const isG8 = gate.gate_key === "G8"
   const isG9 = gate.gate_key === "G9"
@@ -302,6 +338,54 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
           </li>
         ))}
       </ul>
+
+      {candidates.length > 0 ? (
+        <section className="gate-candidates" aria-label="任务产物候选">
+          <p className="supporting-copy">
+            任务产物候选（完成任务的指针+指纹，已登记为一等证据；采纳走提交闸标 claimed）
+          </p>
+          <ul>
+            {candidates.map((candidate) => {
+              const key = `${candidate.task_key}|${candidate.source_uri}|${candidate.content_hash}`
+              const chosen = candidateLabels[key] ?? gate.checklist[0]?.label ?? ""
+              return (
+                <li key={key} className="gate-candidate-row">
+                  <span className="gate-check-label">{candidate.task_key} · {candidate.task_name}</span>
+                  <small className="gate-evidence-uri">{candidate.source_uri}</small>
+                  <small className="gate-evidence-uri">{candidate.content_hash}</small>
+                  {adoptable ? (
+                    <span className="gate-candidate-adopt">
+                      <select
+                        aria-label={`候选 ${candidate.task_key} 的目标清单项`}
+                        value={chosen}
+                        onChange={(event) =>
+                          setCandidateLabels((current) => ({ ...current, [key]: event.target.value }))
+                        }
+                      >
+                        {gate.checklist.map((item) => (
+                          <option key={item.label} value={item.label}>{item.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={busy || !chosen}
+                        onClick={() => {
+                          void onSubmitEvidence(gate, [
+                            { label: chosen, source_uri: candidate.source_uri, content_hash: candidate.content_hash },
+                          ])
+                        }}
+                      >
+                        采纳到清单
+                      </button>
+                    </span>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <dl className="gate-meta">
         <div><dt>证据位置</dt><dd>{gate.evidence_location ?? "—"}</dd></div>

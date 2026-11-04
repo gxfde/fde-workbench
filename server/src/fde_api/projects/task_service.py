@@ -458,6 +458,16 @@ def update_project_task(
                 evidence_uri=scalar_values.get("evidence_uri"),
                 evidence_hash=scalar_values.get("evidence_hash"),
             )
+            # V3 T-G1：任务完成且挂点/证据齐备 → 门禁证据候选（建议性，幂等）。
+            # 同样只在乐观锁通过后执行；effective 值 = 变更键取 scalar_values、
+            # 未变更键取更新前 ORM 属性（synchronize_session=False 下后者仍准确）。
+            _maybe_attach_gate_candidate(
+                session,
+                project=project,
+                actor=actor,
+                task=task,
+                scalar_values=scalar_values,
+            )
             record_event(
                 session,
                 actor,
@@ -799,6 +809,55 @@ def _sync_task_evidence(
         origin=f"task:{task_key}",
         captured_from="human",
         created_by_user_id=actor.id,
+    )
+
+
+def _maybe_attach_gate_candidate(
+    session: Session,
+    *,
+    project: Project | None,
+    actor: User,
+    task: ProjectTask,
+    scalar_values: Mapping[str, Any],
+) -> None:
+    """V3 T-G1（WB-DEF-8）：任务完成且门禁挂点+证据指针+指纹齐备 → 证据候选。
+
+    语义（风险登记册「任务完成→证据候选」）：只有 status=completed 的任务才
+    产出候选——in_progress 任务挂了指针只说明「准备中」，产物尚不承诺存在。
+    三要素（gate ∈ G1-9 / evidence_uri / evidence_hash）任一缺省不挂。候选是
+    建议性提示，绝不触碰清单项 claim_status 与门禁状态机（领用走既有提交闸，
+    由人完成）；同指纹幂等（gate_service.attach_task_evidence_candidate）。
+
+    放在乐观锁 rowcount 校验之后：stale 版本不产生候选副作用（同 _sync_task_evidence）。
+    project 形参放 None 只为不新增 mypy 基线错误——调用点 _require_project_view
+    已经挡掉 None，这里 None 时直接跳过（候选是建议性副作用，宁缺毋错）。
+    """
+    effective_gate = scalar_values.get("gate", task.gate)
+    effective_uri = scalar_values.get("evidence_uri", task.evidence_uri)
+    effective_hash = scalar_values.get("evidence_hash", task.evidence_hash)
+    effective_status = scalar_values.get("status", task.status)
+    if (
+        project is None
+        or not effective_gate
+        or not effective_uri
+        or not effective_hash
+        or effective_status != "completed"
+    ):
+        return
+    # 延迟导入：gate_service 与本模块同包，但模块级互导会拉长初始化环
+    # （沿本文件 _sync_task_evidence 延迟导入 evidence.service 的先例）
+    from fde_api.projects.gate_service import attach_task_evidence_candidate
+
+    attach_task_evidence_candidate(
+        session,
+        actor=actor,
+        project=project,
+        task_id=task.id,
+        task_key=task.task_key,
+        task_name=task.name,
+        gate_key=effective_gate,
+        source_uri=effective_uri,
+        content_hash=effective_hash,
     )
 
 

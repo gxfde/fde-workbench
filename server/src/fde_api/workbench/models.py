@@ -613,6 +613,11 @@ class Gate(Base, TimestampMixin, VersionedMixin):
     is_delivery_party: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # V3 T-G1（WB-DEF-8）：任务产物→门禁证据候选。列表项
+    # {source_uri, content_hash, task_key, task_name, task_id, proposed_by_user_id,
+    # proposed_at}；候选只是建议（advisory）——claim_status 与门禁状态一概不动，
+    # 人工经既有提交闸采纳后按指纹剪除。旧行 NULL → 读时合并 []（零破坏）。
+    evidence_candidates: Mapped[list[Any] | None] = mapped_column(JSON)
 
     project: Mapped[Project] = relationship(back_populates="gates")
 

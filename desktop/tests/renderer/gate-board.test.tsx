@@ -245,3 +245,82 @@ it("J2: summary badges follow the actual gate statuses, including unknown ones",
   // 未知状态照样出徽标（显示原值），不被硬编码五态吞掉
   expect(screen.getByText(/brand_new_state 1/)).toBeVisible()
 })
+
+const candidateEntry = {
+  source_uri: "fdeops://engagements/demo/.fde/gates/G3/report.md",
+  content_hash: "c".repeat(64),
+  task_id: "task-1",
+  task_key: "diagnosis_report",
+  task_name: "产出诊断报告",
+  proposed_by_user_id: "actor-1",
+  proposed_at: "2026-11-04T08:00:00+00:00",
+}
+
+it("T-G1: renders task evidence candidates and adopts via the existing submit gate", async () => {
+  const user = userEvent.setup()
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [{ ...base[0], evidence_candidates: [candidateEntry] }],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  const section = await screen.findByRole("region", { name: "任务产物候选" })
+  expect(section).toBeVisible()
+  expect(screen.getByText(/diagnosis_report · 产出诊断报告/)).toBeVisible()
+
+  // 默认选中第一个清单项；改选第二个再采纳——提交体走既有 evidence 闸
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "候选 diagnosis_report 的目标清单项" }),
+    "现状与痛点清单",
+  )
+  await user.click(screen.getByRole("button", { name: "采纳到清单" }))
+
+  await waitFor(() => expect(evidenceRequestBodies()).toHaveLength(1))
+  expect(evidenceRequestBodies()[0]).toEqual({
+    items: [
+      {
+        label: "现状与痛点清单",
+        source_uri: candidateEntry.source_uri,
+        content_hash: candidateEntry.content_hash,
+      },
+    ],
+  })
+  // 采纳成功后回读面板
+  await waitFor(() => {
+    expect(callCount(gatesPath(), "GET")).toBeGreaterThanOrEqual(2)
+  })
+})
+
+it("T-G1: candidates stay read-only for viewers and legacy payloads without the key still render", async () => {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({ gates: [{ ...base[0], evidence_candidates: [candidateEntry] }] }),
+  )
+  const { unmount } = render(<GateBoard projectId="gate-project" canManage={false} />)
+  expect(await screen.findByRole("region", { name: "任务产物候选" })).toBeVisible()
+  expect(screen.queryByRole("button", { name: "采纳到清单" })).not.toBeInTheDocument()
+  unmount()
+  cleanup()
+
+  // 旧服务端载荷不带 evidence_candidates 键 → 照常渲染、无候选区
+  mocks.apiRequest.mockResolvedValue(gateView())
+  render(<GateBoard projectId="gate-project" canManage />)
+  expect(await screen.findByRole("heading", { name: /G3 ·/ })).toBeVisible()
+  expect(screen.queryByRole("region", { name: "任务产物候选" })).not.toBeInTheDocument()
+})
+
+it("T-G1: malformed candidate shapes fail validation instead of rendering half a board", async () => {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [{ ...base[0], evidence_candidates: [{ source_uri: 123 }] }],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  const alert = await screen.findByRole("alert")
+  expect(alert).toHaveTextContent("门禁数据加载失败，请稍后重试。")
+  expect(screen.queryByRole("region", { name: "任务产物候选" })).not.toBeInTheDocument()
+})

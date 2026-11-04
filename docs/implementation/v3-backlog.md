@@ -268,9 +268,18 @@
 
 ## P2（交付编译与质量闭环）
 
-### T-G1 任务/workflow 产物→门禁证据候选（域 4，WB-DEF-8）
-- 前置：T-E1/E2。修改文件：task_service、gate_service（attach_task_evidence_candidate；claim_status=None）；桌面 GateBoard 呈现候选与"采纳"按钮（走既有 evidence 提交闸）。
-- 测试：候选出现/人工采纳/decide 闸不回归。复杂度：**M**。
+### T-G1 任务/workflow 产物→门禁证据候选（域 4，WB-DEF-8）— **DONE（2026-11-04，分支 feat/v3-t-g1-gate-evidence-candidates）**
+- 目标：审计 WB-DEF-8「任务级证据与门禁清单双口径脱钩」的候选闭环——任务完成且自带挂点与指针+指纹时，产物以**候选**身份出现在门禁面板，人工采纳走既有提交闸；绝不自动领用（claim_status=None 语义：候选不动领用态）。
+- 原计划修改文件：task_service、gate_service；桌面 GateBoard。实际一致。
+- **实施记录（2026-11-04）**：
+  - **挂接语义（风险登记册「任务完成→证据候选」）**：`gate_service.attach_task_evidence_candidate`——只有 `status=completed` 的任务才产出候选（in_progress 挂指针只是「准备中」，产物尚不承诺存在）；三要素 gate ∈ G1-9 / evidence_uri / evidence_hash 缺一不挂；候选条目 {source_uri, content_hash（统一小写）, task_id, task_key, task_name, proposed_by_user_id, proposed_at}；同 (uri, hash, task_key) 幂等；上限 20 条丢最旧；门禁行未实例化时 `ensure_project_gates` 懒初始化后再挂。候选是建议性提示，**清单项 claim_status 与门禁状态机一概不动**。
+  - **挂接点**：`task_service.update_project_task` 乐观锁 rowcount 通过后（stale 零副作用，同 T-E3 `_sync_task_evidence` 位置），按 effective 值（变更键取 scalar_values ∪ 未变更键取 ORM 属性——`synchronize_session=False` 下后者仍准确）判定，三要素任意更新次序凑齐即挂（完成在后/在前皆可）。create 路径任务恒 `not_started`，天然不触发。project 形参放 `Project | None`、None 即跳过——只为不新增 mypy 基线错误（调用点 `_require_project_view` 已挡 None）。延迟导入 gate_service（同包跨模块，沿 T-E3 延迟导入先例防初始化环）。
+  - **采纳即闭环**：`submit_gate_evidence` 提交指纹命中候选（uri 相等且 hash 忽略大小写）即剪除对应候选；未命中者保留——采纳是候选唯一剪除入口。**零新路由**：候选随 `_serialize_gate` 输出（恒输出 `evidence_candidates`，旧行 NULL→[] 读时合并），采纳复用既有 `POST /gates/{key}/evidence`。事件 `gate_evidence_candidate_attached` 挂 gate 行，`GATE_EVENT_TYPES` 扩展并入门禁事件流。
+  - **桌面 GateBoard**：清单项下「任务产物候选」区——候选出任务键/名+指针+指纹，下拉选目标清单项一键「采纳到清单」（走既有提交闸）；evidence 态也可补采纳（部分采纳流，`adoptable = 非 passed/conditional_pass`）；viewer 只读；`isGatesView` 可选键校验（旧载荷缺键合法，非法形状整板拒渲染 fail-loud）。
+  - **DB**：迁移 `c7e1a9f3b5d8`（32→**33 rev**）——gates +`evidence_candidates` 可空 JSON 列，含 downgrade；纯增量零数据改写，候选是建议性数据、downgrade 丢弃属回退应有语义。
+  - **实现偏差回写（原计划「任务/workflow 产物」）**：**workflow 产物候选挂起**——`workflow_node_runs.output_json` 是任意 JSON、无「source_uri + sha256」形状，强行把任意产物当证据会踩红线（门禁证据只收指针+指纹）；挂接函数已按通用形设计（收 uri/hash/来源粒度），待产物 schema 立项后零改挂入。本轮交付任务→候选闭环（任务侧证据形状 T-E3 已定且校验齐备）。
+  - **测试**：NEW `server/tests/test_gate_evidence_candidates.py` 6 例（挂接+序列化契约+事件载荷 / 三缺一（未完成·缺挂点·缺指纹）不挂 / 次序无关+同指纹幂等（候选与事件都不重复）/ 采纳剪除+清单项 claimed+evidence_id（hash 大写提交验证忽略大小写）/ 部分采纳保留他者 / 拍板零感知（候选在场过门照常、未采纳候选不剪））；`test_migrations` HEAD `c7e1a9f3b5d8`。桌面 `gate-board.test.tsx` +3（渲染+采纳流走提交闸 / viewer 只读+旧载荷无键兼容 / 非法形状拒收）。
+  - **口径**：105 表不变（列级增量）、迁移头 `d4e6f8a2c7b9`→**`c7e1a9f3b5d8`**（**33 rev**）、路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1847 收集 = 1841 passed + 6 skipped**（本轮 +6；相对上轮报口径 1832 的 +9 中 +3 为 #93 skill 两闸用例）、vitest **755**（+3）、mypy 基线不变（新代码零新增）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`。
 
 ### T-G2 template_hash 漂移呈现（WB-DEF-5）
 - 修改文件：gate_service._serialize_gate（比对存储值 vs 当前 gates.json sha256，响应加 template_outdated: bool）。测试：test_gates_api。复杂度：**S**。

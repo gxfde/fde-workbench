@@ -279,6 +279,19 @@ def submit_gate_evidence(
             gate.submitted_at = datetime.now(timezone.utc)
             gate.evidence_uri = items[0]["source_uri"]
             gate.evidence_hash = items[0]["content_hash"]
+            # V3 T-G1：采纳即闭环——提交指纹命中候选（uri 相等且 hash 忽略大小
+            # 写相等）则剪除对应候选，面板不再重复提示；未命中的候选原样保留。
+            submitted_uris = {item["source_uri"] for item in items}
+            submitted_hashes = {item["content_hash"].lower() for item in items}
+            candidates = [
+                row
+                for row in (gate.evidence_candidates or [])
+                if not (
+                    row.get("source_uri") in submitted_uris
+                    and str(row.get("content_hash") or "").lower() in submitted_hashes
+                )
+            ]
+            gate.evidence_candidates = candidates if candidates else None
             # P0-5 门禁验收分离（设计 §9.4）：提交人即执行人，落库供 decide_gate
             # 校验「拍板人 ≠ 执行人」。is_delivery_party 标记证据由交付方（外部
             # FDE，§9.3 接单后以 ProjectMember(role='member') 入场）执行；管理位
@@ -659,6 +672,8 @@ def _serialize_gate(
             }
             for item in gate.evidence_checklist
         ],
+        # V3 T-G1：任务产物候选（建议性）；旧行 NULL → []（读时合并，恒输出）
+        "evidence_candidates": list(gate.evidence_candidates or []),
         # 模板快照（gates.json，A4 出处指针在模板 source_uri/source_sha256）
         "gate_name": template.get("gate_name") if template else None,
         "node_key": template.get("node_key") if template else None,
@@ -674,11 +689,88 @@ def _serialize_gate(
     }
 
 
-GATE_EVENT_TYPES = ("gates_instantiated", "gate_evidence_submitted", "gate_decided")
+GATE_EVENT_TYPES = (
+    "gates_instantiated",
+    "gate_evidence_submitted",
+    "gate_decided",
+    # V3 T-G1：候选挂接事件（挂 gate 行目标），随事件留痕入 feed
+    "gate_evidence_candidate_attached",
+)
+
+# 候选上限：任务证据指纹去重后仍可能被反复改动刷出长尾，超过即丢最旧候选
+# （建议性数据，最旧的参考价值最低）。
+MAX_EVIDENCE_CANDIDATES = 20
+
+
+def attach_task_evidence_candidate(
+    session: Session,
+    *,
+    actor: User,
+    project: Project,
+    task_id: str,
+    task_key: str,
+    task_name: str,
+    gate_key: str,
+    source_uri: str,
+    content_hash: str,
+) -> bool:
+    """V3 T-G1（WB-DEF-8）：任务产物→门禁证据候选（建议性，claim_status 不动）。
+
+    任务完成且自带门禁挂点 + 证据指针+指纹时由 task_service 调用；候选只提示
+    「这份产物可能可作为本门禁清单项证据」，领用永远经既有提交闸由人完成
+    （submit_gate_evidence 命中指纹即剪除候选）。同 (uri, hash, task_key) 幂等
+    不重复挂；门禁行尚未实例化时懒初始化（ensure_project_gates，幂等）。
+
+    Returns: True = 新挂了一条候选；False = 去重跳过或门禁行不存在。
+    """
+    ensure_project_gates(session, project)
+    gate = session.scalar(
+        select(Gate).where(Gate.project_id == project.id, Gate.gate_key == gate_key)
+    )
+    if gate is None:
+        return False
+    fingerprint_hash = content_hash.lower()
+    candidates = list(gate.evidence_candidates or [])
+    for row in candidates:
+        if (
+            row.get("source_uri") == source_uri
+            and str(row.get("content_hash") or "").lower() == fingerprint_hash
+            and row.get("task_key") == task_key
+        ):
+            return False
+    candidates.append(
+        {
+            "source_uri": source_uri,
+            "content_hash": fingerprint_hash,
+            "task_id": task_id,
+            "task_key": task_key,
+            "task_name": task_name,
+            "proposed_by_user_id": actor.id,
+            "proposed_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    if len(candidates) > MAX_EVIDENCE_CANDIDATES:
+        candidates = candidates[-MAX_EVIDENCE_CANDIDATES:]
+    gate.evidence_candidates = candidates
+    record_event(
+        session,
+        actor,
+        "gate_evidence_candidate_attached",
+        gate,
+        {
+            "gate_key": gate.gate_key,
+            "task_key": task_key,
+            "task_name": task_name,
+            "source_uri": source_uri,
+            "content_hash": fingerprint_hash,
+            "candidates_count": len(candidates),
+        },
+    )
+    return True
 
 
 def _recent_gate_events(session: Session, project_id: str) -> list[dict[str, Any]]:
-    # gates_instantiated 挂在 project 目标上，另两类挂在 gate 行上——按事件类型过滤
+    # gates_instantiated 挂在 project 目标上，其余三类挂在 gate 行上——按事件类型过滤
     events = list(
         session.scalars(
             select(OperationEvent)
