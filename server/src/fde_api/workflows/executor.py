@@ -323,8 +323,11 @@ def cancel_run(*, actor: User, project_id: str, run_id: str) -> dict[str, Any]:
 
 
 def resume_run(*, actor: User, project_id: str, run_id: str) -> dict[str, Any]:
-    """恢复失败运行（can_manage）：failed/skipped 节点放回 pending（attempt 归零，
-    计数按每轮恢复重置），已完成节点原样复用；重新投递 workflow.run。"""
+    """恢复失败运行（can_manage）：failed/skipped 节点放回 pending（attempt
+    归零——agent 节点除外，保留 attempt 使分派开新一代际，幂等键
+    `wfnode-{行id}:{attempt}` 不复用失败终态；agents V8 对失败终态拒同键
+    重跑，归零会让 agent 节点每次 resume 都撞确定性 409），计数按每轮恢复
+    重置；已完成节点原样复用；重新投递 workflow.run。"""
     with db.session() as session, session.begin():
         run, _project = _load_run(session, actor, project_id, run_id, manage=True)
         if run.status != "failed":
@@ -338,7 +341,15 @@ def resume_run(*, actor: User, project_id: str, run_id: str) -> dict[str, Any]:
         for node in nodes:
             if node.status in ("failed", "skipped"):
                 node.status = "pending"
-                node.attempt = 0
+                # goal-c CR-019（executor 子代理 F2）：agent 节点保留 attempt——
+                # 幂等键 = wfnode-{行id}:{attempt}，agents V8 对失败终态拒同键重跑。
+                # 归零 attempt 会让每次 resume 都撞回 `:1` 的 failed 终态 → 确定性
+                # 409，agent 节点永远救不活；保留 attempt 使 _begin_node +1 开新
+                # 代际（兑现 docstring「resume_run / retryable 崩溃恢复各开新代际」）。
+                # 其余节点（call/skill/human）attempt 仅用于退避计数与「每轮恢复
+                # 重置」语义，照旧归零。
+                if node.node_type != "agent":
+                    node.attempt = 0
                 node.error = None
                 node.started_at = None
                 node.finished_at = None
@@ -868,6 +879,16 @@ def _dispatch_call(
         )
     if status == "running":
         raise _NodeFailure("action_in_flight", "同名操作正在执行，稍后重试。", retryable=True)
+    # goal-c CR-020（executor 子代理 F3）：写类节点结果未确认（started 无 finished
+    # → uncertain；被 cancelled）不得折叠为 succeeded——FV-F1「断链不静默 done」
+    # 红线；结果未知按失败断链，同键去重在 api_actions 层兜底不二次外呼。
+    if status in ("uncertain", "cancelled"):
+        raise _NodeFailure(
+            "action_not_confirmed",
+            f"写操作已开始但结果未确认（status={status}，action_id={result.get('action_id')}），"
+            "不自动重试；请人工核实目标状态后处置。",
+            retryable=False,
+        )
     http_status = result.get("http_status")
     if isinstance(http_status, int) and http_status >= 400:
         raise _NodeFailure(
@@ -1057,8 +1078,13 @@ def _dispatch_human_approval(
             raise _NodeFailure("run_not_found", "运行不存在。", retryable=False)
         if node.idempotency_key:
             existing = session.get(AutomationApproval, node.idempotency_key)
-            if existing is not None:
-                return existing.id  # 崩溃恢复：审批已建，直接复用
+            if existing is not None and existing.status == "pending":
+                return existing.id  # 崩溃恢复：审批已建且仍在等拍板，直接复用
+            # goal-c CR-014：键所指的审批已终态（reject/expired/approved/executed）
+            # ——resume 是全新分派而非崩溃恢复，不能把节点重新挂到终态审批上
+            # （否则 waiting_approval 无人可拍板，run 唯一出口只剩 cancel）。
+            # 清掉过期键，落到下方按 workflow_node_run_id 复用 pending / 或新建。
+            node.idempotency_key = None
         pending = session.scalar(
             select(AutomationApproval).where(
                 AutomationApproval.workflow_node_run_id == node.id,

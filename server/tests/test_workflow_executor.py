@@ -1452,3 +1452,161 @@ def test_agent_node_run_failure_fails_node_without_workflow_retry(
     node = _node_map(db_session, run.id)["classify"]
     assert node.status == "failed" and node.attempt == 1
     assert (node.error or "").startswith("agent_run_failed:")
+
+
+# ---------------------------------------------------------------------------
+# goal-c c5：P1 三修回归（CR-014 stale 审批键 / CR-019 agent 恢复代际 /
+# CR-020 写类节点结果未确认不折叠 succeeded）
+# ---------------------------------------------------------------------------
+
+
+def test_human_approval_rejected_resume_creates_fresh_pending(
+    db_session, settings, monkeypatch
+):
+    """goal-c CR-014：resume 是全新分派——旧幂等键所指的审批已 rejected（终态）时
+    不得复用（否则节点重新挂到终态审批，run 永久卡 waiting_approval，唯一出口
+    只剩 cancel）：清键后按节点行查 pending / 或新建；随后人工拍板收敛 succeeded。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    definition = _approval_definition(db_session, leader, project)
+    run, _ = _start(db_session, leader, project, definition)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    node, approval = _waiting_approval(db_session, run.id)
+    key_before = node.idempotency_key
+    assert key_before == approval.id
+
+    decide_automation_approval(
+        user=leader,
+        approval_id=approval.id,
+        decision_value="reject",
+        password="",
+        reason="第一轮不同意",
+    )
+    run_workflow_run(run.id)  # 断链：approve failed + ship skipped → run failed
+    db_session.expire_all()
+    stale_key = _node_map(db_session, run.id)["approve"].idempotency_key
+    assert stale_key == key_before  # 终态审批键留在节点上——resume 必须能挣脱它
+
+    resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    new_node = _node_map(db_session, run.id)["approve"]
+    new_approval = db_session.scalar(
+        select(AutomationApproval).where(
+            AutomationApproval.workflow_node_run_id == new_node.id,
+            AutomationApproval.status == "pending",
+        )
+    )
+    assert new_approval is not None and new_approval.id != key_before
+    assert new_node.status == "waiting" and new_node.idempotency_key == new_approval.id
+
+    decide_automation_approval(
+        user=leader,
+        approval_id=new_approval.id,
+        decision_value="approve",
+        password=INITIAL_PASSWORD,
+        reason="改主意了",
+    )
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["approve"].status == "succeeded"
+    assert nodes["ship"].status == "succeeded" and nodes["ship"].input_snapshot == {"note": "approved"}
+
+
+def test_agent_node_resume_preserves_attempt_new_generation(
+    db_session, d4_settings, d4_app
+):
+    """goal-c CR-019：agent 节点幂等键 = wfnode-{行id}:{attempt}，agents V8 对失败
+    终态拒同键重跑——resume 必须保留 attempt（_begin_node +1 开新代际），归零会
+    每次撞回 `:1` 的 failed 终态 → 确定性 409，agent 节点永远救不活。
+    本例：first run 失败终态（exit 1）→ resume 代际 2 成功收敛。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    agent = seed_agent(
+        db_session,
+        d4_settings,
+        capability="project.read",
+        allowed_tools=(),
+        credential_ref=f"zcode-{uuid4().hex[:6]}",
+    )
+    prime_run(d4_app, events=ScriptedEvents([[{"type": "done", "exit_code": 1}]]))
+    definition = _make_definition(
+        db_session, leader, project, {"key": "classify", "type": "agent", "ref": agent.id}, publish=True
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    with d4_app.app_context():
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    node = _node_map(db_session, run.id)["classify"]
+    assert node.status == "failed" and node.attempt == 1
+
+    prime_run(d4_app)  # 事件工厂每 run 新克隆：本轮脚本=done(exit 0)
+    resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    with d4_app.app_context():
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    node = _node_map(db_session, run.id)["classify"]
+    assert node.status == "succeeded" and node.attempt == 2  # 新一代际，不归零
+    assert node.error is None
+    agent_run = db_session.get(AgentRun, node.output_json["agent_run_id"])
+    assert agent_run.idempotency_key == f"wfnode-{node.id}:2"  # 新代际键≠:1 失败终态
+
+
+def test_write_call_node_uncertain_and_cancelled_fail_not_succeeded(
+    db_session, settings, monkeypatch
+):
+    """goal-c CR-020：写类节点结果未确认（started 无 finished→uncertain；被
+    取消→cancelled）不得折叠为 succeeded——FV-F1「断链不静默 done」红线。
+    action_not_confirmed 非可重试（api_actions 同键去重兜底不二次外呼），故
+    max_retries 不叠加自动重试：uncertain 当轮 1 次外呼即断链；cancelled 分支
+    经 resume 重派才摸到（call 节点 resume attempt 归零→_begin_node +1）。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    calls: list = []
+
+    def fake_uncertain_then_cancelled(**kwargs):
+        calls.append(kwargs["operation"])
+        if len(calls) == 1:
+            return {"http_status": 200, "result": {}, "status": "uncertain", "action_id": "act-1"}
+        return {"http_status": 200, "result": {}, "status": "cancelled", "action_id": "act-1"}
+
+    monkeypatch.setattr("fde_api.control.api_actions.execute_api", fake_uncertain_then_cancelled)
+    _zero_backoff(monkeypatch)
+    definition = _make_definition(
+        db_session, leader, project, _node("create", ref=WRITE_REF, max_retries=2), publish=True
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    # 第一轮：uncertain（started 无 finished）→ 节点 failed，**不是** succeeded；
+    # 非可重试 ⇒ max_retries=2 不叠加，当轮仅 1 次外呼。
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    node = _node_map(db_session, run.id)["create"]
+    assert node.status == "failed" and node.attempt == 1
+    assert (node.error or "").startswith("action_not_confirmed:")
+    assert "uncertain" in node.error
+    assert len(calls) == 1
+
+    # 第二轮：resume 重派 → call 节点 attempt 归零重开，fake 走到 cancelled 分支
+    # → 仍 failed（不是 succeeded），坐实 cancelled 也不折叠。
+    resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    node = _node_map(db_session, run.id)["create"]
+    assert node.status == "failed"
+    assert (node.error or "").startswith("action_not_confirmed:")
+    assert "cancelled" in node.error
+    assert len(calls) == 2
