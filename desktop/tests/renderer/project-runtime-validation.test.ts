@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   isProjectResearchFormDto,
   isResearchImportResultDto,
+  isResearchMergeResultDto,
   isResearchSubjectDto,
   parseResearchImportErrorDetails,
 } from "../../src/renderer/src/research/projectRuntimeValidation"
@@ -170,6 +171,31 @@ describe("project research response guards", () => {
         matched_subject: { id: "sub-1", tracking_code: null },
       }],
     })).toBe(false)
+  })
+
+  it("requires exact merge-result shape with valid subject and summary values", () => {
+    // V3 T-O4b：合并响应新契约——subject=并入方序列化，merge_summary 值为计数/画像字符串/null
+    const summary: Record<string, unknown> = {
+      forms_moved: 1,
+      forms_dropped: 0,
+      links_repointed: 2,
+      links_dropped: 0,
+      children_reparented: 0,
+      merged_rows_repointed: 0,
+      memo_appended: 1,
+      personal_memos_moved: 0,
+      personal_memos_appended: 0,
+      personal_memos_dropped: 0,
+      opportunity_profile: null,
+    }
+    expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: summary })).toBe(true)
+    expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: { ...summary, opportunity_profile: "moved" } })).toBe(true)
+    expect(isResearchMergeResultDto({ subject: validSubject() })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: summary, project_version: 4 })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: { ...validSubject(), subject_type: "nonsense" }, merge_summary: summary })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: { extra: true } })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: "moved" })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: "subject-1", merge_summary: summary })).toBe(false)
   })
 
   it("counts Unicode code points when enforcing text answer lengths", () => {

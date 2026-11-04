@@ -298,6 +298,7 @@ interface RenderResearchOptions {
   patchError?: { code: string; status?: number }
   opportunityPatchError?: { code: string; status?: number }
   documentCreateError?: { code: string; status?: number }
+  mergeError?: { code: string; status?: number }
   malformedForms?: boolean
   patchErrorOnce?: boolean
   createStaleOnce?: boolean
@@ -594,6 +595,23 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
       }
       forms = [...forms, created]
       return apiOk(created, 201)
+    }
+    if (path.includes("/research/subjects/") && path.endsWith("/merge") && request.method === "POST") {
+      // V3 T-O4b：合并原语——source 停用归档 + merged_into 指向 target，双方 version+1
+      const sourceId = path.split("/").at(-2)!
+      if (options.mergeError) return apiError(options.mergeError.code, options.mergeError.status ?? 409)
+      const body = request.body as { version: number; target_subject_id: string }
+      const source = subjects.find((subject) => subject.id === sourceId)!
+      const target = subjects.find((subject) => subject.id === body.target_subject_id)!
+      if (body.version !== source.version) return apiError("stale_version", 409)
+      subjects = subjects.map((subject) => subject.id === sourceId
+        ? { ...subject, status: "archived" as const, version: subject.version + 1, merged_into_subject_id: target.id }
+        : { ...subject, version: subject.version + 1 })
+      currentProject = { ...currentProject, version: currentProject.version + 1 }
+      return apiOk({
+        subject: subjects.find((subject) => subject.id === target.id)!,
+        merge_summary: { forms_moved: 1, forms_dropped: 0, links_repointed: 0, links_dropped: 0, children_reparented: 0, merged_rows_repointed: 0, memo_appended: 0, personal_memos_moved: 0, personal_memos_appended: 0, personal_memos_dropped: 0, opportunity_profile: null },
+      })
     }
     if (path.includes("/research/subjects/") && request.method === "DELETE") {
       const id = path.split("/").at(-1)
@@ -1330,6 +1348,51 @@ describe("project research workspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "停用" }))
     await waitFor(() => expect(screen.queryByRole("treeitem", { name: /销售部/ })).not.toBeInTheDocument())
     expect(mutationBodies(apiRequest, `/research/subjects/${departmentSubject.id}`, "DELETE")).toContainEqual({ version: 1 })
+  })
+
+  it("merges a department into a sibling and links the archived row back", async () => {
+    // V3 T-O4b 桌面面：树合并入口 → 同类型目标挑选 → 密码确认 → 合并归档 + 「已并入」回链
+    const apiRequest = renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject, otherDepartment],
+      initialForms: [formFor(departmentSubject.id)],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
+    await user.click(screen.getByRole("button", { name: "合并销售部" }))
+    const dialog = await screen.findByRole("dialog", { name: "合并部门" })
+    await user.selectOptions(within(dialog).getByLabelText("并入目标"), otherDepartment.id)
+    await user.click(within(dialog).getByRole("button", { name: "确认合并" }))
+    const confirmDialog = await screen.findByRole("dialog", { name: "合并调研对象" })
+    await user.type(within(confirmDialog).getByLabelText("当前账号密码"), "AdminPass!123")
+    await user.click(within(confirmDialog).getByRole("button", { name: "合并" }))
+
+    expect(mutationBodies(apiRequest, `/research/subjects/${departmentSubject.id}/merge`, "POST")).toEqual([{ version: 1, target_subject_id: otherDepartment.id }])
+    expect(await screen.findByText(/已将“销售部”并入“交付部”/)).toBeVisible()
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: /销售部/ })).not.toBeInTheDocument())
+    await user.click(await screen.findByRole("button", { name: "已归档（1）" }))
+    expect(screen.getByText("销售部")).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "已并入 交付部" }))
+    expect(screen.getByRole("treeitem", { name: /交付部/ })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("maps merge conflicts to an actionable error", async () => {
+    renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject, otherDepartment],
+      mergeError: { code: "merge_subject_type_mismatch", status: 409 },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
+    await user.click(screen.getByRole("button", { name: "合并销售部" }))
+    const dialog = await screen.findByRole("dialog", { name: "合并部门" })
+    await user.selectOptions(within(dialog).getByLabelText("并入目标"), otherDepartment.id)
+    await user.click(within(dialog).getByRole("button", { name: "确认合并" }))
+    const confirmDialog = await screen.findByRole("dialog", { name: "合并调研对象" })
+    await user.type(within(confirmDialog).getByLabelText("当前账号密码"), "AdminPass!123")
+    await user.click(within(confirmDialog).getByRole("button", { name: "合并" }))
+
+    expect(await screen.findByText(/只能把对象并入同类型的调研对象/)).toBeVisible()
   })
 
   it("creates a project-scoped research form bound to a selected node (no template)", async () => {

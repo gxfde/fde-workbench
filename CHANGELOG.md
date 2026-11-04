@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-O4b 桌面合并 UI：subject 合并原语上 UI + 归档行回链（2026-11-04）
+
+### 桌面端（服务端零改动：零迁移零路由、无需 rebuild 镜像）
+
+- **对象树合并入口**：操作栏新增「合并」（选中非根对象且可填写时出现，与既有「停用」同位）→ 对话框内挑选**同类型启用对象**为目标 → 密码确认（危险确认对话框）→ 调用 `POST /research/subjects/{id}/merge`（#91 `dfe91b3` 服务端原语的唯一 UI 面；合并仍有意不进 api_catalog）。
+- **归档行「已并入 X」回链**：树底新增「已归档（N）」折叠组——归档行不可选中、不进 treeitem 键盘导航；合并让位行显示「已并入 X」回链（目标仍启用=可点击跳选，已停用=纯文本）；普通停用行也在此一并可见。
+- **契约同步**：`ResearchMergeResultDto` + `isResearchMergeResultDto`（subject=并入方序列化 + `merge_summary` 六面搬迁明细，值计数/画像字符串/null）；`subjectMutationError` 补 4 个合并错误码映射（根对象/类型不一致/双方须启用）。
+- **实施偏差（记录在案）**：①「导入结果 merge_candidates 卡片一键合并」前置缺失——桌面端调研数据导入 UI 尚未立项（`imports/preview|commit` 端点与桌面 DTO 校验器在、零 UI 消费），留待「调研数据导入 UI」独立轮；②「对象树右键合并」以操作栏行内「合并」按钮替代，避免引入整套右键菜单系统。
+
+### 测试与口径
+
+- vitest **761**（+6：树 3 / 工作区 2 / 契约 1；串行口径 `--no-file-parallelism`；基线 `8340e89` 实测 755）；`npm run typecheck` 绿。
+- 服务端零改动：pytest 1863 收集（1857 passed + 6 skipped）不变、105 表/迁移头 `c7e1a9f3b5d8`（33 rev）/业务路由 296/ENTRIES 94/mypy 279 全部不变，**无需 rebuild 三镜像**；桌面改动交付=便携版重打包（r13）+ asar 字节验证。
+
 ## [未发布] — V3 实施 T-G2：template_hash 漂移呈现——门禁序列化比对冻结哈希 vs 现行 gates.json（2026-11-04）
 
 ### 服务端（零迁移零路由；gap-matrix WB-DEF-5 / 风险册 F-2）

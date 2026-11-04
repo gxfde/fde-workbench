@@ -149,7 +149,8 @@
   - **序列化契约**：`_serialize_subject` +`merged_into_subject_id`（恒输出，null=未让位）——服务端契约钉（test_research_subjects_api 根对象用例）与桌面 `ResearchSubjectDto` 可选键+运行时校验双同步（旧载荷缺键兼容，T-O4 桌面契约同步先例重演）。
   - **测试**：NEW `test_research_subject_merge.py` 7 例（全表面搬迁+响应摘要计数+列表序列化+占号验证 / 撞键 409→人工处置→重试成功且零残留 / 根·类型·自指·stale·归档源·归档目标六拒绝 / 链一跳化 / 画像迁入与留任双分支+事件留档 / viewer 403·非成员 404 / catalog 钉子）；`test_migrations` HEAD `d4e6f8a2c7b9`；conftest 清理序 +「merged_into 置空」（同表自引用先解除再删行）。
   - **口径**：105 表不变（列级增量）、迁移头 `b5d9e3f7a1c6`→**`d4e6f8a2c7b9`**（**32 rev**）、业务路由 295→**296**（+1）、ENTRIES 94 不变、pytest **1838 收集 = 1832 passed + 6 skipped**（+7）、vitest **752**（+2）。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
-  - **遗留（后续轮可选）**：桌面端「合并」入口（导入结果的 merge_candidates 卡片一键发起合并、对象树右键合并、归档行「已并入 X」回链显示）——本轮只交付服务端原语+契约，桌面 UI 另行立项。
+  - **桌面 UI 补轮（2026-11-04，分支 feat/v3-t-o4b-merge-ui，遗留 UI 轮收口）**：对象树操作栏「合并」入口（选中非根对象且 canFill；对话框挑**同类型启用对象**为目标 → 密码确认 → `POST /research/subjects/{source_id}/merge`）+ 树底「已归档（N）」折叠组（归档行不可选中、不进 treeitem 键盘导航；合并让位行「已并入 X」回链——目标仍启用=可点击跳选，已停用=纯文本；普通停用行一并可见）；契约 `ResearchMergeResultDto` + `isResearchMergeResultDto`，`subjectMutationError` 补 4 错误码映射（root_immutable/type_mismatch/source|target_not_active）。测试 +6（树 3 / 工作区合并流+错误映射 2 / 契约 1），vitest **761**（基线 `8340e89` 实测 755），typecheck 绿；服务端零改动（pytest 1863 / 105 表 / head `c7e1a9f3b5d8` / 路由 296 / ENTRIES 94 / mypy 279 全不变，无需 rebuild），便携版重打包 r13 + asar 字节验证。
+  - **实施偏差（记录在案）**：①「导入结果 merge_candidates 卡片一键合并」**前置缺失**——桌面端调研数据导入 UI 未立项（`/research/subjects/imports/preview|commit` 端点与桌面 DTO 校验器在、零 UI 消费），留待「调研数据导入 UI」独立轮；②「对象树右键合并」以操作栏行内「合并」按钮替代（与既有停用同位同模式），避免引入整套右键菜单系统。
 
 ## P1（可控自动化）
 

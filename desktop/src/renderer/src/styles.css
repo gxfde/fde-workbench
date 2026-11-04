@@ -798,6 +798,18 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .research-tree-toggle:hover { background: var(--surface-2); color: var(--text); }
 .research-tree-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease; }
 .research-tree-toggle svg.expanded { transform: rotate(90deg); }
+/* V3 T-O4b：树底「已归档」组——归档行不可选中，合并让位行提供「已并入 X」回链。 */
+.research-archived-group { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.research-archived-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 2px 5px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.research-archived-toggle:hover { background: var(--surface-2); color: var(--text); }
+.research-archived-toggle svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease; }
+.research-archived-toggle svg.expanded { transform: rotate(90deg); }
+.research-archived-list { display: grid; gap: 5px; margin: 6px 0 0; padding: 0; list-style: none; }
+.research-archived-row { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+.research-archived-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-merged-link { flex: 0 0 auto; padding: 0; border: 0; background: transparent; color: var(--brand-blue); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.research-merged-link:hover { text-decoration: none; }
+.research-merged-link.static { color: var(--muted); text-decoration: none; cursor: default; }
 .research-rename-button { display: inline-grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; margin-right: 5px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-rename-button:hover { background: var(--surface); color: var(--brand-blue); }
 .research-rename-button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }

@@ -334,3 +334,10 @@ export interface ResearchImportResultDto {
   idempotent_replay: boolean
   merge_candidates: ResearchImportMergeCandidateDto[]
 }
+
+// V3 T-O4b 桌面面：subject 合并响应——subject=并入方（target）的最新序列化；
+// merge_summary=六面搬迁明细（键名以服务端为权威，值多为计数，画像分支为字符串/null）。
+export interface ResearchMergeResultDto {
+  subject: ResearchSubjectDto
+  merge_summary: Record<string, number | string | null>
+}

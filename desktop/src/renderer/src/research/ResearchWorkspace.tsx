@@ -7,7 +7,7 @@ import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
 import { isProjectDto } from "../workbench/runtimeValidation"
 import type { ProjectDto } from "../workbench/types"
-import { isProjectResearchFormListDto, isResearchSubjectDto, isResearchSubjectListDto } from "./projectRuntimeValidation"
+import { isProjectResearchFormListDto, isResearchMergeResultDto, isResearchSubjectDto, isResearchSubjectListDto } from "./projectRuntimeValidation"
 import { createEmptyOpportunityProfile, OpportunityDetail, OpportunityListPanel, OpportunityProfileFields, opportunityProfileInput, validateOpportunityProfile } from "./ResearchOpportunity"
 import { AIOpportunityDiscoveryDialog } from "./AIOpportunityDiscoveryDialog"
 import { ProjectResearchFormBuilder, type ProjectResearchFormDraft } from "./ProjectResearchFormBuilder"
@@ -159,6 +159,9 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
   const [renameSubject, setRenameSubject] = useState<ResearchSubjectDto | null>(null)
   const [renameSubjectName, setRenameSubjectName] = useState("")
   const [renameSubjectDescription, setRenameSubjectDescription] = useState("")
+  // V3 T-O4b：对象合并入口——source 固定为发起对象，target 在同类型启用对象中挑选。
+  const [mergeSource, setMergeSource] = useState<ResearchSubjectDto | null>(null)
+  const [mergeTargetId, setMergeTargetId] = useState("")
   const [memoDraft, setMemoDraft] = useState("")
   const [memoSaved, setMemoSaved] = useState("")
   const [memoSaving, setMemoSaving] = useState(false)
@@ -300,6 +303,12 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     () => opportunitiesForSelectedSubject(subjects, selectedId),
     [subjects, selectedId],
   )
+  const mergeCandidates = useMemo(() => {
+    if (!mergeSource) return []
+    return subjects
+      .filter((subject) => subject.status === "active" && subject.subject_type === mergeSource.subject_type && subject.id !== mergeSource.id)
+      .sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, "zh-CN"))
+  }, [mergeSource, subjects])
   const canCreateOpportunity = canFill && Boolean(selected) && selected !== null && CHILD_TYPES_BY_PARENT[selected.subject_type]?.includes("opportunity")
 
   useEffect(() => {
@@ -524,6 +533,51 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       await loadResearch(parentId ?? undefined)
       setNotice(isOpportunity ? "AI 机会已删除，历史数据已保留。" : "调研对象已停用，历史数据已保留。")
     } catch (caught) {
+      setError(subjectMutationError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function beginMergeSubject(subject: ResearchSubjectDto): void {
+    if (!canFill || subject.subject_type === "project") return
+    setMergeSource(subject)
+    setMergeTargetId("")
+    setError("")
+  }
+
+  async function submitMerge(): Promise<void> {
+    const source = mergeSource
+    const target = mergeCandidates.find((subject) => subject.id === mergeTargetId) ?? null
+    if (!source || !target) {
+      setError("请选择要并入的同类型调研对象。")
+      return
+    }
+    if (!confirmDiscard("合并会离开当前提交区并放弃未保存修改，确定继续吗？")) return
+    const confirmed = await dangerConfirm({
+      title: "合并调研对象",
+      description: `确定将“${source.name}”并入“${target.name}”吗？“${source.name}”将停用归档，其调研表、填写内容、链接、子对象和备忘录会整体搬入“${target.name}”。`,
+      confirmLabel: "合并",
+    })
+    if (!confirmed) return
+    setBusy(true)
+    setError("")
+    try {
+      const value = await apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(project.id)}/research/subjects/${encodeURIComponent(source.id)}/merge`, {
+        method: "POST",
+        body: { version: source.version, target_subject_id: target.id },
+      })
+      if (!isResearchMergeResultDto(value)) throw new Error("invalid research merge result")
+      const returnedVersion = (value.subject as ResearchSubjectDto & { project_version?: number }).project_version
+      if (returnedVersion) setProjectVersion((current) => Math.max(current, returnedVersion))
+      clearDirtyRegistry()
+      resetDetailViews()
+      setMergeSource(null)
+      pendingFocusId.current = target.id
+      await loadResearch(target.id)
+      setNotice(`已将“${source.name}”并入“${target.name}”，调研表与记录已整体搬迁，原对象可在树底「已归档」中回溯。`)
+    } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === "stale_version") await loadResearch(source.id)
       setError(subjectMutationError(caught))
     } finally {
       setBusy(false)
@@ -930,7 +984,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     {notice ? <p className="notice" role="status">{notice}</p> : null}
     {loading ? <p role="status">正在加载调研数据…</p> : <div className="research-workspace-grid">
       <div className="research-subject-column">
-        <ResearchSubjectTree subjects={subjects} selectedId={selectedId} canFill={canFill} onSelect={selectSubject} onCreate={beginCreate} onRename={beginRenameSubject} onArchive={(subject) => void archiveSubject(subject)} onReorder={async (ordered) => {
+        <ResearchSubjectTree subjects={subjects} selectedId={selectedId} canFill={canFill} onSelect={selectSubject} onCreate={beginCreate} onRename={beginRenameSubject} onArchive={(subject) => void archiveSubject(subject)} onMerge={(subject) => beginMergeSubject(subject)} onReorder={async (ordered) => {
           if (dirtyForms.current.size) throw new Error("请先保存当前未保存的内容，再调整顺序。")
           try {
             const result = await apiRequest<{ items: ResearchSubjectDto[] }>(`/api/v1/projects/${project.id}/research/subjects/reorder`, { method: "POST", body: { items: ordered.map(item => ({ id: item.id, version: item.version })) } })
@@ -985,6 +1039,13 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
         </div>
         <section className="memo-merge-analysis"><h4>变化分析</h4><ul>{memoMergeResult.change_summary.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul></section>
         <div className="dialog-actions"><button type="button" className="secondary-button" disabled={memoSaving} onClick={() => setMemoMergeResult(null)}>保留原内容</button><button type="button" className="primary-button" disabled={memoSaving || !canFill} onClick={() => void adoptMergedMemo()}>{memoSaving ? "正在保存" : "采用整理结果"}</button></div>
+      </section>
+    </div> : null}
+    {mergeSource ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setMergeSource(null) }}>
+      <section className="dialog research-merge-dialog" role="dialog" aria-modal="true" aria-labelledby="research-merge-title">
+        <div className="dialog-heading"><div><h3 id="research-merge-title">合并{subjectLabels[mergeSource.subject_type]}</h3><p className="supporting-copy compact-copy">把“{mergeSource.name}”并入同类型的另一对象：调研表、填写内容、链接、子对象和备忘录会整体搬迁，本对象停用归档，稍后可在树底「已归档」中回溯。</p></div></div>
+        {mergeCandidates.length ? <label className="field"><span>并入目标</span><select value={mergeTargetId} disabled={busy} onChange={(event) => setMergeTargetId(event.target.value)}><option value="" disabled>请选择{subjectLabels[mergeSource.subject_type]}</option>{mergeCandidates.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}{subject.tracking_code ? `（${subject.tracking_code}）` : ""}</option>)}</select></label> : <p className="empty-state compact">当前没有同类型的其他启用对象可并入。</p>}
+        <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setMergeSource(null)}>取消</button><button type="button" className="primary-button" disabled={busy || !mergeTargetId} onClick={() => void submitMerge()}>{busy ? "正在合并" : "确认合并"}</button></div>
       </section>
     </div> : null}
     {renameSubject ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setRenameSubject(null) }}>
@@ -1043,6 +1104,9 @@ function subjectMutationError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === "stale_version") return "项目或调研对象已被更新，请刷新调研数据后重试。"
     if (error.code === "research_subject_has_active_children") return "该对象仍有启用中的下级，请先停用其下级后再重试。"
+    if (error.code === "research_subject_root_immutable") return "项目根对象不能参与合并。"
+    if (error.code === "merge_subject_type_mismatch") return "只能把对象并入同类型的调研对象，请刷新后重试。"
+    if (error.code === "merge_source_not_active" || error.code === "merge_target_not_active") return "合并双方都必须处于启用状态，请刷新调研数据后重试。"
     if (error.code === "forbidden") return "你没有权限修改该项目的调研对象。"
   }
   return "调研对象操作失败，请稍后重试。"

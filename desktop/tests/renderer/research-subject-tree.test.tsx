@@ -59,6 +59,51 @@ describe("research subject tree rename actions", () => {
   })
 })
 
+describe("research subject tree merge and archived rows", () => {
+  it("offers the merge action for the selected non-root subject only", async () => {
+    const onMerge = vi.fn()
+    const subjects = [subject("project", "project", null, "示例企业"), subject("department", "department", "project", "销售部")]
+    render(<ResearchSubjectTree subjects={subjects} selectedId="department" canFill onSelect={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onArchive={vi.fn()} onMerge={onMerge} />)
+    const user = userEvent.setup()
+    expect(screen.queryByRole("button", { name: "合并示例企业" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "合并销售部" }))
+    expect(onMerge.mock.calls.map(([item]) => item.id)).toEqual(["department"])
+  })
+
+  it("hides the merge action without a handler or write access", () => {
+    const subjects = [subject("project", "project", null, "示例企业"), subject("department", "department", "project", "销售部")]
+    const first = render(<ResearchSubjectTree subjects={subjects} selectedId="department" canFill onSelect={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onArchive={vi.fn()} />)
+    expect(screen.queryByRole("button", { name: "合并销售部" })).not.toBeInTheDocument()
+    first.unmount()
+    render(<ResearchSubjectTree subjects={subjects} selectedId="department" canFill={false} onSelect={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onArchive={vi.fn()} onMerge={vi.fn()} />)
+    expect(screen.queryByRole("button", { name: "合并销售部" })).not.toBeInTheDocument()
+  })
+
+  it("collapses archived rows and links merged rows back to their target", async () => {
+    const onSelect = vi.fn()
+    const merged = { ...subject("archived-sales", "department", "project", "旧销售部"), status: "archived" as const, merged_into_subject_id: "department" }
+    const plain = { ...subject("archived-role", "role", "department", "旧岗位"), status: "archived" as const }
+    const subjects = [
+      subject("project", "project", null, "示例企业"),
+      subject("department", "department", "project", "销售部"),
+      merged,
+      plain,
+    ]
+    render(<ResearchSubjectTree subjects={subjects} selectedId="project" canFill onSelect={onSelect} onCreate={vi.fn()} onRename={vi.fn()} onArchive={vi.fn()} onMerge={vi.fn()} />)
+    const user = userEvent.setup()
+
+    expect(screen.queryByText("旧销售部")).not.toBeInTheDocument()
+    expect(screen.queryByRole("treeitem", { name: /旧销售部/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "已归档（2）" }))
+    expect(screen.getByText("旧销售部")).toBeVisible()
+    expect(screen.getByText("旧岗位")).toBeVisible()
+    expect(screen.queryByRole("button", { name: "已并入 旧岗位" })).not.toBeInTheDocument()
+    const backlink = screen.getByRole("button", { name: "已并入 销售部" })
+    await user.click(backlink)
+    expect(onSelect.mock.calls.map(([item]) => item.id)).toEqual(["department"])
+  })
+})
+
 function subject(id: string, type: ResearchSubjectType, parentId: string | null, name: string): ResearchSubjectDto {
   return {
     id,

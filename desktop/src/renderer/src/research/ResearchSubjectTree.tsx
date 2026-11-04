@@ -10,15 +10,18 @@ interface ResearchSubjectTreeProps {
   onCreate(type: Exclude<ResearchSubjectType, "project">): void
   onRename(subject: ResearchSubjectDto): void
   onArchive(subject: ResearchSubjectDto): void
+  onMerge?(subject: ResearchSubjectDto): void
   onReorder?(subjects: ResearchSubjectDto[]): Promise<void>
 }
 
 const typeLabels = RESEARCH_SUBJECT_LABELS
 
-export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, onCreate, onRename, onArchive, onReorder }: ResearchSubjectTreeProps) {
+export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, onCreate, onRename, onArchive, onMerge, onReorder }: ResearchSubjectTreeProps) {
   const dragged = useRef<string | null>(null)
   const [sorting, setSorting] = useState(false)
   const [sortError, setSortError] = useState("")
+  // V3 T-O4b：归档行默认折叠展示（含合并让位行），「已并入 X」提供回链。
+  const [archivedOpen, setArchivedOpen] = useState(false)
   const treeRef = useRef<HTMLUListElement>(null)
   function clearDrag() {
     dragged.current = null
@@ -42,6 +45,7 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
     try { await onReorder(reordered) } catch (error) { setSortError(error instanceof Error ? error.message : "排序保存失败，请重试。") } finally { setSorting(false) }
   }
   const active = subjects.filter((subject) => subject.status === "active" && subject.subject_type !== "opportunity")
+  const archived = subjects.filter((subject) => subject.status === "archived" && subject.subject_type !== "opportunity").sort(subjectSort)
   const root = active.find((subject) => subject.subject_type === "project") ?? null
   const selected = active.find((subject) => subject.id === selectedId) ?? null
   const selectedType = selected?.subject_type ?? "project"
@@ -125,7 +129,7 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
     {canFill && onReorder ? <p className="research-sort-hint" role="status">{sorting ? "正在保存顺序…" : "拖动对象调整同级顺序；也可用 Alt + ↑ / ↓"}</p> : null}
     {sortError ? <p className="form-error" role="alert">{sortError}</p> : null}
     <div className="panel-heading"><h2>调研对象</h2><span>{active.length} 个</span></div>
-    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{typeLabels[type]}</button>)}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
+    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{typeLabels[type]}</button>)}{selected && selected.subject_type !== "project" && onMerge ? <button type="button" className="secondary-button compact" aria-label={`合并${selected.name}`} onClick={() => onMerge(selected)}>合并</button> : null}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
     {root ? <ul className="research-tree" role="tree" aria-label="项目调研对象树" ref={treeRef} onKeyDown={handleKeyDown} onDragStart={(event) => {
       const { subject } = targetSubject(event.target)
       if (!canFill || !onReorder || sorting || !subject || subject.subject_type === 'project') { event.preventDefault(); return }
@@ -143,6 +147,13 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
       if (dragged.current && subject && row) void move(dragged.current, subject.id, event.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2)
       clearDrag()
     }} onDragEnd={clearDrag}><SubjectNode subject={root} subjects={active} selectedId={selectedId} expanded={expanded} canFill={canFill} onSelect={onSelect} onRename={onRename} onToggle={toggleSubject} /></ul> : <p className="empty-state">项目调研根对象缺失。</p>}
+    {archived.length ? <div className="research-archived-group">
+      <button type="button" className="research-archived-toggle" aria-expanded={archivedOpen} onClick={() => setArchivedOpen((current) => !current)}><ChevronIcon expanded={archivedOpen} />已归档（{archived.length}）</button>
+      {archivedOpen ? <ul className="research-archived-list">{archived.map((subject) => {
+        const target = subject.merged_into_subject_id ? subjects.find((item) => item.id === subject.merged_into_subject_id) ?? null : null
+        return <li key={subject.id} className="research-archived-row"><span className="research-subject-type">{typeLabels[subject.subject_type]}</span><span className="research-archived-name">{subject.name}</span>{target ? target.status === "active" ? <button type="button" className="research-merged-link" onClick={() => onSelect(target)}>已并入 {target.name}</button> : <span className="research-merged-link static">已并入 {target.name}</span> : null}</li>
+      })}</ul> : null}
+    </div> : null}
   </aside>
 }
 

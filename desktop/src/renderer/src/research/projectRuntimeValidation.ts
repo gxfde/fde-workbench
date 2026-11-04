@@ -1,6 +1,6 @@
 import { isResearchFormDto } from "./runtimeValidation"
 import { isCanonicalDecimalValue, normalizeAsciiEdgeWhitespace, normalizeDecimalValue } from "./conditionValueContract"
-import { RESEARCH_SUBJECT_TYPES, type ProjectResearchFormDto, type ResearchAnswerValue, type ResearchFieldDto, type ResearchFormDto, type ResearchFormRevisionDto, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto, type ResearchSubjectDto, type ResearchTableColumnDto } from "./types"
+import { RESEARCH_SUBJECT_TYPES, type ProjectResearchFormDto, type ResearchAnswerValue, type ResearchFieldDto, type ResearchFormDto, type ResearchFormRevisionDto, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto, type ResearchMergeResultDto, type ResearchSubjectDto, type ResearchTableColumnDto } from "./types"
 
 const FILE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const SCRIPT_MARKUP = /<\s*\/?\s*script\b/i
@@ -94,6 +94,13 @@ export function isResearchImportResultDto(value: unknown): value is ResearchImpo
     && positiveInteger(value.project_version)
     && typeof value.idempotent_replay === "boolean"
     && Array.isArray(value.merge_candidates) && value.merge_candidates.every(isResearchMergeCandidateDto)
+}
+
+// V3 T-O4b 桌面面：合并响应——并入方序列化 + 搬迁明细（值计数为主，画像分支字符串/null）。
+export function isResearchMergeResultDto(value: unknown): value is ResearchMergeResultDto {
+  if (!isRecord(value) || !exact(value, ["subject", "merge_summary"])) return false
+  if (!isResearchSubjectDto(value.subject) || !isRecord(value.merge_summary)) return false
+  return Object.values(value.merge_summary).every((item) => item === null || typeof item === "string" || typeof item === "number")
 }
 
 export function parseResearchImportErrorDetails(value: unknown): ResearchImportErrorDto[] | null {
