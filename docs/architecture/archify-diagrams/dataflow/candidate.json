@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "集成桥采集 → 服务端投影 → 一等证据登记簿",
+    "locale": "zh-CN",
+    "output": ".archify/dataflow-bridge-20261104-092108/bridge-evidence-dataflow.html",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 660],
+    "repository": {
+      "url": "https://github.com/gxfde/fde-workbench.git",
+      "revision": "05f3773283a67054bab230453cbff39cee474c65",
+      "link_mode": "local-only"
+    },
+    "views": [
+      {
+        "id": "capture-chain",
+        "label": "采集到登记",
+        "focus": ["collector", "ingest", "evidence"],
+        "note": "宿主只读采集 → 令牌白名单入站 → 投影事务内登记一等证据行"
+      },
+      {
+        "id": "registry-consumers",
+        "label": "登记簿消费面",
+        "focus": ["evidence", "gateboard", "evidenceapi"],
+        "note": "清单项只持 evidence_id，登记簿按 referenced_by=gate:Gx 反查"
+      }
+    ]
+  },
+  "stages": [
+    { "label": "触发" },
+    { "label": "宿主 · 真相层与采集器" },
+    { "label": "服务端入站" },
+    { "label": "存储" },
+    { "label": "消费面" }
+  ],
+  "nodes": [
+    {
+      "id": "polltask",
+      "type": "backend",
+      "label": "计划任务",
+      "sublabel": "FDE-Bridge-Poll",
+      "tag": "每 4 小时",
+      "stage": 0,
+      "row": 0,
+      "sources": [
+        { "path": "scripts/install-bridge-poll-task.ps1", "line": 13, "end_line": 17 },
+        { "path": "scripts/bridge-poll.mjs", "line": 12, "end_line": 17 },
+        { "path": "desktop/src/main/bridge-capture.ts", "line": 42, "end_line": 56 }
+      ]
+    },
+    {
+      "id": "manual",
+      "type": "frontend",
+      "label": "立即采集",
+      "sublabel": "集成桥页",
+      "tag": "手动触发",
+      "stage": 0,
+      "row": 1,
+      "sources": [
+        { "path": "desktop/src/renderer/src/bridge/BridgePage.tsx", "line": 149, "end_line": 198 },
+        { "path": "desktop/src/main/bridge-capture.ts", "line": 36, "end_line": 41 }
+      ]
+    },
+    {
+      "id": "openfde",
+      "type": "external",
+      "label": "openfde 知识轨",
+      "sublabel": "只读 CLI",
+      "tag": "真相层",
+      "stage": 1,
+      "row": 0,
+      "sources": [
+        { "path": "scripts/bridge-poll.mjs", "line": 99, "end_line": 129 },
+        { "path": "server/src/fde_api/bridge/runner.py", "line": 80, "end_line": 101 }
+      ]
+    },
+    {
+      "id": "collector",
+      "type": "backend",
+      "label": "bridge-poll.mjs",
+      "sublabel": "只读采集器",
+      "tag": "不写真相层",
+      "stage": 1,
+      "row": 2,
+      "sources": [
+        { "path": "scripts/bridge-poll.mjs", "line": 27, "end_line": 33 },
+        { "path": "scripts/bridge-poll.mjs", "line": 99, "end_line": 129 },
+        { "path": "scripts/bridge-poll.mjs", "line": 186, "end_line": 220 }
+      ]
+    },
+    {
+      "id": "fdeops",
+      "type": "external",
+      "label": "fdeops 流程轨",
+      "sublabel": "文件探针",
+      "tag": "真相层",
+      "stage": 1,
+      "row": 3,
+      "sources": [
+        { "path": "scripts/bridge-poll.mjs", "line": 131, "end_line": 184 },
+        { "path": "server/src/fde_api/bridge/runner.py", "line": 103, "end_line": 124 }
+      ]
+    },
+    {
+      "id": "ingest",
+      "type": "backend",
+      "label": "快照入站与投影",
+      "sublabel": "apply_snapshot",
+      "tag": "令牌 + 白名单",
+      "stage": 2,
+      "row": 2,
+      "sources": [
+        { "path": "server/src/fde_api/bridge/routes.py", "line": 30, "end_line": 42 },
+        { "path": "server/src/fde_api/bridge/runner.py", "line": 34, "end_line": 51 },
+        { "path": "server/src/fde_api/bridge/sync.py", "line": 161, "end_line": 263 }
+      ]
+    },
+    {
+      "id": "taskentry",
+      "type": "frontend",
+      "label": "任务证据字段",
+      "sublabel": "evidence_uri + hash",
+      "tag": "人工录入",
+      "stage": 2,
+      "row": 3,
+      "sources": [
+        { "path": "server/src/fde_api/projects/task_service.py", "line": 774, "end_line": 802 },
+        { "path": "server/src/fde_api/projects/task_service.py", "line": 450, "end_line": 460 }
+      ]
+    },
+    {
+      "id": "projection",
+      "type": "database",
+      "label": "bridge_engagements",
+      "sublabel": "只读投影",
+      "tag": "文件永远赢",
+      "stage": 3,
+      "row": 0,
+      "sources": [
+        { "path": "server/src/fde_api/bridge/sync.py", "line": 179, "end_line": 220 },
+        { "path": "server/src/fde_api/bridge/routes.py", "line": 63, "end_line": 73 }
+      ]
+    },
+    {
+      "id": "evidence",
+      "type": "security",
+      "label": "project_evidence",
+      "sublabel": "指针 + sha256",
+      "tag": "不可变幂等",
+      "stage": 3,
+      "row": 2,
+      "sources": [
+        { "path": "server/src/fde_api/evidence/models.py", "line": 21, "end_line": 47 },
+        { "path": "server/src/fde_api/evidence/service.py", "line": 114, "end_line": 148 },
+        { "path": "server/migrations/versions/e1f3a5c7b9d2_v3_project_evidence.py", "line": 19, "end_line": 61 }
+      ]
+    },
+    {
+      "id": "bridgepage",
+      "type": "frontend",
+      "label": "集成桥页",
+      "sublabel": "双轨只读视图",
+      "tag": "桌面端",
+      "stage": 4,
+      "row": 0,
+      "sources": [
+        { "path": "desktop/src/renderer/src/bridge/BridgePage.tsx", "line": 111, "end_line": 138 },
+        { "path": "server/src/fde_api/bridge/sync.py", "line": 275, "end_line": 300 }
+      ]
+    },
+    {
+      "id": "gateboard",
+      "type": "frontend",
+      "label": "门禁清单项",
+      "sublabel": "evidence_id",
+      "tag": "G1–G9",
+      "stage": 4,
+      "row": 2,
+      "sources": [
+        { "path": "server/src/fde_api/projects/gate_service.py", "line": 222, "end_line": 310 },
+        { "path": "desktop/src/renderer/src/projects/GateBoard.tsx", "line": 295, "end_line": 307 }
+      ]
+    },
+    {
+      "id": "evidenceapi",
+      "type": "backend",
+      "label": "证据登记簿 API",
+      "sublabel": "referenced_by",
+      "tag": "can_view",
+      "stage": 4,
+      "row": 3,
+      "sources": [
+        { "path": "server/src/fde_api/evidence/routes.py", "line": 24, "end_line": 42 },
+        { "path": "server/src/fde_api/evidence/service.py", "line": 218, "end_line": 256 }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "manual-triggers-task",
+      "from": "manual",
+      "to": "polltask",
+      "label": "schtasks /Run",
+      "classification": "同一代码路径",
+      "variant": "default",
+      "labelDy": -27
+    },
+    {
+      "id": "task-runs-collector",
+      "from": "polltask",
+      "to": "collector",
+      "label": "4 小时调度",
+      "classification": "宿主",
+      "variant": "default"
+    },
+    {
+      "id": "openfde-snapshot",
+      "from": "openfde",
+      "to": "collector",
+      "label": "知识轨快照",
+      "classification": "只读 CLI",
+      "variant": "default",
+      "labelDy": 95
+    },
+    {
+      "id": "fdeops-snapshot",
+      "from": "fdeops",
+      "to": "collector",
+      "label": "流程轨快照",
+      "variant": "default"
+    },
+    {
+      "id": "collector-posts-snapshot",
+      "from": "collector",
+      "to": "ingest",
+      "label": "快照 bundle",
+      "classification": "HTTP POST",
+      "variant": "emphasis"
+    },
+    {
+      "id": "snapshot-projection",
+      "from": "ingest",
+      "to": "projection",
+      "label": "双轨投影",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [[530, 104], [745, 104]]
+    },
+    {
+      "id": "snapshot-evidence",
+      "from": "ingest",
+      "to": "evidence",
+      "label": "bridge 登记",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -8
+    },
+    {
+      "id": "task-evidence",
+      "from": "taskentry",
+      "to": "evidence",
+      "label": "task 登记",
+      "variant": "default"
+    },
+    {
+      "id": "projection-bridge-page",
+      "from": "projection",
+      "to": "bridgepage",
+      "label": "只读视图",
+      "classification": "文件永远赢",
+      "variant": "default"
+    },
+    {
+      "id": "evidence-gate-item",
+      "from": "evidence",
+      "to": "gateboard",
+      "label": "evidence_id",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -8
+    },
+    {
+      "id": "evidence-registry-api",
+      "from": "evidence",
+      "to": "evidenceapi",
+      "label": "登记簿反查",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "只读采集纪律",
+      "items": [
+        "scripts/bridge-poll.mjs 只调 openfde 只读命令 + 读文件，绝不写真相层",
+        "openfde 逐 slug 产 stdout_sha256；fdeops 工作区产 registry_sha256",
+        "采集器只能跑在 Windows 宿主，Docker 容器内 subprocess 不到 openfde"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "一等证据登记簿",
+      "items": [
+        "project_evidence 行 = (project, source_uri, content_sha256)，唯一指纹即幂等键",
+        "只存指针 + sha256 指纹；证据原件永远留在本地 fdeops/openfde 工作目录",
+        "桥侧登记 kind=bridge、captured_from=bridge_sync:{run_id}；任务侧 kind=task",
+        "清单项只持 evidence_id；登记簿按 referenced_by=gate:Gx 反查"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "红线与失败语义",
+      "items": [
+        "指纹不齐整即跳过不炸：投影是 4h 关键路径，证据是锦上添花",
+        "任务 update 的登记写在乐观锁 rowcount 之后，stale 版本零副作用",
+        "文件永远赢：清投影只删 bridge 行，不动真相文件"
+      ]
+    }
+  ]
+}

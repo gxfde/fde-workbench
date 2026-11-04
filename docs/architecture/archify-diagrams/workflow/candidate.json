@@ -1,0 +1,599 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "蔡工FDE智能交付系统 · 交付主流程：从项目到回款",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-delivery-20261104-074141/delivery-workflow.html",
+    "repository": {
+      "url": "https://github.com/gxfde/fde-workbench.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "46dfd4f6c2d9f86cf40a1e6c1ef594ece0bf4a8c"
+    }
+  },
+  "lanes": [
+    {
+      "id": "ops",
+      "label": "交付主线 · projects / research / solutions"
+    },
+    {
+      "id": "gates",
+      "label": "门禁与证据 · gate_service / project_evidence"
+    },
+    {
+      "id": "commerce",
+      "label": "商务 · 报价 / 合同"
+    },
+    {
+      "id": "agents",
+      "label": "智能体执行 · agents.run"
+    },
+    {
+      "id": "review",
+      "label": "终审签出与人工接管 · signoff / export_sow",
+      "variant": "exception"
+    },
+    {
+      "id": "settle",
+      "label": "派单与回款 · dispatch / settlements"
+    }
+  ],
+  "phases": [
+    {
+      "id": "intake",
+      "label": "立项与调研",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "evidence",
+      "label": "门禁取证与核验",
+      "fromCol": 2,
+      "toCol": 2
+    },
+    {
+      "id": "deal",
+      "label": "报价与合同",
+      "fromCol": 3,
+      "toCol": 3
+    },
+    {
+      "id": "solve",
+      "label": "方案与终审",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "cash",
+      "label": "派单与回款",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "gate_station",
+      "label": "G1–G9 门禁站",
+      "lane": "gates",
+      "fromCol": 2,
+      "toCol": 2
+    },
+    {
+      "id": "deal_desk",
+      "label": "商务要素",
+      "lane": "commerce",
+      "fromCol": 3,
+      "toCol": 3
+    },
+    {
+      "id": "review_desk",
+      "label": "终审签出台",
+      "lane": "review",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "security"
+    },
+    {
+      "id": "cash_out",
+      "label": "交付包与结算",
+      "lane": "settle",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "create_project",
+    "research",
+    "gate_evidence",
+    "gate_decide",
+    "quote",
+    "contract",
+    "solution",
+    "export_sow",
+    "package",
+    "payment_settle"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "create_project"
+    ],
+    "allowedTerminals": [
+      "payment_settle"
+    ],
+    "requiredEdges": [
+      {
+        "from": "gate_evidence",
+        "to": "gate_decide"
+      },
+      {
+        "from": "signoff",
+        "to": "export_sow"
+      },
+      {
+        "from": "export_sow",
+        "to": "package"
+      },
+      {
+        "from": "package",
+        "to": "payment_settle"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "create_project",
+      "lane": "ops",
+      "col": 0,
+      "type": "backend",
+      "label": "立项",
+      "sublabel": "create_project · 模板快照与任务排程",
+      "tag": "status=draft",
+      "width": 160,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/service.py",
+          "line": 97,
+          "end_line": 210,
+          "label": "create_project"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "lane": "ops",
+      "col": 1,
+      "type": "backend",
+      "label": "调研建档",
+      "sublabel": "subjects · links · forms",
+      "width": 150,
+      "sources": [
+        {
+          "path": "server/src/fde_api/research/subject_service.py",
+          "line": 498,
+          "end_line": 552,
+          "label": "create_subject_in_transaction"
+        },
+        {
+          "path": "server/src/fde_api/research/form_service.py",
+          "line": 132,
+          "end_line": 140,
+          "label": "initialize_subject_forms"
+        }
+      ]
+    },
+    {
+      "id": "gate_evidence",
+      "lane": "gates",
+      "col": 2,
+      "yOffset": -58,
+      "type": "security",
+      "icon": "person",
+      "label": "门禁证据提交",
+      "sublabel": "source_uri + sha256 指纹",
+      "tag": "G1–G9 · 人工",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/gate_service.py",
+          "line": 222,
+          "end_line": 292,
+          "label": "submit_gate_evidence"
+        }
+      ]
+    },
+    {
+      "id": "gate_decide",
+      "lane": "gates",
+      "col": 2,
+      "yOffset": 58,
+      "type": "security",
+      "icon": "person",
+      "label": "门禁核验过门",
+      "sublabel": "pass · conditional_pass 仅G9 · fail",
+      "tag": "拍板人≠提交人",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/gate_service.py",
+          "line": 333,
+          "end_line": 407,
+          "label": "decide_gate"
+        },
+        {
+          "path": "server/src/fde_api/projects/gate_service.py",
+          "line": 505,
+          "end_line": 516,
+          "label": "G8 收款联动"
+        }
+      ]
+    },
+    {
+      "id": "quote",
+      "lane": "commerce",
+      "col": 3,
+      "yOffset": -58,
+      "type": "backend",
+      "label": "报价定稿",
+      "sublabel": "create_quote · 公式价三分支 A/B/C",
+      "tag": "finalized 前置",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/quote_service.py",
+          "line": 243,
+          "end_line": 331,
+          "label": "create_quote"
+        }
+      ]
+    },
+    {
+      "id": "contract",
+      "lane": "commerce",
+      "col": 3,
+      "yOffset": 58,
+      "type": "backend",
+      "label": "合同台账",
+      "sublabel": "record_contract · signed_at · 指针+指纹",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/contract_service.py",
+          "line": 61,
+          "end_line": 131,
+          "label": "record_contract"
+        }
+      ]
+    },
+    {
+      "id": "solution",
+      "lane": "ops",
+      "col": 4,
+      "type": "backend",
+      "label": "方案准备",
+      "sublabel": "人工编写或 AI 协同 generate-agent",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/solutions/routes.py",
+          "line": 41,
+          "end_line": 57,
+          "label": "solution 路由"
+        },
+        {
+          "path": "server/src/fde_api/solutions/routes.py",
+          "line": 91,
+          "end_line": 98,
+          "label": "generate-agent"
+        }
+      ]
+    },
+    {
+      "id": "agent_run",
+      "lane": "agents",
+      "col": 4,
+      "type": "messagebus",
+      "label": "AI 产物 run",
+      "sublabel": "T1 计划评审门 · T2 强制评审门",
+      "tag": "completed 自动开 pending",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 756,
+          "end_line": 763,
+          "label": "T1 gate"
+        },
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 430,
+          "end_line": 437,
+          "label": "T2 gate"
+        },
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 481,
+          "end_line": 488,
+          "label": "自动开 pending"
+        }
+      ]
+    },
+    {
+      "id": "signoff",
+      "lane": "review",
+      "col": 4,
+      "yOffset": 75,
+      "type": "security",
+      "icon": "person",
+      "label": "终审拍板",
+      "sublabel": "resolve_signoff · approved / rejected",
+      "tag": "幂等 pending",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/signoff.py",
+          "line": 28,
+          "end_line": 51,
+          "label": "ensure_pending_signoff"
+        },
+        {
+          "path": "server/src/fde_api/solutions/service.py",
+          "line": 320,
+          "end_line": 357,
+          "label": "resolve_signoff"
+        }
+      ]
+    },
+    {
+      "id": "handoff",
+      "lane": "review",
+      "col": 3,
+      "type": "security",
+      "icon": "person",
+      "label": "人工接管",
+      "sublabel": "handoff_run · 失败 / 超时 / L1 降级",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 880,
+          "end_line": 913,
+          "label": "handoff_run"
+        }
+      ],
+      "yOffset": -55
+    },
+    {
+      "id": "export_sow",
+      "lane": "review",
+      "col": 5,
+      "type": "backend",
+      "label": "导出 SOW",
+      "sublabel": "文档 draft + 生成任务",
+      "tag": "agent_assisted 闸",
+      "width": 150,
+      "sources": [
+        {
+          "path": "server/src/fde_api/solutions/service.py",
+          "line": 669,
+          "end_line": 686,
+          "label": "export_sow"
+        },
+        {
+          "path": "server/src/fde_api/solutions/service.py",
+          "line": 632,
+          "end_line": 664,
+          "label": "_signoff_gate_detail"
+        }
+      ]
+    },
+    {
+      "id": "package",
+      "lane": "settle",
+      "col": 5,
+      "yOffset": -62,
+      "type": "backend",
+      "label": "交付包发布接单",
+      "sublabel": "draft → published → accepted",
+      "tag": "前置 报价 finalized",
+      "width": 168,
+      "sources": [
+        {
+          "path": "server/src/fde_api/dispatch/packages.py",
+          "line": 165,
+          "end_line": 232,
+          "label": "create_package"
+        },
+        {
+          "path": "server/src/fde_api/dispatch/packages.py",
+          "line": 235,
+          "end_line": 302,
+          "label": "publish_package"
+        },
+        {
+          "path": "server/src/fde_api/dispatch/packages.py",
+          "line": 332,
+          "end_line": 380,
+          "label": "transition accept"
+        }
+      ]
+    },
+    {
+      "id": "payment_settle",
+      "lane": "settle",
+      "col": 5,
+      "yOffset": 78,
+      "type": "database",
+      "label": "收款与结算",
+      "sublabel": "结算四态 draft → accrued → payable → paid",
+      "tag": "G8 验收联动 · 凭证只存指针",
+      "width": 178,
+      "sources": [
+        {
+          "path": "server/src/fde_api/projects/payment_service.py",
+          "line": 232,
+          "end_line": 290,
+          "label": "update_payment"
+        },
+        {
+          "path": "server/src/fde_api/dispatch/settlements.py",
+          "line": 159,
+          "end_line": 217,
+          "label": "record_receipt_settlements"
+        },
+        {
+          "path": "server/src/fde_api/dispatch/settlements.py",
+          "line": 315,
+          "end_line": 372,
+          "label": "payable → paid"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-project-research",
+      "from": "create_project",
+      "to": "research",
+      "variant": "default"
+    },
+    {
+      "id": "e-research-gate",
+      "from": "research",
+      "to": "gate_evidence",
+      "label": "取证",
+      "variant": "default"
+    },
+    {
+      "id": "e-submit-decide",
+      "from": "gate_evidence",
+      "to": "gate_decide",
+      "label": "提交待核验",
+      "variant": "default"
+    },
+    {
+      "id": "e-decide-quote",
+      "from": "gate_decide",
+      "to": "quote",
+      "label": "过门推进",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "e-quote-contract",
+      "from": "quote",
+      "to": "contract",
+      "label": "定稿签订",
+      "variant": "default"
+    },
+    {
+      "id": "e-contract-solution",
+      "from": "contract",
+      "to": "solution",
+      "label": "进入方案阶段",
+      "variant": "default"
+    },
+    {
+      "id": "e-solution-agent",
+      "from": "solution",
+      "to": "agent_run",
+      "label": "generate-agent",
+      "variant": "default"
+    },
+    {
+      "id": "e-signoff-sow",
+      "from": "signoff",
+      "to": "export_sow",
+      "label": "approved 放行",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "e-sow-package",
+      "from": "export_sow",
+      "to": "package",
+      "label": "交付要素齐备",
+      "variant": "default"
+    },
+    {
+      "id": "e-package-payment",
+      "from": "package",
+      "to": "payment_settle",
+      "label": "接单交付回款",
+      "variant": "default"
+    },
+    {
+      "id": "e-decide-resubmit",
+      "from": "gate_decide",
+      "to": "gate_evidence",
+      "label": "fail 整改重提",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "e-solution-sow",
+      "from": "solution",
+      "to": "export_sow",
+      "label": "人工免终审",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-agent-handoff",
+      "from": "agent_run",
+      "to": "handoff",
+      "label": "T1/T2 未过 · 失败/L1",
+      "variant": "dashed",
+      "role": "error"
+    },
+    {
+      "id": "e-handoff-signoff",
+      "from": "handoff",
+      "to": "signoff",
+      "label": "接管后开闸",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-sow-409",
+      "from": "export_sow",
+      "to": "signoff",
+      "label": "409 · 终审闸拦截",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "门禁与证据纪律",
+      "items": [
+        "G1–G9 按 seeds/gates.json 首次访问懒实例化，九门齐建",
+        "证据只收 source_uri 指针 + sha256 指纹，同步登记一等证据表 project_evidence（同指纹幂等）",
+        "拍板人 ≠ 提交人（P0-5 gate_decider_conflict）；conditional_pass 仅限 G9 上线门"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "终审 signoff 唯一幂等开闸",
+      "items": [
+        "ensure_pending_signoff 是唯一开闸入口：同方案至多一个 pending，绝不重复开闸",
+        "三个开闸来源：_finalize 非降级 completed 自动开；export_sow 拦下兜底开（先提交再 409，remedy=resolve_pending_signoff）；handoff 人工接管后开",
+        "L1 降级产物永不自动进终审（linked_solution_id=None），handoff 后人工收口"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "回款结算链",
+      "items": [
+        "收款实收回填钩子：update_payment 事务内为已发布/接单交付包落 settlement draft（基数=实收）",
+        "G8 过门联动 mark_acceptance_passed：实收+验收双满足 → accrued 并计提预扣；G8 stop 尾款照收",
+        "对应里程碑发票登记前置才可 payable；打款 paid 只存 paid_proof_source_uri 指针"
+      ]
+    }
+  ]
+}

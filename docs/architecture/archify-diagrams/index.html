@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>蔡工FDE智能交付系统 · 整套架构图</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#14181f; --muted:#5b6675; --line:#e3e7ee;
+    --accent:#0b6bcb; --accent-soft:#e8f1fb; --ok:#0f8a5f; --ok-soft:#e6f5ee;
+    --type:#6b4fbb; --type-soft:#f0ebfa;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1319; --panel:#171d26; --ink:#e9edf3; --muted:#9aa7b8; --line:#252d3a;
+      --accent:#5aa9f8; --accent-soft:#14243a; --ok:#43c894; --ok-soft:#122a20;
+      --type:#b39cf0; --type-soft:#221c38;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    padding:40px 24px 64px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header{margin-bottom:28px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:14px;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .pill{
+    font-size:12px;padding:3px 10px;border-radius:999px;
+    background:var(--accent-soft);color:var(--accent);border:1px solid transparent;
+  }
+  .pill.ok{background:var(--ok-soft);color:var(--ok)}
+  .grid{display:grid;gap:14px;margin-top:26px}
+  .card{
+    display:grid;grid-template-columns:76px 1fr auto;gap:18px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s;
+  }
+  .card:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .badge{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    text-align:center;padding:8px 4px;border-radius:8px;
+    background:var(--type-soft);color:var(--type);font-weight:600;
+  }
+  .t{font-size:16px;font-weight:600;margin:0 0 4px}
+  .d{font-size:13.5px;color:var(--muted);margin:0}
+  .k{font-size:12px;color:var(--muted);margin-top:6px;font-family:ui-monospace,Menlo,monospace}
+  .go{font-size:13px;color:var(--accent);white-space:nowrap}
+  footer{margin-top:30px;color:var(--muted);font-size:12.5px;line-height:1.8}
+  code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>蔡工FDE智能交付系统 · 整套架构图</h1>
+    <p class="sub">用 archify 从仓库真实代码取证生成：五个视角覆盖总体架构、交付流程、执行时序、证据数据流与运行状态机。</p>
+    <div class="meta">
+      <span class="pill ok">五张全部四闸通过</span>
+      <span class="pill">archify v3.0.1</span>
+      <span class="pill">证据模式 · 行号级 sources</span>
+      <span class="pill">仓库只读 · 未改任何代码</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="architecture/system-architecture.html">
+      <div class="badge">archi<br>tecture</div>
+      <div>
+        <p class="t">系统总体架构</p>
+        <p class="d">桌面端（React 渲染层 → Preload → Electron 主进程）→ 本机回环 HTTP + JWT → Flask API 单体 36 蓝图；下挂 PostgreSQL / Redis 队列 / 异步 worker-scheduler；右侧 AI Server 与 MCP 工具面；右下 Windows 宿主集成桥与 openfde·fdeops 真相层（只读纪律）。</p>
+        <p class="k">14 节点 · 16 连接 · 4 边界 · 取证 46dfd4f</p>
+      </div>
+      <div class="go">打开 →</div>
+    </a>
+
+    <a class="card" href="workflow/delivery-workflow.html">
+      <div class="badge">work<br>flow</div>
+      <div>
+        <p class="t">交付主流程：从项目到回款</p>
+        <p class="d">立项 → 调研建档 → 门禁证据提交 → 门禁核验 → 报价 → 合同 → 方案 → AI 产物 run → 终审拍板 → 导出 SOW → 交付包 → 收款结算；含 fail 整改重提、人工免终审、L1 人工接管、409 终审闸拦截等异常分支。</p>
+        <p class="k">13 节点 · 15 边 · 6 车道 · 取证 46dfd4f</p>
+      </div>
+      <div class="go">打开 →</div>
+    </a>
+
+    <a class="card" href="sequence/workflow-run-sequence.html">
+      <div class="badge">sequ<br>ence</div>
+      <div>
+        <p class="t">Workflow run 一次执行的完整调用链</p>
+        <p class="d">发起 run（幂等键 + 版本快照）→ 入队与租约认领 → 调度循环 → 四类节点分派（api_execute / skill / agent / human_approval）→ 审批拍板回投 → 断链与取消恢复。</p>
+        <p class="k">8 参与者 · 42 消息 · 10 段 · 取证 9bc342e</p>
+      </div>
+      <div class="go">打开 →</div>
+    </a>
+
+    <a class="card" href="dataflow/bridge-evidence-dataflow.html">
+      <div class="badge">dataf<br>low</div>
+      <div>
+        <p class="t">集成桥采集 → 服务端投影 → 一等证据登记簿</p>
+        <p class="d">计划任务 / 立即采集 → bridge-poll.mjs（只读）→ POST /api/v1/bridge/snapshots → apply_snapshot 投影事务 → bridge_engagements + project_evidence → 门禁清单项 / 集成桥页消费；原件永远留在本地工作目录，链路只传指针 + sha256。</p>
+        <p class="k">12 节点 · 取证 05f3773</p>
+      </div>
+      <div class="go">打开 →</div>
+    </a>
+
+    <a class="card" href="lifecycle/run-lifecycle.html">
+      <div class="badge">life<br>cycle</div>
+      <div>
+        <p class="t">Workflow 运行生命周期状态机</p>
+        <p class="d">run 层七态（queued → running ⇄ waiting_approval → succeeded / failed / cancelled）与 node 层八态（pending / ready / running / waiting / succeeded / failed / skipped / cancelled）双层迁移，含幂等键、断链、取消幂等与 resume 复位语义。</p>
+        <p class="k">14 态 · 21 迁移 · 取证 46dfd4f</p>
+      </div>
+      <div class="go">打开 →</div>
+    </a>
+  </div>
+
+  <footer>
+    每张图均为独立 standalone HTML（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、可开路径与透镜视图）。<br>
+    候选与取证回执在各图同级目录：<code>&lt;type&gt;/candidate.json</code> + <code>&lt;type&gt;/receipts/*.json</code> + <code>preview.png</code>，可复跑校验。<br>
+    取证版本说明：生成期间仓库被另一工作流推进，三张图钉 46dfd4f、sequence 钉 9bc342e、dataflow 钉 05f3773；经核对这些版本间被引用的源文件字节完全一致。
+  </footer>
+</div>
+</body>
+</html>

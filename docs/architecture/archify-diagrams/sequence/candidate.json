@@ -1,0 +1,721 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Workflow run 一次执行的完整调用链",
+    "locale": "zh-CN",
+    "output": ".archify/sequence-run-20261104-091726/workflow-run-sequence.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/gxfde/fde-workbench.git",
+      "revision": "9bc342e4f349ac88e3b88c000017b3e002099974",
+      "link_mode": "local-only"
+    },
+    "views": [
+      {
+        "id": "start",
+        "label": "发起与入队",
+        "focus": [
+          "client",
+          "httpapi",
+          "wfsvc",
+          "store",
+          "worker"
+        ],
+        "note": "HTTP 发起 → 幂等校验 → 落 run/节点行 → 事务性 outbox → worker 认领"
+      },
+      {
+        "id": "dispatch",
+        "label": "四类节点分派",
+        "focus": [
+          "exec",
+          "dispatch",
+          "store",
+          "taskcenter"
+        ],
+        "note": "call / skill / agent 三条服务分派，human_approval 走审批表与任务中心"
+      },
+      {
+        "id": "approval",
+        "label": "审批等待与人工拍板",
+        "focus": [
+          "exec",
+          "store",
+          "taskcenter"
+        ],
+        "note": "run=waiting_approval 挂起，任务中心拍板后同事务落节点终态并重投"
+      },
+      {
+        "id": "lifecycle",
+        "label": "终态、取消与恢复",
+        "focus": [
+          "exec",
+          "wfsvc",
+          "store",
+          "client"
+        ],
+        "note": "断链 run failed；cancel 幂等；resume 仅 failed 可用"
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "API 客户端",
+      "sublabel": "WorkflowConsole",
+      "sources": [
+        {
+          "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
+          "line": 110,
+          "end_line": 140,
+          "label": "run 列表 / 详情 GET"
+        },
+        {
+          "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
+          "line": 165,
+          "end_line": 179,
+          "label": "cancel / resume POST"
+        }
+      ]
+    },
+    {
+      "id": "httpapi",
+      "type": "backend",
+      "label": "HTTP API",
+      "sublabel": "workflows/routes.py",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/routes.py",
+          "line": 78,
+          "end_line": 104,
+          "label": "发起运行路由"
+        },
+        {
+          "path": "server/src/fde_api/workflows/routes.py",
+          "line": 148,
+          "end_line": 159,
+          "label": "cancel / resume 路由"
+        }
+      ]
+    },
+    {
+      "id": "wfsvc",
+      "type": "backend",
+      "label": "工作流服务",
+      "sublabel": "executor.py 服务层",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 156,
+          "end_line": 255,
+          "label": "start_run 服务层"
+        },
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 301,
+          "end_line": 350,
+          "label": "cancel_run / resume_run"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "业务库",
+      "sublabel": "workflow_runs 等表",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/models.py",
+          "line": 108,
+          "end_line": 201,
+          "label": "workflow_runs / workflow_node_runs"
+        },
+        {
+          "path": "server/src/fde_api/control/models.py",
+          "line": 163,
+          "end_line": 204,
+          "label": "automation_approvals"
+        },
+        {
+          "path": "server/src/fde_api/jobs/outbox.py",
+          "line": 29,
+          "end_line": 48,
+          "label": "事务性 outbox"
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "messagebus",
+      "label": "jobs worker",
+      "sublabel": "jobs/worker.py",
+      "sources": [
+        {
+          "path": "server/src/fde_api/jobs/worker.py",
+          "line": 56,
+          "end_line": 128,
+          "label": "run_job 认领租约"
+        },
+        {
+          "path": "server/src/fde_api/jobs/outbox.py",
+          "line": 50,
+          "end_line": 91,
+          "label": "dispatch_pending"
+        },
+        {
+          "path": "server/src/fde_api/jobs/queue.py",
+          "line": 51,
+          "end_line": 73,
+          "label": "ensure_background_job 单活守卫"
+        }
+      ]
+    },
+    {
+      "id": "exec",
+      "type": "backend",
+      "label": "执行器",
+      "sublabel": "run_workflow_run",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 456,
+          "end_line": 507,
+          "label": "run_workflow_run 调度主循环"
+        },
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 597,
+          "end_line": 649,
+          "label": "_execute_node 独立事务"
+        },
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 800,
+          "end_line": 817,
+          "label": "_dispatch 分派入口"
+        }
+      ]
+    },
+    {
+      "id": "dispatch",
+      "type": "backend",
+      "label": "节点分派",
+      "sublabel": "api_execute 等",
+      "sources": [
+        {
+          "path": "server/src/fde_api/control/api_actions.py",
+          "line": 110,
+          "end_line": 169,
+          "label": "api_execute 同一闸"
+        },
+        {
+          "path": "server/src/fde_api/control/ai_server_client.py",
+          "line": 135,
+          "end_line": 141,
+          "label": "execute_ai_prompt"
+        },
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 662,
+          "end_line": 844,
+          "label": "agents.start_run 同闸"
+        }
+      ]
+    },
+    {
+      "id": "taskcenter",
+      "type": "backend",
+      "label": "任务中心",
+      "sublabel": "decide_approval",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/executor.py",
+          "line": 1030,
+          "end_line": 1123,
+          "label": "_dispatch_human_approval"
+        },
+        {
+          "path": "server/src/fde_api/control/service.py",
+          "line": 701,
+          "end_line": 787,
+          "label": "decide_automation_approval"
+        },
+        {
+          "path": "server/src/fde_api/control/routes.py",
+          "line": 265,
+          "end_line": 281,
+          "label": "任务中心拍板路由"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 206,
+      "to": 438,
+      "label": "① 发起 run"
+    },
+    {
+      "from": 486,
+      "to": 590,
+      "label": "② 入队与拾取"
+    },
+    {
+      "from": 638,
+      "to": 742,
+      "label": "③ 调度循环 · tx A"
+    },
+    {
+      "from": 790,
+      "to": 926,
+      "label": "④ 分派 · call 节点"
+    },
+    {
+      "from": 974,
+      "to": 1142,
+      "label": "⑤ 分派 · skill 节点"
+    },
+    {
+      "from": 1190,
+      "to": 1294,
+      "label": "⑥ 分派 · agent 节点"
+    },
+    {
+      "from": 1342,
+      "to": 1446,
+      "label": "⑦ 分派 · human_approval 节点"
+    },
+    {
+      "from": 1494,
+      "to": 1662,
+      "label": "⑧ 等待审批与人工拍板"
+    },
+    {
+      "from": 1710,
+      "to": 1814,
+      "label": "⑨ 终态收敛与断链"
+    },
+    {
+      "from": 1862,
+      "to": 2062,
+      "label": "⑩ 取消与恢复"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "client",
+      "to": "httpapi",
+      "y": 230,
+      "label": "POST /workflows/{id}/runs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m2",
+      "from": "httpapi",
+      "to": "wfsvc",
+      "y": 262,
+      "label": "start_run(ctx, key)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m3",
+      "from": "wfsvc",
+      "to": "store",
+      "y": 294,
+      "label": "查幂等键 + 版本快照",
+      "variant": "default"
+    },
+    {
+      "id": "m4",
+      "from": "wfsvc",
+      "to": "store",
+      "y": 326,
+      "label": "写 run(queued) + 节点行",
+      "variant": "default"
+    },
+    {
+      "id": "m5",
+      "from": "wfsvc",
+      "to": "store",
+      "y": 358,
+      "label": "同事务写 outbox",
+      "variant": "default"
+    },
+    {
+      "id": "m6",
+      "from": "wfsvc",
+      "to": "httpapi",
+      "y": 390,
+      "label": "run + created",
+      "variant": "return"
+    },
+    {
+      "id": "m7",
+      "from": "httpapi",
+      "to": "client",
+      "y": 422,
+      "label": "201 run",
+      "variant": "return"
+    },
+    {
+      "id": "m8",
+      "from": "worker",
+      "to": "store",
+      "y": 510,
+      "label": "dispatch_pending 建 job",
+      "variant": "dashed"
+    },
+    {
+      "id": "m9",
+      "from": "worker",
+      "to": "store",
+      "y": 542,
+      "label": "claim：running + lease",
+      "variant": "default"
+    },
+    {
+      "id": "m10",
+      "from": "worker",
+      "to": "exec",
+      "y": 574,
+      "label": "run_workflow_run(run_id)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m11",
+      "from": "exec",
+      "to": "store",
+      "y": 662,
+      "label": "载入 run / 节点行 / DAG",
+      "variant": "default"
+    },
+    {
+      "id": "m12",
+      "from": "store",
+      "to": "exec",
+      "y": 694,
+      "label": "节点态 + 上游产物",
+      "variant": "return"
+    },
+    {
+      "id": "m13",
+      "from": "exec",
+      "to": "store",
+      "y": 726,
+      "label": "tx A：置 running + attempt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m14",
+      "from": "exec",
+      "to": "dispatch",
+      "y": 814,
+      "label": "call：execute_api",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m15",
+      "from": "dispatch",
+      "to": "store",
+      "y": 846,
+      "label": "同 sha256 键查重",
+      "variant": "security"
+    },
+    {
+      "id": "m16",
+      "from": "dispatch",
+      "to": "exec",
+      "y": 878,
+      "label": "result / 需人工确认",
+      "variant": "return"
+    },
+    {
+      "id": "m17",
+      "from": "exec",
+      "to": "store",
+      "y": 910,
+      "label": "tx B：节点 succeeded",
+      "variant": "default"
+    },
+    {
+      "id": "m18",
+      "from": "exec",
+      "to": "dispatch",
+      "y": 998,
+      "label": "skill：execute_ai_prompt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m19",
+      "from": "dispatch",
+      "to": "store",
+      "y": 1030,
+      "label": "读 published 技能版本",
+      "variant": "default"
+    },
+    {
+      "id": "m20",
+      "from": "store",
+      "to": "dispatch",
+      "y": 1062,
+      "label": "pinned instructions",
+      "variant": "return"
+    },
+    {
+      "id": "m21",
+      "from": "dispatch",
+      "to": "exec",
+      "y": 1094,
+      "label": "answer（无工具面）",
+      "variant": "return"
+    },
+    {
+      "id": "m22",
+      "from": "exec",
+      "to": "store",
+      "y": 1126,
+      "label": "tx B + 技能消费计数",
+      "variant": "default"
+    },
+    {
+      "id": "m23",
+      "from": "exec",
+      "to": "dispatch",
+      "y": 1214,
+      "label": "agent：start_run",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m24",
+      "from": "dispatch",
+      "to": "exec",
+      "y": 1246,
+      "label": "agent_run + 产物",
+      "variant": "return"
+    },
+    {
+      "id": "m25",
+      "from": "exec",
+      "to": "store",
+      "y": 1278,
+      "label": "tx B：节点 succeeded",
+      "variant": "default"
+    },
+    {
+      "id": "m26",
+      "from": "exec",
+      "to": "store",
+      "y": 1366,
+      "label": "human_approval：建审批行 risk=4",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m27",
+      "from": "store",
+      "to": "exec",
+      "y": 1398,
+      "label": "approval_id",
+      "variant": "return"
+    },
+    {
+      "id": "m28",
+      "from": "exec",
+      "to": "store",
+      "y": 1430,
+      "label": "节点 waiting + 审批 id",
+      "variant": "default"
+    },
+    {
+      "id": "m29",
+      "from": "exec",
+      "to": "store",
+      "y": 1518,
+      "label": "run = waiting_approval",
+      "variant": "dashed"
+    },
+    {
+      "id": "m30",
+      "from": "taskcenter",
+      "to": "store",
+      "y": 1550,
+      "label": "读待审审批行",
+      "variant": "default"
+    },
+    {
+      "id": "m31",
+      "from": "store",
+      "to": "taskcenter",
+      "y": 1582,
+      "label": "pending 行 + 指纹",
+      "variant": "return"
+    },
+    {
+      "id": "m32",
+      "from": "taskcenter",
+      "to": "store",
+      "y": 1614,
+      "label": "批准：节点 succeeded",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m33",
+      "from": "taskcenter",
+      "to": "store",
+      "y": 1646,
+      "label": "重投 workflow.run",
+      "variant": "dashed"
+    },
+    {
+      "id": "m34",
+      "from": "exec",
+      "to": "store",
+      "y": 1734,
+      "label": "节点 failed → 下游 skipped",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m35",
+      "from": "exec",
+      "to": "store",
+      "y": 1766,
+      "label": "run = failed（断链）",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m36",
+      "from": "exec",
+      "to": "store",
+      "y": 1798,
+      "label": "全绿 → run = succeeded",
+      "variant": "return"
+    },
+    {
+      "id": "m37",
+      "from": "client",
+      "to": "httpapi",
+      "y": 1886,
+      "label": "POST …/cancel",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m38",
+      "from": "httpapi",
+      "to": "wfsvc",
+      "y": 1918,
+      "label": "cancel_run（幂等）",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m39",
+      "from": "wfsvc",
+      "to": "store",
+      "y": 1950,
+      "label": "run + 节点 → cancelled",
+      "variant": "default"
+    },
+    {
+      "id": "m40",
+      "from": "client",
+      "to": "httpapi",
+      "y": 1982,
+      "label": "POST …/resume",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m41",
+      "from": "httpapi",
+      "to": "wfsvc",
+      "y": 2014,
+      "label": "resume_run（failed-only）",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m42",
+      "from": "wfsvc",
+      "to": "store",
+      "y": 2046,
+      "label": "failed/skipped → pending 重投",
+      "variant": "default"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "httpapi",
+      "from": 225,
+      "to": 432,
+      "type": "backend"
+    },
+    {
+      "participant": "worker",
+      "from": 505,
+      "to": 582,
+      "type": "messagebus"
+    },
+    {
+      "participant": "exec",
+      "from": 655,
+      "to": 1810,
+      "type": "backend"
+    },
+    {
+      "participant": "taskcenter",
+      "from": 1545,
+      "to": 1655,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "① 发起闸门（workflows/executor.py::start_run）",
+      "items": [
+        "幂等键全局唯一：同键同项目返回既有 run（created=false），跨项目同键 409 idempotency_conflict",
+        "只接受 published 定义；未知节点类型 422 unsupported_node_type——不留必死 run",
+        "run 起始状态为 queued；paused 只存在于 CHECK 值域，执行器永不写入",
+        "同事务落库：workflow_runs(queued) + 每个节点一行 workflow_node_runs(pending)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "② 入队与调度（jobs/outbox.py + jobs/worker.py）",
+      "items": [
+        "事务性 outbox：workflow.run 事件与业务写同事务提交，业务回滚事件一并消失",
+        "dispatch_pending 把它变成 background_jobs 行；ensure_background_job 单活守卫防重复投递",
+        "worker 先提交认领（running + locked_until 租约）再跑 handler，handler 内不持长事务",
+        "调度循环按拓扑序取下一个 ready 节点；节点独立事务，产物先落表再前进，分派在事务外"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "④⑤⑥ call / skill / agent 三条服务分派",
+      "items": [
+        "call：api_execute 同一闸，权限每节点实时校验（发起人 AI 档位 ∩ 项目 scope），run 级不冻结",
+        "写类 call 节点强制落节点级 sha256 幂等键（与 api_actions 同构），跨重试/恢复不二次外呼",
+        "skill：published 版本 instructions 作 system_prompt 的确定性调用，use_tools=False；计数走独立微事务",
+        "agent：agents.start_run 同闸全链（鉴权/预算/试点/T1/T6/沙箱/产物校验），幂等键 wfnode-{行id}:{attempt}"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "⑦⑧ human_approval 与人工拍板",
+      "items": [
+        "human_approval 复用 automation_approvals：run_id 置空 + workflow_node_run_id 反链",
+        "request_key = wfnode:{节点行id}；arguments sha256 指纹 + 敏感键扫描 + 64KB 上限 + risk_level=4",
+        "审批期间节点 waiting、run = waiting_approval（事件 workflow_run_waiting_approval）",
+        "拍板走既有任务中心 decide_automation_approval：批准 → 节点 succeeded；拒绝/过期 → 节点 failed"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "⑨⑩ 终态、取消与恢复",
+      "items": [
+        "断链不静默 done：出现 failed 节点 → run failed，下游 skipped（FV-F1 执行侧）",
+        "POST …/cancel 幂等：重复取消 200 cancelled=false；run 已终态 409 already_terminal",
+        "POST …/resume 仅 failed 可用：failed/skipped 节点回 pending 并重投 workflow.run，其余 409 not_resumable",
+        "占位符缺键 → 节点 failed（placeholder_missing），绝不填空串；等待审批的 run 不可 resume"
+      ]
+    }
+  ]
+}

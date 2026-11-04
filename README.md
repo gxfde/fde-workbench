@@ -62,6 +62,8 @@
 | 后台进程 | 容器 worker / scheduler | 文件处理、异步任务与自动化调度 |
 | 部署 | Docker Compose（redis / api / worker / scheduler） | API 只绑定 `127.0.0.1:8010`；数据库复用网络上已有的 PostgreSQL 16 实例 |
 
+> 整套交互式架构图（总体架构 / 交付流程 / 工作流执行时序 / 集成桥证据数据流 / 运行状态机，五视角）已用 archify 从本仓库真实代码取证生成，见 [docs/architecture/archify-diagrams/index.html](docs/architecture/archify-diagrams/index.html)（每张为独立 standalone HTML，含通过回执与行号级证据）。
+
 ## 环境要求
 
 - Docker 与 Docker Compose v2（后端全栈）

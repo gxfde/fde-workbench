@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — docs：archify 整套架构图入库——五视角交互式证据图 + 复跑回执（2026-11-04，纯文档零代码零迁移）
+
+- 新增 `docs/architecture/archify-diagrams/`：用 archify（v3.0.1）从本仓库真实代码取证生成的**五视角**架构图，每张独立 standalone HTML（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、路径/透镜视图）：
+  - `architecture/` 系统总体架构（14 节点 / 16 连接 / 4 边界）
+  - `workflow/` 交付主流程：从项目到回款（13 节点 / 15 边 / 6 车道，含 fail 整改 / 人工免终审 / L1 接管 / 409 闸拦分支）
+  - `sequence/` Workflow run 一次执行完整调用链（8 参与者 / 42 消息 / 10 段，四类节点分派）
+  - `dataflow/` 集成桥采集 → 服务端投影 → 一等证据登记簿（指针 + sha256 红线）
+  - `lifecycle/` Workflow 运行生命周期双层状态机（run 七态 + node 八态，幂等键 / 断链 / cancel / resume）
+- 每张同级含 `candidate.json`（生成输入）+ `receipts/`（通过轮 finalize/deliver/check/browser-check 回执）+ `preview.png`（1440×900 亮色截图），`index.html` 汇总入口。
+- 文档口径纠偏（以代码为准）：run 起始态 `queued`（非 `pending`）；发起路由 `POST /projects/{pid}/workflows/{def_id}/runs`；桌面控制台可列/详情/取消/恢复、**不能**发起 run。
+- README「技术架构」节加一段指向本目录的锚注。
+- 口径数字全部不变（105 表 / 路由 296 / ENTRIES 94 / 迁移头不变）；零路由零迁移零桌面改动。
+
 ## [未发布] — V3 实施 T-O4b：subject 合并原语——表单/答案/链接/子对象/备忘录/画像单事务搬迁（2026-11-04）
 
 ### 服务端（迁移 `d4e6f8a2c7b9`：+`merged_into_subject_id` 可空列；一条人工路由 295→296）

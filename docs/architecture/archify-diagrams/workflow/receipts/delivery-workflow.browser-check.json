@@ -1,0 +1,1597 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "browser-check",
+  "evidenceKind": "automated-browser",
+  "status": "pass",
+  "visualReview": "not-requested",
+  "provenance": "current",
+  "deliveryReceiptId": "aff50cff-6a5f-41fa-97d9-87bbbf55c640",
+  "artifact": {
+    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.html",
+    "sha256": "d9026aecb5ed11ee60bf5b86b3d749d30183493541fe83af861e84b1b6b5e181",
+    "bytes": 784012
+  },
+  "state": {
+    "detail": "read",
+    "motion": "still"
+  },
+  "chrome": {
+    "status": "available",
+    "executable": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+  },
+  "diagnostics": [],
+  "containment": {
+    "status": "pass",
+    "policy": "fit-or-reader-declared-readable-vertical-scroll",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 900,
+        "theme": "light",
+        "innerWidth": 1440,
+        "innerHeight": 900,
+        "scrollWidth": 1440,
+        "scrollHeight": 1534,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 12,
+          "headerPx": 68,
+          "diagramChromePx": 78,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1600,
+        "height": 1000,
+        "theme": "light",
+        "innerWidth": 1600,
+        "innerHeight": 1000,
+        "scrollWidth": 1600,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1920,
+        "height": 1080,
+        "theme": "light",
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "scrollWidth": 1920,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 2048,
+        "height": 1320,
+        "theme": "light",
+        "innerWidth": 2048,
+        "innerHeight": 1320,
+        "scrollWidth": 2048,
+        "scrollHeight": 1618,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 967,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 84,
+          "diagramChromePx": 94,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 44,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      }
+    ]
+  },
+  "themeStates": {
+    "status": "pass",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 900,
+        "requestedTheme": "light",
+        "resolvedTheme": "light",
+        "ok": true
+      },
+      {
+        "width": 1600,
+        "height": 1000,
+        "requestedTheme": "light",
+        "resolvedTheme": "light",
+        "ok": true
+      },
+      {
+        "width": 1920,
+        "height": 1080,
+        "requestedTheme": "light",
+        "resolvedTheme": "light",
+        "ok": true
+      },
+      {
+        "width": 2048,
+        "height": 1320,
+        "requestedTheme": "light",
+        "resolvedTheme": "light",
+        "ok": true
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "requestedTheme": "dark",
+        "resolvedTheme": "dark",
+        "ok": true
+      },
+      {
+        "width": 2048,
+        "height": 1320,
+        "requestedTheme": "dark",
+        "resolvedTheme": "dark",
+        "ok": true
+      }
+    ]
+  },
+  "readability": {
+    "status": "pass",
+    "minimumProjectedNodeTextPx": 6,
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 900,
+        "theme": "light",
+        "innerWidth": 1440,
+        "innerHeight": 900,
+        "scrollWidth": 1440,
+        "scrollHeight": 1534,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 12,
+          "headerPx": 68,
+          "diagramChromePx": 78,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1600,
+        "height": 1000,
+        "theme": "light",
+        "innerWidth": 1600,
+        "innerHeight": 1000,
+        "scrollWidth": 1600,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1920,
+        "height": 1080,
+        "theme": "light",
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "scrollWidth": 1920,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 2048,
+        "height": 1320,
+        "theme": "light",
+        "innerWidth": 2048,
+        "innerHeight": 1320,
+        "scrollWidth": 2048,
+        "scrollHeight": 1618,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 967,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 84,
+          "diagramChromePx": 94,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 44,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      }
+    ]
+  },
+  "viewerChrome": {
+    "status": "pass",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 900,
+        "theme": "light",
+        "innerWidth": 1440,
+        "innerHeight": 900,
+        "scrollWidth": 1440,
+        "scrollHeight": 1534,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 12,
+          "headerPx": 68,
+          "diagramChromePx": 78,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1600,
+        "height": 1000,
+        "theme": "light",
+        "innerWidth": 1600,
+        "innerHeight": 1000,
+        "scrollWidth": 1600,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 1920,
+        "height": 1080,
+        "theme": "light",
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "scrollWidth": 1920,
+        "scrollHeight": 1600,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 960,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 76,
+          "diagramChromePx": 84,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 54,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      },
+      {
+        "width": 2048,
+        "height": 1320,
+        "theme": "light",
+        "innerWidth": 2048,
+        "innerHeight": 1320,
+        "scrollWidth": 2048,
+        "scrollHeight": 1618,
+        "overflowX": false,
+        "overflowY": true,
+        "verticalScrollAccepted": true,
+        "overflowDisposition": "readable-vertical-scroll",
+        "readerLayout": "adaptive",
+        "readerOverflow": "authored",
+        "readerFit": "intrinsic-height",
+        "ok": true,
+        "readerWidth": 967,
+        "diagramWidth": 917,
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 84,
+          "diagramChromePx": 94,
+          "svgPx": 1376,
+          "cardsPx": 0,
+          "viewBoxHeight": 1467
+        },
+        "viewBoxWidth": 978,
+        "workflowLanes": [
+          {
+            "frameId": "lane-5",
+            "heightPx": 247,
+            "nodeCount": 2,
+            "nodeIds": [
+              "package",
+              "payment_settle"
+            ],
+            "nodeSpanPx": 195,
+            "spaceAboveNodesPx": 47,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-4",
+            "heightPx": 241,
+            "nodeCount": 3,
+            "nodeIds": [
+              "handoff",
+              "signoff",
+              "export_sow"
+            ],
+            "nodeSpanPx": 178,
+            "spaceAboveNodesPx": 58,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-1",
+            "heightPx": 216,
+            "nodeCount": 2,
+            "nodeIds": [
+              "gate_decide",
+              "gate_evidence"
+            ],
+            "nodeSpanPx": 173,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 5
+          },
+          {
+            "frameId": "lane-2",
+            "heightPx": 215,
+            "nodeCount": 2,
+            "nodeIds": [
+              "contract",
+              "quote"
+            ],
+            "nodeSpanPx": 165,
+            "spaceAboveNodesPx": 38,
+            "spaceBelowNodesPx": 11
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 99,
+            "nodeCount": 3,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "solution"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          },
+          {
+            "frameId": "lane-3",
+            "heightPx": 99,
+            "nodeCount": 1,
+            "nodeIds": [
+              "agent_run"
+            ],
+            "nodeSpanPx": 64,
+            "spaceAboveNodesPx": 32,
+            "spaceBelowNodesPx": 4
+          }
+        ],
+        "minimumProjectedNodeTextPx": 6.000817995910021,
+        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
+        "minimumProjectedEdgeTextPx": 7.5010224948875255,
+        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextDetail": "context",
+        "minimumProjectedNodeTextOwner": {
+          "kind": "node",
+          "id": "contract"
+        },
+        "minimumRequiredNodeTextPx": 6,
+        "readabilityOk": true,
+        "hasLegend": true,
+        "hasNavigationDock": true,
+        "legendDockIntersectionArea": 0,
+        "dockStageIntersectionArea": 0,
+        "dockStageGap": 10,
+        "requiredDockStageGap": 10,
+        "viewerChromeStageOk": true,
+        "viewerChromeReserve": 44,
+        "viewerChromeActive": true,
+        "viewerChromeOk": true,
+        "resolvedTheme": "light"
+      }
+    ]
+  },
+  "captures": {
+    "status": "not-requested",
+    "screenshots": [],
+    "contactSheet": null
+  },
+  "sidecars": {
+    "receipt": "delivery-workflow.browser-check.json",
+    "files": []
+  }
+}
