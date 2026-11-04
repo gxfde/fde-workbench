@@ -2,6 +2,8 @@
 
 三处调用共用同一幂等语义：同方案至多一个 ``pending`` signoff；已有 pending
 时只补 run 软链（``handoff_run_id`` 为空才补、绝不覆写），绝不重复开闸。
+跨事务并发的「查 pending + 开闸」由事务级 advisory lock 串行（goal-c CR-008，
+``pg_advisory_xact_lock(hashtext('fde_signoff:<solution_id>'))``，同仓首单闸先例）。
 
 - ``agents.service._finalize``：非降级 completed 且绑定 solution 的 run
   （产物进入终审通道）即时开闸。此前唯一开闸点是 handoff_run，而它只收
@@ -17,7 +19,7 @@
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from fde_api.agents.models import SolutionReviewCheckpoint
@@ -29,7 +31,17 @@ def ensure_pending_signoff(session: Session, *, solution_id: str, run_id: str | 
     """返回该方案唯一的 pending signoff checkpoint；没有则在当前事务内开出。
 
     取最早的 pending（与 ``resolve_signoff`` 的收口顺序一致）。
+
+    并发防线（goal-c CR-008）：SELECT-then-INSERT 在跨事务并发下会双插 pending
+    （READ COMMITTED 下两事务各读不到对方的未提交 INSERT）。事务级 advisory lock
+    按方案串行化「查 pending + 开闸」这一段——同仓 `quote_service` 首单闸
+    （fde_quote_first_order）与 `bridge/sync.py`（fde_bridge_apply）同构先例；
+    锁随事务提交/回滚自动释放，无新增 DDL。
     """
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext('fde_signoff:' || :solution_id))"),
+        {"solution_id": solution_id},
+    )
     checkpoint = session.scalar(
         select(SolutionReviewCheckpoint)
         .where(SolutionReviewCheckpoint.solution_id == solution_id)

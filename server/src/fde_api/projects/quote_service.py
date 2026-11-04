@@ -293,6 +293,14 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
             cash_cost = default_cash if cash_cost is None else cash_cost
             if isinstance(cash_cost, bool) or not isinstance(cash_cost, int) or cash_cost < 0:
                 raise QuoteServiceError("invalid_request", "现金成本必须是不为负的整数金额。", 400)
+            if cash_cost > int(MAX_INPUT_MONEY):
+                # 数值入参的合理上限（工程防御，非方法论取值）：超出即视为录入错误拒 400
+                # （同 final_amount 口径——cash_cost 是 Integer 列，超限 500 前拦下）。
+                raise QuoteServiceError(
+                    "invalid_request",
+                    f"现金成本不得超过 {int(MAX_INPUT_MONEY)}（超出视为录入错误）。",
+                    400,
+                )
             integration = _decimal_input(payload, "integration_factor")
             if integration is None:
                 integration = Decimal("1.00")
@@ -526,6 +534,15 @@ def calibrate_quote(
                 )
             realistic = quote.realistic_hours
             deviation = ((actual - realistic) / realistic).quantize(Decimal("0.0001"))
+            # Numeric(7,4) 上限 999.9999：deviation 先落库（flush 前），超限必须先 400
+            # 拒（「超出即视为录入错误拒 400」防御口径，同 calibrated 的 99.99 闸）——
+            # 否则 flush 抛 DataError 走全局 500（goal-c CR-010）。
+            if abs(deviation) > Decimal("999.9999"):
+                raise QuoteServiceError(
+                    "invalid_request",
+                    "actual_hours 与 realistic 偏差超出存储上限（疑似录入错误），请核对实际工时。",
+                    400,
+                )
             quote.actual_hours = actual
             quote.deviation_pct = deviation
             quote.deviation_reason = reason

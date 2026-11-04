@@ -2,11 +2,16 @@
 
 A1 修复的回归钉：G8 + conditional_pass 必须被拒（gate_result_not_allowed），
 G9 + conditional_pass 不被误伤，G8 + pass 无 decision 必须被拒（gate_decision_required）。
+
+goal-c CR-009：G8 stop 结算联动（flag_g8_stop_settlement）两条分支补载体——
+有尾款行打 settlement_reason='g8_stop' + 事件；无尾款行只留事件不落标记。
 """
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -16,7 +21,12 @@ from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.evidence.models import ProjectEvidence
-from fde_api.workbench.models import IndustryTemplate, IndustryTemplateVersion, OperationEvent
+from fde_api.workbench.models import (
+    IndustryTemplate,
+    IndustryTemplateVersion,
+    OperationEvent,
+    Payment,
+)
 from fde_api.workbench.seed import GENERIC_TEMPLATE_KEY, seed_workbench
 
 from conftest import INITIAL_PASSWORD
@@ -235,3 +245,78 @@ def test_submit_evidence_registers_first_class_evidence(admin_client, gate_proje
     assert db_session.scalar(
         select(func.count()).select_from(ProjectEvidence).where(ProjectEvidence.project_id == project["id"])
     ) == len(ids)
+
+
+def _g8_stop_payment_row(db_session, project) -> Payment:
+    """G8 尾款行（SOW C 里程碑）：金额真相留台账（本用例只关心结算标记）。"""
+    row = Payment(
+        project_id=project["id"],
+        milestone_key="G8",
+        sow_type="c",
+        collects="G8 尾款",
+        timing="验收通过",
+        amount=Decimal("30000"),
+        source_uri="fdeops://g8-stop/G8",
+        content_hash=hashlib.sha256(b"g8-stop-test").hexdigest(),
+        note="",
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def test_g8_stop_flags_g8_settlement_when_row_exists(admin_client, gate_project, db_session):
+    """CR-009：G8 + pass + decision=stop 有尾款行 → 打 settlement_reason='g8_stop'
+    + 事件 flagged=true + note 追加结算说明；B 尾款照收（不因 stop 免除）。"""
+    project, gates_url, leader_client = gate_project
+    row = _g8_stop_payment_row(db_session, project)
+    _submit_all_evidence(admin_client, gates_url, "G8")
+
+    response = leader_client.post(
+        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "stop"}
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.json["data"]["g8_stop_settlement"] == {"flagged": True, "milestone_key": "G8"}
+
+    db_session.expire_all()
+    db_session.refresh(row)
+    assert row.settlement_reason == "g8_stop"
+    assert row.note.endswith("G8 stop：按合同结算尾款")
+    event = db_session.scalars(
+        select(OperationEvent)
+        .where(
+            OperationEvent.project_id == project["id"],
+            OperationEvent.event_type == "payment_settlement_flagged",
+        )
+        .order_by(OperationEvent.occurred_at.desc())
+    ).first()
+    assert event is not None
+    assert event.changes["flagged"] is True and event.changes["reason"] == "g8_stop"
+
+
+def test_g8_stop_without_settlement_row_only_records_event(admin_client, gate_project, db_session):
+    """CR-009：无 G8 尾款行（计划未建）→ 只留事件 flagged=false，不落标记（建计划时人工确认）。"""
+    project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G8")
+
+    response = leader_client.post(
+        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "stop"}
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.json["data"]["g8_stop_settlement"] == {"flagged": False, "milestone_key": "G8"}
+
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(Payment)
+        .where(Payment.project_id == project["id"], Payment.milestone_key == "G8")
+    ) == 0
+    event = db_session.scalars(
+        select(OperationEvent)
+        .where(
+            OperationEvent.project_id == project["id"],
+            OperationEvent.event_type == "payment_settlement_flagged",
+        )
+        .order_by(OperationEvent.occurred_at.desc())
+    ).first()
+    assert event is not None
+    assert event.changes["flagged"] is False
