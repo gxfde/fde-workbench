@@ -202,4 +202,95 @@ def test_snapshot_includes_tasks_members_research(db_session):
     assert snapshot["research"]["role_interview"]["main_problem"] == {
         "text": "排产信息分散"
     }
+    # V3 T-D1（WB-DEF-7）：血缘键随答案冻结，未实例化门禁的快照 gates 为空
+    assert isinstance(snapshot["research"]["role_interview"]["revision_id"], str)
+    assert snapshot["gates"] == []
     assert isinstance(snapshot["captured_at"], str)
+
+
+def test_snapshot_research_revision_lineage_points_at_latest_confirmed(db_session):
+    """V3 T-D1（WB-DEF-7）：revision_id 必须指向最新 confirmed revision 且可反查。"""
+    leader = User(username="snapshot.lead3", password_hash="x", role="project_lead")
+    db_session.add(leader)
+    db_session.commit()
+    project = _build_persisted_project(db_session, code="SNAP-REV-001", leader=leader)
+
+    subject = _add_role_subject(db_session, project, subject_key="planner", name="计划员")
+    form = _add_confirmed_role_form(db_session, project, subject, form_key="role_interview")
+
+    # 第二个 confirmed revision（revision_number=2）——快照必须采用它。
+    second_revision = ProjectResearchFormRevision(
+        form=form,
+        revision_number=2,
+        status="confirmed",
+    )
+    db_session.add(second_revision)
+    db_session.flush()
+    db_session.add(
+        ProjectResearchAnswer(
+            revision=second_revision,
+            field_key="main_problem",
+            value_json={"text": "已更新的主要问题"},
+        )
+    )
+    db_session.commit()
+
+    snapshot = build_document_snapshot(
+        db_session,
+        project.id,
+        {"research_keys": [{"form_key": "role_interview", "subject_type": "role"}]},
+    )
+
+    values = snapshot["research"]["role_interview"]
+    assert values["revision_id"] == second_revision.id
+    assert values["main_problem"] == {"text": "已更新的主要问题"}
+    # 血缘反查：从快照冻结的 id 找回 revision 行本身。
+    backtracked = db_session.get(ProjectResearchFormRevision, values["revision_id"])
+    assert backtracked is not None
+    assert backtracked.status == "confirmed"
+    assert backtracked.revision_number == 2
+
+
+def test_snapshot_includes_gate_state_summary(db_session):
+    """V3 T-D1：gates 摘要冻结生成时刻的门禁状态语义，按 gate_key 排序。"""
+    from datetime import UTC, datetime
+
+    from fde_api.workbench.models import Gate
+
+    leader = User(username="snapshot.lead4", password_hash="x", role="project_lead")
+    db_session.add(leader)
+    db_session.commit()
+    project = _build_persisted_project(db_session, code="SNAP-GATE-001", leader=leader)
+
+    decided_at = datetime(2026, 9, 30, 8, 0, tzinfo=UTC)
+    db_session.add(
+        Gate(
+            project_id=project.id,
+            gate_key="G8",
+            status="passed",
+            decision="proceed",
+            decided_at=decided_at,
+        )
+    )
+    db_session.add(
+        Gate(project_id=project.id, gate_key="G1", status="evidence")
+    )
+    db_session.commit()
+
+    snapshot = build_document_snapshot(db_session, project.id, {"research_keys": []})
+
+    gates = snapshot["gates"]
+    assert [gate["gate_key"] for gate in gates] == ["G1", "G8"]
+    assert gates[0] == {
+        "gate_key": "G1",
+        "status": "evidence",
+        "decision": None,
+        "submitted_at": None,
+        "decided_at": None,
+    }
+    assert gates[1]["status"] == "passed"
+    assert gates[1]["decision"] == "proceed"
+    assert gates[1]["decided_at"] == decided_at.isoformat()
+    # 摘要不携带清单明细/证据指针——那些属于门禁面，不属于文档快照。
+    assert "evidence_checklist" not in gates[1]
+    assert "evidence_uri" not in gates[1]

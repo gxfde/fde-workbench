@@ -21,12 +21,30 @@ from fde_api.documents.models import ProjectDocument
 from fde_api.research.models import ProjectResearchForm, ProjectResearchFormRevision, ProjectResearchSubject
 
 
+def ai_content_applicable(document: ProjectDocument) -> bool:
+    """Whether this document takes the AI content path at all (T-D1 单一谓词).
+
+    生成器据此决定是否铸造 request_id：只有真正会发起供应商调用的文档才铸，
+    避免「冻结了 id 却没有对应 ai_call_audits 行」的幽灵血缘。
+    """
+    return document.document_type in {"pov_plan", "sow"} and bool(
+        document.source_opportunity_id or document.opportunity_scope_json
+    )
+
+
 def generate_document_fields(
     session: Session,
     document: ProjectDocument,
     requested_fields: list[str] | None = None,
+    *,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
-    if document.document_type not in {"pov_plan", "sow"} or not (document.source_opportunity_id or document.opportunity_scope_json):
+    """Generate AI draft fields; ``request_id`` names the ``ai_call_audits`` row.
+
+    V3 T-D1（WB-DEF-6）：调用方可传入自己铸造并负责冻结的 request_id，使
+    版本行/任务行能反查本次调用的审计记录；缺省时在此自铸（兼容旧调用）。
+    """
+    if not ai_content_applicable(document):
         return {}
     opportunity = session.scalar(
         select(ProjectResearchSubject)
@@ -95,7 +113,7 @@ def generate_document_fields(
     )
     result = _client().complete_json(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-        request_id=f"document-content-{uuid4()}",
+        request_id=request_id or f"document-content-{uuid4()}",
         max_tokens=6144,
     )
     fields = result.get("fields")

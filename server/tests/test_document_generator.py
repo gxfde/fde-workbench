@@ -4,6 +4,7 @@ import io
 import json
 from datetime import date
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -25,6 +26,7 @@ from fde_api.extensions import object_storage
 from fde_api.files.models import ProjectFile, ProjectFileVersion
 from fde_api.files.names import extension_of, safe_filename
 from fde_api.workbench.models import (
+    AICallAudit,
     IndustryTemplate,
     IndustryTemplateVersion,
     Project,
@@ -492,6 +494,75 @@ def test_handle_document_generation_files_qa_failure_as_failed(db_session):
     # The generator must not promote or create a file version on QA failure.
     assert seeded["docx_file_version"].status == "uploading"
     assert seeded["job"].status == "failed"
+
+
+def test_handle_document_generation_freezes_ai_request_lineage(app, db_session):
+    """V3 T-D1（WB-DEF-6）：AI 调用的 request_id 冻结进版本行并落 job 行，可反查 ai_call_audits。"""
+    seeded = _seed_generation(db_session, template_bytes=_clean_sow_template_bytes())
+    document = seeded["document"]
+    document.opportunity_scope_json = {"generation_scope": "一期统一交付"}
+    db_session.commit()
+    version = seeded["version"]
+
+    fake = Mock()
+    fake.complete_json.return_value = {"fields": {"deliverables": "血缘闭环交付物"}}
+    app.extensions["fde_api_document_generation_deepseek"] = fake
+    try:
+        result = handle_document_generation(version_id=version.id)
+    finally:
+        app.extensions.pop("fde_api_document_generation_deepseek", None)
+
+    assert result["status"] == "succeeded", result
+    captured = fake.complete_json.call_args.kwargs["request_id"]
+    assert captured.startswith("document-content-")
+
+    db_session.refresh(version)
+    db_session.refresh(seeded["job"])
+    frozen = version.content_snapshot_json
+    # 回写版本：content_snapshot 与 AI 字段同处冻结。
+    assert frozen["ai_request_id"] == captured
+    assert frozen["ai_fields"]["deliverables"] == "血缘闭环交付物"
+    # 落 job 行：document_generation_jobs 可直接 join 审计表。
+    assert seeded["job"].ai_request_id == captured
+
+    # 血缘反查：同一 request_id 命中 ai_call_audits 审计行（模拟审计写入，
+    # 用后即清——ai_call_audits 不在 conftest 清理序）。
+    audit = AICallAudit(
+        request_id=captured,
+        model="MiniMax-M3.1-Flash",
+        duration_ms=12,
+        status="succeeded",
+    )
+    db_session.add(audit)
+    db_session.commit()
+    backtracked = db_session.scalar(
+        select(AICallAudit).where(AICallAudit.request_id == captured)
+    )
+    assert backtracked is not None
+    assert backtracked.status == "succeeded"
+    db_session.delete(backtracked)
+    db_session.commit()
+
+    # 重复生成幂等：不重铸 request_id（血缘指向首代调用），AI 不再发起。
+    second = handle_document_generation(version_id=version.id)
+    assert second["status"] == "succeeded"
+    db_session.refresh(version)
+    assert version.content_snapshot_json["ai_request_id"] == captured
+    assert fake.complete_json.call_count == 1
+
+
+def test_handle_document_generation_non_ai_job_keeps_request_id_null(db_session):
+    """V3 T-D1：未走 AI 的生成（无机会范围）不铸造 request_id，job 行保持 NULL。"""
+    seeded = _seed_generation(db_session, template_bytes=_clean_sow_template_bytes())
+    version = seeded["version"]
+
+    result = handle_document_generation(version_id=version.id)
+
+    assert result["status"] == "succeeded", result
+    db_session.refresh(version)
+    db_session.refresh(seeded["job"])
+    assert "ai_request_id" not in version.content_snapshot_json
+    assert seeded["job"].ai_request_id is None
 
 
 def test_zz_diag_gen_error(db_session):

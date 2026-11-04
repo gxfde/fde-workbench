@@ -313,9 +313,17 @@
   - list/GET、证据提交、拍板响应共用同一序列化器四调用面自动携带；桌面 GateBoard 类型守卫只验必填键零破坏（桌面呈现消费留待 UI 轮，本轮范围=后端字段）。
   - 测试：test_gates_api **+1**（懒实例化首访全不漂移 / 冻结哈希改写 → true / NULL → false；注意**首个 gates 访问才触发懒实例化**，前置 UPDATE 会落空——先 GET 再改哈希复 GET）；pytest **1863 收集（1857 passed + 6 skipped，本轮 +1）**——基线即 fork/main `6cccedb` 实测 collect-only 1862（1856+6s）：T-R2 记录 1855 是其自轮 `e1568d6` 运行面（基于 ef34ce0 不含 #98），squash `6cccedb` 基于 `e3b8350` 并入 #98 goal-c3 的 +7 测试（G8-stop ×2 / 报价数值闸 ×3 / signoff 并发 ×2），diff 实测归因闭合。零迁移（head `c7e1a9f3b5d8` 不变）/ 路由 296 不变 / ENTRIES 94 不变 / mypy 基线 279 不变（104 distinct）/ 桌面零改动（vitest 755 不变）。
 
-### T-D1 文档血缘补洞（WB-DEF-6/7）
+### T-D1 文档血缘补洞（WB-DEF-6/7）— **DONE（2026-11-04）**
 - 修改文件：`documents/snapshots.py`（confirmed_research_values 加 revision_id 键）、`documents/ai_content.py`+`generator.py`（request_id 落 generation job 行并回写版本）、快照含 gates 摘要。
 - 测试：test_document_snapshots 扩展（可反查 revision 与 ai_call_audits）。复杂度：**M**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **WB-DEF-7（revision_id）**：`confirmed_research_values` 每表单字典新增 `revision_id` 键（指向被采用的最新 confirmed revision），血缘键先落位、答案随后——扁平布局不变，`research.<form>.<field>` 占位符解析零破坏；极端同名模板字段会覆盖血缘键（文档内容优先，取舍在案：模板循环迭代表单字典会看到该键）。快照即冻结答案出处，反查 `session.get(ProjectResearchFormRevision, id)` 直达。
+  - **gates 摘要**：快照新增 `gates` 段——每门 `{gate_key, status, decision, submitted_at, decided_at}`，按 gate_key 排序；**有意不携带**清单明细/证据指针/候选（文档需要「生成时刻门禁走到哪」，不是门禁第二份镜像）；门禁未实例化项目为 `[]`。
+  - **WB-DEF-6（request_id）**：`generate_document_fields` 增 keyword-only `request_id` 参数（缺省自铸兼容旧调用）；`generator._build_context` 在**新鲜 AI 分支**铸 `document-content-{uuid4()}` 传入并冻结进 `content_snapshot_json["ai_request_id"]`（与 `ai_fields` 同处，D3/E1 来源真值伴生）；`handle_document_generation` 随后 `_stamp_job_ai_request_id` 把同值落 `document_generation_jobs.ai_request_id` 新列（迁移 `e2c6a8f4d1b3`，33→34 rev，可空、downgrade 直删）——job 行可直接 join `ai_call_audits`，版本行经 content_snapshot 反查。
+  - **幽灵血缘防线（设计外新增，测试驱动）**：初版在资格判定前铸 id，非 AI 文档（无机会范围的 PoV/SOW、非 PoV/SOW 类型）会冻结无审计行对应的 id。修复=资格判定提为 `ai_content.ai_content_applicable(document)` 单一谓词，`generate_document_fields` 守卫与 `_build_context` 铸造分支同源——只有真正发起供应商调用的文档才铸 id。复用首代冻结字段的再生成（D10）不重铸，血缘恒指首代调用；失败路径 id 随事务回滚（失败版本无内容可追溯）；方案导出（has_saved_solution）无 AI 调用故无 id。
+  - 桌面零改动：桌面只消费 `field_overrides`，不解析 `source_snapshot_json`/`ai_request_id`（`_serialize_version` 的 content_snapshot 全量外泄面早已存在，新键纯增量）。`ai_request_id` 不进 api_catalog、零新路由。
+  - **测试**：test_document_snapshots **+2**（最新 confirmed revision 指向+反查 / gates 摘要形状+排序+无清单键）+ 既有全量用例扩 2 断言（revision_id 类型、空 gates）；test_document_generator **+2**（AI 血缘闭环：伪造客户端捕获 request_id → 版本冻结+job 落列+`ai_call_audits` 反查+幂等再生成不重铸 / 非 AI 生成 job 列保持 NULL 且 content_snapshot 无键）；`test_migrations` HEAD `e2c6a8f4d1b3`。
+  - **口径**：105 表不变（列级增量）、迁移头 `c7e1a9f3b5d8`→**`e2c6a8f4d1b3`**（**34 rev**）、业务路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1871 收集 = 1865 passed + 6 skipped**（本轮 +4；基线 `c8aa08a` 实测 collect 1867——#103 goal-c4 较 #102 的 1863 +4）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`。
 
 ### T-C1 Delivery Compiler 最小闭环（P2 尾）
 - 目标：change_set confirmed 后的"编译预览"：从 confirmed 本体+模板生成方案草稿骨架（复用 solutions /skeleton 路径）与 workflow 定义草稿（dag_json 模板化）。

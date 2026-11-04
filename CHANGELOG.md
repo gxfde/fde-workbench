@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-D1：文档血缘补洞——快照 revision_id + 门禁摘要 + AI 调用 request_id 落库（2026-11-04）
+
+### 服务端（审计 WB-DEF-6/7；1 列级迁移、零路由零桌面改动）
+
+- **WB-DEF-7（调研答案血缘）**：文档快照 `confirmed_research_values` 每表单字典新增 `revision_id` 键，指向被采用的最新 confirmed revision——快照冻结后仍可反查答案出处；扁平布局不变，模板占位符解析零破坏。
+- **门禁摘要**：快照新增 `gates` 段（每门 `gate_key/status/decision/submitted_at/decided_at`，按 key 排序）——文档生成时刻的门禁进度随快照冻结；有意不携带清单明细/证据指针（门禁面的数据不进文档镜像）。
+- **WB-DEF-6（AI 调用血缘）**：AI 内容生成的 `request_id` 由生成器铸造并传入 `generate_document_fields`，冻结进版本行 `content_snapshot_json["ai_request_id"]` 并落 `document_generation_jobs.ai_request_id` 新列（迁移 `e2c6a8f4d1b3`）——版本行/任务行均可直接反查 `ai_call_audits` 审计记录。资格判定提为 `ai_content_applicable` 单一谓词：只有真正发起供应商调用的生成才铸 id（不产幽灵血缘）；再生成复用首代冻结字段不重铸（血缘恒指首代调用）；失败路径 id 随事务回滚。
+
+### 测试与口径
+
+- pytest **1871 收集（1865 passed + 6 skipped，本轮 +4；基线 `c8aa08a` 实测 1867——#103 goal-c4 +4）**：快照血缘指向最新 confirmed revision + 反查 / gates 摘要形状排序 / AI 血缘闭环（捕获 request_id → 版本冻结 + job 落列 + 审计反查 + 幂等不重铸）/ 非 AI 生成保持 NULL。
+- 105 表不变（列级增量）/ 迁移头 `c7e1a9f3b5d8`→**`e2c6a8f4d1b3`（34 rev）**/ 业务路由 296 不变 / ENTRIES 94 不变 / mypy 基线 279 不变 / 桌面 vitest 765 不变（零改动，无需重打包）；改 server + 新迁移 ⇒ **rebuild 三镜像 + `alembic upgrade head`**。
+
 ## [未发布] — V3 实施 T-O4 桌面消费面：调研数据导入 UI + 导入结果让位回溯卡片（2026-11-04）
 
 ### 桌面端（服务端零改动：零迁移零路由、无需 rebuild 镜像）

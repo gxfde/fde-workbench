@@ -365,6 +365,10 @@ class DocumentGenerationJob(Base, TimestampMixin, VersionedMixin):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # V3 T-D1（WB-DEF-6）：本次生成发起 AI 内容调用时传入 ai_call_audits 的
+    # request_id（与版本行 content_snapshot_json.ai_request_id 同值）——失败
+    # 重试可多条 job，各记各的调用；未走 AI 的生成为 NULL。
+    ai_request_id: Mapped[str | None] = mapped_column(String(120))
 
     document_version: Mapped[ProjectDocumentVersion] = relationship(
         back_populates="generation_jobs"

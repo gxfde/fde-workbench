@@ -21,6 +21,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 from typing import Any, BinaryIO
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import docxtpl
@@ -33,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from fde_api.documents.catalog import RESOURCE_TEMPLATES_DIR, load_document_catalog
-from fde_api.documents.ai_content import generate_document_fields
+from fde_api.documents.ai_content import ai_content_applicable, generate_document_fields
 from fde_api.documents.models import (
     DocumentGenerationJob,
     DocumentTemplateVersion,
@@ -230,6 +231,10 @@ def handle_document_generation(*, version_id: str) -> dict[str, Any]:
                 session, document.document_type, version.source_template_version
             )
             context = _build_context(session, version, document, template_bytes)
+            # V3 T-D1（WB-DEF-6）：_build_context 若发起 AI 调用，会把 request_id
+            # 冻结进版本 content_snapshot；这里同步落 job 行，两处都可反查
+            # ai_call_audits。失败路径的 id 随事务回滚（失败版本无内容可追溯）。
+            _stamp_job_ai_request_id(session, version)
             rich_text = _content_rich_text(version)
 
             rendered = render_docx(io.BytesIO(template_bytes), context, rich_text)
@@ -804,14 +809,23 @@ def _build_context(
         if isinstance(content_snapshot.get("ai_fields"), dict)
         else {}
     )
-    if has_saved_solution:
+    ai_request_id: str | None = None
+    if has_saved_solution or not ai_content_applicable(document):
         ai_fields = {}
     elif frozen_ai_fields:
         # D10 可重现：同版本再生成以首代冻结的 AI 字段为准，不实时读库——
         # 调研答案的后续修改不得改变已冻结版本的重复生成结果。
         ai_fields = dict(frozen_ai_fields)
     else:
-        ai_fields = generate_document_fields(session, document, requested_fields)
+        # V3 T-D1（WB-DEF-6）：request_id 在调用方铸造并随 AI 字段一同冻结，
+        # 版本行与 job 行据此反查 ai_call_audits（血缘闭环）。资格判定与
+        # generate_document_fields 同源（ai_content_applicable）——只有真正
+        # 发起调用的文档才铸 id，不产幽灵血缘；复用首代冻结字段的再生成
+        # 不重铸，审计指向首代调用，与 D10 可重现语义一致。
+        ai_request_id = f"document-content-{uuid4()}"
+        ai_fields = generate_document_fields(
+            session, document, requested_fields, request_id=ai_request_id
+        )
     merged_fields = dict(ai_fields)
     merged_fields.update(manual_fields)
     if merged_fields.get("generated_date") in (None, "", [], {}):
@@ -827,11 +841,13 @@ def _build_context(
         # to return the complete schema.  Freeze an explicit, reviewable value
         # instead of leaving a template token behind and failing the whole job.
         merged_fields[field_path] = "待确认"
-    if merged_fields:
+    if merged_fields or ai_request_id:
         frozen_content = dict(content_snapshot)
         frozen_content["field_overrides"] = merged_fields
         # D3/E1 来源真值：AI 字段单独冻结，重复生成既可复现也可追溯来源。
         frozen_content["ai_fields"] = dict(ai_fields)
+        if ai_request_id:
+            frozen_content["ai_request_id"] = ai_request_id
         if document.opportunity_scope_json and not has_saved_solution:
             frozen_content["opportunity_scope"] = document.opportunity_scope_json
         version.content_snapshot_json = frozen_content
@@ -1063,6 +1079,43 @@ def _mark_job(
     if job is not None:
         job.status = status
         job.last_error = error or ""
+
+
+def _stamp_job_ai_request_id(
+    session: Session, version: ProjectDocumentVersion
+) -> None:
+    """WB-DEF-6：把版本 content_snapshot 冻结的 ai_request_id 同步落 job 行。
+
+    job 定位与 ``_mark_job`` 同语义（活跃优先、退最新）；未发起 AI 调用的
+    版本无该键，job 行保持 NULL。
+    """
+    content = (
+        version.content_snapshot_json
+        if isinstance(version.content_snapshot_json, dict)
+        else {}
+    )
+    request_id = content.get("ai_request_id")
+    if not isinstance(request_id, str) or not request_id:
+        return
+    job = session.scalar(
+        select(DocumentGenerationJob)
+        .where(
+            DocumentGenerationJob.document_version_id == version.id,
+            DocumentGenerationJob.status.in_(("queued", "running")),
+        )
+        .order_by(DocumentGenerationJob.created_at.desc(), DocumentGenerationJob.id.desc())
+        .limit(1)
+    )
+    if job is None:
+        job = session.scalar(
+            select(DocumentGenerationJob).where(
+                DocumentGenerationJob.document_version_id == version.id
+            )
+            .order_by(DocumentGenerationJob.created_at.desc(), DocumentGenerationJob.id.desc())
+            .limit(1)
+        )
+    if job is not None and job.ai_request_id != request_id:
+        job.ai_request_id = request_id
 
 
 def _storage_bucket() -> str:

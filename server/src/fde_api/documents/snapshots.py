@@ -2,10 +2,11 @@
 
 ``build_document_snapshot`` gathers the deterministic, frozen state of a project
 that the DOCX generator consumes: the project identity and contact block, the
-confirmed research answers, the research subjects (grouped by subject type and
-keyed by their stable ``id``, never by name), the scheduled tasks, and the
-project members. Every value is plain JSON-serializable data; raw ORM objects,
-secrets, and binary blobs never cross this boundary.
+confirmed research answers (each form tagged with its ``revision_id`` for
+lineage), the research subjects (grouped by subject type and keyed by their
+stable ``id``, never by name), the scheduled tasks, the project members, and a
+gate-state summary. Every value is plain JSON-serializable data; raw ORM
+objects, secrets, and binary blobs never cross this boundary.
 
 Used by both Task 4 (``request_document_generation``) and the document engine's
 worker, so the snapshot builder is deliberately ``session``-parameterised and
@@ -30,6 +31,7 @@ from fde_api.research.models import (
     ProjectResearchSubject,
 )
 from fde_api.workbench.models import (
+    Gate,
     Project,
     ProjectMember,
     ProjectModule,
@@ -71,6 +73,9 @@ def build_document_snapshot(
         "subjects": _serialize_subjects(session, project_id),
         "tasks": _serialize_tasks(session, project_id),
         "members": _serialize_members(session, project_id),
+        # V3 T-D1（WB-DEF-6/7）：门禁状态摘要随快照冻结——文档生成时刻的门禁
+        # 进度可与调研 revision 血缘一同反查，不引入门禁清单明细。
+        "gates": _serialize_gates(session, project_id),
         "captured_at": datetime.now(UTC).isoformat(),
     }
 
@@ -84,6 +89,10 @@ def confirmed_research_values(
     ``ProjectResearchFormRevision`` is located and its answers are collapsed into
     ``{field_key: value_json}``. Forms without a confirmed revision or without
     answers are skipped (never stale or draft content).
+
+    V3 T-D1（WB-DEF-7）：每个表单字典额外携带 ``revision_id`` 键指向被采用的
+    confirmed revision——快照冻结后仍可反查答案出处。血缘键先落位、答案随后，
+    极端同名模板字段会覆盖它（文档内容优先），与扁平占位符解析兼容。
     """
     result: dict[str, dict[str, Any]] = {}
     for form_key in _normalize_research_keys(research_keys):
@@ -111,9 +120,10 @@ def confirmed_research_values(
                 ProjectResearchAnswer.revision_id == revision.id
             )
         )
-        result[form_key] = {
-            answer.field_key: answer.value_json for answer in answers
-        }
+        values: dict[str, Any] = {"revision_id": revision.id}
+        for answer in answers:
+            values[answer.field_key] = answer.value_json
+        result[form_key] = values
     return result
 
 
@@ -304,4 +314,32 @@ def _serialize_members(session: Session, project_id: str) -> list[dict[str, Any]
             "role": member.role,
         }
         for member in members
+    ]
+
+
+def _serialize_gates(session: Session, project_id: str) -> list[dict[str, Any]]:
+    """Summarise the project's gate state (T-D1 lineage summary, not a checklist copy).
+
+    摘要只冻结状态语义（gate_key/status/decision/提交与拍板时间），不带清单
+    明细、证据指针或候选——文档需要的是「生成时刻门禁走到哪」，不是门禁的
+    第二份完整镜像。门禁未实例化的项目返回空列表。
+    """
+    gates = list(
+        session.scalars(
+            select(Gate)
+            .where(Gate.project_id == project_id)
+            .order_by(Gate.gate_key)
+        )
+    )
+    return [
+        {
+            "gate_key": gate.gate_key,
+            "status": gate.status,
+            "decision": gate.decision,
+            "submitted_at": (
+                gate.submitted_at.isoformat() if gate.submitted_at else None
+            ),
+            "decided_at": gate.decided_at.isoformat() if gate.decided_at else None,
+        }
+        for gate in gates
     ]

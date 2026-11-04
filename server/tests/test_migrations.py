@@ -50,7 +50,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-O2b：对象类型值域开放——三处 subject_type CHECK 枚举→码格式 + 列宽 32→60
 # V3 T-O4b：project_research_subjects +merged_into_subject_id（合并指向，复合外键+CHECK）
 # V3 T-G1：gates +evidence_candidates JSON 可空列（任务产物→门禁证据候选，建议性）
-HEAD_REVISION = "c7e1a9f3b5d8"
+# V3 T-D1：document_generation_jobs +ai_request_id（WB-DEF-6 文档血缘：job 行反查 ai_call_audits）
+HEAD_REVISION = "e2c6a8f4d1b3"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
