@@ -20,6 +20,7 @@ it("lists every workbench module, the gate flow and the failure checklist", asyn
     "开始前：三件必查的事",
     "角色与权限",
     "项目工作台",
+    "工作流与术语表",
     "门禁 G1–G9（最常卡住的地方）",
     "报价收款",
     "集成桥",
@@ -38,6 +39,10 @@ it("lists every workbench module, the gate flow and the failure checklist", asyn
   ).toBeVisible()
   // 门禁故障首因写的是登录态，不是服务坏
   expect(screen.getByText(/全部显示未提交 \/ 提交后转圈又回去/)).toBeVisible()
+  // 工作流 run 七态在册（T-W6 控制台）
+  expect(screen.getByText(/排队中\/运行中\/等待审批\/已暂停\/成功\/失败\/已取消/)).toBeVisible()
+  // 变更集评审的验收分离语义在册
+  expect(screen.getByText(/拍板人≠提交人/)).toBeVisible()
 })
 
 it("carries the somwyn walkthrough with concrete paths and privacy rules", async () => {
@@ -80,4 +85,7 @@ it("jumps to a section from the table of contents without navigating away", asyn
 it("keeps known gaps honest — no invented features", () => {
   render(<HelpPage />)
   expect(screen.getByText("调研表 confirm / reject / revise 三态流转——暂无前端入口。")).toBeVisible()
+  expect(
+    screen.getByText("工作流定义的新建/发布——暂无人工 UI 入口（控制台只读呈现 + 运行控制）。"),
+  ).toBeVisible()
 })
