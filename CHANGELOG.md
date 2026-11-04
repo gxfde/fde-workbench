@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-R2：工具目录结构化 effect/risk——目录权威外效判定 + WB-DEF-10 确认面补口（2026-11-04）
+
+### 服务端（零迁移零路由；agent-policy P1-R2 / gap-matrix 域 9 / 风险册 WB-DEF-10）
+
+- **api_catalog 结构化 effect/risk**：`CATALOG` 行新增 `effect`（`read | write_db | external`）与 `risk`（0–4，与 `automation_approvals.risk_level` 同尺度，≥3 = 密码确认/审批类）——ENTRIES 五元行不动，派生在装配层 `_catalog_row`（规则显式：GET=read/0；确认类（DELETE / .archive / .deprecate / 确认补口）=3；其余 external=2；普通写=1；4 留最高危未用）。
+- **WB-DEF-10 补口**：`EXTERNAL_EFFECT_KEYS`（forms.export / solutions.export_sow / documents.generate / translator.translate = 异步作业或模型调用类）+ `CONFIRMATION_KEYS`（export_sow / documents.generate）——AI 经 `api_execute` 发起即 `awaiting_confirmation`（密码确认通道后才触发 worker 作业），绝不无确认排队模型调用。
+- **TOOLS 五元扩 effect/risk**（17 工具）：(description, capability, properties, effect, risk)；`file_send_wechat`=external/3、`api_execute`=write_db/3、`lcsc_search`=external/2、其余只读=read/0；MCP `tools/list` annotations 改由结构化元数据派生（`readOnlyHint=effect==read`、`destructiveHint=risk>=3`），取代工具名硬编码集合；`api_catalog` 工具描述同步声明「外部副作用与风险分级」。
+- **workflow rule 9 消费目录权威**：`validate_dag` 新增 `call_effects` 注入参（生产恒经 `catalog_call_effects()` 注入 CATALOG effect；None 时仅节点自声明生效，纯函数单测兼容）——call 节点目录 effect=external 即触发 `external_effect_without_approval` 告警，节点 effect 声明**只加不减**（不可把目录 external 降级为 read）；P1 仍告警不阻断（P2 转强制随 enforcement wave 另行）。
+- **executor 外副作用推断收敛**：`_is_external_call` 由 `write` 字段推断改为结构化 `effect != "read"`（集合等价，清偿 T-W3 挂账「effect 结构化仍待 T-R2」）。
+
+### 测试与口径
+
+- 服务端 pytest **1855 收集 = 1849 passed + 6 skipped**（本轮 +4：目录 effect/risk 全量一致性扫描 / WB-DEF-10 双操作确认流 / tools/list annotations 派生 / rule 9 目录权威+不可降级+装配同域；解包适配为改造非新增）。
+- 口径：105 表不变、迁移头 `c7e1a9f3b5d8` 不变（零迁移）、路由 296 不变、ENTRIES 94 不变、mypy 基线 279 不变（104 distinct，实测零新增）；桌面端零改动（vitest 755 不变）。
+
 ## [未发布] — V3 实施 T-R1：agent_tool_groups 只读工具组目录——`group:` 引用声明糖，resolve=交集组永不扩大（2026-11-04）
 
 ### 服务端（纯种子零新表：`seeds/tool_groups.json`；零迁移零路由）

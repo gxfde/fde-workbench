@@ -227,8 +227,14 @@
   - **测试注入链**：`run_face_declared`/`effective_run_tools` 增 `groups=` 注入参（生产恒走种子，仅供测试整链替换）——注入组贡献能穿透 effective_run_tools 验三重闸。`list_agents` 序列化仍展示原始声明（组引用自描述，解析留 run 时刻冻结语义不变：在跑 run 不重算）。
   - 测试：test_agents_fallback_chain **+4**（真种子装载+未知工具/嵌套引用 fail-fast / 组不放宽三闸齐验：写类剥除·档位地板 project_lead 拒 lcsc_search·插件目录声明未安装 admin 也剥 / 未知组收缩+tools_unavailable 报因+混合声明不受污染 / 真种子混合声明保序去重+停用组空贡献）；pytest **1847→1851 收集（1845 passed + 6 skipped）**。零迁移（head `c7e1a9f3b5d8` 不变）/ 路由 296 不变 / ENTRIES 94 不变 / mypy 基线 273 不变 / 桌面零改动（vitest 755 不变）。
 
-### T-R2 工具目录结构化 effect/risk（域 9，含 WB-DEF-10）
+### T-R2 工具目录结构化 effect/risk（域 9，含 WB-DEF-10）— **DONE（2026-11-04）**
 - 修改文件：`control/mcp_gateway.py`（TOOLS 元组扩 effect/risk）、`control/api_catalog.py`（ENTRY 扩字段；export_sow/documents.generate 标 confirmation）。测试：test_ai_tool_loop/test_control_plane_api 扩展（目录扫描断言/写类确认流）。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **api_catalog：结构化字段落在 CATALOG 装配层而非 ENTRIES 行**（偏差：原计划「ENTRY 扩字段」）——ENTRIES 保持五元不动，新增 `_catalog_row` 装配函数派生 `effect`（read|write_db|external）/`risk`（0–4，与 automation_approvals.risk_level 同尺度）两字段；派生规则显式：GET=read/0、确认类=3、其余 external=2、普通写=1（4 留最高危未用）。消费面（api_actions/mcp_gateway/definition_service/executor）全走 CATALOG，ENTS 行扩字段无消费者受益反添 94 行维护负担。两个显式集合承载例外：`EXTERNAL_EFFECT_KEYS`（forms.export/solutions.export_sow/documents.generate/translator.translate=异步作业或模型调用）、`CONFIRMATION_KEYS`（export_sow/documents.generate——**WB-DEF-10 补口**：确认面不再只看 DELETE/.archive/.deprecate 后缀，AI 经 api_execute 发起即 awaiting_confirmation，密码确认后才触发 worker 内模型调用）。
+  - **TOOLS 五元**：(description, capability, properties, effect, risk)——`file_send_wechat`=external/3、`api_execute`=write_db/3、`lcsc_search`=external/2（外网只读浏览，risk<3 不入审批类）、其余 13 只读=read/0。**tools/list annotations 改派生**（readOnlyHint=effect==read、destructiveHint=risk>=3），取代工具名硬编码集合（file_send_wechat 由 non-destructive 修正为 destructive=确认类，标注保真即本任务目的）；解包适配 5 处（mcp_gateway.call_tool / ai_tool_loop.tool_definitions / 三处测试）。agents/tools.py 与 extensions_service.py 为索引式消费零改动。
+  - **workflow rule 9 消费目录权威**：`validate_dag` 增 `call_effects` 注入参（**沿 T-W4 capabilities=None 先例**：None=仅节点自声明生效，纯函数单测兼容；生产 `validate_dag_against_registry` 恒经新增 `catalog_call_effects()` 注入）——目录 effect=external 即触发 `external_effect_without_approval`；节点 effect 声明**只加不减**（不可把目录 external 降级为 read，与 T-R1 组永不扩大同构）。**P1 仍告警不阻断**——backlog T-W1 行「T-R2 后转强制」按 workflow-dag-v1 原文收敛为：结构化=T-R2（本轮），强制=P2 enforcement wave（rule 9 代码注释原文口径），无路由无生产定义 ⇒ 行为零影响。
+  - **executor `_is_external_call` 收敛**：`write` 字段推断改结构化 `effect != "read"`（两集合按派生规则恒等价，清偿 T-W3 挂账「effect 结构化仍待 T-R2」）。
+  - 测试：test_ai_api_actions **+2**（effect/risk 全目录一致性扫描+派生规则锁定 / WB-DEF-10 双操作确认流）；test_ai_server_chat_mcp **+1**（annotations 派生断言）；test_workflow_definition **+1**（目录权威+不可降级+未注入兼容+装配同域）；test_ai_tool_loop/test_help_fetch_tool 解包适配顺带断言结构化元数据；pytest **1851→1855 收集（1849 passed + 6 skipped）**。零迁移（head `c7e1a9f3b5d8` 不变）/ 路由 296 不变 / ENTRIES 94 不变 / mypy 基线 279 不变（104 distinct，实测零新增；T-R1 记录的「273」为笔误口径，基线文件 279 行自 #76 未动）/ 桌面零改动（vitest 755 不变）。
 
 ### T-S1 Skill 治理态扩展（域 8）— **DONE（2026-11-03）**
 - 目标：status draft/in_review/published/deprecated；publish 四条闸；_skills 只回 published。

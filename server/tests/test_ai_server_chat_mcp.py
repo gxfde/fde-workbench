@@ -126,6 +126,20 @@ def test_lcsc_skill_tool_is_visible_and_callable_from_ai_chat(ai_context, client
     assert called.call_args.kwargs["skill_key"] == "lcsc-browser-jev"
 
 
+def test_tools_list_annotations_derive_from_effect_risk(ai_context, client):
+    """T-R2（agent-policy P1-R2）：tools/list annotations 由结构化 effect/risk 派生
+    （取代工具名硬编码集合）——effect=read 才 readOnlyHint；risk>=3（确认/审批类，
+    与 automation_approvals 同尺度）才 destructiveHint。"""
+    users, _ = ai_context
+    token = issue_mcp_token(users["admin"], execution_id=str(uuid4()))
+    tools = {item["name"]: item["annotations"] for item in mcp_request(client, token).json["result"]["tools"]}
+    assert tools["project_list"] == {"readOnlyHint": True, "destructiveHint": False}
+    assert tools["api_execute"] == {"readOnlyHint": False, "destructiveHint": True}
+    assert tools["file_send_wechat"] == {"readOnlyHint": False, "destructiveHint": True}  # external / risk 3
+    assert tools["lcsc_search"]["readOnlyHint"] is False                                  # external 面
+    assert tools["lcsc_search"]["destructiveHint"] is False                               # risk 2 < 3
+
+
 def test_lcsc_record_read_is_owner_scoped_and_omits_image_payload(ai_context, client, db_session):
     from fde_api.control.lcsc_skills import LcscSkillRun
     users, _ = ai_context

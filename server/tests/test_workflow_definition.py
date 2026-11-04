@@ -164,6 +164,42 @@ def test_external_effect_without_approval_is_warning_not_error():
     assert gated.ok and gated.warnings == ()
 
 
+def test_external_effect_derives_from_catalog_and_cannot_be_downgraded():
+    """规则 9（T-R2）：外效判定收敛目录权威——catalog effect=external 无需节点声明即
+    告警；节点 effect=read 不能把目录 external 降级（声明只加不减）；call_effects
+    未注入时仅节点自声明生效（纯函数单测兼容）；生产装配 catalog_call_effects 与
+    CATALOG 同域。"""
+    from fde_api.workflows.definition_service import catalog_call_effects
+
+    ref = "documents.generate"  # WB-DEF-10 族：目录结构化 external
+    refs = {**REFS, "call_refs": frozenset({ref})}
+    effects = {ref: "external"}
+    catalog_driven = validate_dag(
+        _dag({"key": "gen", "type": "call", "ref": ref}), call_effects=effects, **refs
+    )
+    assert catalog_driven.ok
+    assert [issue.code for issue in catalog_driven.warnings] == ["external_effect_without_approval"]
+    downgraded = validate_dag(
+        _dag({"key": "gen", "type": "call", "ref": ref, "effect": "read"}),
+        call_effects=effects, **refs,
+    )
+    assert [issue.code for issue in downgraded.warnings] == ["external_effect_without_approval"]
+    gated = validate_dag(
+        _dag(
+            {"key": "gen", "type": "call", "ref": ref},
+            {"key": "gate", "type": "human_approval", "capability": "c", "depends_on": ["gen"]},
+        ),
+        call_effects=effects, **refs,
+    )
+    assert gated.ok and gated.warnings == ()
+    without_injection = validate_dag(_dag({"key": "gen", "type": "call", "ref": ref}), **refs)
+    assert without_injection.ok and without_injection.warnings == ()
+    produced = catalog_call_effects()
+    assert set(produced) == set(CATALOG)
+    assert set(produced.values()) <= {"read", "write_db", "external"}
+    assert produced["solutions.export_sow"] == "external"
+
+
 def test_definition_publish_locks_immutable_version_rows(db_session, settings):
     """§6 用例 7（定义侧）：draft v1 → publish 锁版本行 → 改动自动开 draft v2（v1 原样）→
     publish v2；already_published 409；非法 dag 更新 422 且不动原定义；白名单从库装配。"""

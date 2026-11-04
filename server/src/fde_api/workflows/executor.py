@@ -1225,10 +1225,10 @@ def _split_call_params(
 
 
 def _is_external_call(spec: dict[str, Any]) -> bool:
-    """外副作用推断（T-R2 effect 结构化前）：写类 api_catalog 条目。"""
+    """外副作用判定（T-R2 起消费目录结构化 effect：非 read 即有副作用面）。"""
     from fde_api.control.api_catalog import CATALOG
 
-    return spec.get("type") == "call" and bool(CATALOG[str(spec["ref"])]["write"])
+    return spec.get("type") == "call" and CATALOG[str(spec["ref"])]["effect"] != "read"
 
 
 def _call_action_identifier(

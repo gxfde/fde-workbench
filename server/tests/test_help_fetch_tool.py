@@ -38,7 +38,8 @@ def ai_user(app, db_session):
 
 
 def test_help_tool_is_registered_and_read_only():
-    description, capability, properties = TOOLS["help_fetch"]
+    description, capability, properties, effect, risk = TOOLS["help_fetch"]
+    assert effect == "read" and risk == 0
     assert capability is None
     assert set(properties) == {"heading", "offset"}
     assert "help_fetch" in READ_ONLY_TOOLS
@@ -50,7 +51,8 @@ def test_help_fetch_is_offered_to_every_ai_level():
 
 
 def test_gates_read_is_registered_capability_gated_and_read_only():
-    description, capability, properties = TOOLS["gates_read"]
+    description, capability, properties, effect, risk = TOOLS["gates_read"]
+    assert effect == "read" and risk == 0
     assert capability == "project.read"
     assert set(properties) == {"project_id"}
     assert "gates_read" in READ_ONLY_TOOLS

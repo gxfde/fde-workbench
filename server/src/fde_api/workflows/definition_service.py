@@ -5,7 +5,8 @@
    未知引用、call.ref 白名单（api_catalog ENTRIES，封 SSRF 面）、skill.ref 必须是
    存在的 active skill 版本（显式 `key@版本号`）、agent.ref 必须可用、output 唯一、
    {{placeholder}} 必须是运行上下文键或**传递上游**节点的 output、节点字段白名单。
-   规则 9（外部副作用须审批）P1 只告警不阻断（工具目录 effect 结构化在 T-R2）。
+   规则 9（外部副作用须审批）P1 只告警不阻断；T-R2 起外效判定消费目录结构化
+   effect（``call_effects`` 注入，目录 external 权威，节点声明只加不减）。
 2. 定义生命周期：create（draft v1）→ update（已发布则自动开新草稿版本）→
    publish（快照成不可变版本行，发布时按**当前**白名单再校验一次）。路由在 §5，
    随 T-W3 执行器一起开（backlog T-W1 文件清单不含 routes）。
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -123,11 +124,14 @@ def validate_dag(
     agent_refs: Collection[str],
     context_keys: Collection[str] = DEFAULT_CONTEXT_KEYS,
     capabilities: Collection[str] | None = None,
+    call_effects: Mapping[str, str] | None = None,
 ) -> DagValidation:
     """dag_json 校验纯函数：返回 (errors, warnings, 拓扑序)；白名单由调用方注入。
 
     ``capabilities``（T-W4）= human_approval.capability 白名单；None = 跳过该检查
     （纯函数单测兼容），生产路径经 validate_dag_against_registry 注入登记表白名单。
+    ``call_effects``（T-R2）= ref → api_catalog 结构化 effect；None = 规则 9 只看
+    节点自声明（纯函数单测兼容），生产路径恒注入 ``catalog_call_effects()``。
     """
     if not isinstance(dag, dict):
         return DagValidation((DagIssue("dag_not_object", "dag_json 必须是对象。"),), (), ())
@@ -368,7 +372,9 @@ def validate_dag(
                         )
                     )
 
-    # 9. 外部副作用须审批：P1 告警不阻断（effect 结构化在 T-R2，P2 转强制）
+    # 9. 外部副作用须审批：P1 告警不阻断（P2 转强制）。T-R2 起判定收敛目录权威——
+    #    目录结构化 effect=external 即触发；节点 effect 声明只加不减（不可把目录
+    #    external 降级为 read）。call_effects 未注入时仅节点自声明生效（纯函数兼容）。
     if order:
         descendants: dict[str, set[str]] = {key: set() for key in by_key}
         for key in reversed(order):
@@ -378,18 +384,24 @@ def validate_dag(
                 descendant_set |= descendants[child]
             descendants[key] = descendant_set
         for key, node in by_key.items():
-            if node.get("type") == "call" and node.get("effect") == "external":
-                if not any(
-                    by_key[descendant].get("type") == "human_approval"
-                    for descendant in descendants[key]
-                ):
-                    warnings.append(
-                        DagIssue(
-                            "external_effect_without_approval",
-                            f"节点 {key} 声明外部副作用但下游无 human_approval（P1 告警，P2 强制）。",
-                            key,
-                        )
+            if node.get("type") != "call":
+                continue
+            ref = node.get("ref")
+            catalog_external = (
+                call_effects is not None and isinstance(ref, str) and call_effects.get(ref) == "external"
+            )
+            declared_external = node.get("effect") == "external"
+            if (catalog_external or declared_external) and not any(
+                by_key[descendant].get("type") == "human_approval"
+                for descendant in descendants[key]
+            ):
+                warnings.append(
+                    DagIssue(
+                        "external_effect_without_approval",
+                        f"节点 {key} 的目录操作具外部副作用但下游无 human_approval（P1 告警，P2 强制）。",
+                        key,
                     )
+                )
     return DagValidation(tuple(errors), tuple(warnings), tuple(order))
 
 
@@ -417,6 +429,15 @@ def catalog_call_refs() -> frozenset[str]:
     return frozenset(CATALOG)
 
 
+def catalog_call_effects() -> dict[str, str]:
+    """call 节点外效判定元数据（T-R2）：ref → api_catalog 结构化 effect。
+
+    生产路径恒注入 validate_dag(call_effects=…)——目录 external 是权威源，
+    节点自声明只加不减；api_catalog 的派生规则被目录扫描测试锁定。
+    """
+    return {ref: str(row["effect"]) for ref, row in CATALOG.items()}
+
+
 def published_skill_refs(session: Session) -> frozenset[str]:
     """skill.ref 白名单 = published skill 的既有版本号 `skill_key@version_number`（T-W1 挂账已随 T-S1 收敛）。"""
     rows = session.execute(
@@ -441,6 +462,7 @@ def validate_dag_against_registry(session: Session, dag: Any) -> DagValidation:
         skill_refs=published_skill_refs(session),
         agent_refs=available_agent_refs(session),
         capabilities=APPROVAL_CAPABILITIES,
+        call_effects=catalog_call_effects(),
     )
 
 

@@ -105,6 +105,50 @@ def test_catalog_paths_resolve_existing_api_routes(app):
         assert endpoint
 
 
+def test_catalog_effect_risk_invariants(app):
+    """T-R2（agent-policy P1-R2）：结构化 effect/risk 全目录一致性扫描。
+
+    risk 0–4 与 automation_approvals.risk_level 同尺度；GET ⟺ read ⟺ risk=0；
+    确认类 risk>=3；external 至少 2 且必为写面。WB-DEF-10：异步文档生成类
+    = external + 确认类（AI 不得无确认排队 worker 内模型调用）。
+    """
+    from fde_api.control.api_catalog import CATALOG
+    for spec in CATALOG.values():
+        assert spec["effect"] in {"read", "write_db", "external"}, spec["id"]
+        assert type(spec["risk"]) is int and 0 <= spec["risk"] <= 4, spec["id"]
+        assert (spec["effect"] == "read") == (spec["method"] == "GET"), spec["id"]
+        assert spec["write"] == (spec["effect"] != "read"), spec["id"]
+        if spec["confirmation"]:
+            assert spec["risk"] >= 3, spec["id"]
+        if spec["effect"] == "external":
+            assert spec["write"] and spec["risk"] >= 2, spec["id"]
+    # 派生规则锁定：只读 0 / 普通写 1 / 非确认 external 2 / 确认类 3
+    assert CATALOG["projects.read"]["risk"] == 0
+    assert CATALOG["projects.update"]["effect"] == "write_db" and CATALOG["projects.update"]["risk"] == 1
+    assert CATALOG["forms.export"]["effect"] == "external" and CATALOG["forms.export"]["risk"] == 2
+    assert CATALOG["research.delete"]["risk"] == 3
+    for key in ("solutions.export_sow", "documents.generate"):
+        assert CATALOG[key]["effect"] == "external", key
+        assert CATALOG[key]["confirmation"] is True, key
+        assert CATALOG[key]["risk"] == 3, key
+
+
+def test_wb_def_10_generation_ops_require_confirmation_before_run(ai_context, db_session):
+    """WB-DEF-10（T-R2）：export_sow / documents.generate 是确认类——AI 发起即
+    awaiting_confirmation（密码确认通道后才触发 worker 作业），绝不直接执行；
+    确认前 pending 队列可见（人工可拒绝）。"""
+    users, _ = ai_context
+    user = users["admin"]
+    project = make_project(db_session, user)
+    for operation, parameters in (
+        ("documents.generate", {"project_id": project.id, "document_id": str(uuid4())}),
+        ("solutions.export_sow", {"project_id": project.id, "solution_id": str(uuid4())}),
+    ):
+        result = invoke(user, operation, parameters, {"version": 1})
+        assert result["status"] == "awaiting_confirmation", (operation, result)
+        assert any(item["operation"] == operation for item in pending_actions(user))
+
+
 def test_wechat_password_commands_never_reach_model(ai_context):
     from fde_api.control.chat import weixin_message_handler
     users, execute = ai_context

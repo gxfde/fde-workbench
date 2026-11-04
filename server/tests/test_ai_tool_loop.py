@@ -436,7 +436,9 @@ def test_quote_tool_is_registered_and_readable(app, db_session, ai_user):
     from fde_api.control.mcp_gateway import TOOLS
 
     assert "quote_list" in TOOLS
-    description, capability, properties = TOOLS["quote_list"]
+    description, capability, properties, effect, risk = TOOLS["quote_list"]
     assert capability == "project.read"
     assert "project_id" in properties
     assert description
+    # T-R2：结构化元数据——报价卡读取 = 纯只读零风险
+    assert effect == "read" and risk == 0

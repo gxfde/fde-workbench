@@ -2,6 +2,10 @@
 
 Each entry maps to an existing authenticated endpoint. No arbitrary paths,
 credential APIs, storage URLs, shell commands, or external recipients.
+
+T-R2（agent-policy P1-R2）：CATALOG 行携带结构化 effect/risk——
+effect: read | write_db | external；risk: 0–4（与 automation_approvals.risk_level
+同尺度，≥3 = 密码确认/审批类）。派生规则显式且被目录扫描测试锁定。
 """
 P = "/api/v1/projects/{project_id}"
 R = P + "/research"
@@ -120,7 +124,31 @@ ENTRIES = [
     ("translator.adopt", "POST", "/api/v1/translator/translations/{translation_id}/adopt", "翻译草稿采纳流（goal-d10）：ready 草稿升格为项目指引新版本（status=draft 待人工确认；O-3 额度随路落）——创作类写先例，确认动作仍在项目侧人工", "project_id"),
 ]
 
-CATALOG = {key: {"id": key, "method": method, "path": path, "description": description,
-    "body_hints": hints, "write": method != "GET",
-    "confirmation": method == "DELETE" or key.endswith((".archive", ".deprecate")),
-} for key, method, path, description, hints in ENTRIES}
+# 外部副作用类（T-R2，WB-DEF-10 族）：排队异步作业 / 触发模型调用——
+# AI 不得无确认排队（消费面：workflow rule 9 外效判定 + api_execute 确认流）
+EXTERNAL_EFFECT_KEYS = frozenset({
+    "forms.export",            # 调研表导出（worker 队列作业）
+    "solutions.export_sow",    # SOW 生成（worker 内模型调用）——WB-DEF-10
+    "documents.generate",      # 文档生成（worker 内模型调用）——WB-DEF-10
+    "translator.translate",    # AI 翻译管道（模型调用）
+})
+# 确认类补口（WB-DEF-10）：目录确认面不再只看 DELETE/.archive/.deprecate 后缀
+CONFIRMATION_KEYS = frozenset({"solutions.export_sow", "documents.generate"})
+
+
+def _catalog_row(key, method, path, description, hints):
+    """ENTRIES 五元 → 结构化 CATALOG 行（effect/risk 派生，规则显式）。
+
+    risk 派生（0–4，与 automation_approvals.risk_level 同尺度）：
+    只读=0；确认类（DELETE / .archive / .deprecate / 确认补口）=3；
+    其余 external=2；普通写=1。risk 4 留给最高危（目录暂未使用）。
+    """
+    effect = "read" if method == "GET" else ("external" if key in EXTERNAL_EFFECT_KEYS else "write_db")
+    confirmation = method == "DELETE" or key.endswith((".archive", ".deprecate")) or key in CONFIRMATION_KEYS
+    risk = 0 if method == "GET" else 3 if confirmation else 2 if effect == "external" else 1
+    return {"id": key, "method": method, "path": path, "description": description,
+        "body_hints": hints, "write": method != "GET",
+        "effect": effect, "risk": risk, "confirmation": confirmation}
+
+
+CATALOG = {row["id"]: row for row in (_catalog_row(*entry) for entry in ENTRIES)}

@@ -60,7 +60,7 @@ def tool_definitions(allowed: list[str] | set[str]) -> list[dict[str, Any]]:
     """Build the OpenAI-compatible `tools` array for the readable tools."""
     definitions: list[dict[str, Any]] = []
     for name, entry in TOOLS.items():
-        description, capability, properties = entry
+        description, capability, properties, _, _ = entry
         if name not in READ_ONLY_TOOLS:
             continue
         if capability and capability not in allowed:
