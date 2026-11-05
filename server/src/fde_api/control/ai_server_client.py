@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from contextvars import ContextVar
 from typing import Any
 from uuid import uuid4
@@ -52,6 +53,56 @@ def _provider_usage_from_response(payload: dict[str, Any], model_name: str) -> d
             "cache_write_tokens": 0,
         }],
     }
+
+
+def _sum_provider_usage_tokens(usage: dict[str, Any] | None) -> tuple[int | None, int | None]:
+    """把 DSH usage shape（``calls[]`` 聚合）折算成 input/output token 总量。
+
+    无 calls（``complete=False`` 或缺块）返回 (None, None)——账本记元数据，
+    预算按可测口径汇总，不发明数字。
+    """
+    calls = (usage or {}).get("calls")
+    if not isinstance(calls, list) or not calls:
+        return None, None
+    input_total = 0
+    output_total = 0
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        try:
+            input_total += int(call.get("input_tokens") or 0)
+            output_total += int(call.get("output_tokens") or 0)
+        except (TypeError, ValueError):
+            continue
+    return input_total, output_total
+
+
+def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str | None,
+                     model: str, used_fallback: bool, duration_ms: int,
+                     usage: dict[str, Any] | None, status: str, error_code: str | None) -> None:
+    """CR-006 统一记账腿：DSH 主路径/降级直连路径统一落 ``ai_call_audits``（E7）。
+
+    此前这两条路径零记账——``dsh_enabled=true`` 时平台月度预算对 skill 节点/
+    聊天/结构化调用恒失效（goal-c CR-006）。尽力而为：审计自身失败不打断业务。
+    """
+    try:
+        from fde_api.ai.auditing import record_audit
+
+        input_tokens, output_tokens = _sum_provider_usage_tokens(usage)
+        record_audit(
+            request_id=request_id,
+            actor_id=actor_id,
+            purpose=purpose,
+            model=model,
+            used_fallback=used_fallback,
+            duration_ms=int(duration_ms),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            status=status,
+            error_code=error_code,
+        )
+    except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
+        logger.warning("AI execution audit dispatch failed request_id=%s", request_id, exc_info=True)
 
 
 def direct_provider_completion(
@@ -137,11 +188,12 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                       use_tools: bool = True, system_prompt: str | None = None,
                       max_tokens: int = 16384, model_override: dict | None = None,
                       capabilities: list[str] | None = None, deep_thinking: bool | None = None, all_projects: bool = False,
-                      return_metadata: bool = False) -> str | dict:
+                      return_metadata: bool = False, purpose: str | None = None) -> str | dict:
     identifier = execution_id or str(uuid4())
     settings = current_app.config["SETTINGS"]
     runtime = dsh_runtime.current.primary
     dsh_usable = runtime.enabled
+    started = time.monotonic()
     with db.session() as session:
         user = session.get(User, user_id)
         if user is None or not user.is_active:
@@ -155,8 +207,26 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             from fde_api.control.service import ControlServiceError
             raise ControlServiceError("thinking_unsupported", "当前模型暂不支持手动深度思考，请关闭开关或选择 DeepSeek 模型。", 400)
         use_tools = use_tools and model.get("supports_tools", True)
+        # CR-006 统一预算门：``ai_monthly_token_budget`` 超限即拒，且不发起
+        # 任何 DSH/供应商请求。与 deepseek 直连腿同语义（预算 0=不限额；设施
+        # 故障 fail-open）。此门带显式 user_id——后台任务（workflow skill
+        # 节点等无请求上下文场景）同样生效，补齐 deepseek 门依赖 flask g 的
+        # 后台盲区。先判门再签 MCP token：拦截路径零写副作用。
+        budget_blocked = False
+        try:
+            from fde_api.ai.auditing import budget_exceeded
+
+            budget_blocked = budget_exceeded(session, user_id, int(settings.ai_monthly_token_budget or 0))
+        except Exception:  # noqa: BLE001 - 预算设施故障不阻塞业务（fail-open）
+            logger.warning("AI budget gate failed open execution_id=%s", identifier, exc_info=True)
         # 工具只能经由 DSH 转发；没有可用运行时时不签发 MCP token。
-        token = issue_mcp_token(user, project_id=None if all_projects else project_id, capabilities=capabilities, execution_id=identifier) if (use_tools and dsh_usable) else None
+        token = None if budget_blocked else (issue_mcp_token(user, project_id=None if all_projects else project_id, capabilities=capabilities, execution_id=identifier) if (use_tools and dsh_usable) else None)
+    if budget_blocked:
+        from fde_api.ai.auditing import audit_budget_blocked
+
+        audit_budget_blocked(request_id=identifier, actor_id=user_id, purpose=purpose,
+                             model=str(model.get("model") or ""))
+        raise DSHRuntimeError("ai_budget_exceeded", "本月 AI 用量已达预算上限，请联系管理员调整或下月再试。", retryable=False)
     if not dsh_usable:
         # 没有部署 DSH 运行时：直接走供应商直连降级路径（带本地工具循环）。
         return _degraded_direct_result(
@@ -164,7 +234,7 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             max_tokens=max_tokens, timeout_seconds=settings.dsh_timeout_seconds,
             reason="dsh_not_enabled", return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
-            use_tools=use_tools)
+            use_tools=use_tools, purpose=purpose)
     body = {"schema_version": "fde-dsh-v1", "execution_id": identifier,
             "actor": {"user_id": user_id}, "scope": {"project_id": project_id},
             "agent_profile": "fde-assistant" if use_tools else "fde-structured",
@@ -175,11 +245,15 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
         body["mcp"] = {"url": settings.ai_internal_api_url.rstrip("/") + "/api/v1/internal/ai/mcp", "token": token}
     if system_prompt:
         body["system_prompt"] = system_prompt
+    elapsed_ms = int((time.monotonic() - started) * 1000)
     try:
         response = runtime._request("POST", "/v1/executions", json=body, timeout=settings.dsh_timeout_seconds,
                                     headers={"Idempotency-Key": identifier})
     except DSHRuntimeError as error:
         if error.code not in DEGRADABLE_DSH_CODES:
+            _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
+                             model=str(model.get("model") or ""), used_fallback=False,
+                             duration_ms=elapsed_ms, usage=None, status="failed", error_code=error.code)
             raise
         logger.warning("DSH runtime unusable, degrading to direct provider call code=%s", error.code)
         return _degraded_direct_result(
@@ -187,16 +261,30 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             max_tokens=max_tokens, timeout_seconds=settings.dsh_timeout_seconds,
             reason=error.code, return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
-            use_tools=use_tools)
+            use_tools=use_tools, purpose=purpose)
     if response.status_code >= 400:
-        raise runtime._service_error(response.status_code)
+        service_error = runtime._service_error(response.status_code)
+        _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
+                         model=str(model.get("model") or ""), used_fallback=False,
+                         duration_ms=int((time.monotonic() - started) * 1000), usage=None,
+                         status="failed", error_code=service_error.code)
+        raise service_error
     result = runtime._json_object(response)
     text = result.get("output", {}).get("text")
     if result.get("status") != "succeeded" or not isinstance(text, str) or not text.strip():
+        _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
+                         model=str(model.get("model") or ""), used_fallback=False,
+                         duration_ms=int((time.monotonic() - started) * 1000), usage=None,
+                         status="failed", error_code="ai_output_invalid")
         raise DSHRuntimeError("ai_output_invalid", "AI Server 未返回有效结果。", retryable=True)
+    provider_usage = result.get("provider_usage") or {"complete": False, "calls": []}
+    _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
+                     model=str(model.get("model") or ""), used_fallback=False,
+                     duration_ms=int((time.monotonic() - started) * 1000), usage=provider_usage,
+                     status="succeeded", error_code=None)
     if return_metadata:
         return {"text": text, "model": {"provider": model.get("provider", ""), "name": model.get("model", "")},
-                "provider_usage": result.get("provider_usage", {"complete": False, "calls": []})}
+                "provider_usage": provider_usage}
     return text
 
 
@@ -204,25 +292,40 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                             max_tokens: int, timeout_seconds: int, reason: str,
                             return_metadata: bool, user_id: str | None = None,
                             project_id: str | None = None, execution_id: str | None = None,
-                            use_tools: bool = True) -> str | dict:
+                            use_tools: bool = True, purpose: str | None = None) -> str | dict:
     """Run the direct provider call and shape it like a normal AI Server result.
 
     When tools are wanted, the provider is called with the workbench tool
     catalogue and the model's tool calls are executed in-process — the same
     tools and the same capability gate the MCP route uses, just without the
     DSH hop. `degraded` marks the run as having bypassed the DSH runtime.
+    CR-006：降级腿同样记账（used_fallback=True 标记绕行），成功/失败各落一条。
     """
+    model_name = str(model.get("model") or "")
+    request_identifier = execution_id or str(uuid4())
     tool_trace: list[dict[str, Any]] = []
     if use_tools and user_id:
         from fde_api.control.ai_tool_loop import direct_tool_completion
         with db.session() as session:
             user = session.get(User, user_id)
             if user is not None:
-                text, usage, tool_trace = direct_tool_completion(
-                    model=model, prompt=prompt, user=user, project_id=project_id,
-                    execution_id=execution_id or str(uuid4()),
-                    system_prompt=system_prompt, max_tokens=max_tokens,
-                    timeout_seconds=timeout_seconds)
+                started = time.monotonic()
+                try:
+                    text, usage, tool_trace = direct_tool_completion(
+                        model=model, prompt=prompt, user=user, project_id=project_id,
+                        execution_id=request_identifier,
+                        system_prompt=system_prompt, max_tokens=max_tokens,
+                        timeout_seconds=timeout_seconds)
+                except DSHRuntimeError as error:
+                    _audit_execution(request_id=request_identifier, actor_id=user_id,
+                                     purpose=purpose, model=model_name, used_fallback=True,
+                                     duration_ms=int((time.monotonic() - started) * 1000),
+                                     usage=None, status="failed", error_code=error.code)
+                    raise
+                _audit_execution(request_id=request_identifier, actor_id=user_id,
+                                 purpose=purpose, model=model_name, used_fallback=True,
+                                 duration_ms=int((time.monotonic() - started) * 1000),
+                                 usage=usage, status="succeeded", error_code=None)
                 if not return_metadata:
                     return text
                 return {
@@ -234,9 +337,21 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                     "tools_available": True,
                     "tool_trace": tool_trace,
                 }
-    text, usage = direct_provider_completion(
-        model=model, prompt=prompt, system_prompt=system_prompt,
-        max_tokens=max_tokens, timeout_seconds=timeout_seconds)
+    started = time.monotonic()
+    try:
+        text, usage = direct_provider_completion(
+            model=model, prompt=prompt, system_prompt=system_prompt,
+            max_tokens=max_tokens, timeout_seconds=timeout_seconds)
+    except DSHRuntimeError as error:
+        _audit_execution(request_id=request_identifier, actor_id=user_id,
+                         purpose=purpose, model=model_name, used_fallback=True,
+                         duration_ms=int((time.monotonic() - started) * 1000),
+                         usage=None, status="failed", error_code=error.code)
+        raise
+    _audit_execution(request_id=request_identifier, actor_id=user_id,
+                     purpose=purpose, model=model_name, used_fallback=True,
+                     duration_ms=int((time.monotonic() - started) * 1000),
+                     usage=usage, status="succeeded", error_code=None)
     if not return_metadata:
         return text
     return {
@@ -277,7 +392,8 @@ def structured_completion(*, messages, model: str, base_url: str, api_key, max_t
     try:
         value = execute_ai_prompt(user_id=actor, prompt=json.dumps(messages, ensure_ascii=False), use_tools=False,
             system_prompt="按提供的messages逐条理解角色和要求。只输出一个合法JSON对象，不要Markdown代码块，不调用工具。",
-            max_tokens=max_tokens, deep_thinking=deep_thinking, model_override=None if has_default else {"model": model, "base_url": base_url, "api_key": key,
+            max_tokens=max_tokens, deep_thinking=deep_thinking, purpose="structured",
+            model_override=None if has_default else {"model": model, "base_url": base_url, "api_key": key,
                                                 "provider": "deepseek" if "deepseek.com" in base_url else "openai-compatible"})
     except ControlServiceError as error:
         # 模型未配置/密钥不可用/无权限等确定性配置问题：重试也不会好。

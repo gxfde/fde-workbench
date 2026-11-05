@@ -27,7 +27,7 @@
 | CR-003 | P3 | open | V3 审计报告 §20 实施跟踪停更于 T-S1（缺 T-S2/T-W6 注记） | 审计报告 §20 | c1 |
 | CR-004 | P3 | open | AGENTS.md 口径数字滞后于 #88 实测（293/1830/732 vs 295/1831/实测） | AGENTS.md 口径行 | c1 |
 | CR-005 | P1 | fixed | workflow skill 节点消费面缺「public∨owner」与「capabilities⊆allowed」两闸（agent-policy-v1:67 明文两闸） | workflows/executor.py `_dispatch_skill` | c2 |
-| CR-006 | P2 | confirmed | skill 节点 AI 消费绕过双预算闸（agent_monthly_budget 仅拦 agent run；DSH 主路径记账面 NEEDS-EVIDENCE） | agents/service.py:813 / ai/deepseek.py:126 | c2 |
+| CR-006 | P2 | **fixed（统一入账轮）** | skill 节点 AI 消费绕过双预算闸（agent_monthly_budget 仅拦 agent run；DSH 主路径记账面 NEEDS-EVIDENCE） | agents/service.py:813 / ai/deepseek.py:126 | c2 |
 | CR-007 | P2 | fixed | CI desktop job 间歇红：`navigation.test.tsx` 重定向断言与 React passive effect 抢跑（effect 未 flush 即读 hash） | desktop/tests/renderer/navigation.test.tsx:147 | c2 |
 | CR-008 | P1 | fixed | signoff「同方案至多一个 pending」无并发防线：SELECT-then-INSERT 无行锁/无部分唯一约束，双 run 并发 `_finalize` 可双插 pending | agents/signoff.py:30-48 / agents/models.py:216-231 | c3 |
 | CR-009 | P2 | fixed | G8-stop 结算联动 `flag_g8_stop_settlement` 零测试载体（gate_service:504 调用点，tests 全仓 grep 命中 0） | projects/payment_service.py:347-374 | c3 |
@@ -166,6 +166,18 @@
 - **证据等级**：E0（c4/c8 两轮 grep 全链直读）。
 - **裁决（c8）**：**NEEDS-DECISION 维持，交用户**——预算口径归属（skill/AI 消费是否计入 `ai_monthly_token_budget` 平台账本、DSH 主路径是否补 `ai_call_audits` 记账腿）属产品/计费口径，非代码 bug；c8 不动码，登记为全循环唯一「销号待用户拍板」项。
 - **修复 PR**：—（用户裁决后另轮实装）
+
+## CR-006 · P2 · skill 节点 AI 消费绕过双预算闸
+
+- **状态**：needs-decision → **fixed（2026-11-05 统一入账轮；用户拍板：统一入账+统一闸）**
+- **用户裁决（2026-11-05）**：skill 节点/DSH 主路径的 AI 消费**计入 `ai_monthly_token_budget` 平台账本 + 前置统一拦截**（三选一中的推荐项：统一入账+统一闸）。
+- **实装（E0，三文件零迁移零路由）**：
+  - `control/ai_server_client.py::execute_ai_prompt`（DSH 主路径单一入口——skill 节点/聊天/结构化调用全走它）：①**统一预算门**——`budget_exceeded(session, user_id, budget)` 超限即拒（`ai_budget_exceeded` retryable=False），先落 `budget_blocked` 审计再拒绝、拦在 MCP token 签发之前（拦截路径零写副作用）；设施故障 fail-open。**带显式 user_id ⇒ 后台任务（workflow skill 节点等无请求上下文场景）同样生效**——补齐 deepseek 门依赖 flask g 的后台盲区。②**统一记账腿** `_audit_execution`：DSH 成功按 `provider_usage.calls[]` 聚合精确入账、失败/HTTP 4xx/无效输出各落 `failed`、DSH 不可达降级直连腿成功/失败均记账（`used_fallback=True`）；provider_usage 无 calls 时 token 记 None 不发明数字。③新增可选 `purpose` 参数（structured_completion 传 `"structured"`；chat/executor/dsh_runtime 调用点未触碰——零冲突纪律，execution_id 已自溯源）。
+  - `ai/auditing.py`：+`audit_budget_blocked` 统一拦截留痕助手（budget_blocked 计入已用量口径不变）。
+  - `ai/kimi.py`：本地直连腿入口补同款预算门（actor 取请求上下文；后台无上下文→放行，缺口如实保留）+ 本地腿成功/失败记账（`purpose="kimi_docx"`；流式无 usage，token 记 None）——kimi 此前全路径零预算零审计。
+  - **无双计**：deepseek/kimi 的 DSH 腿经 structured_completion→execute_ai_prompt 单点入账；deepseek 本地腿沿旧 `_audit`（入口预算门不变）；`direct_tool_completion` 内部零审计（降级腿由 `_degraded_direct_result` 单点记账）。
+- **测试**：NEW `test_ai_server_budget_audit.py` 7 例（DSH 拦截零请求+budget_blocked 留痕 / DSH 成功按 provider_usage 入账+计入月度预算 / DSH 失败入账不计预算 / 降级腿 used_fallback 入账 / kimi 门拦在上传前 / kimi 成功记账 token=None / kimi 失败记账）；既有回归 `test_ai_server_direct_fallback`/`test_ai_audit_budget`/`test_kimi_client`/`test_ai_server_chat_mcp`/`test_agent_budget`/`test_agents_adapter` 93 passed；`**kwargs` 替身全兼容新 `purpose` 参数。
+- **口径**：105 表不变（零 DDL）/ 迁移头 `e2c6a8f4d1b3`（34 rev）不变 / 路由 **297** 不变 / ENTRIES 94 不变 / mypy 基线 279 不变（新代码零新增）/ pytest **1898 收集**（+7）/ 桌面零改动。改 server（零迁移）⇒ rebuild 三镜像（alembic 幂等校验）。
 
 ## CR-007 · P2 · 桌面导航重定向断言与 React passive effect 抢跑（CI desktop job 间歇红）
 

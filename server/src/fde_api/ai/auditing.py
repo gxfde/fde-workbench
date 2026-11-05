@@ -107,3 +107,26 @@ class Timer:
 
     def elapsed_ms(self) -> int:
         return int((time.monotonic() - self._start) * 1000)
+
+
+def audit_budget_blocked(
+    *, request_id: str, actor_id: str | None, purpose: str | None, model: str
+) -> None:
+    """预算拦截统一留痕（CR-006 统一闸）：落一条 ``budget_blocked`` 审计。
+
+    各调用方（deepseek 直连腿 / DSH 主路径 execute_ai_prompt / kimi 本地腿）
+    抛各自的 ``ai_budget_exceeded`` 异常前调用，保证「拦截必有账」——预算
+    汇总把 budget_blocked 计入已用量（status 过滤含 budget_blocked）。
+    """
+    record_audit(
+        request_id=request_id,
+        actor_id=actor_id,
+        purpose=purpose,
+        model=model,
+        used_fallback=False,
+        duration_ms=0,
+        input_tokens=None,
+        output_tokens=None,
+        status="budget_blocked",
+        error_code="ai_budget_exceeded",
+    )

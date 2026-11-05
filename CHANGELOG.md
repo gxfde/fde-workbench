@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-006 统一入账+统一闸：DSH 主路径/kimi 本地腿补预算门与 `ai_call_audits` 记账腿（2026-11-05）
+
+### 服务端（用户拍板「统一入账+统一闸」落地；零迁移零路由零桌面改动）
+
+- **缺口（goal-c c2/c8 两轮 E0）**：`dsh_enabled=true` 时 `execute_ai_prompt`——workflow skill 节点/聊天/结构化调用的 DSH 主路径——对 `ai_monthly_token_budget` 恒放行且零记账（skill 花费不入任何账本）；kimi 全路径零预算零审计；预算设施对后台任务存在 flask g 盲区。
+- **统一预算门**（`control/ai_server_client.py::execute_ai_prompt`）：`ai_monthly_token_budget` 超限即拒（`ai_budget_exceeded`，retryable=False），先落 `budget_blocked` 审计再拒绝、拦在 MCP token 签发之前（拦截路径零写副作用）；预算 0=不限额、设施故障 fail-open（与 deepseek 直连腿同语义）。**门带显式 user_id——后台任务（workflow skill 节点等无请求上下文场景）同样生效**。
+- **统一记账腿**（`_audit_execution`）：DSH 成功按 `provider_usage.calls[]` 聚合精确入账；失败（HTTP 4xx/无效输出/不可达非降级错）各落 `failed`；降级直连腿成功/失败均记账（`used_fallback=True`，token 来自 OpenAI 兼容 usage 块）；provider_usage 无 calls 时 token 记 None 不发明数字。**无双计**：deepseek/kimi 的 DSH 腿经 `structured_completion`→`execute_ai_prompt` 单点入账；deepseek 本地腿沿旧 `_audit` 不动；`direct_tool_completion` 内部零审计（降级腿单点记账）。
+- **kimi 本地腿补齐**（`ai/kimi.py`）：入口预算门（拦在文件上传前；actor 取请求上下文，后台无上下文→放行——缺口如实保留）+ 本地腿成功/失败记账（`purpose="kimi_docx"`；流式无 usage，token 记 None）。
+- `ai/auditing.py` +`audit_budget_blocked` 统一拦截留痕助手；`execute_ai_prompt` 新增可选 `purpose` 参数（`structured_completion` 传 `"structured"`；chat/executor/dsh_runtime 调用点未触碰）。
+- **测试与口径**：pytest **1898 收集 = 1892 passed + 6 skipped（本轮 +7；基线 `b3793d4` 实测 1891；T-W7 同日并轮后总口径 1905 = 1899+6s）**（NEW `test_ai_server_budget_audit.py` 7 例：DSH 拦截零请求+budget_blocked 留痕/成功按 provider_usage 入账+计入月度预算/失败入账不计预算/降级腿 used_fallback 入账/kimi 门拦在上传前/kimi 成功记账 token=None/kimi 失败记账；既有 AI 面 93 例回归全绿）；105 表 / head `e2c6a8f4d1b3`（34 rev）/ 路由 297 / ENTRIES 94 / mypy 基线 279 全不变；改 server（零迁移）⇒ rebuild 三镜像（alembic 幂等校验）。
+
 ## [未发布] — V3 实施 T-W7：workflow 节点产物→门禁证据候选——运行时保留键 gate_evidence 同事务挂候选（2026-11-05）
 
 ### 服务端（立项合同 `docs/architecture/workflow-gate-evidence-candidates-v1.md`；WB-DEF-8 workflow 腿；零迁移零路由零桌面改动）

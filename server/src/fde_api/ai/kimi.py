@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, BinaryIO, Callable
 
 import requests
 from pydantic import SecretStr
+
+logger = logging.getLogger(__name__)
 
 
 class KimiError(Exception):
@@ -58,6 +62,10 @@ class KimiFileClient:
         api_key = self._secret_value()
         if not api_key:
             raise KimiError("ai_service_not_configured", "AI 服务尚未配置，请联系管理员。", retryable=False)
+        # CR-006 统一预算门：kimi 此前全路径零预算零审计（goal-c 取证 E0）。
+        # DSH 腿经 structured_completion → execute_ai_prompt 已统一闸+账；此处
+        # 门守本地直连腿入口（含文件上传花费），审计见 _write_local_audit。
+        self._enforce_monthly_budget(request_id=request_id)
         headers = {"Authorization": f"Bearer {api_key}", "X-Request-ID": request_id}
         file_id = ""
         try:
@@ -108,6 +116,7 @@ class KimiFileClient:
                 completion_payload["reasoning_effort"] = "low"
                 completion_payload["max_completion_tokens"] = 32768
 
+            leg_started = time.monotonic()
             completion = self._request(
                 "post",
                 f"{self._base_url}/chat/completions",
@@ -115,15 +124,29 @@ class KimiFileClient:
                 json=completion_payload,
                 stream=True,
             )
-            content = self._read_streamed_content(completion, on_event=on_event)
-            if not content.strip():
-                raise KimiError("ai_empty_response", "AI 未返回有效分析结果，请重试。", retryable=True)
             try:
-                parsed = json.loads(content)
-            except json.JSONDecodeError as error:
-                raise KimiError("ai_output_invalid", "AI 返回的项目指引格式不正确，请重试。", retryable=True) from error
-            if not isinstance(parsed, dict):
-                raise KimiError("ai_output_invalid", "AI 返回的项目指引格式不正确，请重试。", retryable=True)
+                content = self._read_streamed_content(completion, on_event=on_event)
+                if not content.strip():
+                    raise KimiError("ai_empty_response", "AI 未返回有效分析结果，请重试。", retryable=True)
+                try:
+                    parsed = json.loads(content)
+                except json.JSONDecodeError as error:
+                    raise KimiError("ai_output_invalid", "AI 返回的项目指引格式不正确，请重试。", retryable=True) from error
+                if not isinstance(parsed, dict):
+                    raise KimiError("ai_output_invalid", "AI 返回的项目指引格式不正确，请重试。", retryable=True)
+            except Exception as error:  # noqa: BLE001 - 失败也记账（CR-006），原样上抛
+                self._write_local_audit(
+                    request_id=request_id, status="failed",
+                    error_code=str(getattr(error, "code", "") or "ai_unavailable"),
+                    duration_ms=int((time.monotonic() - leg_started) * 1000),
+                )
+                raise
+            # 流式响应不回传 usage：token 记 None（账本记元数据，预算按可测
+            # 口径汇总，不发明数字）——DSH 主路径有 provider_usage 精确入账。
+            self._write_local_audit(
+                request_id=request_id, status="succeeded", error_code=None,
+                duration_ms=int((time.monotonic() - leg_started) * 1000),
+            )
             return parsed
         finally:
             if file_id:
@@ -131,6 +154,57 @@ class KimiFileClient:
                     self._session.delete(f"{self._base_url}/files/{file_id}", headers=headers, timeout=15)
                 except requests.RequestException:
                     pass
+
+    def _enforce_monthly_budget(self, *, request_id: str) -> None:
+        """CR-006 本地直连腿预算门（E7 统一口径）：超限先留痕再拒（retryable=False）。
+
+        actor 取请求上下文当前用户；后台任务等无请求上下文场景 actor=None →
+        放行（kimi 无显式 actor 参数，后台腿的限流缺口如实保留，账本仍记
+        元数据）。预算设施故障 fail-open，不阻塞业务。
+        """
+        from flask import current_app, has_app_context
+
+        if not has_app_context():
+            return
+        actor_id: str | None = None
+        blocked = False
+        try:
+            from fde_api.ai.auditing import budget_exceeded, current_actor_id
+            from fde_api.extensions import db
+
+            actor_id = current_actor_id()
+            budget = int(current_app.config["SETTINGS"].ai_monthly_token_budget or 0)
+            with db.session() as session:
+                blocked = budget_exceeded(session, actor_id, budget)
+        except Exception:  # noqa: BLE001 - 预算设施故障不阻塞业务（fail-open）
+            logger.warning("kimi budget gate failed open request_id=%s", request_id, exc_info=True)
+            return
+        if blocked:
+            from fde_api.ai.auditing import audit_budget_blocked
+
+            audit_budget_blocked(request_id=request_id, actor_id=actor_id,
+                                 purpose="kimi_docx", model=self._model)
+            raise KimiError("ai_budget_exceeded", "本月 AI 用量已达预算上限，请联系管理员调整或下月再试。", retryable=False)
+
+    def _write_local_audit(self, *, request_id: str, status: str, error_code: str | None, duration_ms: int) -> None:
+        """本地直连腿记账（CR-006）：kimi 此前零审计；尽力而为不打断业务。"""
+        try:
+            from fde_api.ai.auditing import current_actor_id, record_audit
+
+            record_audit(
+                request_id=request_id,
+                actor_id=current_actor_id(),
+                purpose="kimi_docx",
+                model=self._model,
+                used_fallback=False,
+                duration_ms=int(duration_ms),
+                input_tokens=None,
+                output_tokens=None,
+                status=status,
+                error_code=error_code[:60] if error_code else None,
+            )
+        except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
+            logger.warning("kimi local audit dispatch failed request_id=%s", request_id, exc_info=True)
 
     def _request(self, method: str, url: str, **kwargs: Any) -> Any:
         kwargs["timeout"] = self._timeout_seconds
