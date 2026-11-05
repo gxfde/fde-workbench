@@ -1,7 +1,10 @@
-"""本体注册表路由（V3 T-O2/T-O3；设计 ontology-registry-v1 §4）。
+"""本体注册表路由（V3 T-O2/T-O3/T-I1；设计 ontology-registry-v1 §4）。
 
 - ``GET  /api/v1/projects/<id>/ontology/terms``（can_view，T-O1 的公开读面）：
   术语清单，``?q=`` 大小写不敏感匹配规范名或别名（别名命中返回属主行）。
+- ``GET  /api/v1/projects/<id>/ontology/terms/<term_id>/impact``（can_view，
+  V3 T-I1 影响分析）：引用该术语的研究客体/邻接边/表单清单——名字域纽带
+  （规范名 ∪ 别名 ∪ 并入来源名），变集拍板前的人工影响面评审。
 - ``GET  /api/v1/projects/<id>/ontology/relation-types``（can_view）：列出对项目
   生效的类型（全局 ∪ 项目内，项目内遮蔽同名全局）。
 - ``POST /api/v1/projects/<id>/ontology/relation-types``（can_manage）：登记类型；
@@ -47,6 +50,22 @@ def list_terms(project_id: str):
         actor=g.current_user,
         project_id=project_id,
         q=request.args.get("q"),
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.get("/terms/<term_id>/impact")
+@require_auth
+def term_impact(project_id: str, term_id: str):
+    """术语影响分析（can_view）：引用它的 subjects/links/forms 清单。
+
+    人工评审读面——有意不进 api_catalog（沿 T-O3 纪律：本体治理面 AI
+    不可直达）。
+    """
+    data = service.impact_project_term(
+        actor=g.current_user,
+        project_id=project_id,
+        term_id=term_id,
     )
     return jsonify({"data": data, "error": None})
 

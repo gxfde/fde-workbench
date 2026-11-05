@@ -1048,9 +1048,10 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
 # goal-c CR-002：conftest 外来戳自愈（_reconcile_test_schema 三分支）回归钉
 # 共享测试库被另一 worktree 盖成本树之外的 revision 时，downgrade base 会报
 # "Can't locate revision" 致全量 DB 用例 setup 即 E。conftest 现按「空/base→
-# upgrade、链内→roundtrip、外来→DROP SCHEMA 重建+upgrade」三分支自愈；本两条
-# 钉住「本树 revision 集判定」与「外来戳识别」两个纯函数面（不依赖 live DB，
-# 故 CI/多 worktree 并发下也稳定）。
+# upgrade、链内→roundtrip、外来→DROP SCHEMA 重建+upgrade」三分支自愈；本三条
+# 钉住「本树 revision 集判定」「外来戳识别」两个纯函数面（不依赖 live DB，
+# 故 CI/多 worktree 并发下也稳定），外加 T-I1 前置热修面：全新库探测撞缺表
+# 吞错后连接必须已回滚（否则会话末解锁撞 InFailedSqlTransaction，CI 必红）。
 # ---------------------------------------------------------------------------
 
 
@@ -1080,3 +1081,20 @@ def test_foreign_stamp_recognized_as_outside_tree(engine, test_settings):
     live_stamp = _current_alembic_stamp(engine.connect())
     assert live_stamp is not None
     assert live_stamp in known
+
+
+def test_stamp_probe_missing_table_rolls_back_connection(engine):
+    """fresh-DB 路径回归钉（CR-002 首版 CI 红根因，T-I1 前置热修）：把
+    search_path 指到无 alembic_version 的 pg_catalog，复现 CI 全新库「探测
+    撞缺表」——探测须返回 None 且吞错后连接已回滚（否则持锁连接留在
+    aborted 态，会话末 pg_advisory_unlock 撞 InFailedSqlTransaction，服务端
+    CI 整列必红）。不动真实 alembic_version：会话 fixture 的持锁事务持有其
+    ACCESS SHARE 直至会话结束，RENAME 会自锁死等。"""
+    with engine.connect() as conn:
+        conn.execute(text("SET search_path = pg_catalog"))
+        try:
+            assert _current_alembic_stamp(conn) is None
+            # 探测吞错后同一连接仍可执行语句（未被留在 aborted 态）
+            assert conn.execute(text("SELECT 1")).scalar() == 1
+        finally:
+            conn.execute(text("RESET search_path"))

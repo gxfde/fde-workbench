@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-I1：本体变更影响分析——impact_of_term 名字域纽带三面清单 + 只读影响面（2026-11-05）
+
+### 服务端（设计 ontology-registry-v1 §5 用例 6 / 验收 O-6；零迁移零桌面改动，+1 只读路由）
+
+- **`impact_of_term(session, *, project_id, term_id)`**（ontology/service）：给定术语，返回引用它的**研究客体/邻接边/表单**清单——变集拍板前的人工影响面评审。引用合同 = **名字域纽带**：当前实现无 term_id 外键（fde-v2「引用方只引 term_id」未随融合裁决落地），「一个名字一个概念」（UNIQUE(project, term) + UNIQUE(project, alias)）使名字精确等价概念引用——subject.name 精确命中生效名字域即引用（纽带是唯一性不是相似度，子串/大小写变体不算）。
+- **生效名字域 = 血缘闭包**：请求行沿 canonical 链到根（merge_terms 保证链一跳化，防御性走到底）+ 全部并入该根的行；名字 = 根规范名（term 绑定）∪ 血缘内别名（alias 绑定——转写来源名归保留行、来源自有别名留在来源行）∪ 非根行历史规范名（alias 绑定兜底）。对并入行发起查询 = 查其存活概念的影响面（请求行原样返回，`resolved.canonical_term_id` 解析到根）。
+- **三面清单**（全部确定性排序）：subjects（命中主体含 subject_type/status/merged_into/matched_via/matched_term_id 逐名溯源）→ links（端点命中主体的邻接边，端点名随行补齐）→ forms（命中主体名下表单，含现行修订状态）；附 counts 汇总。**gates 面按验收权威 O-6 落为三面**：门禁清单是 gates.json 冻结模板文本（template_hash 钉死，T-G2），无术语名表面——不发明方法论层没有的引用（偏差回写 backlog）。
+- **`GET /projects/{id}/ontology/terms/{term_id}/impact`**（can_view）：影响分析只读面，**有意不进 api_catalog**（沿 T-O3 纪律：本体治理面 AI 不可直达；桌面 T-UI1 GlossaryPage 是预期消费方）。跨项目/未知术语 404 `term_not_found`、无权限 403。
+- **前置热修（goal-c8 CR-002 首版回归，fork/main 服务端 CI 必红根因）**：conftest `_current_alembic_stamp` 探测在全新库（CI service container 无 `alembic_version` 表）吞错后把持锁连接留在 aborted 事务——会话末 `pg_advisory_unlock` 撞 InFailedSqlTransaction，server-tests 整列必红（#109 PR-head 即此签名，红仍被合入）。修为探测吞错即回滚 + 会话 fixture 解锁前保险回滚（会话级 advisory 锁不随回滚释放，安全）；回归钉 +1（search_path 复现缺表探测，A/B 验证：无修复红/有修复绿）。
+
+### 测试与口径
+
+- pytest **1884 收集（1878 passed + 6 skipped，本轮 +7；基线 `8f10771` 实测 1877）**：名字域全命中四路（规范名/保留行别名/转写来源名/来源自有别名）+ 子串不命中 + 三面清单与 counts / 并入行查询解析到 canonical（请求行原样+血缘解析）/ 未知与跨项目术语 404 / 零引用空面 / HTTP 面（200 形状+外人 403+未知术语与项目 404）/ 红线钉子（影响面永不进 api_catalog）/ 前置热修回归钉（fresh-DB 缺表探测吞错后连接可用）。
+- 105 表不变（零 DDL）/ 迁移头 `e2c6a8f4d1b3`（34 rev）不变 / 业务路由 **296→297**（+1 只读 GET impact，不进 api_catalog）/ ENTRIES 94 不变 / mypy 基线 279 不变（新代码零新增）/ 桌面 vitest 765 不变（零改动，无需重打包）；改 server（零迁移）⇒ **rebuild 三镜像**（`alembic upgrade head` 幂等空跑校验 current）。
+
 ## [未发布] — V3 实施 T-C1：Delivery Compiler 最小闭环——confirmed 本体→方案骨架 + workflow 定义草稿纯函数编译预览（2026-11-05）
 
 ### 服务端（NEW `workflows/compiler.py` 纯函数；零迁移零路由零桌面改动）

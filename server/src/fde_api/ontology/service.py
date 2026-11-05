@@ -31,6 +31,13 @@ DB 状态）→ submit（受影响行快照取 base 指纹）→ confirm（复�
   不可变优先）。同项目「一个名字至多一个概念」由 create/别名写入共同把守。
 - retired 关系类型禁新边、存量边只读——retire 只改注册表状态，不动既有边行。
 - AI 候选 confirm 前不物化——propose 只写变更集行本身（用例 1）。
+
+影响分析（V3 T-I1，设计 §5 用例 6 / 验收 O-6）：impact_of_term 列出引用某
+术语的研究客体/邻接边/表单。引用合同 = **名字域纽带**——当前实现无 term_id
+外键（fde-v2「引用方只引 term_id」未随融合裁决落地），「一个名字一个概念」
+（UNIQUE(project, term) + UNIQUE(project, alias)）使名字精确等价概念引用；
+生效名字域 = 血缘（根 + 并入来源）内规范名 ∪ 别名（merge_terms 转写来源
+规范名为保留行别名、来源自有别名留在来源行，闭包全部可解析到同一概念）。
 """
 
 from __future__ import annotations
@@ -59,6 +66,14 @@ from fde_api.ontology.models import (
 )
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
+# V3 T-I1 影响分析读 research 三表（models 叶子模块，不回导 ontology——
+# 方向恒 research.*_service → ontology.service → research.models，无环）。
+from fde_api.research.models import (
+    ProjectResearchForm,
+    ProjectResearchFormRevision,
+    ProjectResearchSubject,
+    ProjectResearchSubjectLink,
+)
 from fde_api.workbench.models import Project
 
 TERM_MAX_LENGTH = 120
@@ -1355,6 +1370,237 @@ def list_project_terms(
             data["aliases"] = sorted(aliases_by_term.get(row.id, []))
             items.append(data)
         return {"items": items}
+
+
+# ---------------------------------------------------------------------------
+# V3 T-I1：本体变更影响分析（设计 §5 用例 6；验收 O-6）
+# ---------------------------------------------------------------------------
+
+
+def _term_lineage_rows(
+    session: Session, *, row: OntologyTerm
+) -> list[OntologyTerm]:
+    """血缘闭包：请求行沿 canonical 链到根，再收全部并入该根的行。
+
+    merge_terms 保证链一跳化（曾并入 source 的行随合并重指 target），这里仍
+    防御性沿链走到底。返回首元素恒为根（canonical_term_id 为 None 的存活行；
+    请求行自身是 merged 行时根即其 canonical），其余按 (term, id) 排序——
+    输出确定性。
+    """
+    root = row
+    visited = {root.id}
+    while root.status == "merged" and root.canonical_term_id:
+        nxt = session.get(OntologyTerm, root.canonical_term_id)
+        if nxt is None or nxt.project_id != row.project_id or nxt.id in visited:
+            break
+        root = nxt
+        visited.add(root.id)
+    # 自根重新收下展（请求行若是 merged 行必在其内——它指向根或链上某行）
+    seen = {root.id}
+    lineage = [root]
+    frontier = [root]
+    while frontier:
+        current = frontier.pop()
+        for child in session.scalars(
+            select(OntologyTerm).where(
+                OntologyTerm.project_id == row.project_id,
+                OntologyTerm.canonical_term_id == current.id,
+                OntologyTerm.status == "merged",
+            )
+        ):
+            if child.id not in seen:
+                seen.add(child.id)
+                lineage.append(child)
+                frontier.append(child)
+    return [lineage[0], *sorted(lineage[1:], key=lambda item: (item.term, item.id))]
+
+
+def impact_of_term(
+    session: Session, *, project_id: str, term_id: str
+) -> dict[str, Any]:
+    """影响分析（设计 §5 用例 6）：给定术语，列出引用它的研究客体/邻接边/表单。
+
+    引用合同 = 名字域纽带（模块 docstring）：subject.name 精确命中生效名字域
+    即引用该概念——纽带是唯一性不是相似度，子串/大小写变体不算命中。
+    对并入行发起查询 = 查其存活概念的影响面（请求行原样返回，血缘解析到根）。
+    """
+    row = session.get(OntologyTerm, term_id)
+    if row is None or row.project_id != project_id:
+        raise OntologyServiceError("term_not_found", "术语不存在。", 404)
+
+    lineage = _term_lineage_rows(session, row=row)
+    # 生效名字域：只有根的规范名是 term 绑定——并入/被取代行的规范名是
+    # 历史名，经合并转写的别名（归保留行）或行自身（转写被占位防御跳过时的
+    # 兜底）按 alias 绑定解析。setdefault 全程防御（UNIQUE 语义下同名不可共存）。
+    names: dict[str, tuple[str, str]] = {}
+    names.setdefault(lineage[0].term, (lineage[0].id, "term"))
+    for alias_row in session.scalars(
+        select(OntologyTermAlias).where(
+            OntologyTermAlias.project_id == project_id,
+            OntologyTermAlias.term_id.in_([item.id for item in lineage]),
+        )
+    ):
+        names.setdefault(alias_row.alias, (alias_row.term_id, "alias"))
+    for term_row in lineage[1:]:
+        names.setdefault(term_row.term, (term_row.id, "alias"))
+
+    subjects = list(
+        session.scalars(
+            select(ProjectResearchSubject)
+            .where(
+                ProjectResearchSubject.project_id == project_id,
+                ProjectResearchSubject.name.in_(names),
+            )
+            .order_by(
+                ProjectResearchSubject.name.asc(), ProjectResearchSubject.id.asc()
+            )
+        )
+    )
+    subject_items = []
+    subject_names = {subject.id: subject.name for subject in subjects}
+    for subject in subjects:
+        owner_id, via = names[subject.name]
+        subject_items.append(
+            {
+                "id": subject.id,
+                "subject_key": subject.subject_key,
+                "name": subject.name,
+                "subject_type": subject.subject_type,
+                "status": subject.status,
+                "merged_into_subject_id": subject.merged_into_subject_id,
+                "matched_via": via,
+                "matched_term_id": owner_id,
+            }
+        )
+
+    subject_ids = list(subject_names)
+    link_items: list[dict[str, Any]] = []
+    if subject_ids:
+        link_rows = list(
+            session.scalars(
+                select(ProjectResearchSubjectLink)
+                .where(
+                    ProjectResearchSubjectLink.project_id == project_id,
+                    or_(
+                        ProjectResearchSubjectLink.source_subject_id.in_(subject_ids),
+                        ProjectResearchSubjectLink.target_subject_id.in_(subject_ids),
+                    ),
+                )
+                .order_by(
+                    ProjectResearchSubjectLink.link_type.asc(),
+                    ProjectResearchSubjectLink.id.asc(),
+                )
+            )
+        )
+        endpoint_ids = {
+            endpoint_id
+            for link in link_rows
+            for endpoint_id in (link.source_subject_id, link.target_subject_id)
+        }
+        endpoint_names: dict[str, str] = {
+            endpoint_id: endpoint_name
+            for endpoint_id, endpoint_name in session.execute(
+                select(
+                    ProjectResearchSubject.id, ProjectResearchSubject.name
+                ).where(ProjectResearchSubject.id.in_(endpoint_ids))
+            ).all()
+        }
+        for link in link_rows:
+            link_items.append(
+                {
+                    "id": link.id,
+                    "link_type": link.link_type,
+                    "source_subject_id": link.source_subject_id,
+                    "source_subject_name": endpoint_names.get(
+                        link.source_subject_id
+                    ),
+                    "target_subject_id": link.target_subject_id,
+                    "target_subject_name": endpoint_names.get(
+                        link.target_subject_id
+                    ),
+                }
+            )
+
+    form_items: list[dict[str, Any]] = []
+    if subject_ids:
+        form_rows = list(
+            session.scalars(
+                select(ProjectResearchForm)
+                .where(
+                    ProjectResearchForm.project_id == project_id,
+                    ProjectResearchForm.subject_id.in_(subject_ids),
+                )
+                .order_by(
+                    ProjectResearchForm.form_key.asc(), ProjectResearchForm.id.asc()
+                )
+            )
+        )
+        revision_ids = [
+            form.current_revision_id
+            for form in form_rows
+            if form.current_revision_id is not None
+        ]
+        status_by_revision: dict[str, str] = (
+            {
+                revision_id: revision_status
+                for revision_id, revision_status in session.execute(
+                    select(
+                        ProjectResearchFormRevision.id,
+                        ProjectResearchFormRevision.status,
+                    ).where(ProjectResearchFormRevision.id.in_(revision_ids))
+                ).all()
+            }
+            if revision_ids
+            else {}
+        )
+        for form in form_rows:
+            form_items.append(
+                {
+                    "id": form.id,
+                    "form_key": form.form_key,
+                    "name": form.name,
+                    "subject_id": form.subject_id,
+                    "subject_name": subject_names.get(form.subject_id),
+                    "current_revision_status": (
+                        status_by_revision.get(form.current_revision_id)
+                        if form.current_revision_id is not None
+                        else None
+                    ),
+                }
+            )
+
+    return {
+        "term": serialize_term(row),
+        "resolved": {
+            "canonical_term_id": lineage[0].id,
+            "lineage_term_ids": [item.id for item in lineage],
+            "names": {
+                name: {"term_id": owner_id, "via": via}
+                for name, (owner_id, via) in sorted(names.items())
+            },
+        },
+        "subjects": subject_items,
+        "links": link_items,
+        "forms": form_items,
+        "counts": {
+            "subjects": len(subject_items),
+            "links": len(link_items),
+            "forms": len(form_items),
+        },
+    }
+
+
+def impact_project_term(
+    *, actor: User, project_id: str, term_id: str
+) -> dict[str, Any]:
+    """影响分析只读面（can_view）：GET /ontology/terms/<id>/impact。
+
+    人工评审读面——有意不进 api_catalog（沿 T-O3 纪律：本体治理面 AI 不可
+    直达；桌面 T-UI1 GlossaryPage 是预期消费方）。
+    """
+    with db.session() as session:
+        project = _load_project(session, actor, project_id, manage=False)
+        return impact_of_term(session, project_id=project.id, term_id=term_id)
 
 
 # ---------------------------------------------------------------------------

@@ -337,8 +337,18 @@
   - **测试**：NEW `test_delivery_compiler.py` 6 例（整树快照 / 三节点 dag 真实目录白名单全绿零告警+拓扑序 (research, solution, review) / 非 confirmed+五类坏载荷点名拒绝 / 无模板无门禁待补回退+坏门禁行跳过 / 坏 skill ref·capability 拒绝 / 骨架 payload 过 `_normalize` 合同）。
   - **口径**：105 表不变（零 DDL）、迁移头 `e2c6a8f4d1b3`（34 rev）不变、业务路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1877 收集 = 1871 passed + 6 skipped**（本轮 +6；基线 `1ef3a42` 实测 1871）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server（零迁移）⇒ rebuild 三镜像。
 
-### T-I1 本体变更影响分析（域 2 §5 用例 6 扩展）
+### T-I1 本体变更影响分析（域 2 §5 用例 6 扩展）— **DONE（2026-11-05，分支 feat/v3-t-i1-ontology-impact，squash 合并至 fork/main）**
 - 目标：impact_of_term(term_id) → 引用它的 subjects/links/forms/gates 证据列表。前置：T-O1。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **引用合同 = 名字域纽带**：fde-v2 设计的「引用方（研究客体、表单、门禁）只引 term_id」未随融合裁决落地（吸收思想不引实现）——当前 schema 无 term_id 外键，T-O4 导入去重/术语治理的真实纽带是「一个名字一个概念」（UNIQUE(project, term) + UNIQUE(project, alias)）。影响分析据此落为**精确名匹配**：subject.name 命中生效名字域即引用该概念；纽带是唯一性不是相似度，子串/大小写变体不算命中。
+  - **生效名字域 = 血缘闭包**：请求行沿 canonical 链到根（merge_terms 已保证链一跳化，防御性走到底）∪ 全部并入该根的行；名字 = 根规范名（via=term）∪ 血缘内别名（via=alias：转写来源名归保留行、来源自有别名留在来源行——逐名 term_id 溯源）∪ 非根行历史规范名（via=alias 兜底，转写被占位防御跳过时不丢名）。对并入行发起查询 = 查其存活概念的影响面（term 段原样返回请求行，resolved.canonical_term_id 指根）。
+  - **三面清单**：subjects（命中主体：类型/状态/merged_into/matched_via/matched_term_id）→ links（**端点命中主体的邻接边**——设计 §5.6「引用该 term 的 links」的落法：引用主体改名，边语义随动；端点名随行补齐）→ forms（命中主体名下表单 + 现行修订状态）；counts 汇总；全清单确定性排序。
+  - **gates 面偏差**：backlog 目标句的 gates 一词按验收权威 O-6（impact_of_term 返回引用它的 subjects/links/forms）落为三面——门禁清单是 gates.json 冻结模板文本（template_hash 钉死，T-G2），无任何术语名表面；为 gates 发明术语引用会踩门禁铁律「工程层不得发明方法论层没有的东西」。未来若门禁清单项引入术语挂接（如 G? 清单项挂 term_id），影响分析可零改扩第四面（返回形状未预留死键）。
+  - **+1 只读路由**：`GET /projects/{id}/ontology/terms/{term_id}/impact`（can_view）——设计 §4 未列本条（设计只说「服务层可查询」），开 HTTP 面是为让人工评审在变集拍板前可达（同 T-O2 retire 先例：为让验收在人工路径可达而补路由），桌面 T-UI1 GlossaryPage 是预期消费方；**有意不进 api_catalog**（沿 T-O3 纪律，既有钉子测试 `/ontology/terms` 路径断言自动覆盖）。
+  - **跨包 import 方向**：ontology.service → research.models（models 叶子模块）——方向恒 research.*_service → ontology.service → research.models，无环（research/__init__ 仅 docstring）。
+  - **前置热修（CI 解堵，非 backlog 项）**：rebase 后首轮 PR CI 红，定位为 **goal-c8 CR-002 首版回归**（#109）：conftest `_current_alembic_stamp` 探测在全新库（CI service container 无 alembic_version 表）吞 UndefinedTable 后未回滚——持锁连接留在 aborted 事务，会话末 `pg_advisory_unlock` 必撞 InFailedSqlTransaction → server-tests 整列红（#109 PR-head 即此签名，红仍被合入；本地共享库戳已知故绿，具隐蔽性）。修为「探测吞错即回滚 + 解锁前保险回滚」两行（会话级 advisory 锁不随回滚释放）；回归钉 `test_stamp_probe_missing_table_rolls_back_connection`（search_path 复现缺表探测，A/B 验证无修复红/有修复绿；**教训：不能用 RENAME alembic_version 复现——会话 fixture 持锁事务持有其 ACCESS SHARE 直至会话结束，会自锁死等**）。
+  - **测试**：NEW `test_ontology_impact.py` 6 例（名字域四路全命中+子串不命中+三面清单与 counts / 并入行查询解析到 canonical / 未知与跨项目术语 404 / 零引用空面 / HTTP 面+访问控制 / 红线钉子不进 catalog）+ 热修回归钉 1 例。
+  - **口径**：105 表不变（零 DDL）、迁移头 `e2c6a8f4d1b3`（34 rev）不变、业务路由 **296→297**（+1 只读，不进 api_catalog）、ENTRIES 94 不变、pytest **1884 收集 = 1878 passed + 6 skipped**（本轮 +7；基线 `8f10771` 实测 1877）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server（零迁移）⇒ rebuild 三镜像。
 
 ### T-UI1 桌面控制台三页（域 16）
 - WorkflowConsole / GlossaryPage / SkillVersionsPage + vitest 用例。前置：对应 API。复杂度：**M**。

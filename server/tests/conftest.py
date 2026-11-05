@@ -152,6 +152,9 @@ def migrated_test_schema(test_settings):
         seed_reference_data(test_settings.database_url)
         yield
     finally:
+        # 保险带：中途任何语句留下 aborted 事务都不该让解锁本身炸掉
+        # （解锁是持锁清理的唯一出口；干净事务上 rollback 是无害空操作）。
+        lock_conn.rollback()
         lock_conn.execute(text(f"SELECT pg_advisory_unlock(hashtext('{_SESSION_LOCK_KEY}'))"))
         lock_conn.close()
         lock_engine.dispose()
@@ -163,6 +166,10 @@ def _current_alembic_stamp(conn) -> str | None:
         row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).first()
         return str(row[0]) if row else None
     except Exception:  # noqa: BLE001 - 表未建（空 schema）即 base
+        # 探测失败已把当前事务打进 aborted 态，必须回滚——否则会话末
+        # pg_advisory_unlock 撞 InFailedSqlTransaction（CI 全新库必踩，
+        # goal-c8 CR-002 首版回归）。会话级 advisory 锁不随事务回滚释放。
+        conn.rollback()
         return None
 
 
