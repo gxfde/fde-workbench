@@ -1,6 +1,6 @@
 # V3 实施任务台账（backlog）
 
-> 状态：全部 **PROPOSED**（基于 VERIFIED 审计设计）。任务 ID 与差距矩阵/风险登记册互引。
+> 状态：**T-\* 任务 33 节全部 DONE**（P0–P2 全部 DONE 或核销；P3 四项已定案收口，见 §P3 与 v3-p3 三报告）；「开源借鉴清单登记」段 B#1–B#40（#127 登记 34 项＋#133 评审补登记 6 项）：**P0 先行批表 10 项 ✅ 已实施**（#128~#131），其余按逐条状态标注——PROPOSED/冻结/封存/修复项（登记≠排期≠默认实施）。任务 ID 与差距矩阵/风险登记册互引。
 > 复杂度：S（≤1 天）/ M（数天）/ L（≥1 周）。均按既有 goal-d 循环节奏逐个交付，不并行开双实施线。
 > 通用约定：所有服务端改动 → `docker compose build && up -d` → `alembic upgrade head`（README 纪律）；桌面改动 → 重打包 + asar 字节验证；CI 4 job 全绿才合并。
 
@@ -388,7 +388,7 @@
 - 业务规则推理（ontology_rules 立项评估）——立项 §3；「无消费方不建空壳」维持；**状态轮裁决：ontology_rules 维持不建 PARK**（两候选消费方均「可做非被需要」——risk≥3 规则已内嵌且被 `test_catalog_effect_risk_invariants` 钉住、T-C1 编译校验无规则输入需求；重开触发器=第二条 risk≥3 规则需配置化 / T-C1 规则输入需求 / 业务点名规则）；**规则 9 强制化悬置线销号：维持告警**（执行层已硬闸——workflow call external 必 awaiting_confirmation 诚实失败 + DSH agent 节点走审批回调，定义期强制只省一次诚实失败的提前量，「P2 enforcement wave」不做）。
 - 有限自动执行开放评估（依赖 P0-P2 验收全绿）——立项 §4；**三道闸齐备（2026-11-05 状态轮清偿）**：T-J2 落定（#116）✅ + §16 用例族核对表全绿（32 例：30 直接绿+W-9 本轮补钉变异验证+W-3 input_schema 后腿裁决不建）✅ + 责任主体机制化方案成形（审批链人签五要素在表+系统自主动作封闭白名单，无结构性缺口）✅ → **评估报告轮解冻可排期**（余项=边界梯度分类学〔写类永不降级红线维持〕+调研会话衔接；运行证据待首批真实 run）；写类 external 免事前确认=红线级非目标。**评估报告轮已落定（同日，报告=`docs/implementation/v3-p3-评估报告-有限自动执行-v1.md`）**：三面目录实测（api_catalog 94 + MCP 17 + A 轨审批硬白名单 service.py:867）→ 八档分类学 G0–G7+S；**现役可降级集合=∅**（G3 产物出具两条/G5 不可逆写五条裁决不降级留痕可推翻；G6 发信类现役唯一成员 `file_send_wechat` 收件域封闭+事前密码确认红线钉死；G7 写外呼/付款构造性零条目）；§1.5 准入五要素模板（全 PROPOSED）+ §2.2 取数口径四条 + §3.2 责任主体断言 SQL 三条先行（活库审批行=0，首批真实 run 后评估复审轮）；调研会话《自动化运行-DSH替代可行性评估》已落盘、四条结论消费同向（P0 维持现状=本报告不开放互证）；**闸态变更数=0，零代码零配置零迁移**。
 
-## 开源借鉴清单登记（2026-11-05 消费登记轮 B#1–B#34 ＋ **2026-11-06 评审补登记 B#35–B#40**，零代码）
+## 开源借鉴清单登记（2026-11-05 消费登记轮 B#1–B#34 ＋ **2026-11-06 评审补登记 B#35–B#40**，登记轮零代码。当前：P0 先行批表 10 项 ✅ 已实施（#128~#131），其余按逐条状态标注——PROPOSED/冻结/封存/修复项）
 
 **来源**：调研会话《开源项目借鉴总览-2026-11-05》（横评**九项目**：fde-v2 / agent-autoloop / agnes-harness / giip-fde-agent / sample-fdep-mcp-server / fde-gym / FF-FDE-Delivery-Workbench / fde-skills / Frank-FDE-Skills）及分报告——`docs/audit/` 下**在途未提交产物**（落定回写归调研会话，本轮只消费登记、不代提交、不复制其证据链）。登记编号沿用总览原文 **B#1–B#40**；条目细节、来源 file:line、分项目裁决以总览原文为准，本节只挂决策骨架。
 
@@ -405,10 +405,10 @@
 
 | 编号 | 名称 | 形态 | 落点 | 闸 |
 |---|---|---|---|---|
-| B#1 | 跳数熔断（workflow 自触发链 hops 上限） | 代码+**迁移** | `workflow_runs` 加 `hops` 列 + 执行器入口 >8 → failed(`hops_exceeded`) + 留痕 + 通知；拍板重投**继承不清零**用例 | **✅ 已实施（P0 代码级子批 #129）：`workflow_runs.hops` 列（迁移 `b2e8f4a6c9d3`）+ `MAX_RUN_HOPS=8`（resume 重投口 409 拒绝+入口 belt honest failed）+ 双用例（逐代累加继承不清零/字面量播种变异敏感）** |
-| B#2 | 回执「写错不重做」 | 代码 | `agents/service.py` 增 `succeeded_but_receipt_invalid` 终态；与 V8 失败终态拒同键重跑的交互写清；repair 按 CLI 能力降级 | 零迁移；zcode 会话能力未核实（待澄清 6.1-4）。**✅ 核心已实施（#129，收窄面）：`ManifestOutputScanner.receipt_state` 四态分类（ok/no_output/files_without_manifest/manifest_invalid，Protocol 不破）经 `RunResult.receipt_state` 入 `_finalize`——completed+exit0+零声明产物且回执面损坏 → `succeeded_but_receipt_invalid` 独立终态（不进 FAILED_STATUSES ⇒ retry_run 拒同键重跑）+ `agent_runs.status` 列 String(24)→(40)+CHECK 扩（同迁移）+ 五用例（终态/合法零产物不误伤/C-1 兼容钉/干净对照/scanner 五态）；**实施中发现并修正两处计划缺腿**（教训 41）：①首版把声明产物校验失败也折入新终态撞 C-1「failed→retry 恢复」既有合同（I-1 幂等复用同撞）→ 收窄到回执面损坏；②合法零产物任务须与回执缺失可区分 → adapter 面 receipt_state 信号。repair 按 CLI 能力降级档待 zcode 会话能力核实后评估** |
+| B#1 | 跳数熔断（workflow 自触发链 hops 上限） | 代码+**迁移** | `workflow_runs` 加 `hops` 列 + 执行器入口 >8 → failed(`hops_exceeded`) + 留痕 + 通知；拍板重投**继承不清零**用例 | **✅ 已实施（P0 代码级子批 #130）：`workflow_runs.hops` 列（迁移 `b2e8f4a6c9d3`）+ `MAX_RUN_HOPS=8`（resume 重投口 409 拒绝+入口 belt honest failed）+ 双用例（逐代累加继承不清零/字面量播种变异敏感）** |
+| B#2 | 回执「写错不重做」 | 代码 | `agents/service.py` 增 `succeeded_but_receipt_invalid` 终态；与 V8 失败终态拒同键重跑的交互写清；repair 按 CLI 能力降级 | 零迁移；zcode 会话能力未核实（待澄清 6.1-4）。**✅ 核心已实施（#130，收窄面）：`ManifestOutputScanner.receipt_state` 四态分类（ok/no_output/files_without_manifest/manifest_invalid，Protocol 不破）经 `RunResult.receipt_state` 入 `_finalize`——completed+exit0+零声明产物且回执面损坏 → `succeeded_but_receipt_invalid` 独立终态（不进 FAILED_STATUSES ⇒ retry_run 拒同键重跑）+ `agent_runs.status` 列 String(24)→(40)+CHECK 扩（同迁移）+ 五用例（终态/合法零产物不误伤/C-1 兼容钉/干净对照/scanner 五态）；**实施中发现并修正两处计划缺腿**（教训 41）：①首版把声明产物校验失败也折入新终态撞 C-1「failed→retry 恢复」既有合同（I-1 幂等复用同撞）→ 收窄到回执面损坏；②合法零产物任务须与回执缺失可区分 → adapter 面 receipt_state 信号。repair 按 CLI 能力降级档待 zcode 会话能力核实后评估** |
 | B#3 | 审查不执行被审代码（红线） | 文档 | AGENTS.md 红线 +1（未来上 AI 审查时加 CI 断言） | 立规≈0 成本。**✅ 已落盘（P0 文档级子批 #128：AGENTS 红线节第 7 条）** |
-| B#4 | purity 架构测试 | 测试 | pytest：workflows/ 不 import control service/routes 层（环导入实证已存在）、kernel 类模块不读 os.environ/flask、无产品硬编码 | 成本=1 测试文件。**✅ 已实施（#129 `tests/test_architecture_purity.py` 四断言：双向环防线/control.service 延迟导入惯例固化/内核零 env·flask/零「蔡工」字面量——落地前实测全绿）** |
+| B#4 | purity 架构测试 | 测试 | pytest：workflows/ 不 import control service/routes 层（环导入实证已存在）、kernel 类模块不读 os.environ/flask、无产品硬编码 | 成本=1 测试文件。**✅ 已实施（#130 `tests/test_architecture_purity.py` 四断言：双向环防线/control.service 延迟导入惯例固化/内核零 env·flask/零「蔡工」字面量——落地前实测全绿）** |
 | B#5 | 审批退避提醒 + SLA 统计 | 代码 | 挂起审批按退避序列提醒（复用任务中心，勿新开外发通道）+ 挂起时长统计进 run 详情 | 零迁移 |
 | B#6 | 状态归属与对账框架 | 文档+测试 | 《状态归属与对账》自检清单（project_evidence/ontology_*/workflow_*/documents 四层）+ pytest 断言（候选 confirm 前不物化/快照可重建/指纹不一致拒绝） | 零迁移。**✅ 已实施（#131：`docs/architecture/状态归属与对账-v1.md` 四层归属总表+C1–C10 自检清单 + `tests/test_state_ownership_reconciliation.py` 六跨层钉——候选两腿挂接后 project_evidence 零行且清单不动/物化唯一入口/引用-实体逐位一致/版本行指纹可重算（v2 发布不污染 v1）/文档快照剥 captured_at 后逐位确定/ontology base_conflict 零物化；六钉逐一变异验证红→还原绿；既有单面专测映射见文档 §2）** |
 | B#21 | 交付效果评测协议 v0（uplift 算分口径） | 文档 | `docs/`：result 字段清单 + G9「上线门」exit_condition「验收线达成」挂接；**不引入任何代码** | 无 oracle 不得出分（`insufficient_data`）；Q1–Q3 影响深度。**✅ 协议已落盘（#128 `docs/architecture/交付效果评测协议-v0.md` §1/§2/§5）；gates.json 种子挂接=接线项归代码级子批同窗口；✅ 接线已实施（#131：G9 exit_condition 挂 §5 冻结公式 `验收线达成 ≔ uplift_bounded ≥ 0.8 ∧ incidents = ∅ ∧ 三锚四反例全过` + insufficient_data 边界 + 协议指针，原五项出门口径逐字保留；种子重生成覆盖由钉 6 守护；存量 Gate 行不改（T-G2 template_outdated 呈现漂移属设计））** |
