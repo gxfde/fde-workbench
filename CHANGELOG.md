@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-027 规则版本显式管理：撮合不再永久停在降级态（2026-11-05）
+
+### 服务端（零迁移零桌面；路由 +2；用户拍板「显式管理动作」）
+
+- **修复（CR-027）**：`dispatch/rules.py` 的 `create_rule_version`（发布）与 `activate_due_versions`（激活）此前**两者都只有测试引用、零生产入口**——规则版本永不 published→active，`active_rule_version` 恒 None，`match_package` 恒 422 `rule_version_required`（§11.1 降级态变永久态）。NEW `dispatch/admin_routes.py`（blueprint `/api/v1/admin/dispatch`，T-J2 admin 蓝图同款）：`POST /rules/versions` 发布新版本（admin 门在服务层 role 判；快照缺省取当前默认规则投影＝发布「当前口径」而非手抄正文）、`POST /rules/activate` 激活到点版本（幂等，无到期版本零变更；同事务留痕 `operation_events dispatch_rule_activated`，changes 只落版本号/数量/激活时刻，**不落规则正文**）。**公示窗不绕过**：发布端强制 `effective_at ≥ published_at + 30 天`（§6.2），激活端只激活已到生效日者——人工也加速不了公示期。**不做请求路径惰性触发、不做 scheduler 自动激活**：激活节奏由人控制，与「名单≠开闸」裁决一致。
+- 测试与口径：NEW `test_dispatch_admin_rules.py` 5 例（非 admin 双路由 403 / 公示窗 <30 天 422 `notice_window_required` + 版本冲突 409 / **激活后撮合不再 422**（解冻证明）+ 重复激活幂等 + 事件留痕只落元数据 / api_catalog 钉子 / 缺省快照取默认投影）。业务路由 298→**300**；全仓 pytest **+5**；台账 CR-027 → fixed、**CR-028 裁决「维持整条挂 B-③ 法务区」**（税率/税法年口径未确认前不动码，解冻条件随法务口径一并修）。
+
 ## [未发布] — goal-c CR-022 补呈现通道：取消后在途派发结果不再静默丢弃（2026-11-05）
 
 ### 服务端（零迁移零路由零桌面改动；用户拍板「补呈现通道」）

@@ -75,6 +75,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # V3 T-J2（域 14）：admin 后台任务取消面（幂等/不强杀/留痕，不进 api_catalog）
     from fde_api.jobs.admin_routes import admin_jobs_blueprint
     app.register_blueprint(admin_jobs_blueprint)
+    # goal-c CR-027：admin 规则版本显式管理面（发布 + 激活；公示窗不绕过，不进 api_catalog）
+    from fde_api.dispatch.admin_routes import admin_dispatch_blueprint
+    app.register_blueprint(admin_dispatch_blueprint)
     # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
     from fde_api.meetings.routes import meetings_blueprint
     app.register_blueprint(meetings_blueprint)

@@ -47,8 +47,8 @@
 | CR-024 | P3 | open（登记不修） | 调研导入同文件多级造数：`_load_parent_candidates`（imports.py:420）在行创建前扫描父级候选——文件内新建的部门/流程对本批后续行 role 的「父级」列不可见 → preview 零报错、commit 确定性 `parent_not_found`（非静默错数据，preview 体验缺口） | research/imports.py:420/1445 | c5 |
 | CR-025 | P3 | open（登记不修） | `update_definition_dag`（definition_service.py:525）零 HTTP 路由——已发布定义无修订出口（`publish_definition` 对 published 行 409 `already_published` 且无编辑路由），docstring 承诺「修改定义会自动开新草稿版本」面缺失；模块 docstring 与路由面漂移 | workflows/definition_service.py:525-551 | c5 |
 | CR-026 | P3 | open（登记不修） | 变更集 `register_relation_type` 物化端点校验仅在 confirm 才跑（propose 只查形状）——AI 多条目变更集一条坏端点码即全事务回滚 409（设计内「全成全败」，但人工路由同操作 propose 期等价校验更早，两侧不对称） | ontology/service.py:1182-1203/826-842 | c5 |
-| CR-027 | P2 | open（登记不修，c8/备案轮裁决） | 派单规则版本激活 `activate_due_versions` 零生产调用方（仅测试引用）→ 版本永不 published→active → `active_rule_version` 恒 None → 自动撮合恒 422 `rule_version_required`（§11.1 降级态变永久）；claim 闸 cities 侧认 published 故未死，仅撮合死 | dispatch/rules.py:110/138-146 | c6 |
-| CR-028 | P2 | open（登记不修，口径=B-③法务区） | 累计预扣 `compute_withholding`：①年过滤 `extract(year, created_at)==now.year` 用 UTC 日历年非自然税法年；②减除月份集 `{...}∪{now.month}` 用调用时月非验收月（G8 回填七月算五月验收 → 多算一档 5000 减除少扣税）。税率表本就 2025-16 待确认占位，口径未定前不动码 | dispatch/settlements.py:138/145 | c6 |
+| CR-027 | P2 | **fixed（CR-027 修复轮，用户拍板 2026-11-05）** | 派单规则版本激活 `activate_due_versions` 零生产调用方（仅测试引用）→ 版本永不 published→active → `active_rule_version` 恒 None → 自动撮合恒 422 `rule_version_required`（§11.1 降级态变永久）；claim 闸 cities 侧认 published 故未死，仅撮合死 | dispatch/rules.py:110/138-146 | c6 |
+| CR-028 | P2 | open（**裁决：维持整条挂 B-③ 法务区**，用户拍板 2026-11-05） | 累计预扣 `compute_withholding`：①年过滤 `extract(year, created_at)==now.year` 用 UTC 日历年非自然税法年；②减除月份集 `{...}∪{now.month}` 用调用时月非验收月（G8 回填七月算五月验收 → 多算一档 5000 减除少扣税）。税率表本就 2025-16 待确认占位，口径未定前不动码 | dispatch/settlements.py:138/145 | c6 |
 | CR-029 | P3 | open（登记） | 集成桥 `captured_at` 单向采信宿主钟：`_parse_captured_at` 只校验格式不比对服务端钟，4h/360min stale 标记两侧都从宿主时间推 → NTP 前漂或带 token 方伪造快照可永久遮「采集断连」 | bridge/sync.py:190/212/310-321 | c6 |
 | CR-030 | P3 | open（登记） | 4h 热路径 `_sync_bridge_evidence` 全表 `select(Project)` 全量 ORM 水合（实只用 3 列）+ `_city_order_rank` 全局包表 join 内 N+1 `session.get`（O(P×N)）——本地单用户量级无实害，纯性能卫生 | bridge/sync.py:108 / dispatch/settlements.py:82-92 | c6 |
 | CR-031 | P3 | open（登记） | 演练 run（`rehearsal:` 前缀、token_cost=0）未排除出指标面：`metrics` 的 `run_cost_median_units`/`draft_generation_p50_ms`/`run_degraded_share`/`run_first_pass_rate` 全含演练行（pilot 闸口面已排除，持续观测面未排 → 口径不齐） | metrics/service.py:77/146/158/173 | c6 |
@@ -391,21 +391,24 @@
 
 ## CR-027 · P2 · 派单规则版本激活零生产调用方（自动撮合永久降级态）
 
-- **状态**：open（登记不修；激活接线属备案/月度 job 轮，非 c6 范围）
+- **状态**：confirmed → **fixed（CR-027 修复轮，2026-11-05，用户拍板「显式管理动作」）**
 - **file:line**：`dispatch/rules.py:110`（`activate_due_versions`，全仓唯一 `published→active` 写点，E0 grep 生产零调用方，仅 `test_dispatch_p0_r2.py:873/902/932/934` 测试引用）；`matching.py:266`（`active_rule_version` 恒 None → 422 `rule_version_required`）。
 - **意图锚**：matching.py:7「§11.1 降级态前置：自动撮合要求存在 published/active 规则版本（=权重已公示）」；rules.py:111 docstring「到点生效（月度 jobs / 请求路径惰性触发均可）」。
 - **触发路径**：`publish_package` 成功 → 规则版本停 published → 无 job/路由/scheduler 调 `activate_due_versions` → `active_rule_version`=None → `match_package` 422；claim 闸（cities.py:137-144 认 published 即可）未死，仅撮合死——即「claim 关、撮合永远回退人工排序」的备案期状态被永久化。
 - **驳斥记录**：「激活本就挂账月度 job / 备案定后开闸」——docstring 明写「均可」但两条都没建，功能面=永久降级；「cities 认 published 所以整体没死」——claim 面活但撮合面死，正是台账 B-①「需备案/名单≠开闸」的另一实例。定级 P2（功能缺失非数据损坏）。
 - **建议修法**：`dispatch.maintenance` 24h job 内加惰性 `activate_due_versions`（或月度 job）；归备案开闸轮与 B-① 一并裁决。
+- **修复（2026-11-05，用户拍板「显式管理动作」）**：**根因比登记更深一层**——实测 `create_rule_version`（发布）与 `activate_due_versions`（激活）**两者都只有测试引用、零生产入口**（不只激活端），故只补激活仍无版本可激活。本轮 NEW `dispatch/admin_routes.py`（blueprint `/api/v1/admin/dispatch`，T-J2 admin 蓝图同款）：①`POST /rules/versions` 发布新版本（**admin 门** service 层 role 判；快照缺省取当前默认规则投影＝发布「当前口径」而非手抄正文）；②`POST /rules/activate` 激活到点版本（**幂等**：无到期版本 activated=0；同事务留痕 `operation_events dispatch_rule_activated`，changes 只落版本号/数量/激活时刻——**不落规则正文**，E7 纪律）。**公示窗不绕过**：发布端仍强制 `effective_at ≥ published_at + 30 天`（§6.2，create_rule_version 内建），激活端只激活**已到生效日**的 published 版本——人工也加速不了公示期。**不做请求路径惰性触发、不做 scheduler 自动激活**（激活节奏由人控制，与「名单≠开闸」裁决一致）。不进 api_catalog（平台治理面，AI 不可调用，同本体治理边界）；路由 +2（298→300）；零迁移零桌面改动。测试 NEW `test_dispatch_admin_rules.py` 5 例：非 admin 双路由 403 / 公示窗 <30 天 422 `notice_window_required` + 版本号冲突 409 / **激活后撮合不再 422 `rule_version_required`（本轮解冻证明）** + 重复激活幂等 + 事件留痕只落元数据 / api_catalog 钉子 / 缺省快照取默认投影。
+- **修复 PR**：见 CHANGELOG（CR-027 修复轮）。
 
 ## CR-028 · P2 · 累计预扣 UTC 年 + 调用时月（两处实算误差，口径未定区）
 
-- **状态**：open（登记不修；税率表 2025-16 待确认占位，口径=法务区）
+- **状态**：open（登记不修；税率表 2025-16 待确认占位，口径=法务区）→ **裁决：维持整条挂 B-③ 法务区**（用户拍板 2026-11-05：等 2025-16 预扣口径/税法年定义法务确认后一并修；预扣尚未上线实跑，且税率占位未定时先修半边会写出「看起来已修其实没修准」的假象）
 - **file:line**：`dispatch/settlements.py:138`（`extract(year, created_at)==now.year` UTC 日历年）+ `:145`（`{past 月} ∪ {now.month}` 调用时月）。
 - **意图锚**：settlements.py:125 docstring「月份数 = 这些结算的验收月（含本月）去重计数」+ 累计预扣法（自然税法年 Asia/Shanghai）。
 - **触发路径**：G8 验收五月通过、七月才跑 `accrue_settlements_for_project`（payment_service.py:287-294 回填路径）→ 月份集={May,Jul} 非 {May} → `_MONTHLY_DEDUCTION` 多算一档少扣税；跨 12/1 月验收则 UTC 年错位 → 累计基数静默重置。
 - **驳斥记录**：「税率/减除额本就待 2025-16 口径确认（B-③），整函数占位」——成立，故登记不动码；「本月=now.month 是 docstring 字面」——docstring 说「验收月（含本月）」，代码取的却是调用时月，回填场景二者已背离。P2（口径未定区内的实算误差）。
 - **建议修法**：税率口径拍板时一并修——年过滤改结算所在自然年、月份集改用该结算行 `accepted_at.month` 而非 `now.month`。
+- **裁决记录（2026-11-05，用户拍板）**：**维持整条挂 B-③ 法务区，本轮不动码**——两处实算误差的正解都依赖「自然税法年/预扣月」口径，而税率表本身是 2025-16 待确认占位、预扣未上线实跑；候选「先修不依赖税率的月语义」被否（半修会留下「已修」的错觉，且 2025-16 落定后大概率连带改同一函数）。解冻条件：B-①/B-③ 法务口径确认后与税率表一并修，届时按上面「建议修法」执行（年过滤改结算所在自然年 + 月份集改用结算行 `accepted_at.month`）。
 
 ## CR-029 · P3 · 集成桥 captured_at 单向采信宿主钟（NTP 前漂/伪造遮「断连」）
 
