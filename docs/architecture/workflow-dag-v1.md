@@ -107,6 +107,8 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 - gate_service 仍是唯一状态机；decide 五道闸不感知 workflow；**Agent/工作流输出永不等于门禁通过**（现状 submit 唯一入口=真人会话，保持，F Q4 VERIFIED）。
 - human_approval 节点 ≠ 门禁拍板：它批准的是工具执行，不是 G 状态。
 
+> **产物→候选合同 2026-11-05 立项**（T-G1 §实现偏差回写挂起项的裁决）：`workflow-gate-evidence-candidates-v1.md`——运行时保留键合同（生产方自带指针+指纹，平台永不自动派生）、坏标记不炸节点（建议性旁路）、节点成功同事务幂等挂 `gates.evidence_candidates`。**对上列第一行的偏差回写**：v1 只挂候选、**不预写 project_evidence 一等表**（一等证据仍只在人工提交闸落库，与 T-G1 任务侧对称）。
+
 ## 5. API（七条全部 IMPLEMENTED：2026-11-03 随 T-W3 五条 + T-W5 cancel/resume；平台模板创建走内部通道暂无路由）
 
 | Method/Path | 权限 | 说明 |

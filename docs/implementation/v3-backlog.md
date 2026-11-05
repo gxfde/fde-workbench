@@ -305,6 +305,12 @@
   - **测试**：NEW `server/tests/test_gate_evidence_candidates.py` 6 例（挂接+序列化契约+事件载荷 / 三缺一（未完成·缺挂点·缺指纹）不挂 / 次序无关+同指纹幂等（候选与事件都不重复）/ 采纳剪除+清单项 claimed+evidence_id（hash 大写提交验证忽略大小写）/ 部分采纳保留他者 / 拍板零感知（候选在场过门照常、未采纳候选不剪））；`test_migrations` HEAD `c7e1a9f3b5d8`。桌面 `gate-board.test.tsx` +3（渲染+采纳流走提交闸 / viewer 只读+旧载荷无键兼容 / 非法形状拒收）。
   - **口径**：105 表不变（列级增量）、迁移头 `d4e6f8a2c7b9`→**`c7e1a9f3b5d8`**（**33 rev**）、路由 **296 不变**（零新路由）、ENTRIES 94 不变、pytest **1847 收集 = 1841 passed + 6 skipped**（本轮 +6；相对上轮报口径 1832 的 +9 中 +3 为 #93 skill 两闸用例）、vitest **755**（+3）、mypy 基线不变（新代码零新增）。改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`。
 
+### T-W7 workflow 节点产物→门禁证据候选（域 14，WB-DEF-8 workflow 腿）— **立项完成（2026-11-05，方案 `docs/architecture/workflow-gate-evidence-candidates-v1.md`），待排期**
+- 目标：清偿 T-G1 §实现偏差回写的挂起项——`output_json` 任意 JSON 不强行当证据；产物经**运行时保留键 `gate_evidence`**（生产方自带 source_uri + sha256，平台永不自动派生指纹）在节点 succeeded 同事务挂入 `gates.evidence_candidates`（复用 T-G1 通用挂接形），claim_status 恒 None，采纳仍走真人提交闸。
+- 修改文件：`workflows/executor.py`（call/skill :725 与 agent :1194 两处成功点读标记）、`projects/gate_service.py`（新原语 `attach_workflow_evidence_candidate`，≈40 行，复用 ensure_project_gates / MAX 上限 / 事件）；坏标记跳过 + 事件 `gate_evidence_candidate_skipped`。
+- 契约要点：dedup=(source_uri, content_hash, `wf:{run_id}:{node_key}`)；attempt 重试同指纹幂等、换指纹新候选并存（CR-019 代际语义）；`captured_from=workflow_node:{run_id}:{node_key}`（T-E3 已预留前缀）；候选行 `source_kind: "task"|"workflow"`（旧行读时缺省 task）；**零 DDL 零迁移零路由**（v1 不预写 project_evidence 一等表——偏差已回写 workflow-dag-v1 §4 注记）。
+- 测试：test_workflow_executor / 候选面扩展（验收 12 八段：出现/幂等/换指纹并存/坏标记跳过/无标记零副作用/失败路径不登记/采纳剪除回归/缺键兼容）。桌面 GateBoard 来源徽标另开 S 轮。复杂度：**M**。前置：T-G1 / T-W3 / T-W4（均已 DONE）。
+
 ### T-G2 template_hash 漂移呈现（WB-DEF-5）— **DONE（2026-11-04）**
 - 修改文件：gate_service._serialize_gate（比对存储值 vs 当前 gates.json sha256，响应加 template_outdated: bool）。测试：test_gates_api。复杂度：**S**。
 - **实施记录（与设计的偏差，按主报告纪律回写）**：
