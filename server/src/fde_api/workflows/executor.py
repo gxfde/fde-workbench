@@ -711,6 +711,61 @@ def _begin_node(
         return {"dispatch": True, "attempt": node.attempt, "node_id": node.id, "input": resolved}
 
 
+def _attach_gate_evidence_marker(
+    session: Session, *, run_id: str, node: WorkflowNodeRun, output: Any
+) -> None:
+    """V3 T-W7：节点成功同事务读 output_json 顶层保留键 ``gate_evidence`` 挂候选。
+
+    产物要成为候选必须由生产方自带指针+指纹，平台永不自动派生（立项 D1）；标记
+    缺失 = 零副作用。坏标记不炸节点：非对象标记在此落 skipped 事件，字段级坏
+    形状（gate 非法 / sha 非 64hex / 超长 / 双字段缺一）由 gate_service.
+    attach_workflow_evidence_candidate 校验裁决——候选是建议性旁路，绝不改变节点
+    成功语义。call 节点产物 = API 响应 dict 是自然生产方；skill/agent 产物为
+    平台包装形（{text}/agent 摘要），顶层标记透传留待现实需求（不发明约束）。
+    """
+    marker = output.get("gate_evidence") if isinstance(output, dict) else None
+    if marker is None:
+        return
+    run = session.get(WorkflowRun, run_id)
+    if run is None or run.status in TERMINAL_RUN_STATUSES:
+        return
+    initiator = (
+        session.get(User, run.initiated_by_user_id) if run.initiated_by_user_id else None
+    )
+    project = session.get(Project, run.project_id) if run.project_id else None
+    if initiator is None or project is None:
+        return
+    if not isinstance(marker, dict):
+        record_event(
+            session,
+            initiator,
+            "gate_evidence_candidate_skipped",
+            run,
+            {
+                "gate_key": None,
+                "workflow_run_id": run_id,
+                "workflow_node_key": node.node_key,
+                "reason": "marker_not_object",
+            },
+        )
+        return
+    # 延迟导入：gate_service 侧事件/权限链与 executor 初始化顺序解耦
+    # （task_service._sync_task_evidence 同款先例）
+    from fde_api.projects.gate_service import attach_workflow_evidence_candidate
+
+    attach_workflow_evidence_candidate(
+        session,
+        actor=initiator,
+        project=project,
+        run_id=run_id,
+        node_key=node.node_key,
+        gate_key=marker.get("gate"),
+        source_uri=marker.get("source_uri"),
+        content_hash=marker.get("content_sha256"),
+        label=marker.get("label"),
+    )
+
+
 def _settle_node_success(run_id: str, key: str, payload: dict[str, Any]) -> None:
     """tx B：产物先落表再前进（崩溃恢复锚点）。"""
     with db.session() as session, session.begin():
@@ -725,6 +780,8 @@ def _settle_node_success(run_id: str, key: str, payload: dict[str, Any]) -> None
         node.output_json = payload
         node.error = None
         node.finished_at = utcnow()
+        # V3 T-W7：顶层保留键 gate_evidence → 同事务挂门禁证据候选（call/skill/agent 共用此点）
+        _attach_gate_evidence_marker(session, run_id=run_id, node=node, output=payload)
 
 
 def _settle_node_failure(
@@ -1197,6 +1254,11 @@ def settle_approval_node(
             "reviewed_by_user_id": reviewer.id if reviewer else None,
             "decision_reason": approval.decision_reason,
         }
+        # V3 T-W7：批准产物同事务读标记——现合同 output 无 gate_evidence → 零副作用；
+        # 与 _settle_node_success 一致接线，未来包装层自带标记时零改生效。
+        _attach_gate_evidence_marker(
+            session, run_id=run.id, node=node, output=node.output_json
+        )
     else:
         node.status = "failed"
         node.output_json = None

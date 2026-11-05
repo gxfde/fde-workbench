@@ -1,6 +1,6 @@
-# Workflow 节点产物 → 门禁证据候选 v1（立项草案）
+# Workflow 节点产物 → 门禁证据候选 v1（立项合同）
 
-> 状态：**PROPOSED（2026-11-05 立项，待排期实施）**。来源：T-C1 轮遗留的「workflow 产物候选（待 schema 立项）」挂账；WB-DEF-8 的 workflow 腿。任务侧（T-G1）已随 `gate_service.attach_task_evidence_candidate`（gate_service.py:708，ca30aae）落地，本草案只裁决 workflow 节点产物这一侧的合同。上游：workflow-dag-v1 §4 草案标记 + 验收 12（claim_status=None，人工采纳后才 claimed/accepted——语义已随 T-G1 钉死，本草案不触碰）。
+> 状态：**IMPLEMENTED（2026-11-05 立项同日实施，V3 T-W7；测试 `server/tests/test_workflow_gate_evidence.py` 八段验收全绿；实施偏差零——§5 候选行 shape 逐键一致，D3 的 captured_from 仅属未来一等表写入路径、v1 按 D4 不预写故不落键）**。来源：T-C1 轮遗留的「workflow 产物候选（待 schema 立项）」挂账；WB-DEF-8 的 workflow 腿。任务侧（T-G1）已随 `gate_service.attach_task_evidence_candidate`（gate_service.py:708，ca30aae）落地，本草案只裁决 workflow 节点产物这一侧的合同。上游：workflow-dag-v1 §4 草案标记 + 验收 12（claim_status=None，人工采纳后才 claimed/accepted——语义已随 T-G1 钉死，本草案不触碰）。
 > 现状锚点（E0，2026-11-05 @ ca30aae）：`workflows/executor.py:724-725`（call/skill 节点成功写 `output_json`）、`:1192-1194`（agent 节点成功）；`gates.evidence_candidates` JSON 候选列 + `MAX_EVIDENCE_CANDIDATES` 上限 + `ensure_project_gates` 懒初始化（attach_task_evidence_candidate 既有行为）；T-E3 通道前缀校验**已预留 `workflow_node:`**。
 
 ## 1. 裁决 D1：标记位置 = 运行时保留键，不是定义层声明

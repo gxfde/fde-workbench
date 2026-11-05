@@ -673,7 +673,14 @@ def _serialize_gate(
             for item in gate.evidence_checklist
         ],
         # V3 T-G1：任务产物候选（建议性）；旧行 NULL → []（读时合并，恒输出）
-        "evidence_candidates": list(gate.evidence_candidates or []),
+        # V3 T-W7：候选行 source_kind 读时缺省 "task"（workflow 行显式带键）；
+        # 任务侧行（含历史行）不回填，沿 T-E2 evidence_id 读时合并先例。
+        "evidence_candidates": [
+            dict(row, source_kind="task")
+            if isinstance(row, dict) and not row.get("source_kind")
+            else row
+            for row in (gate.evidence_candidates or [])
+        ],
         # 模板快照（gates.json，A4 出处指针在模板 source_uri/source_sha256）
         "gate_name": template.get("gate_name") if template else None,
         "node_key": template.get("node_key") if template else None,
@@ -698,6 +705,8 @@ GATE_EVENT_TYPES = (
     "gate_decided",
     # V3 T-G1：候选挂接事件（挂 gate 行目标），随事件留痕入 feed
     "gate_evidence_candidate_attached",
+    # V3 T-W7：workflow 产物坏标记跳过事件（挂 project 目标——gate 非法时无行可挂）
+    "gate_evidence_candidate_skipped",
 )
 
 # 候选上限：任务证据指纹去重后仍可能被反复改动刷出长尾，超过即丢最旧候选
@@ -764,6 +773,114 @@ def attach_task_evidence_candidate(
             "gate_key": gate.gate_key,
             "task_key": task_key,
             "task_name": task_name,
+            "source_uri": source_uri,
+            "content_hash": fingerprint_hash,
+            "candidates_count": len(candidates),
+        },
+    )
+    return True
+
+
+# V3 T-W7 标记合同（workflow-gate-evidence-candidates-v1 §2）：source_uri 仅指针
+# ≤1024、label 可选 ≤120（缺省用节点 key）、content_sha256 64 位 hex 归一小写。
+_WF_MARKER_URI_MAX = 1024
+_WF_MARKER_LABEL_MAX = 120
+
+
+def attach_workflow_evidence_candidate(
+    session: Session,
+    *,
+    actor: User,
+    project: Project,
+    run_id: str,
+    node_key: str,
+    gate_key: Any,
+    source_uri: Any,
+    content_hash: Any,
+    label: Any = None,
+) -> bool:
+    """V3 T-W7（WB-DEF-8 workflow 腿）：workflow 节点产物→门禁证据候选。
+
+    executor 在节点 succeeded 的同一事务内调用（事务回滚则节点成功与候选一并
+    回滚）；标记是 output_json 顶层保留键 ``gate_evidence``，生产方（API 响应）
+    自带指针+指纹——平台永不自动派生指纹，形状不齐=不是证据，跳过不发明。
+    坏标记不炸节点：gate 非法 / sha 非 64hex / 超长 / 双字段缺一 → 节点照常
+    succeeded，登记跳过 + ``gate_evidence_candidate_skipped`` 事件（details 点名
+    坏键）。dedup = (source_uri, content_hash, wf:{run_id}:{node_key})：重试产出
+    同指纹幂等跳过，换指纹新候选并存；上限沿 MAX_EVIDENCE_CANDIDATES 与任务候选
+    共享同一列表与裁剪。claim_status 恒不动，采纳唯一入口 = submit_gate_evidence
+    真人提交闸（命中指纹即剪除候选）。字段收 Any：坏形状由本校验裁决，绝不抛出。
+
+    Returns: True = 新挂了一条候选；False = 坏标记跳过 / 幂等去重 / 门禁行不存在。
+    """
+    if not isinstance(gate_key, str) or not _GATE_KEY_PATTERN.fullmatch(gate_key):
+        reason = "gate"
+    elif not isinstance(source_uri, str) or not 0 < len(source_uri) <= _WF_MARKER_URI_MAX:
+        reason = "source_uri"
+    elif not isinstance(content_hash, str) or not _HEX64_PATTERN.fullmatch(content_hash):
+        reason = "content_sha256"
+    elif label is not None and (
+        not isinstance(label, str) or len(label) > _WF_MARKER_LABEL_MAX
+    ):
+        reason = "label"
+    else:
+        reason = None
+    if reason is not None:
+        record_event(
+            session,
+            actor,
+            "gate_evidence_candidate_skipped",
+            project,
+            {
+                "gate_key": gate_key if isinstance(gate_key, str) else None,
+                "workflow_run_id": run_id,
+                "workflow_node_key": node_key,
+                "reason": reason,
+            },
+        )
+        return False
+    ensure_project_gates(session, project)
+    gate = session.scalar(
+        select(Gate).where(Gate.project_id == project.id, Gate.gate_key == gate_key)
+    )
+    if gate is None:
+        return False
+    fingerprint_hash = content_hash.lower()
+    candidates = list(gate.evidence_candidates or [])
+    for row in candidates:
+        if (
+            row.get("source_uri") == source_uri
+            and str(row.get("content_hash") or "").lower() == fingerprint_hash
+            and row.get("source_kind") == "workflow"
+            and row.get("workflow_run_id") == run_id
+            and row.get("workflow_node_key") == node_key
+        ):
+            return False
+    candidates.append(
+        {
+            "source_uri": source_uri,
+            "content_hash": fingerprint_hash,
+            "source_kind": "workflow",
+            "workflow_run_id": run_id,
+            "workflow_node_key": node_key,
+            "label": label or node_key,
+            "proposed_by_user_id": actor.id,
+            "proposed_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    if len(candidates) > MAX_EVIDENCE_CANDIDATES:
+        candidates = candidates[-MAX_EVIDENCE_CANDIDATES:]
+    gate.evidence_candidates = candidates
+    record_event(
+        session,
+        actor,
+        "gate_evidence_candidate_attached",
+        gate,
+        {
+            "gate_key": gate.gate_key,
+            "workflow_run_id": run_id,
+            "workflow_node_key": node_key,
+            "label": label or node_key,
             "source_uri": source_uri,
             "content_hash": fingerprint_hash,
             "candidates_count": len(candidates),

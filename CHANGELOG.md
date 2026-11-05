@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-W7：workflow 节点产物→门禁证据候选——运行时保留键 gate_evidence 同事务挂候选（2026-11-05）
+
+### 服务端（立项合同 `docs/architecture/workflow-gate-evidence-candidates-v1.md`；WB-DEF-8 workflow 腿；零迁移零路由零桌面改动）
+
+- **`gate_service.attach_workflow_evidence_candidate`**：节点产物经 output_json 顶层保留键 `gate_evidence`（`{gate, label?, source_uri, content_sha256}`）挂入 `gates.evidence_candidates`——**产物必须由生产方自带指针+指纹，平台永不自动派生指纹**（立项 D1：对任意 payload 自动哈希入库正是红线本身；形状不齐=不是证据，跳过不发明）。dedup=(source_uri, content_hash, 来源粒度)：同位同指纹幂等（哈希大小写归一）、换指纹两代并存由人取舍；上限沿 MAX_EVIDENCE_CANDIDATES 与任务候选共享列表；与任务候选按来源粒度隔离互不吞并。claim_status 恒不动，采纳唯一入口=真人提交闸（命中指纹即剪除，T-G1 行为零改动复用）。
+- **坏标记不炸节点**（D2）：gate 非法 / sha 非 64hex / 超长（uri>1024 / label>120）/ 双字段缺一 → 节点照常 succeeded，登记跳过 + 新事件 `gate_evidence_candidate_skipped`（details 点名坏键 reason；gate 非法挂 project 目标、非对象标记挂 workflow_run 目标；已入 GATE_EVENT_TYPES，feed 可见）。
+- **executor 两成功点同事务接线**（D3）：`_settle_node_success`（call/skill/agent 共用）与 `settle_approval_node` 批准分支读标记——事务回滚则节点成功与候选一并回滚（原子）；标记缺失零副作用；失败路径无产物不登记（连门禁行都不懒初始化）。call 节点产物=API 响应 dict 是自然生产方；skill/agent 产物为平台包装形，顶层标记透传留待现实需求（不为想象的需求加形状）。
+- **读时缺省 `source_kind`**（D5）：候选行带 `source_kind: "task"|"workflow"`，旧行（T-W7 前任务候选）缺键读时缺省 "task" 不回填（沿 T-E2 evidence_id 先例）；**v1 不预写 project_evidence 一等表**（D4 偏差：工作流产物 ≠ 已采集证据，一等证据仍只在人工提交闸落库——workflow-dag-v1 §4 已注记）。
+- **零路由**：候选随既有 `GET /projects/{id}/gates` 的 evidence_candidates 返回；桌面 GateBoard 来源徽标（任务/工作流）另开 S 轮。
+
+### 测试与口径
+
+- pytest **1898 收集（1892 passed + 6 skipped，本轮 +7；新文件 `test_workflow_gate_evidence.py`）**：标记产物挂候选+claim 不动+无标记节点零副作用 / 同指纹幂等（大小写归一）+换指纹并存+与任务候选共享列表互不吞并 / 坏标记 executor 面（节点仍 succeeded+两类 skipped 事件）+service 面八形状裁决 / 失败路径零登记（门禁行未实例化）+resume 后恰好一条 / 采纳剪除回归（submit 同指纹→清单项 claimed+evidence_id）/ source_kind 旧行读时缺省。
+- 105 表不变（零 DDL）/ 迁移头 `e2c6a8f4d1b3`（34 rev）不变 / 路由 **297 不变**（零路由）/ ENTRIES 94 不变 / mypy 279·104 不变 / 桌面 vitest 767 不变（零改动无需重打包）；改 server（零迁移）⇒ **rebuild 三镜像**（alembic upgrade head 幂等空跑校验）。
+
 ## [未发布] — V3 实施 T-I1：本体变更影响分析——impact_of_term 名字域纽带三面清单 + 只读影响面（2026-11-05）
 
 ### 服务端（设计 ontology-registry-v1 §5 用例 6 / 验收 O-6；零迁移零桌面改动，+1 只读路由）

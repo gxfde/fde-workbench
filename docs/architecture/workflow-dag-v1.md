@@ -1,6 +1,6 @@
 # Workflow DAG v1 设计（P1）
 
-> 状态：**IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`；automation_approvals 审批反链 2026-11-03 T-W4 迁移 `d5b8e2f4a7c9`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器四类节点全部实施（call/skill=2026-11-03 T-W3；agent/human_approval=2026-11-03 T-W4）、§5 路由七条全部实施（2026-11-03 T-W3 五条 + T-W5 cancel/resume 两条）**；仅 §4 证据候选挂接（用例 12）随 T-G1。偏差见 backlog 实施记录。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
+> 状态：**IMPLEMENTED**——§2 四表（definitions + 版本行 2026-11-02 T-W1 迁移 `f2a4c6e8b1d3`；runs + node_runs 2026-11-03 T-W2 迁移 `b7d9f1a3c5e2`；automation_approvals 审批反链 2026-11-03 T-W4 迁移 `d5b8e2f4a7c9`）、「dag_json schema」校验规则 1–8（9 为告警）、**§3 执行器四类节点全部实施（call/skill=2026-11-03 T-W3；agent/human_approval=2026-11-03 T-W4）、§5 路由七条全部实施（2026-11-03 T-W3 五条 + T-W5 cancel/resume 两条）**；仅 §4 证据候选挂接（用例 12）已随 T-G1（任务腿）+ T-W7（workflow 腿，2026-11-05，立项 `workflow-gate-evidence-candidates-v1.md`）全部实施。偏差见 backlog 实施记录。现状证据：附录 C 11/13、F Q10——WB jobs 骨架 VERIFIED；fde-v2 flow.py 形态与缺陷 VERIFIED，附录 B 1-6。
 > 核心决策（任务书"决策 3"）：**不复制队列**。workflow 是 background_jobs 的一个新 job_type（`workflow.run`），编排 handler 在一个 job 内驱动节点循环，复用 lease/token/续租/reconcile/failure-hook 全套机制。
 
 ## 1. 与现有体系的边界（决策 3 落实）
@@ -103,7 +103,7 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 
 ## 4. 与 G1–G9 的关系（决策 4 落实）
 
-- Workflow 只产**证据候选**：call/agent 节点 output 可标记 `gate_evidence: {gate: "G5", label: "…", source_uri, content_sha256}` → executor 写 project_evidence（域 3）+ gates.evidence_checklist 候选项（claim_status=None）。
+- Workflow 只产**证据候选**：call/agent 节点 output 可标记 `gate_evidence: {gate: "G5", label: "…", source_uri, content_sha256}` → executor 写 project_evidence（域 3）+ gates.evidence_checklist 候选项（claim_status=None）。**实施偏差（T-W7 立项 D4 已裁决）**：v1 只挂 `gates.evidence_candidates` 候选列（T-G1 通用挂接形），**不预写 project_evidence 一等表**——工作流产物 ≠ 已采集证据，一等证据仍只在人工提交闸落库；采纳唯一入口 = submit_gate_evidence 命中指纹剪除候选。
 - gate_service 仍是唯一状态机；decide 五道闸不感知 workflow；**Agent/工作流输出永不等于门禁通过**（现状 submit 唯一入口=真人会话，保持，F Q4 VERIFIED）。
 - human_approval 节点 ≠ 门禁拍板：它批准的是工具执行，不是 G 状态。
 
@@ -125,9 +125,9 @@ T-W4 落地差异（详见 backlog 实施记录）：human_approval 复用 autom
 
 错误码：422 dag_invalid / 409 idempotency_conflict / 409 already_terminal / 409 not_resumable / 403 permission_revoked（节点执行时）。
 
-## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py——用例 1-11 均已随 T-W1/T-W3/T-W4 落地；用例 12 证据候选随 T-G1）
+## 6. 验收测试（server/tests/test_workflow_definition.py、test_workflow_executor.py——用例 1-11 均已随 T-W1/T-W3/T-W4 落地；用例 12 证据候选已随 T-G1（任务腿）/ T-W7（workflow 腿，test_workflow_gate_evidence.py）落地）
 
-1. 环 DAG → 422 且指明环节点；2. depends_on/ref 未知 → 422；3. call.ref 不在 catalog → 422（白名单生效）；4. 节点失败重试 n 次→paused→resume 只跑剩余节点（已完成节点 output 复用，断言不重复执行）；5. 幂等键：同 key 二次 run → 409 或返回同一 run；6. 效果幂等：外副作用节点崩溃后恢复不二次执行（断言 node 幂等键）；7. definition_version 固定：发布 v2 后旧 run 仍按 v1 定义展示与恢复；8. 取消：未启动节点 cancelled、已成功节点保留；9. 权限撤销：run 中途撤销 capability → 后续 call 节点 403 permission_revoked；10. 审批过期：waiting 节点 15min 后 failed（复用审批语义）；11. 断链不静默 done（修 FV-F1 的回归用例）；12. workflow 产物→gate 证据候选：claim_status 仍为 None，人工采纳后才 claimed/accepted。
+1. 环 DAG → 422 且指明环节点；2. depends_on/ref 未知 → 422；3. call.ref 不在 catalog → 422（白名单生效）；4. 节点失败重试 n 次→paused→resume 只跑剩余节点（已完成节点 output 复用，断言不重复执行）；5. 幂等键：同 key 二次 run → 409 或返回同一 run；6. 效果幂等：外副作用节点崩溃后恢复不二次执行（断言 node 幂等键）；7. definition_version 固定：发布 v2 后旧 run 仍按 v1 定义展示与恢复；8. 取消：未启动节点 cancelled、已成功节点保留；9. 权限撤销：run 中途撤销 capability → 后续 call 节点 403 permission_revoked；10. 审批过期：waiting 节点 15min 后 failed（复用审批语义）；11. 断链不静默 done（修 FV-F1 的回归用例）；12. workflow 产物→gate 证据候选：claim_status 仍为 None，人工采纳后才 claimed/accepted（T-W7 八段验收：出现/幂等/换指纹并存/坏标记跳过不炸节点/无标记零副作用/失败路径不登记/采纳剪除/旧行缺键兼容）。
 
 ## 7. 实施任务与复杂度
 
