@@ -51,7 +51,7 @@
 | 运行版本固定 | 有（join current_version_number） | 无（读当前行） | REUSE；workflow skill 节点再显式钉版本号 |
 | 回滚 | 无 | 无 | EXTEND：rollback 端点=set current 到历史版本行（版本行不可变故安全） |
 | 弃用 | 有（disabled，_skills 过滤） | 有（deprecated） | REUSE |
-| 效果评估 | 无 | 部分（usage_count/score） | P2：run 面累计 usage（operation_events 已有基础） |
+| 效果评估 | 无 | 部分（usage_count/score） | P2：run 面累计 usage（operation_events 已有基础）→ **T-S2 DONE；P3 状态轮裁决（2026-11-05）：usage 维持「失败不计」对称语义不新开失败维度**——失败证据走 ai_call_audits/operation_events 人工审计面；重审触发器=首个真实改进建议需求（详见 docs/implementation/v3-p3-四项状态与闸清偿-v1.md §2） |
 
 ### 2.2 目标状态机（PROPOSED）
 

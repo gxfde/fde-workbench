@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P3 四项状态轮与 §4 闸清偿：①②③定案 + ④三道闸齐备（2026-11-05）
+
+### 状态轮报告（零迁移零路由零生产行为变更）
+
+- **轮次定位**：主报告 §17 P3 行四项「立项不排期」的状态清偿轮——报告 `docs/implementation/v3-p3-四项状态与闸清偿-v1.md`（含 §16 用例族 32 例逐项核对表、责任主体机制化方案、活库数据闸实测）；四项裁决 AskUserQuestion 未获答复，按 #124 委托先例按推荐项执行、逐项留痕可推翻。
+- **①多 Agent 自适应编排**：活库实测 `agent_runs=0`/`workflow_runs=0`（演练键亦 0）——真实 run 数据解冻闸未动，维持冻结，零动作。
+- **②Skill 运行反馈改进**：裁决=usage 维持「失败不计」对称语义、不新开失败核算维度（活库 skill 消费事件=0 无建议需求；失败证据走 ai_call_audits/operation_events 人工审计面；重审触发器=首个真实改进建议需求）；agent-policy §2.1 效果评估行已回写；双面消费量闸未过，仍冻。
+- **③业务规则推理**：ontology_rules 维持不建 PARK 定案（risk≥3 规则已内嵌且被 `test_catalog_effect_risk_invariants` 钉住、T-C1 编译校验无规则输入需求；重开触发器三项写死）；**规则 9 强制化悬置线销号=维持告警**（执行层已硬闸：workflow call external 必 awaiting_confirmation 诚实失败 + DSH agent 节点走审批回调；「P2 enforcement wave」不做）。
+- **④有限自动执行**：三道闸齐备——T-J2 ✅（#116）+ **§16 用例族核对表 32 例全绿**（30 直接绿 + W-9 本轮补钉 + W-3 裁决回写，0 红）+ 责任主体机制化方案成形（审批链人签五要素在表、系统自主动作=封闭白名单、验收分离双面钉住，无结构性缺口）→ **评估报告轮解冻可排期**（余项=边界梯度分类学〔写类永不降级红线维持〕+调研会话衔接；写类 external 免事前确认=红线级非目标逐字维持）。
+- **W-9 补钉（唯一代码变更，纯测试）**：NEW `test_capability_revocation_mid_run_fails_subsequent_write_call_node`——run 进行中撤销发起人 AI 档位，后续写类 call 节点分派时实时重判命中 `execute_api` workbench.write 硬闸 403 forbidden 诚实失败（零重试）、run failed（FV-F1）；变异验证（档位一次定终身→红→还原→绿）；executor 全文件 37/37 绿。
+- **W-3 裁决回写**：skill `input_schema` 为只写元数据（publish 期仅 isinstance(dict)，MCP/chat/workflow 三面零消费）——校验面不补码（无消费方不建空壳），test-plan W-3 行注记「未实现，按需另立」；S-7/S-9/D-5 形态偏差同批注记。
+- 口径：pytest 基线 1944=1938+6s 双面一致（干净 `58a54ff` 本地全量实测=#124 CI 口径）+1 → **1945 收集（CI PR-head 复核为准）**；mypy 279 基线不动；桌面零改动（vitest 787 不变）；零迁移零路由 ⇒ 无需重建镜像、无需 alembic、无需重打包便携版。
+
 ## [未发布] — goal-c P3 服务端小轮：指标面排除演练 run + 桥投影列水合 + outbox 死信箱销号（2026-11-05）
 
 ### 服务端（零迁移零路由零桌面）

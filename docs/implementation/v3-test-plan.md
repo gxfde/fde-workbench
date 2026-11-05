@@ -2,6 +2,7 @@
 
 > 覆盖任务书第十节全部四族测试要求。分两层：①**基线层**（既有套件，实跑记录见 docs/audit/v3-test-inventory.md）；②**新增层**（随 V3 各任务交付，PROPOSED，文件名与用例均已指定于 backlog）。
 > 纪律：新用例与实现同一 PR；变异校验法沿用 d11 方法论（old 串带函数锚定、红判定 selftest）；本地全量 pytest 必设 FDE_TEST_DATABASE_URL。
+> **P3 状态轮核对（2026-11-05）**：§1–§4 全部 32 例逐项实测核对表落 `docs/implementation/v3-p3-四项状态与闸清偿-v1.md` §4.1（30 直接绿 + W-9 本轮补钉 + W-3 后腿裁决回写，0 红）；本文件仅就与计划形态有偏差的用例行加注，其余行不动。
 
 ## 0. 基线层（既有，先跑绿再动工）
 
@@ -31,13 +32,13 @@
 |---|---|---|
 | W-1 | DAG 环检测 | A→B→A 定义 → 422 且错误体指明环节点链 |
 | W-2 | 未知节点/依赖/操作拒绝 | depends_on 指空、type 非四类、call.ref 不在 api_catalog、skill.ref 非 published → 422 |
-| W-3 | 非法 I/O schema 拒绝 | 占位符引用未声明 output；skill input_schema 校验失败 → 422 |
+| W-3 | 非法 I/O schema 拒绝 | 占位符引用未声明 output；skill input_schema 校验失败 → 422。**注记（P3 状态轮裁决 2026-11-05）**：后腿未实现——`input_schema` 为只写元数据（publish 期仅 isinstance(dict)，MCP/chat/workflow 三面零消费），按「无消费方不建空壳」不补码；重开触发器=workflow skill 节点未来消费结构化输入（届时 publish 期 jsonschema 校验一并盘，见 agent-policy §2.1 I/O 契约行） |
 | W-4 | 节点失败重试/暂停/恢复/取消 | 失败节点按 max_retries 退避；run paused；resume 只跑未完成节点（已完成节点 output 复用，计数器断言不重复执行）；cancel → 未启动节点 cancelled |
 | W-5 | 幂等键阻止重复副作用 | 同 run idempotency_key 二次 → 409/返回同 run；外副作用节点崩溃恢复不二次执行（node idempotency_key 断言） |
 | W-6 | 已完成节点不重复执行 | 恢复后 succeeded 节点 attempt 不变、output 原样 |
 | W-7 | 运行固定版本 | 定义发布 v2 后，v1 run 的展示与恢复仍按 v1 dag_json |
 | W-8 | 断链不静默 done | 存在 failed 且无 when 豁免 → run failed（fde-v2 FV-F1 回归锚） |
-| W-9 | 权限撤销即时生效 | run 进行中撤销 capability → 后续 call 节点 403 permission_revoked |
+| W-9 | 权限撤销即时生效 | run 进行中撤销 capability → 后续 call 节点 403 permission_revoked。**补钉（P3 状态轮 2026-11-05）**：`test_workflow_executor.py::test_capability_revocation_mid_run_fails_subsequent_write_call_node`——读→写双节点链，节点 1 分派在途撤销档位，节点 2 实时重判命中 workbench.write 硬闸 403 forbidden 诚实失败；变异验证通过 |
 | W-10 | workflow→gate 证据候选 | 产物只产生 claim_status=None 候选；采纳走人工闸 |
 
 ## 3. 权限与安全族（扩展既有 test_permissions/test_control_plane_api/test_ai_server_chat_mcp 等）
@@ -50,9 +51,9 @@
 | S-4 | 运行中撤销 | test_ai_server_chat_mcp:166/197 回归 + W-9 | 既有+新增 |
 | S-5 | 过期/异目标审批不复用 | 既有 sha256+15min+一次性用例回归；新：同 run 不同 arguments_sha256 → 新审批必须新建；过期审批 execute → 409 | 既有+新增 |
 | S-6 | 文件内容不覆盖系统策略 | file_read 返回 source=untrusted 回归；mcp_gateway 模块红线注释存在性断言（漂移告警） | 既有 |
-| S-7 | 日志/审计不泄密 | 既有 credential_limits/redaction 用例回归；新：ai_call_audits/operation_events 序列化断言无密钥模式（复用 context.py 遮蔽正则做扫描器） | 既有+新增 |
+| S-7 | 日志/审计不泄密 | 既有 credential_limits/redaction 用例回归；新：ai_call_audits/operation_events 序列化断言无密钥模式（复用 context.py 遮蔽正则做扫描器）。**注记（P3 状态轮）**：「扫描器」未按原描述单独落地，等价覆盖在位（credential_limits + api_actions:49 密码永不入审计 + :76 密钥递归拒绝） | 既有+新增 |
 | S-8 | skill 发布越权 | 非 admin publish/rollback → 403（fde-v2 R1 教训显式负向用例） | T-S1 |
-| S-9 | tool_group 只收窄 | group 引用后工具面 ⊆ 无引用基线；组含未授权工具时被交集裁掉 | T-R1 |
+| S-9 | tool_group 只收窄 | group 引用后工具面 ⊆ 无引用基线；组含未授权工具时被交集裁掉。**注记（P3 状态轮）**：组∩claims 交集腿由 claims∩档位既有闸（api_actions:37 同闸）覆盖，无独立用例；组展开/去重/幽灵组丢弃断言在 test_agents_fallback_chain:347/412/430 | T-R1 |
 
 ## 4. 门禁与交付物族（扩展 test_gates_api/test_document_snapshots/test_migrations 等）
 
@@ -62,7 +63,7 @@
 | D-2 | 自动检查与人工批准分开记录 | 证据候选（suggested_by）与人工 accepted 分字段；decide 五道闸回归（拍板人≠执行人/G8G9 admin/conditional 仅 G9） |
 | D-3 | 文档生成保存输入快照与版本 | 既有 snapshots 用例回归 + T-D1：版本行可反查 ai_call_audits.request_id 与 research revision_id |
 | D-4 | 重新生成不覆盖历史 | 既有 idempotent/frozen 用例回归（sha256 短路、新 version_number） |
-| D-5 | 迁移升级与回滚 | test_migrations 扩展：新四族表（evidence/ontology×3/workflow×3/skill 扩列）upgrade→downgrade→upgrade 全绿 |
+| D-5 | 迁移升级与回滚 | test_migrations 扩展：新四族表（evidence/ontology×3/workflow×3/skill 扩列）upgrade→downgrade→upgrade 全绿。**注记（P3 状态轮）**：四族 roundtrip 在位（migrations:557/590/623/658）；skill 扩列无独立 roundtrip，由全表存在性（:195）+ metadata=HEAD 一致性（:415）覆盖 |
 
 ## 5. 执行与准入门禁
 

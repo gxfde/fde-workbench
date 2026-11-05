@@ -21,6 +21,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from test_agents_d4_harness import (  # noqa: F401  (pytest fixture 再导出)
     ScriptedEvents,
@@ -1070,6 +1071,65 @@ def test_write_node_idempotency_survives_resume(db_session, settings, monkeypatc
     node = _node_map(db_session, run.id)["create"]
     assert node.idempotency_key == key_before  # 恢复不换键
     assert node.attempt == 1
+
+
+def test_capability_revocation_mid_run_fails_subsequent_write_call_node(
+    db_session, settings, monkeypatch
+):
+    """§16 用例族 W-9（权限撤销即时生效，P3 四项状态轮核对表补钉）：run 进行
+    中撤销发起人 AI 档位 → 后续写类 call 节点**分派时**实时重判
+    （_dispatch_call 每节点重算 effective_ai_access，非 start 时一次定终身），
+    命中 execute_api 写面 workbench.write 硬闸 → 403 forbidden 诚实失败
+    （403 非暂态不重试）→ run failed（FV-F1 断链不静默）。已成功节点产物
+    不受影响；MCP 面撤销回归见 test_ai_server_chat_mcp（180/211）。"""
+    from fde_api.control import api_actions
+    from fde_api.control.models import UserAIAccessGrant
+
+    leader = make_user(db_session, "project_lead")  # 角色默认 project_manager：含 workbench.write
+    project = _persist_project(db_session, leader, code=f"RV{uuid4().hex[:4]}")
+    calls: list = []
+    real_execute_api = api_actions.execute_api
+
+    def revoke_on_first_dispatch(**kwargs):
+        calls.append(kwargs["operation"])
+        if len(calls) == 1:
+            # 节点 1 分派在途：此刻撤销发起人档位（独立会话提交，下一节点
+            # 分派的 effective_ai_access 开新事务实时读到 disabled）。
+            with Session(db_session.bind) as session:
+                session.add(
+                    UserAIAccessGrant(
+                        user_id=leader.id,
+                        access_level="disabled",
+                        granted_by_user_id=leader.id,
+                        reason="W-9：run 进行中撤销",
+                    )
+                )
+                session.commit()
+            return {"http_status": 200, "result": {"items": [1, 2, 3]}}
+        return real_execute_api(**kwargs)
+
+    monkeypatch.setattr(api_actions, "execute_api", revoke_on_first_dispatch)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("peek", ref=READ_REF),
+        _node("apply", ref=WRITE_REF, deps=("peek",)),
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "failed"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["peek"].status == "succeeded" and nodes["peek"].attempt == 1
+    apply_node = nodes["apply"]
+    assert apply_node.status == "failed" and apply_node.attempt == 1  # 403 非暂态：零重试
+    # 落表格式 f"{code}:{message}"（_settle_node_failure）；闸=execute_api 写面 workbench.write
+    assert apply_node.error == "forbidden:本次 AI 执行未获写入授权。"
+    assert calls == [READ_REF, WRITE_REF]  # 撤销发生在两节点之间，写节点真实走到闸
 
 
 # ---------------------------------------------------------------------------
