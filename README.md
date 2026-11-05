@@ -41,7 +41,7 @@
 
 | 项目工作台 | 交付门禁与商务 | AI 与平台管理 |
 | --- | --- | --- |
-| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离 | AI 模型、Skills（治理态与效果统计）、工作流控制台、插件、AI Server、微信/ClawBot 集成 |
+| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离；任务与工作流产物可自动挂为证据候选（建议性，采纳仍走人工提交闸） | AI 模型、Skills（治理态与效果统计）、工作流控制台、AI 用量月度预算与审计账本、插件、AI Server、微信/ClawBot 集成 |
 | 项目负责人、FDE 工程师、查看者等角色权限 | **报价 / 收款（里程碑）/ 合同**商务看板；标准 FDE 项目模板一键派生 | 行业模板、文档模板、模块管理、用户管理、系统配置 |
 | 集成桥：本地 openfde / fdeops 工作目录在台内的只读投影 | 任务中心：后台任务、自动化执行与工作流人工审批集中可见 | 桌面端内嵌「使用帮助」：模块操作 + 门禁流程 + 实操示例 |
 
@@ -184,6 +184,9 @@ cd server
 | `FDE_API_HOST` / `FDE_API_PORT` | API 监听地址和端口 |
 | `FDE_ENV` | `development`、`test` 或 `production` |
 | `FDE_DESKTOP_API_URL` | 开发态桌面端连接的 API 地址 |
+| `FDE_PRODUCT_NAME` | 服务端侧产品名（默认与桌面 `desktop/src/shared/brand.ts` 同值，改名双侧同步）；chat 等服务端界面文案取值处 |
+| `FDE_AI_MONTHLY_TOKEN_BUDGET` | AI 调用月度 token 预算（按用户核算），超限拒绝新调用并留审计记录；`0` = 不限额 |
+| `FDE_AGENT_MONTHLY_BUDGET` | 平台月度 agent 预算（token 单位）；`0` = 不限额 |
 
 不要在提交、issue、日志或截图中暴露 `.env`。生产环境切换 `FDE_JWT_SECRET` 前应先在系统配置中重新录入所有加密密钥，否则已保存的加密配置将无法解密。
 
@@ -310,7 +313,7 @@ npm run package:mac
 
 ### 更换 Logo 与安装图标
 
-- 界面品牌资源在 `desktop/src/renderer/src/assets/`：[`logo-caigong-fde.svg`](desktop/src/renderer/src/assets/logo-caigong-fde.svg)（侧边栏、favicon 及本 README 页首）、`logo-caigong-fde-full.png`（带字全标）、`logo-caigong-fde-light.svg`（浅色底变体）。产品名一律取 `desktop/src/renderer/src/brand.ts`，不在代码里硬编码。
+- 界面品牌资源在 `desktop/src/renderer/src/assets/`：[`logo-caigong-fde.svg`](desktop/src/renderer/src/assets/logo-caigong-fde.svg)（侧边栏、favicon 及本 README 页首）、`logo-caigong-fde-full.png`（带字全标）、`logo-caigong-fde-light.svg`（浅色底变体）。产品名一律取 `desktop/src/shared/brand.ts`（桌面侧单点，main/renderer/tests 双侧引用；服务端侧单点在 `server/src/fde_api/config.py`，可用 `FDE_PRODUCT_NAME` 覆写），不在代码里硬编码。
 - Windows 构建图标使用 [`desktop/build/icon.png`](desktop/build/icon.png) 与 [`desktop/build/icon.ico`](desktop/build/icon.ico)（安装器图标三处同源）。
 - macOS 图标由 `npm run icon:mac`（`desktop/scripts/generate-icon.sh`）从 `assets/logo.png` 渲染圆角图标并生成 `build/icon.icns`（渲染只写临时目录，**不回写** `build/icon.png` / `icon.ico` 等 Windows 图标文件），`npm run package:mac` 会先自动执行；换 Logo 时需同步更新该源图并重新生成图标。
 
