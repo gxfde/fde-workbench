@@ -25,7 +25,7 @@
 | CR-001 | P1 | **fixed（c8 PR）** | 红线①「改名只改这一个文件」被 5 处硬编码产品名证伪→双侧单点来源（桌面 `shared/brand.ts` + 服务端 `config.DEFAULT_PRODUCT_NAME`）+ 静态闸防复发 | 见详情 | c1 |
 | CR-002 | P2 | **fixed（c8 PR，根除）** | 共享测试库对外来迁移链戳无自愈，worktree 会话互踩→全量 E ⇒ conftest 加外来戳检测（读 alembic_version 戳 ∉ 本树迁移文件 revision 集→`DROP SCHEMA public CASCADE` 重建再 upgrade head） | server/tests/conftest.py:131 | c1 |
 | CR-003 | P3 | open（挂账·待并发回滚轮落定） | V3 审计报告 §20 实施跟踪停更于 T-S1（缺 T-S2/T-W6 注记）——补注记本身要逐轮核对「哪些轮次仍在基线上」，并发会话在途回滚轮正在撤 T-W7/T-I1 等轮次，此刻补即写即错，故挂账待回滚轮落定后一次性补 | 审计报告 §20 | c1 |
-| CR-004 | P3 | open | AGENTS.md 口径数字滞后于 #88 实测（293/1830/732 vs 295/1831/实测） | AGENTS.md 口径行 | c1 |
+| CR-004 | P3 | closed（销号·逐轮维护治愈） | AGENTS.md 口径数字滞后于 #88 实测（293/1830/732 vs 295/1831/实测）——**口径行（AGENTS「当前状态」节）已由后续每轮维护**：逐轮更新并以 CI PR-head 实测行逐位核对（链头 `9195746` 时代=105 表/头 `d9f4a7c2e6b1` 35 rev/路由 300/ENTRIES 94/pytest 1945=1939+6s（#125/#126 CI 双轮一致）/vitest 787/mypy 279），#88 时代投诉面不复存在，本轮补台账销号 | AGENTS.md 口径行 | c1 |
 | CR-005 | P1 | fixed | workflow skill 节点消费面缺「public∨owner」与「capabilities⊆allowed」两闸（agent-policy-v1:67 明文两闸） | workflows/executor.py `_dispatch_skill` | c2 |
 | CR-006 | P2 | **fixed（统一入账轮）** | skill 节点 AI 消费绕过双预算闸（agent_monthly_budget 仅拦 agent run；DSH 主路径记账面 NEEDS-EVIDENCE） | agents/service.py:813 / ai/deepseek.py:126 | c2 |
 | CR-007 | P2 | fixed | CI desktop job 间歇红：`navigation.test.tsx` 重定向断言与 React passive effect 抢跑（effect 未 flush 即读 hash） | desktop/tests/renderer/navigation.test.tsx:147 | c2 |
@@ -120,14 +120,13 @@
 
 ## CR-004 · P3 · AGENTS.md 口径数字滞后于 #88
 
-- **状态**：open
-- **file:line**：`AGENTS.md` 口径行：「蓝图路由 **293**」「pytest **1830 收集 = 1824 passed + 6 skipped**」「vitest **732/732**」；「当前状态」bullet 列表缺 T-W6 实施条目（#88 只把节标题改成了「V3 T-W6 后」，正文未跟上）。
+- **状态**：open → **closed（销号·逐轮维护治愈，2026-11-05）**——登记后 #95/#103/#111–#126 十余轮每轮都维护「当前状态」节口径行与 bullet，且口径数字改以 **CI PR-head 实测行逐位核对**为纪律（教训 39，禁止算术推导）：现链头 `9195746` 时代口径=105 表 / 迁移头 `d9f4a7c2e6b1`（35 rev，本轮 `alembic` ScriptDirectory 实测一致）/ 蓝图路由 300 / ENTRIES 94 / pytest **1945 收集 = 1939 passed + 6 skipped**（#125 与 #126 两轮 CI PR-head 实测逐位一致）/ vitest 787 / mypy 279。#88 时代的 293/1830/732 投诉面早已被覆盖，登记前提不复存在。本轮只补台账销号，零代码。
 - **意图锚**：AGENTS.md 自我声明「口径数字（实测 2026-11-04 …）」+ goal-c 收口判据「AGENTS.md 口径与实测一致」。
 - **触发路径**：任何按 AGENTS.md 口径做开工预检的会话 → 路由数对不上（293 vs 实测 295）→ 误判有未登记的路由变更。
 - **驳斥记录**：反驳=「#88 有 5 行 AGENTS.md 改动，说明当轮更新过」——查 `git show b89a8f3 -- AGENTS.md` 实测只改了节标题一行语义，数字与 bullet 未更新，反驳不成立。
 - **证据等级**：E0（本轮实测：路由 295 / pytest 1831 收集 / vitest 见 c1 报告实测；`git show b89a8f3 -- AGENTS.md` diff）
 - **建议修法**：口径行更新为实测值（295 / 1831 / vitest 实测），补 T-W6 bullet 一条（三页全 NEW + 2 只读路由 + usage 块消费）。
-- **修复 PR**：—（c1 收口或下一文档轮顺手；改动前遵守 C-7 共享文件纪律）
+- **修复 PR**：— → **销号 PR：开源借鉴消费登记轮（2026-11-05）**——不再修数字（口径行逐轮维护已治愈），只补本销号注记；改动遵守 C-7 共享文件纪律（本轮在隔离 worktree 改，主树零触碰）。
 
 ---
 
