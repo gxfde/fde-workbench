@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import timedelta
 from uuid import uuid4
 
@@ -652,6 +653,55 @@ def test_skill_node_uses_pinned_version_instructions(db_session, settings, monke
     assert len(usage) == 1
     assert usage[0].actor_user_id == leader.id
     assert usage[0].changes == {"surface": "workflow", "version": 1}
+
+
+def test_skill_usage_count_failure_does_not_fail_node(db_session, settings, monkeypatch, caplog):
+    """CR-013 计数隔离：计数微事务故障不得升级为消费侧失败。
+
+    skill 节点 AI 调用已成功后 record_skill_usage 抛 DB 异常，只记 warning——
+    若裸露冒泡会被 _execute_node 兜底 catch 为 dispatch_crashed(retryable=True)
+    重投：同一逻辑节点双份 AI 成本 + 「消费成功」误标 failed（T-S2 对称语义；
+    chat 面 ai_tool_loop 对工具异常同型有守卫，唯 workflow 面曾裸露）。
+    """
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    _seed_skill(db_session, leader, key="flaky-count", versions=["指令"])
+    calls: list = []
+    _install_fake_api(monkeypatch, calls)
+    ai_calls: list = []
+    _install_fake_ai(monkeypatch, ai_calls)
+
+    from fde_api.control import extensions_service
+
+    def _count_blip(**_kwargs):
+        raise OSError("counting micro-transaction blip")
+
+    monkeypatch.setattr(extensions_service, "record_skill_usage", _count_blip)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        {"key": "draft", "type": "skill", "ref": "flaky-count@1", "output": "hint"},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    # 既有测试基建特性：alembic env.py 每次迁移都 fileConfig（默认
+    # disable_existing_loggers=True），导入期创建的模块级 logger 会被全量禁用
+    # ——与 test_storage_contract 对 oss2 sdk_logger 的解禁先例同型。
+    logging.getLogger("fde_api.workflows.executor").disabled = False
+    with caplog.at_level(logging.WARNING, logger="fde_api.workflows.executor"):
+        run_workflow_run(run.id)
+
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).status == "succeeded"
+    nodes = _node_map(db_session, run.id)
+    assert nodes["draft"].status == "succeeded"
+    assert nodes["draft"].output_json == {"text": "润色结果"}
+    assert len(ai_calls) == 1  # 无重投——没有第二份 AI 成本
+    assert any(
+        "workflow skill usage count failed" in record.message for record in caplog.records
+    )
 
 
 def test_skill_node_denies_initiator_below_required_capabilities(db_session, settings, monkeypatch):

@@ -34,7 +34,7 @@
 | CR-010 | P1 | fixed | quote_service 数值防御不自洽：deviation 先落库后 400 检查（Numeric(7,4) 可被 10⁵ 倍偏差击穿→500）、create 侧 cash_cost 无 MAX 上限、finalize 同型 | projects/quote_service.py:292 / 527 / 638 | c3 |
 | CR-011 | P3 | open | mailing/translator/guidance 三包意图锚分散 4 份文档，V3 主报告无集中裁决行（NEEDS-EVIDENCE 定级，倾向 P3 文档补齐） | V3 审计 §13 / 各 goal-d 台账 | c3 |
 | CR-012 | P1 | fixed（PR #103 已合并 `c8aa08a`） | `retry_run` 绕过平台月度预算闸：start 有 `agent_monthly_budget` 闸（service.py:815），retry（925-1005）只查家族/退避/试点，未重判月度闸 → 月预算用满后仍可用 retry 发新 run | agents/service.py:925 | c4 |
-| CR-013 | P2 | open | `record_skill_usage`（skill 节点，executor.py:964）无 try/except 包裹：计数微事务自带提交，但调用点若抛 DB 异常 → 被 `_execute_node` 兜底 catch 为 dispatch_crashed(retryable=True) → 已成功那次 AI 调用被丢弃重跑（双份 AI 成本）+ 节点误标 failed，违反 T-S2「失败不计」对称语义 | workflows/executor.py:960-966 | c4 |
+| CR-013 | P2 | **fixed（CR-013 修复轮）** | `record_skill_usage`（skill 节点，executor.py:964）无 try/except 包裹：计数微事务自带提交，但调用点若抛 DB 异常 → 被 `_execute_node` 兜底 catch 为 dispatch_crashed(retryable=True) → 已成功那次 AI 调用被丢弃重跑（双份 AI 成本）+ 节点误标 failed，违反 T-S2「失败不计」对称语义 | workflows/executor.py:960-966 | c4 |
 | CR-014 | P1 | **fixed（c5 PR）** | `resume_run` 后 human_approval 节点仍复用 stale 审批键：approval 被 reject/expired 后节点 failed，resume 回 pending 但 `_dispatch_human_approval` 仍按旧键 reuse 已终态审批 → 节点再次 waiting 挂死 | workflows/executor.py:1058 | c4 |
 | CR-015 | P1 | fixed（PR #103 已合并 `c8aa08a`） | `ZcodeAdapter.run` 非 SandboxError 异常路径沙箱容器泄漏：`sandbox.kill()` 在 try 之后顺序执行，`event_provider.poll()`/`output_scanner.scan()` 抛非 SandboxError 时容器 `sleep infinity` 悬挂 | agents/adapter.py:179 | c4 |
 | CR-016 | P3 | open | outbox_events 四态终态机未实装（只写 pending/dispatched），completed/failed 态与 attempts/last_error 列空置=审计死信箱；RECOVERABLE 四类型缺 failure hook，耗尽后业务行悬空 | jobs/outbox.py:41 / reconcile.py:159 | c4 |
@@ -61,6 +61,7 @@
 | CR-038 | P3 | open（登记，CR-007 同型残留） | `new-project.test.tsx:279` `expect(location.hash).toBe(…)` 同步读——创建成功路径当前同步写 hash 不翻车，但一旦 hash 写异步化即复发（与 CR-007 修复前同型），改 `waitFor` 一行 | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
 | CR-039 | P3 | open（登记） | `gui-harness/shots.mjs` 13 页走查未含 T-W6 三面（WorkflowConsole/GlossaryPage 为项目详情子 tab 需真实 fixture、SkillVersionsPage 为 #extensions 内展开子视图，默认截图态不展开）——功能面已有三 vitest 兜住，纯视觉走查缺口 | desktop/gui-harness/shots.mjs:19-34 | c7 |
 | CR-040 | P3 | open（登记） | GlossaryPage `TERM_STATUS_LABEL` 含 `candidate/retired` 键但服务端 `TERM_STATUSES=(draft,confirmed,superseded,merged)` 无此二值、反缺 `draft/superseded` → fallback 原值回显：术语表状态列出现英文 draft/superseded，中文「候选」「已退役」永不显示（T-W6 新代码自带小口径漂移） | desktop/…/ontology/GlossaryPage.tsx:50-55/67-69 | c7 |
+| CR-041 | P3 | open（登记不修，CR-013 轮发现） | alembic `env.py:31` `fileConfig(config.config_file_name)` 默认 `disable_existing_loggers=True`，而 db_session fixture 每测试 downgrade/upgrade → 导入期创建的模块级 logger（`executor.py:72` 等**全部** `logging.getLogger(__name__)`）测试会话内全量 `disabled=True` → caplog 对这些 logger 永远空捕；lazy `getLogger` 调用点（rate limiter 等）不受影响。CR-013 修复轮测试被迫显式解禁（沿 test_storage_contract oss2 先例） | server/migrations/env.py:31 + tests/conftest.py:131 | c13 |
 
 ---
 
@@ -252,14 +253,15 @@
 
 ## CR-013 · P2 · skill 节点计数调用无隔离（计数侧故障升级消费侧故障）
 
-- **状态**：open（c4 发现，登记不修——修复涉 executor 节点事务语义，归 c5 轮次评估）
+- **状态**：confirmed → **fixed（CR-013 修复轮，2026-11-05）**——c5 评估未按（当轮只按 CR-014/019/020 三条 P1），CR-013 修复轮单独清偿
 - **file:line**：`workflows/executor.py:960-966`（`record_skill_usage` 在 `_dispatch_skill` 末尾、无 try/except）
 - **意图锚**：AGENTS.md T-S2 段「计数走独立微事务（自带 `session.begin()` 提交，穿越共享会话回滚存活）」+ `record_skill_usage` docstring「分派失败不计——失败是噪声不是效果」。
 - **触发路径**：skill 节点 AI 调用**已成功** → 紧随其后的 `record_skill_usage` 微事务遇 DB 瞬断抛异常 → 被 `_execute_node` 兜底（executor.py:637-645）catch 为 `dispatch_crashed(retryable=True)` → 节点 failed 重投 → 同一逻辑节点**双份真实 AI 调用 + 双份计数**，且「消费成功」被记为「节点失败」——把计数侧故障升级成了消费侧故障。chat 侧（`ai_tool_loop.py:111`）有 try/except 覆盖，唯 workflow 面裸露。
 - **驳斥记录**：「微事务与主会话同源 DB，双故障同时发生概率极低」——部分成立，故 P2 非 P1；但 T-S2「自带提交才能存活」的对称语义被破坏的方向是实害（双份 AI 成本 + 状态背离）。
 - **证据等级**：E0（调用点无防护直读 + 兜底 catch 路径直读）。
 - **建议修法**：`_dispatch_skill` 计数调用包 try/except（记 warning 不冒泡）；归 c5 workflows 轮次修（executor 全域深审时一并按）。
-- **修复 PR**：—
+- **修复**（CR-013 修复轮）：`_dispatch_skill` 计数调用包 `try/except Exception`（`# noqa: BLE001` 中文尾注，沿 executor.py:647 同款；记 warning 含 node/skill/error_type 不冒泡）——AI 已成功则节点必 succeeded，计数失败只丢一条消费事件（T-S2「失败不计」对称方向）。零迁移零路由零桌面改动。测试 `test_workflow_executor.py::test_skill_usage_count_failure_does_not_fail_node`（monkeypatch `record_skill_usage` 抛 OSError → run succeeded + 节点 succeeded + 恰 1 次 AI 调用（无重投双份成本）+ warning 落 caplog）；变异验证：还原裸调用→该测试红（run failed，正是登记的升级路径）→还原守卫→绿。测试侧顺带钉住既有基建特性：alembic env.py 每次迁移 fileConfig 禁导入期 logger（登记为 CR-041），测试内沿 test_storage_contract oss2 先例显式解禁 executor logger。
+- **修复 PR**：#115（CR-013 修复轮）。
 
 ## CR-014 · P1 · resume 后 human_approval 节点 stale 审批键复用（run 永久卡 waiting_approval）
 
@@ -491,6 +493,15 @@
 - **file:line**：`desktop/src/renderer/src/ontology/GlossaryPage.tsx:50-55`（`TERM_STATUS_LABEL` 含 `candidate/retired`）vs 服务端 `ontology/models.py:46`（`TERM_STATUSES=(draft,confirmed,superseded,merged)` 无 candidate/retired、反缺 draft/superseded）→ `:67-69` fallback 原值回显：术语表状态列显示英文 `draft`/`superseded`，中文「候选」「已退役」永不渲染。
 - **驳斥记录**：「fallback 不崩」——成立，P3；是 T-W6 新代码自带小漂移（桌面枚举与服务端值域未同步）。
 - **建议修法**：`TERM_STATUS_LABEL` 对齐 `TERM_STATUSES` 四值（draft/confirmed/superseded/merged）。
+
+## CR-041 · P3 · alembic fileConfig 禁导入期 logger（测试会话 caplog 全盲区）
+
+- **状态**：open（CR-013 修复轮发现，登记不修——改动面=全测试套件的日志可见性，跨 suite 行为面待专轮裁决）
+- **file:line**：`server/migrations/env.py:31`（`fileConfig(config.config_file_name)` 未传 `disable_existing_loggers=False`）+ `server/tests/conftest.py:131`（`migrated_test_schema` 及 db_session 每测试 downgrade/upgrade 都触发 env.py）。
+- **触发路径**：模块导入期 `logger = logging.getLogger(__name__)`（executor.py:72、agents/service.py 等全部模块级 logger）先于首个 alembic 调用创建 → env.py fileConfig 默认 `disable_existing_loggers=True` 把它们置 `disabled=True` → 之后整个 pytest 会话里这些 logger 零输出 → caplog/`log_cli` 对其永远空捕。CR-013 修复轮的 warning 断言正是靠测试内显式 `logging.getLogger("fde_api.workflows.executor").disabled = False`（沿 `test_storage_contract.py:805` 对 oss2 sdk_logger 的解禁先例）才钉住的。
+- **驳斥记录**：「生产环境同样被禁」——不成立：生产/本地运行时 `alembic upgrade` 是独立进程，跑完即退，业务进程的 logger 不受影响；仅测试进程内迁移与应用共存才踩中。
+- **证据等级**：E0（探针测试直读：`disabled: True` + RECORDS 空；fileConfig 调用点直读）。
+- **建议修法**：env.py 改 `fileConfig(config.config_file_name, disable_existing_loggers=False)`（一行）；副作用=测试会话日志变多（原被静音的模块恢复输出），可能影响个别负向日志断言（如 `test_auth_api.py:481` `not in caplog.text` 类需复跑核对），故登记不修、归测试基建轮。
 
 ## 驳回/观察记录（不占编号）
 

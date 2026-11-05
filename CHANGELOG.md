@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-013 计数隔离修复：skill 节点计数侧故障不再升级消费侧（2026-11-05）
+
+### 服务端（零迁移零路由零桌面改动）
+
+- **修复（goal-c 台账 c4 遗留 P2，c5 评估未按、本轮单独清偿）**：workflow skill 节点 `_dispatch_skill` 的 `record_skill_usage` 计数调用原为裸调用——计数微事务遇 DB 异常会被 `_execute_node` 兜底 catch 为 `dispatch_crashed(retryable=True)`：已成功的那次 AI 调用被丢弃重跑（双份真实 AI 成本）且节点误标 failed。现包 try/except 记 warning（含 node/skill/error_type）不冒泡——AI 已成功则节点必 succeeded，计数失败只丢一条 `skill_used_workflow` 事件（T-S2「失败不计」对称方向；chat 面 ai_tool_loop 同型守卫，workflow 面补齐最后裸露点）。
+- 测试与口径：executor +1（`test_skill_usage_count_failure_does_not_fail_node`——monkeypatch 计数抛 OSError → run succeeded + 恰 1 次 AI 调用（无重投）+ warning 落 caplog；变异验证红→还原绿）。全仓 pytest **1913 收集 = 1907 passed + 6 skipped**（本轮自身 +1；全仓口径随同日 #114 P1 残尾清偿轮 +7 前进）/ 105 表 / 路由 297 / ENTRIES 94 / mypy 279（基线无新增）；**rebuild 后必 `alembic upgrade head`**（零迁移，幂等校验）。
+- 台账同步：CR-013 → fixed；**CR-041 登记不修**（测试基建：alembic `env.py` `fileConfig` 默认 `disable_existing_loggers=True`，db_session 每测试跑迁移 → 导入期创建的模块级 logger 测试会话内全量禁用、caplog 空捕；CR-013 测试沿 test_storage_contract oss2 先例显式解禁，根因修复留测试基建轮）。
+
 ## [未发布] — V3 P1 残尾清偿：outbox 状态闭环 + 终审双闸 + 审批过期清扫（2026-11-05）
 
 ### 服务端（三 S 同轮：T-J1 / T-P1-4 / T-P1-5；T-OBS1 核验销号；零迁移零路由零桌面）
@@ -10,7 +18,7 @@
 - **T-P1-4 resolve_signoff 双闸（WB-DEF-2）**：终审拍板原仅 can_view+AI 档位——viewer 被授予高档后即可代拍。改为项目 `can_manage`（`_require_project_manager`）+ 档位双闸（与 `generate_agent_solution` 权限双层同款）；viewer+`system_operator` 档 → 403 `forbidden`（拦截者显式为项目闸而非档位闸）。
 - **T-P1-5 审批过期清扫（WB-DEF-3）**：过期翻转从 decide/状态查询两处内联重复提取为唯一原语 `control/service._expire_approval`（行为零变化），新增 `scheduler.sweep_expired_approvals`（`skip_locked` 与并发拍板互不阻塞）接入 scheduler 循环（与派单同拍）——无人触碰的过期 pending 审批不再永挂任务中心。
 - **T-OBS1 降级 chat 落审计（WB-DEF-4）核验销号**：chat 直调 `execute_ai_prompt`，降级直连腿的审计+月账本入账已随 #112（CR-006）落地，本轮零补码销号（`direct-chat-*` 前缀方案由 purpose+used_fallback 取代，区分度更优）。
-- 测试与口径：pytest +7（outbox 收口 2 + worker 端到端 3 + viewer 双闸 1 + 清扫 1）＝**1912 收集 = 1906 passed + 6 skipped**；105 表 / 迁移头 `e2c6a8f4d1b3` / 路由 297 / ENTRIES 94 / vitest 771 不变（需 rebuild 三镜像，无迁移）。P1 仅剩 T-J2（重试落地时 outbox failed 只准在最终失败分支翻转——backlog 已留注）。
+- 测试与口径：pytest +7（outbox 收口 2 + worker 端到端 3 + viewer 双闸 1 + 清扫 1）；105 表 / 迁移头 `e2c6a8f4d1b3` / 路由 297 / ENTRIES 94 / vitest 771 不变（需 rebuild 三镜像，无迁移）。P1 仅剩 T-J2（重试落地时 outbox failed 只准在最终失败分支翻转——backlog 已留注）。
 
 ## [未发布] — V3 实施 T-UI1 三页核销 + GateBoard 候选来源徽标（2026-11-05）
 

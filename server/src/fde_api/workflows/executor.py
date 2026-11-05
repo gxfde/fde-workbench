@@ -1038,10 +1038,20 @@ def _dispatch_skill(
     if not isinstance(answer, str):
         answer = json.dumps(answer, ensure_ascii=False)
     # V3 T-S2：pinned 版本完成一次确定性调用即消费——独立微事务计数，
-    # 节点失败（AI 异常/重试）不计；attempt 代际各自计一次（每次都真消费了）
+    # 节点失败（AI 异常/重试）不计；attempt 代际各自计一次（每次都真消费了）。
+    # CR-013：计数侧故障不升级消费侧——AI 已成功，计数失败只记 warning 不冒泡
+    # （否则 _execute_node 兜底 catch 为 dispatch_crashed(retryable=True)：
+    # 已成功的 AI 调用被丢弃重跑成双份成本、节点误标 failed；chat 面
+    # ai_tool_loop 对工具异常同型有守卫，唯此处曾裸露）。
     from fde_api.control.extensions_service import record_skill_usage
-    record_skill_usage(actor_id=initiator_id, skill_id=skill_id, surface="workflow",
-                       version=int(version_part))
+    try:
+        record_skill_usage(actor_id=initiator_id, skill_id=skill_id, surface="workflow",
+                           version=int(version_part))
+    except Exception as error:  # noqa: BLE001 —— 计数失败是噪声不是效果（T-S2 对称语义）
+        logger.warning(
+            "workflow skill usage count failed node=%s skill=%s error_type=%s",
+            node_id, skill_id, type(error).__name__,
+        )
     return {"text": answer}
 
 
