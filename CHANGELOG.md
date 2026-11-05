@@ -2,6 +2,12 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-041 核销：融合树独立复测 + 口径校正 + 桌面便携包 r16（2026-11-05）
+
+- **核销（零代码轮）**：并发 P3 批清偿（#121）落定后的独立核销——融合树全量实测：服务端 pytest **1943 收集 = 1937 passed + 6 skipped**（本地 Windows 与 CI PR-head 双面一致）、CR-041 专项 2 例绿、mypy 基线 279 全绿、桌面 vitest 774/774、typecheck 零错；**发现并校正融合口径偏 1**（AGENTS 前值 1942/1936 为算术推导；CI 实测 #120 = 1935+6s、#121 = 1937+6s，口径行按实测改写）；「负向日志断言空转绿」担忧实测排除——`not in caplog.text` 全仓 10 处（含 test_auth_api.py:481 密钥不入日志安全断言）在 env.py 解禁后真判零红。部署活体核验：api 镜像 env.py 修在位、300 业务路由、双 admin 路由、`/ready` 200、alembic head `d9f4a7c2e6b1`。
+- **桌面便携包 r16**：r15（11-05 11:18）早于 #113 T-UI1 徽标与 #121 CR-035/040——marker「已取代」「source_kind」双 0 命中证实缺口；从 fork/main `7dc620e` 干净树重打包 **蔡工FDE-0.2.0-便携版-r16**：asar sha256 `c62e184b131db53386eb83897c80ca447a57a81b952d6e992cea1bcbcb75027d`，marker「已取代」×2 /「source_kind」×3 命中；r15 旧目录未覆盖。
+- 台账同步：CR-041 增核销复核段（含口径校正与 r16 交付记录）。
+
 ## [未发布] — goal-c P3 测试补强：AI 机会主链组件 13 例覆盖 + sync-hash 断言加固（2026-11-05）
 
 ### 桌面端（纯测试轮：生产代码零变更、服务端零改动）
@@ -11,7 +17,7 @@
   - `OpportunityDetail` 组件 5 例：非编辑态档案网格中文渲染；canManage 经「更多」菜单删除联动；编辑态保存主链（PATCH 载荷逐字段断言 + 成功回执与提示）；保存失败按码映射 alert 且不回执；脏标记按 `opportunity-profile:<id>` 键置脏、卸载自动清脏。
   - 变异验证：评分上界 5→6 → 评分用例红 → 还原 → 绿（生产代码 `git diff` 零残留）。
 - **CR-038 sync-hash 断言加固（CR-007 同型残留收尾）**：`new-project.test.tsx` 创建成功路径的 `location.hash` 同步读改 `await waitFor(...)`，与 `navigation.test.tsx` 已修的 5 处同型对齐；属加固型改动（当前同步写 hash 下两种写法均绿，防未来异步化复发），台账已如实注记无可做的红绿变异。
-- 口径：桌面 vitest **787/787**（+13）；typecheck 绿。测试文件不进应用包（asar），**无需重打包便携版**；105 表 / pytest 1942 / 路由 300 / ENTRIES 94 全部不变。
+- 口径：桌面 vitest **787/787**（+13）；typecheck 绿。测试文件不进应用包（asar），**无需重打包便携版**；105 表 / pytest 1943 / 路由 300 / ENTRIES 94 全部不变（pytest 数字承 CR-041 核销轮 CI 实测校正）。
 
 ## [未发布] — goal-c P3 批清偿：术语页搜索守卫 + 状态值域 + alembic 日志基建（2026-11-05）
 
