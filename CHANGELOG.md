@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P3 立项轮：高级自主化四项立项合同（2026-11-05）
+
+### 文档（零代码零迁移零路由零桌面；口径不变）
+
+- **立项合同 NEW `docs/implementation/v3-p3-高级自主化立项-v1.md`**——backlog §P3 四项逐项展开：①多 Agent 自适应编排（域 6 DEFER 维持，进程内团队拒绝理由=主报告 §19-7 常量，观测=`agent_runs.fallback_level` 分布）；②基于运行反馈的 Skill 改进（T-S2+CR-013 数据面已闭环，失败面维度属语义裁决非补漏）；③业务规则推理 ontology_rules（registry-v1「无消费方不建空壳」维持，候选消费方=risk≥3→human_approval[域 9]+T-C1 编译校验，规则 9 强制化悬置线一并盘）；④有限自动执行开放评估（P0/P2 全 DONE、P1 仅剩 T-J2 在途；解冻=三道闸；写类 external 免事前确认=红线级非目标）。每项含立项依据/已落地基线/评估问题清单/非目标/解冻条件/回写义务；评估报告轮自身也须先过解冻闸。
+- 台账同步：backlog §P3 重写挂锚；RAG/LightRAG 维持不立项（主报告 §19 附注）；在途开源借鉴调研（autoloop/agnes/fde-gym/giip/fdep-mcp/DSH 替代可行性）不预支结论，落定后由调研会话自行回写。
+- 口径：pytest 1913 收集 = 1907 passed + 6 skipped / 105 表 / head `e2c6a8f4d1b3`（34 rev）/ 路由 297 / ENTRIES 94 / mypy 279 / vitest 771——全不变，无需 rebuild/重打包。
+
 ## [未发布] — goal-c CR-013 计数隔离修复：skill 节点计数侧故障不再升级消费侧（2026-11-05）
 
 ### 服务端（零迁移零路由零桌面改动）

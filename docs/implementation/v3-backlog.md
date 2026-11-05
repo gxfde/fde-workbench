@@ -372,9 +372,14 @@
 - WorkflowConsole / GlossaryPage / SkillVersionsPage + vitest 用例。前置：对应 API。复杂度：**M**。
 - **核销记录（2026-11-05）**：三页已随 T-W6（#88）同名全量交付（`workflows/WorkflowConsole.tsx` / `ontology/GlossaryPage.tsx` / `extensions/SkillVersionsPage.tsx` + vitest 5/6/7 例 + typecheck 绿，本轮基线复核 767 全绿）——按「已由先导轮兑现」销号，零补码。同轮附带清偿 T-W7 桌面挂账：GateBoard 候选来源徽标（`source_kind` 判别联合 + 分形守卫，修复 workflow 候选行整板拒载的潜伏 bug；vitest +4 → 771），见 T-W7 实施记录尾注。
 
-## P3（高级自主化——本轮仅立项不排期）
+## P3（高级自主化——**2026-11-05 立项完成，实施仍不排期**）
 
-- 多 Agent 自适应编排（域 6 DEFER 观测项）；基于运行反馈的 Skill 改进（usage 统计→建议）；业务规则推理（ontology_rules 立项评估）；有限自动执行开放评估（依赖 P0-P2 验收全绿）。
+四项合同见 **`docs/implementation/v3-p3-高级自主化立项-v1.md`**（各节含立项依据/已落地基线/评估问题清单/非目标/解冻条件/风险；全局红线与范围外=RAG 不立项、在途开源借鉴调研不预支）。解冻前不开实施轮，评估报告轮自身也须先过解冻闸：
+
+- 多 Agent 自适应编排（域 6 DEFER 观测项）——立项 §1；进程内团队拒绝理由（主报告 §19-7）是常量；观测=`agent_runs.fallback_level` 分布，**真实 run 数据积累是解冻闸**（生产 run 数近零）。
+- 基于运行反馈的 Skill 改进（usage 统计→建议）——立项 §2；T-S2+CR-013（#115）数据正确性已闭环；缺口=失败面维度（T-S2「失败不计」是有意对称语义，改进建议需要的失败证据是否新开核算维度=评估轮裁决）+双面消费量。
+- 业务规则推理（ontology_rules 立项评估）——立项 §3；「无消费方不建空壳」维持（registry-v1 §1 DEFER）；候选消费方=**risk≥3→human_approval**（域 9，T-R2 结构化后口径已一致）与 **T-C1 编译校验**（DONE 2026-11-05）；另须盘规则 9 强制化悬置线（T-R2 记「P2 enforcement wave」但 P2 清单无此轮）。
+- 有限自动执行开放评估（依赖 P0-P2 验收全绿）——立项 §4；任务面 P0/P2 全 DONE、**P1 仅剩 T-J2 在途**；闸=T-J2 落定 + §16 用例族核对表全绿 + 责任主体机制化；写类 external 免事前确认=红线级非目标。
 
 ## 依赖图（摘要）
 
