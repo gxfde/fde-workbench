@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-021 行锁修复：本体变更集三翻转入口串行化（2026-11-05）
+
+### 服务端（零迁移零路由零桌面改动；用户拍板「修复：CAS 状态翻转」）
+
+- **修复（CR-021）**：`submit_change_set`/`confirm_change_set`/`reject_change_set` 三处状态翻转原为「读 `row.status` 判合法→物化→赋值」的先读后写——两拍板人并发 confirm 会双双物化（幂等键+UNIQUE 兜底不炸数据，但 409 `not_in_review` 语义失守、`ontology_change_set_confirmed` 事件双份）；reject 可翻转已物化的 confirmed 行；双 submit 重复 version。现新增 `_lock_change_set`（`select … with_for_update() + populate_existing`）在三处入口**行锁重读**：并发对手在此串行化，锁在手读到的必是已提交真值；confirm 的 base 指纹复核+逐项物化全程在锁内。
+- 测试与口径：`test_change_set_transition_races_serialize_on_row_lock`（裸连接提交并发终态+会话旧实例=并发窗口第二请求的真实内存视图；三段：迟到 confirm 零物化 `not_in_review` / confirmed 终态拒迟到 reject `invalid_transition` / 迟到 submit 409 且 version 只 +1）。变异验证：摘三处行锁→红（迟到 confirm DID NOT RAISE=静默双物化）→还原→绿。全仓 pytest **+1**；台账 CR-021 → fixed。
+
 ## [未发布] — V3 T-J2 收官：handler 自动重试 + admin 任务取消 API（2026-11-05，P1 全清）
 
 ### 服务端（域 14 最后一块；迁移 +1 纯 CHECK 置换；路由 +1；零桌面）

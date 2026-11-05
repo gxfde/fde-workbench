@@ -1220,6 +1220,76 @@ def test_change_set_item_failure_rolls_back_whole_set(
     assert admin_client.get(f"{cs_url}/{cs_id}").json["data"]["change_set"]["status"] == "in_review"
 
 
+def test_change_set_transition_races_serialize_on_row_lock(db_session) -> None:
+    """CR-021 竞态根除：并发对手已提交的终态，迟到拍板人的旧实例在行锁重读后
+    必须得到正确的 409（先读后写时代会双物化/翻转已物化行/重复 version）。
+    模拟：裸连接提交并发终态，会话内实例保持旧值——正是并发窗口里第二个
+    请求持有的内存视图；行锁重读即见真值。"""
+    proposer = _actor(db_session, name="cs-race-proposer")
+    decider = _actor(db_session, name="cs-race-decider")
+    project = _persist_project(db_session, proposer, code=f"ONTO-RACE-{uuid4().hex[:6]}")
+    engine = db_session.get_bind()
+
+    def _raw_touch(change_set_id: str, assignments: str) -> None:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"UPDATE ontology_change_sets SET {assignments} "
+                    "WHERE id = :change_set_id"
+                ),
+                {"change_set_id": change_set_id},
+            )
+
+    # ① confirm 竞态：对手已 confirm，迟到 confirm 不得二次物化（not_in_review）
+    seed = _propose(
+        db_session,
+        proposer,
+        project.id,
+        [{"action": "create_term", "term": "竞态种子", "definition": "占位。"}],
+    )
+    db_session.commit()
+    submit_change_set(db_session, row=seed, actor=proposer)
+    db_session.commit()
+    _raw_touch(seed.id, "status = 'confirmed', confirmed_at = now(), version = version + 1")
+    with pytest.raises(OntologyServiceError) as late_confirm:
+        confirm_change_set(db_session, row=seed, actor=decider)
+    assert late_confirm.value.code == "not_in_review"
+    db_session.rollback()
+    db_session.expire_all()
+    terms = (
+        db_session.execute(select(OntologyTerm).where(OntologyTerm.project_id == project.id))
+        .scalars()
+        .all()
+    )
+    assert terms == []  # 迟到的 confirm 零物化（本用例对手侧只改状态未建 term）
+
+    # ② reject 竞态：confirmed 终态不可被迟到 reject 翻转（先读后写时代会翻已物化行）
+    with pytest.raises(OntologyServiceError) as late_reject:
+        reject_change_set(db_session, row=seed, actor=proposer, reason="迟到否决")
+    assert late_reject.value.code == "invalid_transition"
+    db_session.rollback()
+    db_session.expire_all()
+    assert db_session.get(OntologyChangeSet, seed.id).status == "confirmed"
+
+    # ③ submit 竞态：对手已 submit，迟到提交人的 draft 旧视图 → 409 且 version 只 +1
+    twin = _propose(
+        db_session,
+        proposer,
+        project.id,
+        [{"action": "create_term", "term": "竞态双提交", "definition": "占位。"}],
+    )
+    db_session.commit()
+    stale_version = twin.version
+    _raw_touch(twin.id, "status = 'in_review', submitted_at = now(), version = version + 1")
+    with pytest.raises(OntologyServiceError) as late_submit:
+        submit_change_set(db_session, row=twin, actor=proposer)
+    assert late_submit.value.code == "invalid_transition"
+    db_session.rollback()
+    db_session.expire_all()
+    fresh = db_session.get(OntologyChangeSet, twin.id)
+    assert fresh.version == stale_version + 1  # 只算对手那一次
+
+
 def test_change_set_update_term_in_place_and_rename_supersede(db_session) -> None:
     """修订语义裁决：同名=原行受控改写（旧定义随事件留档）；改名=新行 confirmed
     + 原行 superseded 指 canonical + 原名转别名；终态行不能修订。"""

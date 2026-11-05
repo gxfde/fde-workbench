@@ -41,7 +41,7 @@
 | CR-017 | P2 | fixed（PR #103 已合并 `c8aa08a`） | 上下文渲染 source_refs 不经模式遮蔽：带盘符的 source_ref（如 `C:\客户\…`）原样进 context.md 与 problem_refs，与正文脱敏双标尺 | agents/context.py:153 | c4 |
 | CR-019 | P1 | **fixed（c5 PR）** | `resume_run` 对**全部** failed/skipped 节点 attempt 归零——agent 节点幂等键 `wfnode-{行id}:{attempt}` 撞回 `:1` 失败终态（agents V8 拒同键重跑）→ agent 节点每次 resume 确定性 409，永远救不活（docstring「resume 开新代际」与实现矛盾，c4 观察项②） | workflows/executor.py:341-352 | c5 |
 | CR-020 | P1 | **fixed（c5 PR）** | 写类 call 节点结果未确认（`uncertain`=started 无 finished；`cancelled`）被折叠为节点 `succeeded`——FV-F1「断链不静默 done」红线虚高；同键去重在 api_actions 层兜底不二次外呼，但节点层「成功」断言失真 | workflows/executor.py:885-893 | c5 |
-| CR-021 | P2 | open（登记不修，c6/c8 裁决） | 本体变更集 confirm/reject 双 confirm 写偏差：`confirm_change_set`/`reject_change_set`/`submit_change_set` 状态翻转**无行锁无 CAS**（`row.status != X` 先读后写），两拍板人并发 confirm 可双双物化（物化原语自身幂等键+UNIQUE 兜底不炸，但 409 语义失守 + 双份事件） | ontology/service.py:1206/1275/1066 | c5 |
+| CR-021 | P2 | **fixed（CR-021 修复轮，用户拍板 2026-11-05）** | 本体变更集 confirm/reject 双 confirm 写偏差：`confirm_change_set`/`reject_change_set`/`submit_change_set` 状态翻转**无行锁无 CAS**（`row.status != X` 先读后写），两拍板人并发 confirm 可双双物化（物化原语自身幂等键+UNIQUE 兜底不炸，但 409 语义失守 + 双份事件） | ontology/service.py:1206/1275/1066 | c5 |
 | CR-022 | P2 | open（登记不修） | cancel_run 与 in-flight call/skill 分派写偏差：cancel 提交 run=cancelled 后，已发出的外呼/ AI 调用返回成功被节点 guard（node.status∉pending/ready/running）静默丢弃——api_actions 留有成功记录但节点 output_json=null，「已执行外呼不回收（诚实呈现）」承诺面缺展示通道 | workflows/executor.py:301-322 vs :714-727 | c5 |
 | CR-023 | P3 | open（登记不修） | cancel_run/resume_run 无行锁无 CAS：双 admin 并发 cancel 双份事件+双 outbox（队列去重兜底）；cancel 与 decide 竞争可产生「cancelled run 下 succeeded 审批节点」矛盾态（分派层对终态 run 早退，无一致性损坏） | workflows/executor.py:307-322/331-361 | c5 |
 | CR-024 | P3 | open（登记不修） | 调研导入同文件多级造数：`_load_parent_candidates`（imports.py:420）在行创建前扫描父级候选——文件内新建的部门/流程对本批后续行 role 的「父级」列不可见 → preview 零报错、commit 确定性 `parent_not_found`（非静默错数据，preview 体验缺口） | research/imports.py:420/1445 | c5 |
@@ -331,14 +331,15 @@
 
 ## CR-021 · P2 · 本体变更集双 confirm 写偏差（无行锁/CAS）
 
-- **状态**：open（c5 登记不修，交 c6/c8 或后续工程轮裁决）
+- **状态**：confirmed → **fixed（CR-021 修复轮，2026-11-05，用户拍板「修复：CAS 状态翻转」）**。
 - **file:line**：`ontology/service.py:1206`（`confirm_change_set`）/`:1275`（`reject_change_set`）/`:1066`（`submit_change_set`）——三处状态翻转均「读 `row.status` 判合法→物化→`row.status=X`」，**无 `with_for_update` 无 CAS**。
 - **意图锚**：T-O3「confirm 复核指纹+单事务逐项物化全成全败，409 base_conflict 并发漂移零物化」——base 指纹只防**本体内容**漂移，不防**同一变更集被两拍板人并发 confirm**。
 - **触发路径**：变更集 in_review，两拍板人 A/B 并发 confirm（均过「拍板人≠提交人」验收分离）→ A、B 各自 `row.status=="in_review"` 先读通过 → 各自物化 → A、B 各自 `row.status="confirmed"`+事件。物化原语（create_term/update_term/merge_terms）自身幂等键+UNIQUE 约束兜底不炸数据，但：① 409 `not_in_review` 语义失守（第二次 confirm 本应 409 却 200）；② 双份 `ontology_change_set_confirmed` 事件 + 双份物化副作用（update_term 同名受控改写两次、merge_terms 逐项 OperationEvent 两次）。
 - **驳斥记录**：「本体 confirm 低频，双拍板人并发概率可忽略」——概率低≠不修，但**修=加行锁/CAS 属 P2 小改**，非 P0/P1，本轮登记不动码；「验收分离已防提交人自拍板」——只防自拍板，不防双拍板人并发。
 - **证据等级**：E1（子代理首报，本轮 grep 直读确认无 `with_for_update`，未实测并发路径→定级 P2 不升级 P1）。
 - **建议修法**：`_load_change_set` 或 confirm/reject/submit 入口 `row = session.get(...).with_for_update()` 行锁，或 UPDATE ... WHERE status=旧值 CAS 检 rowcount；归后续工程轮。
-- **修复 PR**：—
+- **修复（2026-11-05，用户拍板）**：新增 `_lock_change_set`（`select … with_for_update() + populate_existing`）在 **submit/confirm/reject 三处翻转入口行锁重读**——两拍板人在此串行化，锁在手读必为已提交真值，「先读后写」竞态从根闭合；confirm 的指纹复核+逐项物化全程在锁内（行锁选型而非 UPDATE CAS：翻转后还要继续用实例字段做物化，锁+刷新语义最贴合）。竞态语义测试 `test_change_set_transition_races_serialize_on_row_lock` 三段：裸连接提交并发终态+会话旧实例（=并发窗口第二请求的真实内存视图）下，迟到 confirm 得 409 `not_in_review` 且**零物化**、confirmed 终态拒迟到 reject（`invalid_transition`，封「翻已物化行」重洞）、迟到 submit 409 且 version 只 +1；变异验证：摘三处行锁→红（迟到 confirm `DID NOT RAISE` 即静默双物化）→还原→绿，全文件 24 例零回归。
+- **修复 PR**：见 CHANGELOG（CR-021 修复轮）。
 
 ## CR-022 · P2 · cancel_run 与 in-flight call/skill 分派写偏差（外呼成功被静默丢弃）
 

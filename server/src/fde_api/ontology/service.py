@@ -1078,10 +1078,23 @@ def _base_snapshot_sha256(descriptor: list[dict[str, Any]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _lock_change_set(session: Session, row: OntologyChangeSet) -> OntologyChangeSet:
+    """CR-021：状态翻转前以行锁重读（for_update + populate_existing）——两拍板人
+    并发 confirm、confirm/reject 互斥、双 submit 都在此串行化；锁在手后读到的
+    必是已提交真值，「先读后写」竞态（双物化/翻已物化行/重复 version）从根闭合。"""
+    return session.execute(
+        select(OntologyChangeSet)
+        .where(OntologyChangeSet.id == row.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+
+
 def submit_change_set(
     session: Session, *, row: OntologyChangeSet, actor: User
 ) -> OntologyChangeSet:
     """draft → in_review：对受影响行快照取 base 指纹（并发防护锚点）。"""
+    row = _lock_change_set(session, row)
     if row.status != "draft":
         raise OntologyServiceError(
             "invalid_transition", f"状态 {row.status} 不能提交评审。", 409
@@ -1228,6 +1241,7 @@ def confirm_change_set(
 
     验收分离（P0-5 纪律）：拍板人 ≠ 提交人。
     """
+    row = _lock_change_set(session, row)
     if row.status != "in_review":
         raise OntologyServiceError(
             "not_in_review", f"状态 {row.status} 不能确认（仅 in_review 可确认）。", 409
@@ -1292,6 +1306,7 @@ def reject_change_set(
 ) -> OntologyChangeSet:
     """draft/in_review → rejected（只改状态留 reason）。拍板否决同样受
     验收分离约束：拍板人 ≠ 提交人。"""
+    row = _lock_change_set(session, row)
     if row.status not in ("draft", "in_review"):
         raise OntologyServiceError(
             "invalid_transition", f"状态 {row.status} 不能否决。", 409
