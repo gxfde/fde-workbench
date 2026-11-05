@@ -1783,3 +1783,104 @@ def test_write_call_node_uncertain_and_cancelled_fail_not_succeeded(
     assert (node.error or "").startswith("action_not_confirmed:")
     assert "cancelled" in node.error
     assert len(calls) == 2
+
+
+def test_resume_increments_hops_across_generations_without_reset(
+    db_session, settings, monkeypatch
+):
+    """B#1：拍板重投是「重投代际」边——hops 逐代累加继承不清零；修好后正常
+    续跑且 hops 冻结在已达代际数（执行不再累加）。"""
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"HP{uuid4().hex[:4]}")
+    _seed_skill(db_session, leader, key="flaky", versions=["指令"])
+    _install_fake_api(monkeypatch, [])
+    _install_fake_ai(monkeypatch, [], fail_times=99)
+    _zero_backoff(monkeypatch)
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("gather", output="subjects"),
+        {
+            "key": "draft",
+            "type": "skill",
+            "ref": "flaky@1",
+            "depends_on": ["gather"],
+            "max_retries": 1,
+        },
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    first = db_session.get(WorkflowRun, run.id)
+    assert first.status == "failed"
+    assert first.hops == 0
+
+    # 第一代拍板重投：hops 0 → 1
+    resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).hops == 1
+    run_workflow_run(run.id)  # AI 仍坏 → 再失败，hops 不回退
+    db_session.expire_all()
+    again = db_session.get(WorkflowRun, run.id)
+    assert again.status == "failed"
+    assert again.hops == 1
+
+    # 第二代重投：hops 1 → 2（继承不清零）
+    resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).hops == 2
+
+    # 修好后正常续跑成功；hops 冻结在已达代际数
+    monkeypatch.setattr(
+        "fde_api.control.ai_server_client.execute_ai_prompt", lambda **kw: "好了"
+    )
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    done = db_session.get(WorkflowRun, run.id)
+    assert done.status == "succeeded"
+    assert done.hops == 2
+
+
+def test_hops_cap_refuses_resume_and_entry_fails_inflight(db_session, settings):
+    """B#1：代际上限——resume 在重投口 409 拒绝（零变更）；入口 belt 把在途
+    超限行 honest failed（不再分派任何节点）。"""
+    from fde_api.workflows.executor import MAX_RUN_HOPS, WorkflowRunError
+
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"HP{uuid4().hex[:4]}")
+    _seed_skill(db_session, leader, key="once", versions=["指令"])
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("gather", output="subjects"),
+        {"key": "draft", "type": "skill", "ref": "once@1", "depends_on": ["gather"]},
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    row = db_session.get(WorkflowRun, run.id)
+    row.status = "failed"
+    row.hops = 8  # 与 MAX_RUN_HOPS 合同钉死（字面量播种，变异敏感）
+    db_session.commit()
+
+    with pytest.raises(WorkflowRunError) as exc:
+        resume_run(actor=leader, project_id=project.id, run_id=run.id)
+    assert exc.value.code == "hops_exceeded"
+    assert exc.value.status == 409
+    db_session.expire_all()
+    assert db_session.get(WorkflowRun, run.id).hops == MAX_RUN_HOPS  # 零变更
+
+    # 入口 belt：在途超限行直接 failed（error 前缀留痕），不进入节点循环
+    row = db_session.get(WorkflowRun, run.id)
+    row.status = "running"
+    row.hops = 9  # 超合同上限一步（字面量播种，变异敏感）
+    db_session.commit()
+    run_workflow_run(run.id)
+    db_session.expire_all()
+    failed = db_session.get(WorkflowRun, run.id)
+    assert failed.status == "failed"
+    assert (failed.error or "").startswith("hops_exceeded")

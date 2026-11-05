@@ -74,6 +74,8 @@ class AgentRunResult:
     tool_calls: tuple[ToolCallRecord, ...]
     degraded: bool
     degraded_reason: str | None
+    # B#2 回执状态面（ManifestOutputScanner.receipt_state；其余 scanner 视为 ok）
+    receipt_state: str = "ok"
 
 
 class RunEventProvider(Protocol):
@@ -204,8 +206,11 @@ class ZcodeAdapter:
         # ③ 只有 completed 才认产物（B-1 超时产物不入库）；回收 kill 由调用方
         # finally 保证（goal-c CR-015）——此处异常逃出同样安全。
         artifacts: tuple[ArtifactFile, ...] = ()
+        receipt_state = "ok"
         if status == "completed":
             artifacts = tuple(output_scanner.scan())
+            # B#2：回执判定随 scanner 走（自定义 scanner 无该属性时视为 ok）
+            receipt_state = str(getattr(output_scanner, "receipt_state", "ok"))
 
         return AgentRunResult(
             status=status,
@@ -216,6 +221,7 @@ class ZcodeAdapter:
             tool_calls=tuple(tool_calls),
             degraded=degraded,
             degraded_reason=degraded_reason,
+            receipt_state=receipt_state,
         )
 
     def _judge_tool_call(self, ctx: AgentRunContext, event: Mapping[str, Any]) -> ToolCallRecord:

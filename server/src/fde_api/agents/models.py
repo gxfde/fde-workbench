@@ -63,7 +63,8 @@ class AgentRun(Base, TimestampMixin):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'completed', 'failed', 'timeout', 'budget_exceeded')",
+            "status IN ('queued', 'running', 'completed', 'succeeded_but_receipt_invalid',"
+            " 'failed', 'timeout', 'budget_exceeded')",
             name="ck_agent_runs_status",
         ),
         CheckConstraint(
@@ -91,7 +92,7 @@ class AgentRun(Base, TimestampMixin):
     # 实时鉴权人（架构方案 §6.4：权限回收即时生效，发起人即责任人）
     initiated_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     capability_used: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued", server_default="queued")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="queued", server_default="queued")
     # 脱敏上下文指针（只指 masked_context 渲染产物，绝不指真相层）
     context_ref: Mapped[str] = mapped_column(String(255), nullable=False)
     token_cost: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

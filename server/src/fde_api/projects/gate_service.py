@@ -369,6 +369,19 @@ def decide_gate(
             "invalid_request", "accepted_labels 必须是字符串数组。", 400
         )
     note = _optional_note(payload)
+    # B#28 门禁 revision CAS（FF stage completeX 语义）：expected_revision 提供
+    # 时必须与当前 version 相等，否则 409 且零变更——多端并发拍板后写不再覆盖
+    # 前写。行锁（_load_gate with_for_update）+ 版本复核 = 原子 CAS；缺省时维持
+    # 既有行为（旧客户端兼容），version 照常推进。
+    expected_revision = payload.get("expected_revision")
+    if expected_revision is not None and (
+        isinstance(expected_revision, bool)
+        or not isinstance(expected_revision, int)
+        or expected_revision < 1
+    ):
+        raise GateServiceError(
+            "invalid_request", "expected_revision 必须是正整数。", 400
+        )
 
     session = db.session()
     try:
@@ -379,6 +392,13 @@ def decide_gate(
             if gate.status != "evidence":
                 raise GateServiceError(
                     "invalid_gate_state", "该门禁尚无待核验证据，先提交证据再核验。", 409
+                )
+            # B#28 CAS 复核：版本已被推进（并发拍板先到者胜）→ 拒绝且零变更。
+            if expected_revision is not None and gate.version != expected_revision:
+                raise GateServiceError(
+                    "gate_revision_conflict",
+                    f"门禁状态已被推进（当前 revision={gate.version}），请刷新后重试；本次拍板未生效。",
+                    409,
                 )
             # P0-5 硬闸门（设计 §9.4，§8.8 开池四道闸之二）：拍板人 ≠ 该门禁执行人，
             # 代码强制、先于其余业务校验，不可绕过。
@@ -509,6 +529,11 @@ def decide_gate(
             gate.decided_at = datetime.now(timezone.utc)
             gate.decided_by_user_id = actor.id
             changes["decided_by_user_id"] = actor.id
+            # B#28：拍板生效即推进 revision（VersionedMixin.version），留痕进
+            # changes 供 operation_events 审计；lifecycle_version 不动（语法代际
+            # 只随模板 grammar 换代推进，拍板不触碰）。
+            gate.version += 1
+            changes["revision"] = gate.version
             if note:
                 changes["note"] = note
             # P4 承接（设计 §6）：G8 stop 也按合同结算（SOP §S8 三态）——

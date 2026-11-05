@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P0 先行批·代码级子批：跳数熔断 + 门禁 revision CAS + 回执终态 + purity 架构测试（2026-11-05）
+
+### 行为变更（合并迁移 `b2e8f4a6c9d3`——一次 rebuild + alembic upgrade head）
+
+- **B#1 跳数熔断**（agent-autoloop 语义）：`workflow_runs.hops` 列 + `MAX_RUN_HOPS=8`——resume_run 拍板重投逐代 +1（继承不清零）、超限 409 `hops_exceeded` 零变更；执行器入口 belt 把在途超限行 honest failed（不再分派任何节点），封顶 workflow 自触发链。
+- **B#28 门禁 revision CAS**（FF stage completeX 语义）：`decide_gate` 增可选 `expected_revision`（缺省=旧客户端兼容）——行锁+版本复核，落后即 409 `gate_revision_conflict` 且零变更，多端并发拍板后写不再覆盖前写；拍板生效推进 `gates.version`（复用既有 VersionedMixin 列）并留痕 changes；新列 `gates.lifecycle_version`（门禁语法代际，现役=1）。桌面 expected_revision 接线归主树品牌轮落定后。
+- **B#2 回执「写错不重做」**（agent-autoloop worker 语义，收窄面）：`ManifestOutputScanner.receipt_state` 四态回执判定（Protocol 不破）经 `RunResult.receipt_state` 入 `_finalize`——completed + exit 0 + 零声明产物 **且** 回执面损坏（output/ 有文件没写 manifest / manifest 非法 JSON）→ 新终态 `succeeded_but_receipt_invalid`（不进 FAILED_STATUSES ⇒ retry_run 拒同键重跑，业务动作不重执行，消除重复交付尾部风险）；合法零产物任务照旧 completed；声明产物校验失败维持 C-1 failed+retry 合同；`agent_runs.status` 列 String(24)→(40) 加宽 + CHECK 扩（downgrade 归位 failed）。
+- **B#4 purity 架构测试**：`test_architecture_purity.py` 四断言——workflows 顶层零 control.service/routes（双向环防线）、control.service 延迟导入惯例固化、workflows 内核零 os.environ/flask、零产品名字面量。
+- **口径**：pytest **1961 收集 = 1955 passed + 6 skipped**（+16：hops 2 / gates CAS 4 / receipt 5 / purity 4 / 迁移 roundtrip 1）；mypy 279 不动；vitest 787 不动。变异验证四连（hops 上限/CAS 复核/回执终态/scanner 收窄面）apply→red→reverse-restore→green。
+
 ## [未发布] — 知识收尾轮：AGENTS 口径行校正 + README 品牌路径/配置对齐（2026-11-05）
 
 ### 文档收尾（零代码零迁移零路由零桌面，口径全不动）

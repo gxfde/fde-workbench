@@ -356,3 +356,80 @@ def test_template_outdated_flags_drift_and_tolerates_unknown(
     assert by_key["G1"]["template_outdated"] is True
     assert by_key["G2"]["template_outdated"] is False
     assert by_key["G3"]["template_outdated"] is False
+
+
+def test_gate_decision_stale_expected_revision_conflicts(admin_client, gate_project, db_session):
+    """B#28 CAS：expected_revision 落后于当前 version → 409 且零变更（状态不动）。"""
+    _project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G8")
+    current = db_session.scalar(
+        select(Gate.version).where(
+            Gate.project_id == _project["id"], Gate.gate_key == "G8"
+        )
+    )
+
+    response = leader_client.post(
+        f"{gates_url}/G8/decision",
+        json={"result": "pass", "decision": "proceed", "expected_revision": current + 1},
+    )
+
+    assert response.status_code == 409, response.get_data(as_text=True)
+    assert response.json["error"]["code"] == "gate_revision_conflict"
+    db_session.expire_all()
+    row = db_session.scalar(
+        select(Gate).where(Gate.project_id == _project["id"], Gate.gate_key == "G8")
+    )
+    assert row.status == "evidence"  # 拍板未生效
+    assert row.version == current  # revision 不动
+    assert row.decided_at is None
+
+
+def test_gate_decision_matching_expected_revision_passes_and_bumps(
+    admin_client, gate_project, db_session
+):
+    """B#28 CAS：expected_revision 与当前 version 相等 → 拍板生效 + revision 推进。"""
+    _project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G8")
+    current = db_session.scalar(
+        select(Gate.version).where(
+            Gate.project_id == _project["id"], Gate.gate_key == "G8"
+        )
+    )
+
+    response = leader_client.post(
+        f"{gates_url}/G8/decision",
+        json={"result": "pass", "decision": "proceed", "expected_revision": current},
+    )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.json["data"]["status"] == "passed"
+    db_session.expire_all()
+    row = db_session.scalar(
+        select(Gate).where(Gate.project_id == _project["id"], Gate.gate_key == "G8")
+    )
+    assert row.version == current + 1
+    assert row.decided_by_user_id is not None
+
+
+def test_gate_decision_without_expected_revision_legacy_allowed(admin_client, gate_project):
+    """B#28 兼容：不带 expected_revision 的旧客户端照常拍板（version 照常推进）。"""
+    _project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G6")
+
+    response = leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass"})
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.json["data"]["status"] == "passed"
+
+
+def test_gate_decision_rejects_non_integer_expected_revision(admin_client, gate_project):
+    """B#28 形状闸：expected_revision 非正整数（bool/字符串/0）→ 400。"""
+    _project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G6")
+
+    for bad in ("1", True, 0):
+        response = leader_client.post(
+            f"{gates_url}/G6/decision", json={"result": "pass", "expected_revision": bad}
+        )
+        assert response.status_code == 400, response.get_data(as_text=True)
+        assert response.json["error"]["code"] == "invalid_request"

@@ -142,21 +142,39 @@ class NdjsonEventProvider:
 
 
 class ManifestOutputScanner:
-    """回收段产物扫描：output/manifest.json → ArtifactFile 清单。"""
+    """回收段产物扫描：output/manifest.json → ArtifactFile 清单。
+
+    B#2 回执状态面：scan() 返回类型不变（OutputScanner Protocol 兼容），
+    回执判定落 ``receipt_state`` 属性——``ok``（manifest 可解析）/
+    ``no_output``（无 output 目录或零文件=合法零产物任务）/
+    ``files_without_manifest``（output/ 有文件但没写 manifest=回执缺失）/
+    ``manifest_invalid``（manifest 不是合法 JSON 数组=回执写坏）。
+    """
 
     def __init__(self, output_dir: Path) -> None:
         self._output_dir = output_dir
+        self.receipt_state = "ok"
+
+    def _classify_missing_manifest(self) -> str:
+        if not self._output_dir.exists():
+            return "no_output"
+        has_files = any(p.is_file() for p in self._output_dir.rglob("*"))
+        return "files_without_manifest" if has_files else "no_output"
 
     def scan(self) -> list[ArtifactFile]:
         manifest = self._output_dir / _MANIFEST_FILE
         if not manifest.exists():
+            self.receipt_state = self._classify_missing_manifest()
             return []
         try:
             value = json.loads(manifest.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
+            self.receipt_state = "manifest_invalid"
             return []
         if not isinstance(value, list):
+            self.receipt_state = "manifest_invalid"
             return []
+        self.receipt_state = "ok"
         items: list[ArtifactFile] = []
         for entry in value:
             if not isinstance(entry, dict):
@@ -425,6 +443,18 @@ def _finalize(
                 validation_failures.append({"path": relative, "reasons": problems})
 
     failed_validation = bool(validation_failures) and result.status == "completed"
+    # B#2 回执「写错不重做」（收窄面）：任务书要求 output/ 附 manifest.json——
+    # completed + exit 0 + 零声明产物 = 回执缺失/写坏（业务动作已执行、产出
+    # 未被清单追踪），独立终态不进 FAILED_STATUSES ⇒ retry_run 拒同键重跑；
+    # 声明了产物但校验失败（invalid_kind/缺 source_refs/文件丢失）仍走 C-1
+    # 既有合同 failed + retry 恢复（可重试族本就排除外副作用类型）。
+    receipt_missing = (
+        result.status == "completed"
+        and (result.exit_code or 0) == 0
+        and not result.artifacts
+        and getattr(result, "receipt_state", "ok")
+        in ("files_without_manifest", "manifest_invalid")
+    )
     gate_open = False
     l1_path = result.status == "completed" and result.degraded  # 决议①：降级 completed = L1
     with session_factory() as session, session.begin():
@@ -436,7 +466,19 @@ def _finalize(
             and not failed_validation
             and not t2_gate_satisfied(session, run_id=run_id, solution_id=solution_id)
         )
-        run.status = "failed" if (failed_validation or gate_open) else result.status
+        if receipt_missing:
+            # B#2 回执缺失：业务成功但回执没写——独立终态，拒绝同键重跑（业务
+            # 动作不重执行）；人工盘点 output/ 后修复回执或另起任务。
+            run.status = "succeeded_but_receipt_invalid"
+        elif gate_open:
+            # T2 评审门（review_gate_open）：业务面未获放行，维持 failed 终态。
+            run.status = "failed"
+        elif failed_validation:
+            # C-1 既有合同：声明产物校验失败 → failed（retry 族排除外副作用
+            # 类型，重试恢复路径由 test_c1_* 钉住）。
+            run.status = "failed"
+        else:
+            run.status = result.status
         run.token_cost = result.token_cost
         run.duration_ms = result.duration_ms
         run.exit_code = result.exit_code
@@ -447,6 +489,9 @@ def _finalize(
         elif result.status != "completed":
             # 决议②：B 类无产物 → 降级去向 L2 模板填空（自动交付 §3.2「L1 或 L2」取 L2）
             run.fallback_level = "L2"
+        if receipt_missing:
+            run.degraded_reason = "receipt_missing"
+            run.degraded = True
         if failed_validation:
             run.degraded_reason = "artifact_validation_failed"
         elif gate_open:

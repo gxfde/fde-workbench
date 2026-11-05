@@ -58,7 +58,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-G1：gates +evidence_candidates JSON 可空列（任务产物→门禁证据候选，建议性）
 # V3 T-D1：document_generation_jobs +ai_request_id（WB-DEF-6 文档血缘：job 行反查 ai_call_audits）
 # V3 T-J2：background_jobs 状态值域 +cancelled（admin 取消面，纯 CHECK 置换零列重建）
-HEAD_REVISION = "d9f4a7c2e6b1"
+HEAD_REVISION = "b2e8f4a6c9d3"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1063,7 +1063,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    assert len(known) == 35  # 与 inventory revision_count 对齐
+    # 迁移文件全集权威=alembic ScriptDirectory（本轮 b2e8f4a6c9d3 后 = 36）；
+    # v3-workbench-inventory.json 的 revision_count=31 为审计滞后快照，重生成归审计轮（挂账）
+    assert len(known) == 36
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical
@@ -1099,3 +1101,54 @@ def test_stamp_probe_missing_table_rolls_back_connection(engine):
             assert conn.execute(text("SELECT 1")).scalar() == 1
         finally:
             conn.execute(text("RESET search_path"))
+
+
+def _column_names(engine, table: str) -> set[str]:
+    from sqlalchemy import inspect
+
+    return {col["name"] for col in inspect(engine).get_columns(table)}
+
+
+def _agent_status_check_ddl(engine) -> str:
+    return scalar(
+        engine,
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_agent_runs_status'",
+    )
+
+
+def test_p0_code_batch_columns_roundtrip_preserves_projects(alembic_config, engine):
+    """B#1/B#28/B#2 合并迁移（b2e8f4a6c9d3）：两列增量 + 回执终态 CHECK 两向
+    可逆——downgrade 列消失且 CHECK 收紧（回执终态归位 failed），projects 行
+    与既有业务表全程不受影响。"""
+    command.upgrade(alembic_config, "head")
+    assert {"hops"} <= _column_names(engine, "workflow_runs")
+    assert {"lifecycle_version"} <= _column_names(engine, "gates")
+    assert "succeeded_but_receipt_invalid" in _agent_status_check_ddl(engine)
+    ids = seed_user_and_template(engine, username="migration.p0-code-keep")
+    seed_project(engine, ids, project_code="FDE-V3-P0-CODE-KEEP")
+
+    command.downgrade(alembic_config, "d9f4a7c2e6b1")
+
+    assert not {"hops"} & _column_names(engine, "workflow_runs")
+    assert not {"lifecycle_version"} & _column_names(engine, "gates")
+    assert "succeeded_but_receipt_invalid" not in _agent_status_check_ddl(engine)
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-P0-CODE-KEEP'",
+        )
+        == "FDE-V3-P0-CODE-KEEP"
+    )
+
+    command.upgrade(alembic_config, "head")
+
+    assert {"hops"} <= _column_names(engine, "workflow_runs")
+    assert {"lifecycle_version"} <= _column_names(engine, "gates")
+    assert "succeeded_but_receipt_invalid" in _agent_status_check_ddl(engine)
+    assert (
+        scalar(
+            engine,
+            "SELECT project_code FROM projects WHERE project_code='FDE-V3-P0-CODE-KEEP'",
+        )
+        == "FDE-V3-P0-CODE-KEEP"
+    )

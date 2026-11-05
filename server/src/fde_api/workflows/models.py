@@ -152,6 +152,12 @@ class WorkflowRun(Base, TimestampMixin):
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # B#1 跳数熔断（agent-autoloop decide 语义）：跨「重投代际」累加的链长
+    # 计数——resume_run（拍板重投）每次 +1，继承不清零；执行器入口超
+    # MAX_RUN_HOPS 直接 honest failed(hops_exceeded)，封顶自触发链。
+    hops: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
 
 class WorkflowNodeRun(Base, TimestampMixin):

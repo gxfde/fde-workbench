@@ -398,16 +398,16 @@
 
 | 编号 | 名称 | 形态 | 落点 | 闸 |
 |---|---|---|---|---|
-| B#1 | 跳数熔断（workflow 自触发链 hops 上限） | 代码+**迁移** | `workflow_runs` 加 `hops` 列 + 执行器入口 >8 → failed(`hops_exceeded`) + 留痕 + 通知；拍板重投**继承不清零**用例 | **B#1+B#28 合并同一迁移窗口（rebuild+alembic 一次）——需拍板** |
-| B#2 | 回执「写错不重做」 | 代码 | `agents/service.py` 增 `succeeded_but_receipt_invalid` 终态；与 V8 失败终态拒同键重跑的交互写清；repair 按 CLI 能力降级 | 零迁移；zcode 会话能力未核实（待澄清 6.1-4） |
+| B#1 | 跳数熔断（workflow 自触发链 hops 上限） | 代码+**迁移** | `workflow_runs` 加 `hops` 列 + 执行器入口 >8 → failed(`hops_exceeded`) + 留痕 + 通知；拍板重投**继承不清零**用例 | **✅ 已实施（P0 代码级子批 #129）：`workflow_runs.hops` 列（迁移 `b2e8f4a6c9d3`）+ `MAX_RUN_HOPS=8`（resume 重投口 409 拒绝+入口 belt honest failed）+ 双用例（逐代累加继承不清零/字面量播种变异敏感）** |
+| B#2 | 回执「写错不重做」 | 代码 | `agents/service.py` 增 `succeeded_but_receipt_invalid` 终态；与 V8 失败终态拒同键重跑的交互写清；repair 按 CLI 能力降级 | 零迁移；zcode 会话能力未核实（待澄清 6.1-4）。**✅ 核心已实施（#129，收窄面）：`ManifestOutputScanner.receipt_state` 四态分类（ok/no_output/files_without_manifest/manifest_invalid，Protocol 不破）经 `RunResult.receipt_state` 入 `_finalize`——completed+exit0+零声明产物且回执面损坏 → `succeeded_but_receipt_invalid` 独立终态（不进 FAILED_STATUSES ⇒ retry_run 拒同键重跑）+ `agent_runs.status` 列 String(24)→(40)+CHECK 扩（同迁移）+ 五用例（终态/合法零产物不误伤/C-1 兼容钉/干净对照/scanner 五态）；**实施中发现并修正两处计划缺腿**（教训 41）：①首版把声明产物校验失败也折入新终态撞 C-1「failed→retry 恢复」既有合同（I-1 幂等复用同撞）→ 收窄到回执面损坏；②合法零产物任务须与回执缺失可区分 → adapter 面 receipt_state 信号。repair 按 CLI 能力降级档待 zcode 会话能力核实后评估** |
 | B#3 | 审查不执行被审代码（红线） | 文档 | AGENTS.md 红线 +1（未来上 AI 审查时加 CI 断言） | 立规≈0 成本。**✅ 已落盘（P0 文档级子批 #128：AGENTS 红线节第 7 条）** |
-| B#4 | purity 架构测试 | 测试 | pytest：workflows/ 不 import control service/routes 层（环导入实证已存在）、kernel 类模块不读 os.environ/flask、无产品硬编码 | 成本=1 测试文件 |
+| B#4 | purity 架构测试 | 测试 | pytest：workflows/ 不 import control service/routes 层（环导入实证已存在）、kernel 类模块不读 os.environ/flask、无产品硬编码 | 成本=1 测试文件。**✅ 已实施（#129 `tests/test_architecture_purity.py` 四断言：双向环防线/control.service 延迟导入惯例固化/内核零 env·flask/零「蔡工」字面量——落地前实测全绿）** |
 | B#5 | 审批退避提醒 + SLA 统计 | 代码 | 挂起审批按退避序列提醒（复用任务中心，勿新开外发通道）+ 挂起时长统计进 run 详情 | 零迁移 |
 | B#6 | 状态归属与对账框架 | 文档+测试 | 《状态归属与对账》自检清单（project_evidence/ontology_*/workflow_*/documents 四层）+ pytest 断言（候选 confirm 前不物化/快照可重建/指纹不一致拒绝） | 零迁移 |
 | B#21 | 交付效果评测协议 v0（uplift 算分口径） | 文档 | `docs/`：result 字段清单 + G9「上线门」exit_condition「验收线达成」挂接；**不引入任何代码** | 无 oracle 不得出分（`insufficient_data`）；Q1–Q3 影响深度。**✅ 协议已落盘（#128 `docs/architecture/交付效果评测协议-v0.md` §1/§2/§5）；gates.json 种子挂接=接线项归代码级子批同窗口** |
 | B#22 | 门禁判据升格（三锚点+四类反例） | 文档 | 与 B#21 同一份文档一章 + pytest 断言模板（先成文不接线）；实施落点=B#11（不另立判据）；**阈值须我方数据校准，不得照抄上游** | 同 B#21。**✅ 已落盘（#128 同文档 §3；接线归代码级子批）** |
 | B#27 | DSH 适配层决策记录 | 文档 | 写明 `fde-dsh-v1` 是自定协议、官方源码零命中端点；若启用 `FDE_DSH_*` 须自写适配层（lock 八字段+三方合并升级法）；**维持「当前不装」裁决** | 零代码。**✅ 已落盘（#128 `docs/architecture/DSH-适配层决策记录-v1.md`）** |
-| B#28 | 门禁精确 revision CAS + 生命周期版本隔离 | 代码+**迁移** | `decide_gate` 增 `expected_revision` 必填 + `project_gates` 加 `revision`/`lifecycle_version`；版本交叉 409 不推进 revision | **与 B#1 合并迁移窗口——需拍板** |
+| B#28 | 门禁精确 revision CAS + 生命周期版本隔离 | 代码+**迁移** | `decide_gate` 增 `expected_revision` 必填 + `project_gates` 加 `revision`/`lifecycle_version`；版本交叉 409 不推进 revision | **✅ 已实施（#129，按我方 schema 适配）：`expected_revision` **可选**（缺省=旧客户端兼容，version 照常推进）+ 复用既有 `gates.version`（VersionedMixin 在位，总览 revision ≡ 该列零新列）+ 新列 `lifecycle_version`（同迁移）+ 行锁（_load_gate with_for_update 既有）+ 版本复核 409 `gate_revision_conflict` + 四用例（落后冲突零变更/命中生效推进/缺省兼容/形状 400）；**桌面 expected_revision 接线归主树品牌轮落定后**（GateBoard.tsx 在冻结区） |
 | B#29 | 验证/验收合同契约（五点） | 文档 | 并入 B#21 一章（G8 conditional_pass / G9 有条件接受语义对齐）；schema 落 B#23 夹具期 | 与 B#21 同期。**✅ 已落盘（#128 同文档 §4）** |
 
 ### P1 第二批（总览建议 1–2 月窗口，登记不展开）

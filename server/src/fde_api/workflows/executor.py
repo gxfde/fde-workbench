@@ -74,6 +74,9 @@ logger = logging.getLogger(__name__)
 WORKFLOW_JOB_TYPE = "workflow.run"
 TERMINAL_RUN_STATUSES = ("succeeded", "failed", "cancelled")
 TERMINAL_NODE_STATUSES = ("succeeded", "failed", "skipped", "cancelled")
+# B#1 跳数熔断（agent-autoloop decide 语义）：重投代际链长上限——resume_run
+# 每次拍板重投 hops+1（继承不清零），入口超限 honest failed(hops_exceeded)。
+MAX_RUN_HOPS = 8
 # 四类节点全部落地（T-W3：call/skill；T-W4：agent/human_approval）；守卫防未来类型漏实现
 SUPPORTED_NODE_TYPES = ("call", "skill", "agent", "human_approval")
 # CR-022：节点被取消后在途派发返回的稳定标记（node.error / output_json 键）
@@ -338,6 +341,15 @@ def resume_run(*, actor: User, project_id: str, run_id: str) -> dict[str, Any]:
                 "只有失败的运行可以恢复（成功/取消为终态；等待审批的运行请先拍板或取消）。",
                 409,
             )
+        # B#1 跳数熔断：拍板重投是「重投代际」边——继承不清零，超限拒绝再投
+        # （人工排查触发链后应另起新运行，而不是无限恢复同一条链）。
+        if run.hops >= MAX_RUN_HOPS:
+            raise WorkflowRunError(
+                "hops_exceeded",
+                f"重投代际已达上限（{MAX_RUN_HOPS}），熔断。请人工排查触发链后另起新运行。",
+                409,
+            )
+        run.hops += 1
         nodes = ordered_nodes(session, run)
         reset = 0
         for node in nodes:
@@ -447,6 +459,20 @@ def _run_workflow_job(job: BackgroundJob) -> None:
     run_workflow_run(job.target_id)
 
 
+def _fail_run_if_hops_exceeded(run_id: str) -> None:
+    """B#1 跳数熔断入口复核（outbox 上下文无 actor，语义同 worker 丢失收口：
+    error 落行即留痕，resume 重跑面由 resume_run 的 hops 闸拒绝）。"""
+    with db.session() as session, session.begin():
+        run = session.get(WorkflowRun, run_id)
+        if run is None or run.status in TERMINAL_RUN_STATUSES:
+            return
+        if run.hops <= MAX_RUN_HOPS:
+            return
+        run.status = "failed"
+        run.error = f"hops_exceeded:重投代际超上限（{MAX_RUN_HOPS}），熔断。"
+        run.finished_at = utcnow()
+
+
 def _fail_run_on_worker_loss(session: Session, job: BackgroundJob) -> None:
     """reconcile 放弃（尝试耗尽/不可恢复）时把 run 与悬挂节点推到终态。
 
@@ -475,6 +501,9 @@ def run_workflow_run(run_id: str) -> None:
     无任何进展且无人等待 → run failed（调度死锁防御）。迭代上限 = 全图最大尝试数 + 余量。
     """
     _recover_interrupted(run_id)
+    # B#1 跳数熔断（belt）：入口复核重投代际链长——超限 honest failed，不再
+    # 分派任何节点（resume_run 已在重投口拒绝，此处兜在途/遗留态）。
+    _fail_run_if_hops_exceeded(run_id)
     dag_nodes = _load_version_dag(run_id)
     specs = {str(node["key"]): node for node in dag_nodes}
     order = _topo_order(dag_nodes)

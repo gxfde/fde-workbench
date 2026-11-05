@@ -618,6 +618,13 @@ class Gate(Base, TimestampMixin, VersionedMixin):
     # proposed_at}；候选只是建议（advisory）——claim_status 与门禁状态一概不动，
     # 人工经既有提交闸采纳后按指纹剪除。旧行 NULL → 读时合并 []（零破坏）。
     evidence_candidates: Mapped[list[Any] | None] = mapped_column(JSON)
+    # B#28 生命周期版本隔离（FF stage 语义）：门禁语法代际，现役=1；将来模板
+    # 换 grammar 时旧记录不接受新入口、版本交叉操作失败且不改 version。
+    # CAS 拍板（expected_revision 复核）复用上方 VersionedMixin.version 作
+    # revision——总览 B#28 的 revision ≡ 本表既有 version 列，不另开重复列。
+    lifecycle_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
 
     project: Mapped[Project] = relationship(back_populates="gates")
 
