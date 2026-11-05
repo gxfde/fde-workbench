@@ -49,6 +49,10 @@ server/.fde-storage/
 # 平行会话工作目录
 .workbuddy/
 
+# 本地测试库连接串（含明文数据库口令，仅存本机工作区；2026-11-06 补）
+.fde_test_db_url
+.fde_test_db_url.*
+
 # 本机运行日志（桥采集等），永不入库
 logs/
 desktop/release-tmp/
