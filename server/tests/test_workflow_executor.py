@@ -1077,6 +1077,69 @@ def test_write_node_idempotency_survives_resume(db_session, settings, monkeypatc
 # ---------------------------------------------------------------------------
 
 
+def test_cancelled_node_records_inflight_dispatch_result(db_session, settings):
+    """CR-022 补呈现通道：节点在派发后被取消，在途外呼/AI 调用返回的结果
+    不得被终态守卫静默丢弃——终态不复活（仍 cancelled），但「确实执行了」
+    落到 output_json（标记+产物+action_id 指针）+ node.error 稳定标记
+    （桌面 WorkflowConsole 错误列可见，零桌面改动即有呈现）。"""
+    from fde_api.workflows import executor as executor_module
+
+    leader = make_user(db_session, "project_lead")
+    project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")
+    definition = _make_definition(
+        db_session,
+        leader,
+        project,
+        _node("gather", output="subjects"),
+        _node("draft", ["gather"]),
+        publish=True,
+    )
+    run, _ = _start(db_session, leader, project, definition)
+
+    cancelled = cancel_run(actor=leader, project_id=project.id, run_id=run.id)
+    assert cancelled["cancelled"] is True
+
+    # 在途 call 节点返回成功（写类操作带 action_id → 可回 api_actions 反查）
+    executor_module._settle_node_success(
+        run.id,
+        "draft",
+        {"action_id": "act-cr22-1", "http_status": 200, "result": {"ok": True}},
+    )
+    # 在途 AI 调用（skill 形态）返回失败
+    executor_module._settle_node_failure(
+        run.id,
+        "gather",
+        1,
+        {"type": "skill", "ref": "builtin.summary@1"},
+        executor_module._NodeFailure("ai_timeout", "上游超时。", retryable=False),
+    )
+
+    db_session.expire_all()
+    by_key = _node_map(db_session, run.id)
+    draft = by_key["draft"]
+    assert draft.status == "cancelled"  # 终态不复活
+    assert draft.output_json["cancelled_after_dispatch"] is True
+    assert draft.output_json["dispatch_outcome"] == "succeeded"
+    assert draft.output_json["action_id"] == "act-cr22-1"
+    assert draft.output_json["dispatch_result"]["result"] == {"ok": True}
+    assert draft.error == "cancelled_after_dispatch"
+
+    gather = by_key["gather"]
+    assert gather.status == "cancelled"
+    assert gather.output_json["dispatch_outcome"] == "failed"
+    assert "ai_timeout" in gather.output_json["dispatch_result"]["error"]
+    assert gather.error == "cancelled_after_dispatch"
+
+    # 序列化面可见（API 消费方零改动即得诚实呈现）
+    serialized = {n["node_key"]: n for n in cancelled["run"]["nodes"]}
+    assert serialized["draft"]["output_json"] is None  # 取消当时尚无在途结果
+    detail = executor_module.serialize_run(
+        db_session.get(WorkflowRun, run.id), list(_node_map(db_session, run.id).values())
+    )
+    detail_by_key = {n["node_key"]: n for n in detail["nodes"]}
+    assert detail_by_key["draft"]["output_json"]["cancelled_after_dispatch"] is True
+
+
 def test_cancel_run_keeps_succeeded_and_cancels_pending(db_session, settings):
     leader = make_user(db_session, "project_lead")
     project = _persist_project(db_session, leader, code=f"WE{uuid4().hex[:4]}")

@@ -76,6 +76,8 @@ TERMINAL_RUN_STATUSES = ("succeeded", "failed", "cancelled")
 TERMINAL_NODE_STATUSES = ("succeeded", "failed", "skipped", "cancelled")
 # 四类节点全部落地（T-W3：call/skill；T-W4：agent/human_approval）；守卫防未来类型漏实现
 SUPPORTED_NODE_TYPES = ("call", "skill", "agent", "human_approval")
+# CR-022：节点被取消后在途派发返回的稳定标记（node.error / output_json 键）
+CANCELLED_AFTER_DISPATCH_MARKER = "cancelled_after_dispatch"
 # 审批材料体上限（与 control.service.create_dsh_approval_request 同口径）
 _APPROVAL_PAYLOAD_LIMIT_BYTES = 64_000
 # 重试退避（指数，封顶）；测试里 monkeypatch 基数即可归零
@@ -766,6 +768,27 @@ def _attach_gate_evidence_marker(
     )
 
 
+def _record_cancelled_after_dispatch(
+    node: WorkflowNodeRun, payload: Any, *, outcome: str
+) -> None:
+    """CR-022：在途派发于节点被取消之后返回——「已执行外呼不回收（诚实呈现）」
+    从账本事实升级为节点面可读事实：终态**不复活**（节点仍是 cancelled，
+    FV-F1「断链不静默 done」不破），但把「确实执行了」落到 output_json：
+    标记 + 派发产物 + action_id 指针（写类操作可回 api_actions 反查）。
+    node.error 同时落稳定标记——桌面 WorkflowConsole 的「错误」列直接可见，
+    零桌面改动即有呈现通道。
+    """
+    result = payload if isinstance(payload, dict) else {"value": payload}
+    action_id = result.get("action_id") if isinstance(result, dict) else None
+    node.output_json = {
+        "cancelled_after_dispatch": True,
+        "dispatch_outcome": outcome,
+        "action_id": action_id,
+        "dispatch_result": result,
+    }
+    node.error = CANCELLED_AFTER_DISPATCH_MARKER
+
+
 def _settle_node_success(run_id: str, key: str, payload: dict[str, Any]) -> None:
     """tx B：产物先落表再前进（崩溃恢复锚点）。"""
     with db.session() as session, session.begin():
@@ -774,7 +797,12 @@ def _settle_node_success(run_id: str, key: str, payload: dict[str, Any]) -> None
                 WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
             )
         )
-        if node is None or node.status not in ("pending", "ready", "running"):
+        if node is None:
+            return
+        if node.status not in ("pending", "ready", "running"):
+            # CR-022：节点在派发后被取消——在途成功返回不得静默丢弃，诚实记录
+            if node.status == "cancelled":
+                _record_cancelled_after_dispatch(node, payload, outcome="succeeded")
             return
         node.status = "succeeded"
         node.output_json = payload
@@ -804,7 +832,17 @@ def _settle_node_failure(
                 WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
             )
         )
-        if node is None or node.status not in ("pending", "ready", "running"):
+        if node is None:
+            return
+        if node.status not in ("pending", "ready", "running"):
+            # CR-022：节点在派发后被取消——在途失败同样不得静默丢弃（外呼可能
+            # 已产生部分效果）；记录「取消后派发失败」+ 失败原因
+            if node.status == "cancelled":
+                _record_cancelled_after_dispatch(
+                    node,
+                    {"error": f"{failure.code}:{failure.message}"},
+                    outcome="failed",
+                )
             return
         node.error = f"{failure.code}:{failure.message}"
         if will_retry:

@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-022 补呈现通道：取消后在途派发结果不再静默丢弃（2026-11-05）
+
+### 服务端（零迁移零路由零桌面改动；用户拍板「补呈现通道」）
+
+- **修复（CR-022）**：节点在派发后被取消时，在途外呼/AI 调用返回的结果被终态 guard（`node.status∉(pending,ready,running)`）静默丢弃——api_actions 留有成功记录但节点 `output_json=null`，「已执行外呼不回收（诚实呈现）」承诺无展示通道。现 `_settle_node_success`/`_settle_node_failure` 拆分 guard：`node is None` 早退不变；状态不在集合且 **== "cancelled"** 时落诚实记录——**终态不复活**（节点仍 cancelled，FV-F1「断链不静默 done」不破），`output_json = {cancelled_after_dispatch: True, dispatch_outcome: "succeeded"|"failed", action_id, dispatch_result}`（产物真值 + **action_id 指针**——写类操作可回 api_actions 反查）+ `node.error = "cancelled_after_dispatch"` 稳定标记（桌面 WorkflowConsole「错误」列直接可见 ⇒ 零桌面改动即有呈现通道）。取消的 run 不挂 T-W7 门禁证据候选（不进 marker 挂载点）。
+- 测试与口径：`test_cancelled_node_records_inflight_dispatch_result`（公开 cancel_run 取消后驱动 settle 点 = 在途返回；断言节点仍 cancelled/未复活 + output_json 三键 + action_id + 序列化面可见）。全仓 pytest **+1**；台账 CR-022 → fixed。
+
 ## [未发布] — goal-c CR-021 行锁修复：本体变更集三翻转入口串行化（2026-11-05）
 
 ### 服务端（零迁移零路由零桌面改动；用户拍板「修复：CAS 状态翻转」）

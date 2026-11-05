@@ -42,7 +42,7 @@
 | CR-019 | P1 | **fixed（c5 PR）** | `resume_run` 对**全部** failed/skipped 节点 attempt 归零——agent 节点幂等键 `wfnode-{行id}:{attempt}` 撞回 `:1` 失败终态（agents V8 拒同键重跑）→ agent 节点每次 resume 确定性 409，永远救不活（docstring「resume 开新代际」与实现矛盾，c4 观察项②） | workflows/executor.py:341-352 | c5 |
 | CR-020 | P1 | **fixed（c5 PR）** | 写类 call 节点结果未确认（`uncertain`=started 无 finished；`cancelled`）被折叠为节点 `succeeded`——FV-F1「断链不静默 done」红线虚高；同键去重在 api_actions 层兜底不二次外呼，但节点层「成功」断言失真 | workflows/executor.py:885-893 | c5 |
 | CR-021 | P2 | **fixed（CR-021 修复轮，用户拍板 2026-11-05）** | 本体变更集 confirm/reject 双 confirm 写偏差：`confirm_change_set`/`reject_change_set`/`submit_change_set` 状态翻转**无行锁无 CAS**（`row.status != X` 先读后写），两拍板人并发 confirm 可双双物化（物化原语自身幂等键+UNIQUE 兜底不炸，但 409 语义失守 + 双份事件） | ontology/service.py:1206/1275/1066 | c5 |
-| CR-022 | P2 | open（登记不修） | cancel_run 与 in-flight call/skill 分派写偏差：cancel 提交 run=cancelled 后，已发出的外呼/ AI 调用返回成功被节点 guard（node.status∉pending/ready/running）静默丢弃——api_actions 留有成功记录但节点 output_json=null，「已执行外呼不回收（诚实呈现）」承诺面缺展示通道 | workflows/executor.py:301-322 vs :714-727 | c5 |
+| CR-022 | P2 | **fixed（CR-022 修复轮，用户拍板 2026-11-05）** | cancel_run 与 in-flight call/skill 分派写偏差：cancel 提交 run=cancelled 后，已发出的外呼/ AI 调用返回成功被节点 guard（node.status∉pending/ready/running）静默丢弃——api_actions 留有成功记录但节点 output_json=null，「已执行外呼不回收（诚实呈现）」承诺面缺展示通道 | workflows/executor.py:301-322 vs :714-727 | c5 |
 | CR-023 | P3 | open（登记不修） | cancel_run/resume_run 无行锁无 CAS：双 admin 并发 cancel 双份事件+双 outbox（队列去重兜底）；cancel 与 decide 竞争可产生「cancelled run 下 succeeded 审批节点」矛盾态（分派层对终态 run 早退，无一致性损坏） | workflows/executor.py:307-322/331-361 | c5 |
 | CR-024 | P3 | open（登记不修） | 调研导入同文件多级造数：`_load_parent_candidates`（imports.py:420）在行创建前扫描父级候选——文件内新建的部门/流程对本批后续行 role 的「父级」列不可见 → preview 零报错、commit 确定性 `parent_not_found`（非静默错数据，preview 体验缺口） | research/imports.py:420/1445 | c5 |
 | CR-025 | P3 | open（登记不修） | `update_definition_dag`（definition_service.py:525）零 HTTP 路由——已发布定义无修订出口（`publish_definition` 对 published 行 409 `already_published` 且无编辑路由），docstring 承诺「修改定义会自动开新草稿版本」面缺失；模块 docstring 与路由面漂移 | workflows/definition_service.py:525-551 | c5 |
@@ -343,14 +343,15 @@
 
 ## CR-022 · P2 · cancel_run 与 in-flight call/skill 分派写偏差（外呼成功被静默丢弃）
 
-- **状态**：open（登记不修；「诚实呈现」承诺面缺口，概率毫秒窗口）
+- **状态**：confirmed → **fixed（CR-022 修复轮，2026-11-05，用户拍板「补呈现通道」）**
 - **file:line**：`workflows/executor.py:301-322`（`cancel_run` 提交 run=cancelled+节点 cancelled）vs `:714-727`（`_settle_node_success` guard `node.status∉(pending,ready,running)` 早退）。
 - **意图锚**：`cancel_run` docstring L302「已执行外呼不回收（诚实呈现）」。
 - **触发路径**：worker 正处 `_dispatch_call`（`execute_api` HTTP in-flight L846-865）或 `execute_ai_prompt` in-flight（L967-974）时，另一请求 `cancel_run` 提交 → 外呼/AI 调用**已真实发生** → worker 返回后 `_settle_node_success` reload，node=cancelled（不在 guard 白名单）→ 成功产物**静默丢弃**（output_json=null）→ api_actions 留有成功记录但节点面看不到，「诚实呈现」承诺缺展示通道。agent 节点安全（durable AgentRun 实体+独立 settle 复查），call/skill 无等价锚。
 - **驳斥记录**：「guard 早退是设计（run 已取消语义）」——对节点面成立，但 api_actions 成功行与节点 cancelled 面矛盾，审计者无从判断该外呼是否真发生；「窗口毫秒级」——成立，故 P2 不 P1。
 - **证据等级**：E1（子代理首报，行号直读；未实测并发窗口）。
 - **建议修法**：`_settle_node_success` 对 cancelled 节点补一条「外呼已成功但 run 已取消」的 OperationEvent 或 output_json 落 `dropped_after_cancel=true`；归后续轮。
-- **修复 PR**：—
+- **修复（2026-11-05，用户拍板「补呈现通道」）**：`_settle_node_success`/`_settle_node_failure` 的终态 guard 拆分——`node is None` 早退不变；状态不在 (pending,ready,running) 且 **== "cancelled"** 时走新助手 `_record_cancelled_after_dispatch`：**终态不复活**（节点仍 cancelled，FV-F1「断链不静默 done」不破），但落 `output_json = {cancelled_after_dispatch: True, dispatch_outcome: succeeded|failed, action_id, dispatch_result}`（产物真值 + **action_id 指针**→写类操作可回 api_actions 反查）+ `node.error = "cancelled_after_dispatch"` 稳定标记（桌面 WorkflowConsole「错误」列直接可见 ⇒ **零桌面改动即有展示通道**）。**取消的 run 不挂 T-W7 门禁证据候选**（提前 return，不进 `_attach_gate_evidence_marker`）。失败路径同样记录（外呼可能已产生部分效果，标 dispatch_outcome=failed + 失败原因）。测试 `test_cancelled_node_records_inflight_dispatch_result`：公开 cancel_run 取消后直接驱动 settle 点（=在途返回），断言节点仍 cancelled/未复活 + output_json 三键 + action_id + 序列化面可见。
+- **修复 PR**：见 CHANGELOG（CR-022 修复轮）。
 
 ## CR-023 · P3 · cancel_run/resume_run 无行锁/CAS（双 admin 并发生命周期写）
 
