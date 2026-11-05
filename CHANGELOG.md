@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P0 先行批收尾：状态归属与对账框架 + G9 出门口径接线（2026-11-06）
+
+### 行为变更（零迁移；server 变更 ⇒ 一次 rebuild）
+
+- **B#6 状态归属与对账框架**：新增 `docs/architecture/状态归属与对账-v1.md`（四层归属总表 + C1–C10 自检清单）与 `server/tests/test_state_ownership_reconciliation.py` 六条跨层对账钉——候选（任务/workflow 两腿）挂接后 `project_evidence` 零行且清单 claim_status 不动；物化唯一入口 = `submit_gate_evidence` 真人提交闸；已领清单项 (source_uri, content_hash, evidence_id) 与被引证据行逐位一致；workflow 版本行 `dag_sha256(dag_json)` 重算 == 落库 `content_sha256`（二次发布不污染已固定版本，run 固定 (definition_id, version)）；documents 快照剥 `captured_at` 后逐位确定；ontology 变更集 base 指纹不符 confirm 409 零物化。六钉逐一变异验证（红→还原→绿）。
+- **B#21 G9 出门口径接线（#128 挂账清偿）**：`server/seeds/gates.json` G9 `exit_condition` 挂接评测协议 §5 冻结公式「验收线达成 ≔ uplift_bounded ≥ 0.8 ∧ incidents = ∅ ∧ 三锚四反例全过」+ 无 oracle → `insufficient_data` 不得出分 + 协议文档指针；原五项出门口径逐字保留。种子重生成覆盖由接线钉守护（红=须重挂）；存量 Gate 行不改，新项目懒实例化即得新口径（模板漂移由 T-G2 `template_outdated` 呈现，属设计行为）。
+- **口径校正**：#130 曾漏改 AGENTS 口径行迁移头（pytest 行已推进而迁移头未随），本轮顺带校正为 `b2e8f4a6c9d3`（36 rev）。
+
+### 口径
+
+- 服务端 pytest **1967 收集 = 1961 passed + 6 skipped**（+6）；mypy 基线 279/104 不变；vitest 787 不变；105 表 / 迁移头 `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 不变。
+
 ## [未发布] — V3 P0 先行批·代码级子批：跳数熔断 + 门禁 revision CAS + 回执终态 + purity 架构测试（2026-11-05）
 
 ### 行为变更（合并迁移 `b2e8f4a6c9d3`——一次 rebuild + alembic upgrade head）

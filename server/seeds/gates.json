@@ -20,7 +20,8 @@
       "SopNode 不存 T 代号（SOP 横切线 T1–T4 与设计文档开工触发 T1–T3 同码不同义，刻意排除）",
       "segment 为抽取器按 v0.3.2 规则归类（售前/交付/交付后/横切），P1 建模时可复核",
       "gates.json 是门禁定义模板（含证据清单），Gate 表按 project 实例化时引用",
-      "goal-r3 P1-5：gates 增 applicable_industries（null=全行业通用；行业专属门禁随行业模板库 A7 扩展时填充）"
+      "goal-r3 P1-5：gates 增 applicable_industries（null=全行业通用；行业专属门禁随行业模板库 A7 扩展时填充）",
+      "B#21（2026-11-06）：G9 exit_condition 手工挂接评测协议机器可算化公式——extract-sop-map.py 重生成会覆盖此字段，由 test_state_ownership_reconciliation.py 钉住（重生成后须重挂）"
     ],
     "warnings": []
   },
@@ -214,7 +215,7 @@
       "gate_key": "G9",
       "gate_name": "上线门",
       "node_key": "S10",
-      "exit_condition": "Pilot→Production 子检查五项 + 验收线达成 + 回滚演练过 + 客户侧独立跑通 + 成本护栏在位",
+      "exit_condition": "Pilot→Production 子检查五项 + 验收线达成 ≔ uplift_bounded ≥ 0.8 ∧ incidents = ∅ ∧ 三锚四反例全过（机器可算化，B#21；无 oracle → insufficient_data 不得出分——口径=docs/architecture/交付效果评测协议-v0.md §1/§3/§5）+ 回滚演练过 + 客户侧独立跑通 + 成本护栏在位",
       "evidence_checklist": [
         "生产环境",
         "Runbook",
