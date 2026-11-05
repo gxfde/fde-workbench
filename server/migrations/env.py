@@ -28,7 +28,12 @@ from fde_api.control import model_preferences, weixin_models, chat, lcsc_skills 
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # CR-041：fileConfig 默认 disable_existing_loggers=True —— 它会把「导入期创建的
+    # 模块级 logger」（logging.getLogger(__name__)，如 workflows/executor.py）整体置
+    # disabled=True，于是同一测试会话内 caplog 对这些 logger 永远空捕（此前只能
+    # 逐测试显式解禁，属基建缺陷而非业务行为）。显式关闭该行为：只重配 alembic
+    # 自身的 logger，不动已存在的模块级 logger。
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 settings = config.attributes.get("settings") or Settings()
 target_metadata = Base.metadata

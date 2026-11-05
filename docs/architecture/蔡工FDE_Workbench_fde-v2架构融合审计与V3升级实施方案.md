@@ -141,6 +141,7 @@ flowchart TB
 | EXTEND | projects/gate_service.py、projects/task_service.py、solutions/service.py、agents/service.py、agents/tools.py、control/{models,extensions_service,builtin_skills,mcp_gateway,api_catalog,scheduler,service}.py、research/{subject_service,models,imports}.py、documents/{snapshots,ai_content,generator}.py、jobs/{outbox,worker,handlers,reconcile}.py、ai/{ai_server_client,ai_tool_loop}.py、bridge/sync.py、app.py（新蓝图） | 各任务 |
 | 迁移 | server/migrations/versions/ 新增 4 个 revision（evidence；ontology×2；workflow×2；skill 扩列——按发布列车分批） | 各任务 |
 | 不触碰 | workbench/models.py 既有列、guidance/translator 全链、bridge 投影语义、dispatch、meetings、DSH 客户端协议 | 兼容边界 |
+| 意图锚指针（不改造） | docs/SES发信模块-G9.md（mailing 发信模块：默认整体关闭 + 启用清单）、docs/goal-d13-交付工作台.md 与 docs/goal-d14-交付工作台.md（translator 管道切 kimi-k3 与独立槽位）、docs/goal-d1-交付工作台.md 与 docs/goal-d2-交付工作台.md（guidance 预调研/确认流与 P0 四指标埋点） | CR-011：三包意图锚集中可查位置（只补指针，不动三包实现面） |
 
 ## 14. 数据表和迁移设计
 

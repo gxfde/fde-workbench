@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|
 | CR-001 | P1 | **fixed（c8 PR）** | 红线①「改名只改这一个文件」被 5 处硬编码产品名证伪→双侧单点来源（桌面 `shared/brand.ts` + 服务端 `config.DEFAULT_PRODUCT_NAME`）+ 静态闸防复发 | 见详情 | c1 |
 | CR-002 | P2 | **fixed（c8 PR，根除）** | 共享测试库对外来迁移链戳无自愈，worktree 会话互踩→全量 E ⇒ conftest 加外来戳检测（读 alembic_version 戳 ∉ 本树迁移文件 revision 集→`DROP SCHEMA public CASCADE` 重建再 upgrade head） | server/tests/conftest.py:131 | c1 |
-| CR-003 | P3 | open | V3 审计报告 §20 实施跟踪停更于 T-S1（缺 T-S2/T-W6 注记） | 审计报告 §20 | c1 |
+| CR-003 | P3 | open（挂账·待并发回滚轮落定） | V3 审计报告 §20 实施跟踪停更于 T-S1（缺 T-S2/T-W6 注记）——补注记本身要逐轮核对「哪些轮次仍在基线上」，并发会话在途回滚轮正在撤 T-W7/T-I1 等轮次，此刻补即写即错，故挂账待回滚轮落定后一次性补 | 审计报告 §20 | c1 |
 | CR-004 | P3 | open | AGENTS.md 口径数字滞后于 #88 实测（293/1830/732 vs 295/1831/实测） | AGENTS.md 口径行 | c1 |
 | CR-005 | P1 | fixed | workflow skill 节点消费面缺「public∨owner」与「capabilities⊆allowed」两闸（agent-policy-v1:67 明文两闸） | workflows/executor.py `_dispatch_skill` | c2 |
 | CR-006 | P2 | **fixed（统一入账轮）** | skill 节点 AI 消费绕过双预算闸（agent_monthly_budget 仅拦 agent run；DSH 主路径记账面 NEEDS-EVIDENCE） | agents/service.py:813 / ai/deepseek.py:126 | c2 |
@@ -32,7 +32,7 @@
 | CR-008 | P1 | fixed | signoff「同方案至多一个 pending」无并发防线：SELECT-then-INSERT 无行锁/无部分唯一约束，双 run 并发 `_finalize` 可双插 pending | agents/signoff.py:30-48 / agents/models.py:216-231 | c3 |
 | CR-009 | P2 | fixed | G8-stop 结算联动 `flag_g8_stop_settlement` 零测试载体（gate_service:504 调用点，tests 全仓 grep 命中 0） | projects/payment_service.py:347-374 | c3 |
 | CR-010 | P1 | fixed | quote_service 数值防御不自洽：deviation 先落库后 400 检查（Numeric(7,4) 可被 10⁵ 倍偏差击穿→500）、create 侧 cash_cost 无 MAX 上限、finalize 同型 | projects/quote_service.py:292 / 527 / 638 | c3 |
-| CR-011 | P3 | open | mailing/translator/guidance 三包意图锚分散 4 份文档，V3 主报告无集中裁决行（NEEDS-EVIDENCE 定级，倾向 P3 文档补齐） | V3 审计 §13 / 各 goal-d 台账 | c3 |
+| CR-011 | P3 | **fixed（文档轮）** | mailing/translator/guidance 三包意图锚分散 4 份文档，V3 主报告无集中裁决行 → §13 补「意图锚指针」行（mailing→SES发信模块-G9.md；translator→goal-d13·d14；guidance→goal-d1·d2），只补指针不动实现面 | V3 审计 §13 / 各 goal-d 台账 | c3 |
 | CR-012 | P1 | fixed（PR #103 已合并 `c8aa08a`） | `retry_run` 绕过平台月度预算闸：start 有 `agent_monthly_budget` 闸（service.py:815），retry（925-1005）只查家族/退避/试点，未重判月度闸 → 月预算用满后仍可用 retry 发新 run | agents/service.py:925 | c4 |
 | CR-013 | P2 | **fixed（CR-013 修复轮）** | `record_skill_usage`（skill 节点，executor.py:964）无 try/except 包裹：计数微事务自带提交，但调用点若抛 DB 异常 → 被 `_execute_node` 兜底 catch 为 dispatch_crashed(retryable=True) → 已成功那次 AI 调用被丢弃重跑（双份 AI 成本）+ 节点误标 failed，违反 T-S2「失败不计」对称语义 | workflows/executor.py:960-966 | c4 |
 | CR-014 | P1 | **fixed（c5 PR）** | `resume_run` 后 human_approval 节点仍复用 stale 审批键：approval 被 reject/expired 后节点 failed，resume 回 pending 但 `_dispatch_human_approval` 仍按旧键 reuse 已终态审批 → 节点再次 waiting 挂死 | workflows/executor.py:1058 | c4 |
@@ -55,13 +55,13 @@
 | CR-032 | P2 | open（登记，T-O2b 桌面同步面） | 桌面调研侧 subject_type 值域钉死内置五类（`RESEARCH_SUBJECT_TYPES`），服务端 T-O2b 已开放「内置∪注册表 active−project 根」：注册类型落库后桌面**读路径**（projectRuntimeValidation/runtimeValidation 五类守卫）整体校验失败 → 调研 tab 全不可读；写路径（导入/定义/表单 builder）注册类型不可选 | desktop/…/research/{types.ts:1,projectRuntimeValidation.ts:17,66,runtimeValidation.ts:48,ResearchImportDialog.tsx:11,ResearchDefinitionEditor.tsx:487/1009,ProjectResearchFormBuilder.tsx:233} | c7 |
 | CR-033 | P3 | open（登记） | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
 | CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
-| CR-035 | P3 | open（登记） | GlossaryPage 术语搜索每键入触发全量重取且无序列/取消守卫：后发先至旧响应覆盖新结果 + `setLoading` 反复清空闪空（单租户 127.0.0.1，乱序窗口极小，纯体验） | desktop/…/ontology/GlossaryPage.tsx:112-143 | c7 |
+| CR-035 | P3 | **fixed（CR-035 轮）** | GlossaryPage 术语搜索无序列守卫 → 加 `sequence` ref（旧响应丢弃，只最新一次可落表）+ 首屏之外不再整页 loading（**附带修掉「搜索框被卸载」**：改前每次按键后整页换成 loading 文案，搜索框随之卸载、焦点丢失，无法连续输入——比原登记的「闪空」更重） | desktop/…/ontology/GlossaryPage.tsx | c7 |
 | CR-036 | P3 | open（登记） | ResearchWorkspace 导出轮询 effect 无序列守卫（同文件 `loadResearch` 有 `sequence`、`ProjectDocuments` 有 `sequenceRef`，唯此缺）：在途 poll 期间表单新增导出 → 旧闭包 stale `active` 快照回写可让已完成条目「复活」为 pending（下轮自愈） | desktop/…/research/ResearchWorkspace.tsx:248-287 | c7 |
 | CR-037 | P3 | open（登记） | `ResearchOpportunity.tsx`（193 行：AI 机会删除/画像编辑/表单联动 + `validateOpportunityProfile` 7 条校验 + 错误码映射）零 vitest 覆盖；T-W6 三新页反而各有测试 | desktop/tests/renderer/（无 opportunityProfile 命中） | c7 |
 | CR-038 | P3 | open（登记，CR-007 同型残留） | `new-project.test.tsx:279` `expect(location.hash).toBe(…)` 同步读——创建成功路径当前同步写 hash 不翻车，但一旦 hash 写异步化即复发（与 CR-007 修复前同型），改 `waitFor` 一行 | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
 | CR-039 | P3 | open（登记） | `gui-harness/shots.mjs` 13 页走查未含 T-W6 三面（WorkflowConsole/GlossaryPage 为项目详情子 tab 需真实 fixture、SkillVersionsPage 为 #extensions 内展开子视图，默认截图态不展开）——功能面已有三 vitest 兜住，纯视觉走查缺口 | desktop/gui-harness/shots.mjs:19-34 | c7 |
-| CR-040 | P3 | open（登记） | GlossaryPage `TERM_STATUS_LABEL` 含 `candidate/retired` 键但服务端 `TERM_STATUSES=(draft,confirmed,superseded,merged)` 无此二值、反缺 `draft/superseded` → fallback 原值回显：术语表状态列出现英文 draft/superseded，中文「候选」「已退役」永不显示（T-W6 新代码自带小口径漂移） | desktop/…/ontology/GlossaryPage.tsx:50-55/67-69 | c7 |
-| CR-041 | P3 | open（登记不修，CR-013 轮发现） | alembic `env.py:31` `fileConfig(config.config_file_name)` 默认 `disable_existing_loggers=True`，而 db_session fixture 每测试 downgrade/upgrade → 导入期创建的模块级 logger（`executor.py:72` 等**全部** `logging.getLogger(__name__)`）测试会话内全量 `disabled=True` → caplog 对这些 logger 永远空捕；lazy `getLogger` 调用点（rate limiter 等）不受影响。CR-013 修复轮测试被迫显式解禁（沿 test_storage_contract oss2 先例） | server/migrations/env.py:31 + tests/conftest.py:131 | c13 |
+| CR-040 | P3 | **fixed（CR-040 轮）** | GlossaryPage `TERM_STATUS_LABEL` 值域漂移 → 对齐服务端 `TERM_STATUSES=(draft,confirmed,superseded,merged)`（删 candidate/retired，补 draft→草稿 / superseded→已取代），状态列不再回显英文原值 | desktop/…/ontology/GlossaryPage.tsx | c7 |
+| CR-041 | P3 | **fixed（CR-041 轮）** | alembic `env.py` `fileConfig` 默认 `disable_existing_loggers=True` 把导入期创建的模块级 logger 全量置 disabled → caplog 永远空捕 → env.py 显式 `disable_existing_loggers=False`（一行；生产不受影响＝迁移独立进程）+ NEW 专项测试钉住 | server/migrations/env.py:31 | c13 |
 
 ---
 
@@ -238,7 +238,8 @@
 - **驳斥记录**：「§13 不触碰行已够」——部分成立：不触碰是边界声明不是意图锚；三包各自独立文档存在且自洽，缺的只是主报告集中指针。P3 文档漂移，登记。
 - **证据等级**：E0（四份文档位置实测）。定级腿 E2（「是否足够」属文档治理判断）→ P3 封顶。
 - **建议修法**：V3 主报告 §13 或 §20 补三包指针行（同 CR-003 类，文档轮顺手）。
-- **修复 PR**：—
+- **状态**：open（c3 发现，P3 登记不修）→ **fixed（文档轮，2026-11-05）**——V3 主报告 §13 表格补「意图锚指针（不改造）」行，逐包指到意图锚原件：mailing → `docs/SES发信模块-G9.md`（发信模块默认整体关闭 + 启用清单）；translator → `docs/goal-d13-交付工作台.md` + `docs/goal-d14-交付工作台.md`（kimi-k3 管道切档与独立槽位）；guidance → `docs/goal-d1-交付工作台.md` + `docs/goal-d2-交付工作台.md`（预调研/确认流 + P0 四指标埋点）。只补指针，三包实现面零改动零迁移零路由。
+- **修复 PR**：本轮 PR（goal-c CR-035/040/041 + CR-011 文档轮）。
 
 ## CR-012 · P1 · retry_run 绕过平台月度预算闸
 
@@ -463,6 +464,10 @@
 - **file:line**：`desktop/src/renderer/src/ontology/GlossaryPage.tsx:112-143`（`load` 依赖 `termQuery` 每键入重跑 + `setLoading(true)` 命中 :189 early return 闪空，无 sequence/AbortController）。
 - **驳斥记录**：「127.0.0.1 乱序窗口极小」——成立，P3；对照同仓 `ResearchWorkspace.loadResearch`（:212 sequence）/`ProjectDocuments`（:79 sequenceRef）已有守卫，唯此缺。
 - **建议修法**：加 `requestSeq` ref 守卫（同 loadResearch 范式）。
+- **状态**：open（登记；单租户体验缺口）→ **fixed（CR-035 轮，2026-11-05）**——`GlossaryPage` 加 `sequence` ref（与同仓 `ResearchWorkspace.loadResearch` 同范式）：`load` 入口 `++sequence.current` 取本次请求号，响应回来先比对「是否仍是最新请求」，不是则整包丢弃（不落 terms/relationTypes/changeSets 也不报错）；effect 清理时 `sequence.current += 1` 作废在途请求（卸载/依赖变更）。
+  - **顺带修掉比登记更重的一处**：改前每次按键都 `setLoading(true)` → 整页 early-return 换成「正在加载术语表…」，**搜索输入框随页面一起被卸载 → 焦点丢失、无法连续输入**（不止「闪空」）。改后 `loadedOnce` ref 记住首屏已加载，之后的搜索/筛选**不再整页 loading**，旧内容留在屏上等新结果（同时消除闪空）。
+  - **测试**：`desktop/tests/renderer/glossary-page.test.tsx` +3（值域中文标签 / 乱序响应取新弃旧 / 在途搜索不闪空且旧内容不消失）。变异验证：撤序列守卫→乱序用例红（旧结果覆盖新结果）；恢复 loading→在途用例红（输入框被卸载致第二次按键丢失，请求数 1≠2）。
+- **修复 PR**：本轮 PR。
 
 ## CR-036 · P3 · ResearchWorkspace 导出轮询 effect 无序列守卫（stale 快照回写）
 
@@ -498,6 +503,8 @@
 - **file:line**：`desktop/src/renderer/src/ontology/GlossaryPage.tsx:50-55`（`TERM_STATUS_LABEL` 含 `candidate/retired`）vs 服务端 `ontology/models.py:46`（`TERM_STATUSES=(draft,confirmed,superseded,merged)` 无 candidate/retired、反缺 draft/superseded）→ `:67-69` fallback 原值回显：术语表状态列显示英文 `draft`/`superseded`，中文「候选」「已退役」永不渲染。
 - **驳斥记录**：「fallback 不崩」——成立，P3；是 T-W6 新代码自带小漂移（桌面枚举与服务端值域未同步）。
 - **建议修法**：`TERM_STATUS_LABEL` 对齐 `TERM_STATUSES` 四值（draft/confirmed/superseded/merged）。
+- **状态**：open（登记；一行口径对齐）→ **fixed（CR-040 轮，2026-11-05）**——`TERM_STATUS_LABEL` 改为 `draft→草稿 / confirmed→已确认 / superseded→已取代 / merged→已合并`，并加注释钉住「值域唯一权威＝服务端 `ontology/models.py::TERM_STATUSES`」。测试：术语表状态列渲染服务端四值域的中文标签，且 `候选/已退役`（服务端不存在的旧值）不再出现。变异验证：还原旧映射→该用例红。
+- **修复 PR**：本轮 PR。
 
 ## CR-041 · P3 · alembic fileConfig 禁导入期 logger（测试会话 caplog 全盲区）
 
@@ -507,6 +514,11 @@
 - **驳斥记录**：「生产环境同样被禁」——不成立：生产/本地运行时 `alembic upgrade` 是独立进程，跑完即退，业务进程的 logger 不受影响；仅测试进程内迁移与应用共存才踩中。
 - **证据等级**：E0（探针测试直读：`disabled: True` + RECORDS 空；fileConfig 调用点直读）。
 - **建议修法**：env.py 改 `fileConfig(config.config_file_name, disable_existing_loggers=False)`（一行）；副作用=测试会话日志变多（原被静音的模块恢复输出），可能影响个别负向日志断言（如 `test_auth_api.py:481` `not in caplog.text` 类需复跑核对），故登记不修、归测试基建轮。
+- **状态**：open（CR-013 修复轮发现，登记不修）→ **fixed（CR-041 轮，2026-11-05）**——按建议修法实施：`server/migrations/env.py` 显式 `fileConfig(config.config_file_name, disable_existing_loggers=False)`，只重配 alembic 自身 logger，不动已存在的模块级 logger。生产面零影响（迁移是独立进程，跑完即退；仅测试进程内「迁移 + 应用」共存才踩中）。
+  - **测试**：NEW `server/tests/test_migrations_logging.py`（2 例：迁移跑完后导入期 logger 仍 `disabled=False`；caplog 能捕获模块级 logger 记录——即「不再需要逐测试显式解禁」）。
+  - **变异验证**：撤 env.py 一行→两例全红（`disabled=True` + caplog 空捕）；恢复→两例绿。
+  - **副作用核对**：原「负向日志断言」风险按全量 pytest 复跑核对（负向断言用 `not in caplog.text` 形态，不受 logger 恢复影响）；CR-013 修复轮的显式解禁保留（幂等无害）。
+- **修复 PR**：本轮 PR。
 
 ## 驳回/观察记录（不占编号）
 

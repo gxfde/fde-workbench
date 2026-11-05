@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
@@ -47,11 +47,15 @@ interface ChangeSetListDto {
   items: ChangeSetDto[]
 }
 
+// 术语状态值域唯一权威＝服务端 `ontology/models.py::TERM_STATUSES`
+// （draft / confirmed / superseded / merged）。CR-040：此前此处写的是
+// candidate / retired（服务端无此二值）且缺 draft / superseded → 状态列
+// 直接回显英文原值，中文标签永不生效。
 const TERM_STATUS_LABEL: Record<string, string> = {
-  candidate: "候选",
+  draft: "草稿",
   confirmed: "已确认",
+  superseded: "已取代",
   merged: "已合并",
-  retired: "已退役",
 }
 
 const CHANGE_SET_STATUS_LABEL: Record<string, string> = {
@@ -108,8 +112,14 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
   const [error, setError] = useState("")
   const [actionError, setActionError] = useState("")
   const [busy, setBusy] = useState(false)
+  // CR-035：搜索每键一触发 → 请求并发返回乱序（后发先至的旧响应会覆盖新结果）。
+  // 序列号守卫：只有最新一次请求的结果可以落表；组件卸载同样作废在途请求。
+  const sequence = useRef(0)
+  // 首屏才整页 loading；后续搜索/筛选保留旧内容，避免每次按键闪空。
+  const loadedOnce = useRef(false)
 
-  const load = useCallback(async (): Promise<void> => {
+  const load = useCallback(async (): Promise<number> => {
+    const requestSequence = ++sequence.current
     setError("")
     try {
       const query = termQuery.trim()
@@ -123,22 +133,29 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
           { method: "GET" },
         ),
       ])
+      if (requestSequence !== sequence.current) return requestSequence
       setTerms(termData.items)
       setRelationTypes(typeData.items)
       setChangeSets(csData.items)
     } catch (caught) {
+      if (requestSequence !== sequence.current) return requestSequence
       setError(actionMessage(caught))
     }
+    return requestSequence
   }, [apiRequest, base, termQuery, csFilter])
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    void load().finally(() => {
-      if (active) setLoading(false)
+    if (!loadedOnce.current) setLoading(true)
+    void load().then((requestSequence) => {
+      if (active && requestSequence === sequence.current) {
+        loadedOnce.current = true
+        setLoading(false)
+      }
     })
     return () => {
       active = false
+      sequence.current += 1
     }
   }, [load])
 

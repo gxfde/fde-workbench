@@ -2,6 +2,25 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c P3 批清偿：术语页搜索守卫 + 状态值域 + alembic 日志基建（2026-11-05）
+
+### 桌面端（GlossaryPage 两项 P3；零服务端改动）
+
+- **CR-035 术语搜索序列守卫**：术语表搜索每键入触发一次全量重取且无守卫——后发先至的旧响应会覆盖新结果；且每次按键后整页换成「正在加载术语表…」，**搜索输入框随页面一起被卸载 → 焦点丢失、无法连续输入**（比原登记的「闪空」更重）。现加 `sequence` ref（同仓 `ResearchWorkspace.loadResearch` 范式）：只有最新一次请求的结果可落表，旧响应整包丢弃；首屏加载完成后不再整页 loading，旧内容留在屏上等新结果（输入框不再被卸载）。
+- **CR-040 术语状态值域对齐**：桌面 `TERM_STATUS_LABEL` 写的是服务端不存在的 `candidate/retired`，又缺 `draft/superseded` → 状态列回显英文原值、中文标签永不显示。现对齐服务端 `ontology/models.py::TERM_STATUSES`（draft→草稿 / confirmed→已确认 / superseded→已取代 / merged→已合并），并加注释钉住「值域唯一权威＝服务端」。
+- 测试：vitest +3（值域中文标签且旧标签不再出现 / 乱序响应取新弃旧 / 在途搜索不闪空且旧内容不消失）；typecheck 绿。
+
+### 服务端（测试基建一行；零迁移零路由零契约）
+
+- **CR-041 alembic 日志基建**：迁移脚本 `fileConfig` 默认 `disable_existing_loggers=True`，而测试夹具每例都跑迁移 → 导入期创建的模块级 logger（`logging.getLogger(__name__)`）在整场会话内全量 `disabled=True` → caplog / `log_cli` 对这些 logger 永远空捕（此前只能逐测试显式解禁）。现显式 `disable_existing_loggers=False`：只重配 alembic 自身的 logger，不动已存在的模块级 logger。生产面零影响——迁移是独立进程，跑完即退，仅「测试进程内迁移与应用共存」才踩中。
+- 测试：NEW `server/tests/test_migrations_logging.py` 2 例（迁移跑完后导入期 logger 仍 `disabled=False`；caplog 能捕获模块级 logger 记录）。变异验证：撤 env.py 那一行 → 两例全红；恢复 → 绿。
+
+### 文档
+
+- **CR-011 三包意图锚集中指针**：V3 主报告 §13 表格补「意图锚指针（不改造）」行——mailing → `docs/SES发信模块-G9.md`；translator → `docs/goal-d13·goal-d14-交付工作台.md`；guidance → `docs/goal-d1·goal-d2-交付工作台.md`。只补可查位置，三包实现面零改动。
+- 台账同步：CR-035 / CR-040 / CR-041 / CR-011 → fixed；**CR-003（主报告 §20 实施跟踪注记）挂账**——并发会话在途回滚轮正在撤 T-W7/T-I1 等轮次，此刻补注记即写即错，待回滚轮落定后一次性补。
+- 口径：pytest **1942 收集 = 1936 passed + 6 skipped**（本轮 +2）；桌面 vitest **774/774**（本轮 +3）；105 表 / 迁移头 `d9f4a7c2e6b1`（35 rev）/ 路由 300 / ENTRIES 94 不变——零迁移零路由，无需 rebuild。
+
 ## [未发布] — goal-c CR-027 规则版本显式管理：撮合不再永久停在降级态（2026-11-05）
 
 ### 服务端（零迁移零桌面；路由 +2；用户拍板「显式管理动作」）

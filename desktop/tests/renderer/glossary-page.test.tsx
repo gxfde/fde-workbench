@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import React from "react"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
@@ -177,4 +177,84 @@ it("reject stays disabled without a reason and posts it once filled", async () =
   await user.type(screen.getByLabelText("否决理由"), "术语口径不对")
   await user.click(screen.getByRole("button", { name: "否决" }))
   await waitFor(() => expect(screen.getByText("已否决")).toBeInTheDocument())
+})
+
+it("renders the server term status domain with Chinese labels (CR-040)", async () => {
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms` || path.startsWith(`${base}/terms?`)) {
+      return Promise.resolve({
+        items: [
+          term({ id: "term-draft", term: "草稿术语", status: "draft" }),
+          term({ id: "term-superseded", term: "旧口径术语", status: "superseded" }),
+          term({ id: "term-merged", term: "并入术语", status: "merged" }),
+        ],
+      })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  const table = within(await screen.findByRole("table"))
+  expect(table.getByText("草稿")).toBeInTheDocument()
+  expect(table.getByText("已取代")).toBeInTheDocument()
+  expect(table.getByText("已合并")).toBeInTheDocument()
+  // 服务端值域无 candidate/retired → 旧标签不得再出现
+  expect(table.queryByText("候选")).not.toBeInTheDocument()
+  expect(table.queryByText("已退役")).not.toBeInTheDocument()
+})
+
+it("keeps the newest search result when an older response arrives later (CR-035)", async () => {
+  const user = userEvent.setup()
+  const pending: Array<(value: { items: Array<Record<string, unknown>> }) => void> = []
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms`) return Promise.resolve({ items: [term({ term: "初始术语" })] })
+    if (path.startsWith(`${base}/terms?`)) {
+      return new Promise((resolve) => {
+        pending.push(resolve as (value: { items: Array<Record<string, unknown>> }) => void)
+      })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  await screen.findByText("初始术语")
+  const input = screen.getByLabelText("搜索术语")
+  await user.type(input, "验")
+  await user.type(input, "收")
+  await waitFor(() => expect(pending.length).toBe(2))
+  await act(async () => {
+    pending[1]!({ items: [term({ term: "新结果" })] })
+  })
+  expect(await screen.findByText("新结果")).toBeInTheDocument()
+  // 旧请求后到：不得覆盖新结果（序列守卫）
+  await act(async () => {
+    pending[0]!({ items: [term({ term: "旧结果" })] })
+  })
+  expect(screen.getByText("新结果")).toBeInTheDocument()
+  expect(screen.queryByText("旧结果")).not.toBeInTheDocument()
+})
+
+it("keeps the current list visible while a new search is in flight (CR-035)", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms`) return Promise.resolve({ items: [term({ term: "初始术语" })] })
+    if (path.startsWith(`${base}/terms?`)) return new Promise(() => {})
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  await screen.findByText("初始术语")
+  await user.type(screen.getByLabelText("搜索术语"), "验")
+  // 搜索在途：旧内容仍在（不闪空），整页 loading 文案不出现
+  expect(screen.getByText("初始术语")).toBeInTheDocument()
+  expect(screen.queryByText("正在加载术语表…")).not.toBeInTheDocument()
 })
