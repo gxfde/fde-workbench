@@ -37,7 +37,7 @@
 | CR-013 | P2 | **fixed（CR-013 修复轮）** | `record_skill_usage`（skill 节点，executor.py:964）无 try/except 包裹：计数微事务自带提交，但调用点若抛 DB 异常 → 被 `_execute_node` 兜底 catch 为 dispatch_crashed(retryable=True) → 已成功那次 AI 调用被丢弃重跑（双份 AI 成本）+ 节点误标 failed，违反 T-S2「失败不计」对称语义 | workflows/executor.py:960-966 | c4 |
 | CR-014 | P1 | **fixed（c5 PR）** | `resume_run` 后 human_approval 节点仍复用 stale 审批键：approval 被 reject/expired 后节点 failed，resume 回 pending 但 `_dispatch_human_approval` 仍按旧键 reuse 已终态审批 → 节点再次 waiting 挂死 | workflows/executor.py:1058 | c4 |
 | CR-015 | P1 | fixed（PR #103 已合并 `c8aa08a`） | `ZcodeAdapter.run` 非 SandboxError 异常路径沙箱容器泄漏：`sandbox.kill()` 在 try 之后顺序执行，`event_provider.poll()`/`output_scanner.scan()` 抛非 SandboxError 时容器 `sleep infinity` 悬挂 | agents/adapter.py:179 | c4 |
-| CR-016 | P3 | open | outbox_events 四态终态机未实装（只写 pending/dispatched），completed/failed 态与 attempts/last_error 列空置=审计死信箱；RECOVERABLE 四类型缺 failure hook，耗尽后业务行悬空 | jobs/outbox.py:41 / reconcile.py:159 | c4 |
+| CR-016 | P3 | closed（销号·后续轮治愈） | outbox_events 四态终态机未实装（只写 pending/dispatched），completed/failed 态与 attempts/last_error 列空置=审计死信箱；RECOVERABLE 四类型缺 failure hook，耗尽后业务行悬空 → **T-J1（#114）落 mark_completed/mark_failed 三终态写入点 + T-J2（#116）取消/重试双路径终态收口后，死信箱彻底闭环（AGENTS 口径行已记「彻底闭环达成」），本轮补台账销号** | jobs/outbox.py:41 / reconcile.py:159 | c4 |
 | CR-017 | P2 | fixed（PR #103 已合并 `c8aa08a`） | 上下文渲染 source_refs 不经模式遮蔽：带盘符的 source_ref（如 `C:\客户\…`）原样进 context.md 与 problem_refs，与正文脱敏双标尺 | agents/context.py:153 | c4 |
 | CR-019 | P1 | **fixed（c5 PR）** | `resume_run` 对**全部** failed/skipped 节点 attempt 归零——agent 节点幂等键 `wfnode-{行id}:{attempt}` 撞回 `:1` 失败终态（agents V8 拒同键重跑）→ agent 节点每次 resume 确定性 409，永远救不活（docstring「resume 开新代际」与实现矛盾，c4 观察项②） | workflows/executor.py:341-352 | c5 |
 | CR-020 | P1 | **fixed（c5 PR）** | 写类 call 节点结果未确认（`uncertain`=started 无 finished；`cancelled`）被折叠为节点 `succeeded`——FV-F1「断链不静默 done」红线虚高；同键去重在 api_actions 层兜底不二次外呼，但节点层「成功」断言失真 | workflows/executor.py:885-893 | c5 |
@@ -50,8 +50,8 @@
 | CR-027 | P2 | **fixed（CR-027 修复轮，用户拍板 2026-11-05）** | 派单规则版本激活 `activate_due_versions` 零生产调用方（仅测试引用）→ 版本永不 published→active → `active_rule_version` 恒 None → 自动撮合恒 422 `rule_version_required`（§11.1 降级态变永久）；claim 闸 cities 侧认 published 故未死，仅撮合死 | dispatch/rules.py:110/138-146 | c6 |
 | CR-028 | P2 | open（**裁决：维持整条挂 B-③ 法务区**，用户拍板 2026-11-05） | 累计预扣 `compute_withholding`：①年过滤 `extract(year, created_at)==now.year` 用 UTC 日历年非自然税法年；②减除月份集 `{...}∪{now.month}` 用调用时月非验收月（G8 回填七月算五月验收 → 多算一档 5000 减除少扣税）。税率表本就 2025-16 待确认占位，口径未定前不动码 | dispatch/settlements.py:138/145 | c6 |
 | CR-029 | P3 | open（登记） | 集成桥 `captured_at` 单向采信宿主钟：`_parse_captured_at` 只校验格式不比对服务端钟，4h/360min stale 标记两侧都从宿主时间推 → NTP 前漂或带 token 方伪造快照可永久遮「采集断连」 | bridge/sync.py:190/212/310-321 | c6 |
-| CR-030 | P3 | open（登记） | 4h 热路径 `_sync_bridge_evidence` 全表 `select(Project)` 全量 ORM 水合（实只用 3 列）+ `_city_order_rank` 全局包表 join 内 N+1 `session.get`（O(P×N)）——本地单用户量级无实害，纯性能卫生 | bridge/sync.py:108 / dispatch/settlements.py:82-92 | c6 |
-| CR-031 | P3 | open（登记） | 演练 run（`rehearsal:` 前缀、token_cost=0）未排除出指标面：`metrics` 的 `run_cost_median_units`/`draft_generation_p50_ms`/`run_degraded_share`/`run_first_pass_rate` 全含演练行（pilot 闸口面已排除，持续观测面未排 → 口径不齐） | metrics/service.py:77/146/158/173 | c6 |
+| CR-030 | P3 | **fixed（CR-031/030 轮·半 A）** | `_sync_bridge_evidence` 全表 ORM 水合 → 三列投影（id/openfde_engagement/fdeops_workspace）；**半 B 经核实登记失真**：r12 B-④/留注⑤ 重写后 `_city_order_rank` 已是单次 join+Python 计数，「循环 session.get」不存在（现存仅 `package_client_city` 每包一次正当 get；真实重复面=只被 simulator.py:580 工具循环逐包重跑全局 join，非 4h 热路径，P4 级维持观察不发明重构） | bridge/sync.py:108 | c6 |
+| CR-031 | P3 | **fixed（CR-031/030 轮）** | metrics 四个 AgentRun 查询统一加 `_REAL_RUNS`（`idempotency_key.notlike("rehearsal:%")`，复用 `agents/pilot.py::REHEARSAL_KEY_PREFIX` 单点常量）+ 四卡 definition 同步注明「排除演练」+ 模块 docstring 口径纪律补一行；专项测试钉 L1/L2 两形态四指标（变异：过滤中性化→四断言全红） | metrics/service.py | c6 |
 | CR-032 | P2 | open（登记，T-O2b 桌面同步面） | 桌面调研侧 subject_type 值域钉死内置五类（`RESEARCH_SUBJECT_TYPES`），服务端 T-O2b 已开放「内置∪注册表 active−project 根」：注册类型落库后桌面**读路径**（projectRuntimeValidation/runtimeValidation 五类守卫）整体校验失败 → 调研 tab 全不可读；写路径（导入/定义/表单 builder）注册类型不可选 | desktop/…/research/{types.ts:1,projectRuntimeValidation.ts:17,66,runtimeValidation.ts:48,ResearchImportDialog.tsx:11,ResearchDefinitionEditor.tsx:487/1009,ProjectResearchFormBuilder.tsx:233} | c7 |
 | CR-033 | P3 | open（登记） | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
 | CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
@@ -295,7 +295,8 @@
 - **驳斥记录**：「概率极低（需五连死）」——成立，故 P3；但 docstring 自称「根治」的承诺面与注册表实际覆盖不符，文档漂移+防线缺口双挂。
 - **证据等级**：E0（grep 注册表 + outbox 写入点全量直读）。
 - **建议修法**：四类型补 failure hook（终态推进 + 事件）或 reconcile 文档降级承诺；归 c8 基建轮与 outbox 语义一并裁决。
-- **修复 PR**：—
+- **状态**：open → **closed（销号·后续轮治愈，2026-11-05）**——V3 P1 残尾清偿轮 T-J1（#114 `9e423f3`）实装 `outbox.mark_completed/mark_failed`（只收 dispatched、last_error 截 2000）覆盖 worker._settle/_claim no_handler/reconcile._fail_job 三个终态写入点；T-J2（#116 `1282722`）补 handler 自动重试（RECOVERABLE 集合退避重投）+ admin 取消 + `outbox.cancel_for_job` 双路径终态收口。死信箱从「列空置」变「全路径有终态」，登记前提（completed/failed 永不落笔）不复存在；failure hook 单独面由 T-J2 的 job 级重试/终态机制实质承接（业务行悬空=耗尽后 job failed 为真终态 + operation_events 留痕）。本轮只补台账销号，零代码。
+- **修复 PR**：本轮 PR（goal-c CR-031/030 轮·销号注记）。
 
 ## CR-017 · P2 · 上下文渲染 source_refs 不经模式遮蔽（双标尺）
 
@@ -421,18 +422,23 @@
 
 ## CR-030 · P3 · 4h 热路径全表 Project 水合 + _city_order_rank N+1
 
-- **状态**：open（登记；本地量级无实害，纯性能卫生）
+- **状态**：open（登记；本地量级无实害，纯性能卫生）→ **fixed（CR-031/030 轮，2026-11-05·半 A）+ 半 B 登记失真修正**——
+  - **半 A（修码）**：`_sync_bridge_evidence` 改 `select(Project.id, Project.openfde_engagement, Project.fdeops_workspace)` 列投影，行为等价（下游只用这三列建 slug→project_id 反查表），4h 投影热路径不再整表 ORM 水合。
+  - **半 B（经核实登记失真，不改码）**：现场 `dispatch/settlements.py:75-97` 的 `_city_order_rank` 在 r12 B-④/留注⑤（`0bb2fc3`）重写后**已是单次 join 查询**（`select(DeliveryPackage.id, Project.enterprise_code)` 两列 + Python 侧计数），登记描述的「循环内 `session.get(Project)`」不存在——`session.get` 仅剩 `package_client_city` 每包一次的正当身份映射读。真实存在的重复面=**simulator.py:580** 仿真工具循环逐包调用 `seat_shares_for`→重跑全局 join（工具面非 4h 热路径、几百包量级 P4 卫生）——维持观察，不为工具面发明预取重构。
+  - 验证：`test_dispatch_p0_r2.py`（seat shares/结算）+ `test_bridge_sync_flags.py` + `test_evidence_registry.py` 全绿（行为等价）。
 - **file:line**：`bridge/sync.py:108`（`select(Project)` 全量 ORM，实用 3 列）/`dispatch/settlements.py:82-92`（`_city_order_rank` 全局 join + 循环内 `session.get(Project)`）。
 - **驳斥记录**：sync.py:98 docstring 自称「4h 关键路径」优化但此处全表水合；「50 engagement/数百项目量级」——成立，P4 级性能卫生升 P3 登记（O(P×N) 随规模放大）。
 - **建议修法**：改 `select(Project.id, Project.openfde_engagement, Project.fdeops_workspace)`；`_city_order_rank` 预取字典替代循环 get。
+- **修复 PR**：本轮 PR（goal-c CR-031/030 轮）。
 
 ## CR-031 · P3 · 演练 run 未排除出指标持续观测面
 
-- **状态**：open（登记）
+- **状态**：open（登记）→ **fixed（CR-031/030 轮，2026-11-05）**——`metrics/service.py` 模块级 `_REAL_RUNS = AgentRun.idempotency_key.notlike(REHEARSAL_KEY_PREFIX + "%")`（常量复用 `agents/pilot.py` 导出的单点 `REHEARSAL_KEY_PREFIX`，避免字面量漂移），四个 AgentRun 查询（草稿耗时中位数/一次通过率/降级率/成本中位数）统一挂过滤；一次通过率的 `completed_count` 同源过滤后，降级率与拦截率分母自动跟随（同一 status_rows 派生）。四卡 `definition` 文案同步注明「排除演练 run」（口径纪律：定义面=计算面），模块 docstring 口径纪律补一行。测试 `test_metrics_report.py::test_rehearsal_runs_excluded_from_run_metrics`：真实 completed(100ms/3units)+failed 与 L1 演练（completed+degraded+0ms+0 费）+L2 演练（failed）同库，断言四指标只吃真实行（p50=100、first_pass=0.5、degraded=0.0、cost=median(3,0)=1.5——含演练则 p50=0/degraded=0.5/first_pass=0.25/cost=0）。变异验证：`_REAL_RUNS` 中性化为永不匹配 → 四断言全红 → 还原 → 绿。
 - **file:line**：`metrics/service.py:77`（`draft_generation_p50_ms` 全含 0ms 演练）/`:146`（`run_first_pass_rate` 含 L2 演练 failed）/`:158-164`（`run_degraded_share` 含 L1 演练 degraded）/`:173-179`（`run_cost_median_units` 全含 token_cost=0 演练）。
 - **意图锚**：agents/service.py:1026 docstring「演练 run 可排除（rehearsal: 前缀）」——pilot 闸口面（pilot.py:76）已排除，持续观测面未排，两侧口径不齐。
 - **驳斥记录**：「演练仅 admin 触发（rehearsal_forbidden），量小」——成立，但中位数/降级率是「持续观测」红线指标，零成本 token 拉低中位数、L1 degraded 抬高降级率（30% 红线）会误触发扩权暂停。P3 登记（加一行 `notlike("rehearsal:%")` 即可修）。
 - **建议修法**：metrics 四个 AgentRun 查询统一加 `idempotency_key.notlike("rehearsal:%")`（与 pilot.py:76 同尺）。
+- **修复 PR**：本轮 PR（goal-c CR-031/030 轮）。
 
 ## CR-032 · P2 · 桌面调研 subject_type 五类钉死（T-O2b 开放域滞后）
 

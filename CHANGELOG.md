@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c P3 服务端小轮：指标面排除演练 run + 桥投影列水合 + outbox 死信箱销号（2026-11-05）
+
+### 服务端（零迁移零路由零桌面）
+
+- **CR-031 演练 run 排除出指标持续观测面**：降级演练（`rehearse_fallback`，幂等键 `rehearsal:` 前缀、零计费零真实耗时）此前混进四张 run 指标卡——L1 演练（completed+degraded+0ms+0 费）拉低草稿耗时中位数、**抬高降级率（持续 >30% 暂停扩大 agent 授权的红线指标会被演练误触发）**，L2 演练（failed）压低一次通过率，零费行拉低成本中位数。现四个 AgentRun 查询统一挂 `_REAL_RUNS` 过滤（常量复用 `agents/pilot.py::REHEARSAL_KEY_PREFIX` 单点，试点闸口面同款口径先行），四卡 `definition` 文案同步注明排除（口径面=计算面）。测试：NEW 专项 1 例钉 L1/L2 两形态四指标；变异验证（过滤中性化→四断言全红→还原→绿）。
+- **CR-030（半 A）桥投影列水合**：4h 采集投影的 `_sync_bridge_evidence` 全表 ORM 水合改三列投影（id/openfde_engagement/fdeops_workspace），行为等价。**半 B 登记失真如实修正**：现场核实 `_city_order_rank` 在 r12 B-④ 重写后已是单次 join+Python 计数，登记描述的「循环 session.get」不存在；真实重复面仅剩仿真工具循环（P4 卫生维持观察）。
+- **CR-016 台账销号**：outbox 死信箱经 T-J1（终态写入三落点）+ T-J2（取消/重试双路径终态收口）已彻底闭环，登记前提不复存在；本轮只补台账销号注记，零代码。
+- 口径：pytest **1944 收集 = 1938 passed + 6 skipped**（+1；基线 1943 已随 #123 CR-041 核销轮双面实测校正）；105 表 / 迁移头 `d9f4a7c2e6b1`（35 rev）/ 路由 300 / ENTRIES 94 / mypy 279 基线 / vitest 787 全部不变；零迁移（rebuild 幂等校验 `alembic upgrade head`）。
+
 ## [未发布] — goal-c CR-041 核销：融合树独立复测 + 口径校正 + 桌面便携包 r16（2026-11-05）
 
 - **核销（零代码轮）**：并发 P3 批清偿（#121）落定后的独立核销——融合树全量实测：服务端 pytest **1943 收集 = 1937 passed + 6 skipped**（本地 Windows 与 CI PR-head 双面一致）、CR-041 专项 2 例绿、mypy 基线 279 全绿、桌面 vitest 774/774、typecheck 零错；**发现并校正融合口径偏 1**（AGENTS 前值 1942/1936 为算术推导；CI 实测 #120 = 1935+6s、#121 = 1937+6s，口径行按实测改写）；「负向日志断言空转绿」担忧实测排除——`not in caplog.text` 全仓 10 处（含 test_auth_api.py:481 密钥不入日志安全断言）在 env.py 解禁后真判零红。部署活体核验：api 镜像 env.py 修在位、300 业务路由、双 admin 路由、`/ready` 200、alembic head `d9f4a7c2e6b1`。

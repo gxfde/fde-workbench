@@ -105,11 +105,15 @@ def _sync_bridge_evidence(session, *, run: BridgeSyncRun, payload: dict[str, Any
     fdeops = payload.get("fdeops") or {}
     openfde_links: dict[str, list[str]] = {}
     fdeops_links: dict[str, list[str]] = {}
-    for project in session.scalars(select(Project)).all():
-        if project.openfde_engagement:
-            openfde_links.setdefault(project.openfde_engagement, []).append(project.id)
-        if project.fdeops_workspace:
-            fdeops_links.setdefault(project.fdeops_workspace, []).append(project.id)
+    # CR-030：4h 投影热路径只吃三列——列投影替代整表 ORM 水合（docstring 自称
+    # 「关键路径」，别让数百项目量级的全列构造拖在每拍前面）。
+    for project_id, openfde_engagement, fdeops_workspace in session.execute(
+        select(Project.id, Project.openfde_engagement, Project.fdeops_workspace)
+    ).all():
+        if openfde_engagement:
+            openfde_links.setdefault(openfde_engagement, []).append(project_id)
+        if fdeops_workspace:
+            fdeops_links.setdefault(fdeops_workspace, []).append(project_id)
 
     # 候选 = (project_id, source_uri, sha256, origin)
     candidates: list[tuple[str, str, str, str]] = []

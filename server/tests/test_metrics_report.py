@@ -188,6 +188,62 @@ def test_run_metrics_medians_and_shares(db_session, client, d4_settings) -> None
     assert ongoing["run_cost_median_units"]["value"] == 0  # median(3,7,0,0,0)=0
 
 
+def test_rehearsal_runs_excluded_from_run_metrics(db_session, client, d4_settings) -> None:
+    """CR-031：演练 run（幂等键 ``rehearsal:`` 前缀，rehearse_fallback 手动触发
+    面）不进 run 类聚合指标——L1 演练（completed+degraded+零计时零计费）曾拉低
+    草稿耗时中位数、抬高降级率（>30% 扩权暂停红线）；L2 演练（failed）压低一次
+    通过率；token_cost=0 拉低成本中位数。意图锚 = rehearse_fallback docstring
+    「试点计数与报告可排除」+ agents/pilot.py 同款 notlike 先行，本测试钉聚合面。"""
+    leader = _user("m8.leader4", role="project_lead")
+    db_session.add(leader)
+    db_session.commit()
+    project = _persist_project(db_session, leader, code=f"M8E{uuid4().hex[:6]}")
+    from fde_api.agents.seeds import ensure_agent_seeds
+
+    ensure_agent_seeds(db_session)
+    db_session.commit()
+    agent = db_session.scalar(select(AgentRegistry).where(AgentRegistry.kind != "persona").limit(1))
+    assert agent is not None
+
+    def _run(status: str, *, duration: int = 0, cost: int = 0, degraded: bool = False, key: str | None = None) -> AgentRun:
+        return AgentRun(
+            project_id=project.id,
+            agent_id=agent.id,
+            initiated_by_user_id=leader.id,
+            capability_used=agent.capability_tier,
+            status=status,
+            duration_ms=duration,
+            token_cost=cost,
+            degraded=degraded,
+            degraded_reason="fallback_rehearsal" if key else ("tool_denied" if degraded else None),
+            fallback_level="L1" if degraded else None,
+            context_ref="agent-workspaces/x/context.md",
+            idempotency_key=key or f"m8:{uuid4().hex}",
+        )
+
+    db_session.add_all(
+        [
+            _run("completed", duration=100, cost=3),
+            _run("failed"),
+            # L1 演练形态（rehearse_fallback：completed + degraded + 零计时零计费）
+            _run("completed", degraded=True, key=f"rehearsal:{uuid4()}"),
+            # L2 演练形态（failed）
+            _run("failed", key=f"rehearsal:{uuid4()}"),
+        ]
+    )
+    db_session.commit()
+    body = _get_report(client, leader, d4_settings)
+    report = body.json["data"]
+    p0 = _cards(report, "p0")
+    p1 = _cards(report, "p1_pilot")
+    ongoing = _cards(report, "ongoing")
+    assert p0["draft_generation_p50_ms"]["value"] == 100  # 演练 0ms 不进中位数
+    assert p0["draft_generation_p50_ms"]["sample_size"] == 1
+    assert p1["run_first_pass_rate"]["value"] == 0.5  # 1 completed / 2 终态（演练 failed 不进）
+    assert p1["run_degraded_share"]["value"] == 0.0  # 演练 degraded 不进，红线不被演练抬高
+    assert ongoing["run_cost_median_units"]["value"] == 1.5  # median(3,0)=1.5；演练零计量行若混入则=median(3,0,0,0)=0
+
+
 def test_lite_meeting_share_and_quota_month(db_session, client, d4_settings) -> None:
     """lite 占比 + 当月动作台账计数（含 over_quota 行）。"""
     leader = _user("m8.leader3", role="project_lead")

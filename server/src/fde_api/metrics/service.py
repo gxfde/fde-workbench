@@ -9,6 +9,8 @@
 - 「一次通过率」当前口径 = run 终态 completed 占比（retry 幂等链未折算，
   细化口径挂账）；「草稿生成耗时」当前口径 = agent 路 completed run
   duration_ms 中位数（人工路无计时埋点，基线对比挂账）。
+- 演练 run（幂等键 ``rehearsal:`` 前缀）不进任何 run 类聚合指标（CR-031；
+  试点闸口面 agents/pilot.py 同口径先行）。
 - 当月口径 = UTC 自然月（O-3 重校窗口 30 天语义在 agents/quota.py，不混用）。
 """
 from __future__ import annotations
@@ -21,11 +23,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fde_api.agents.models import AgentRun, SeatActionLedger
+from fde_api.agents.pilot import REHEARSAL_KEY_PREFIX
 from fde_api.guidance.models import ProjectGuidanceAnalysis
 from fde_api.meetings.models import ReviewMeeting
 from fde_api.workbench.models import OperationEvent
 
 _TERMINAL_FAILED = ("failed", "timeout", "budget_exceeded")
+
+# CR-031：演练 run（幂等键 ``rehearsal:`` 前缀，agents/service.rehearse_fallback
+# 手动触发面，零计费零真实耗时）不进任何持续观测聚合——试点闸口面早已排除
+# （agents/pilot.py 同款 notlike），此处补齐指标面：L1 演练 = duration_ms 0 的
+# completed+degraded（拉低草稿耗时中位数、抬高降级率——降级率是 >30% 暂停
+# 扩权红线）；L2 演练 = failed（压低一次通过率）；token_cost=0（拉低成本中位数）。
+_REAL_RUNS = AgentRun.idempotency_key.notlike(REHEARSAL_KEY_PREFIX + "%")
 
 
 def _metric(
@@ -75,14 +85,14 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
 
     # ---- P0：方案草稿生成耗时（agent 路观测；人工基线未积累挂账）----
     completed_durations = session.scalars(
-        select(AgentRun.duration_ms).where(AgentRun.status == "completed")
+        select(AgentRun.duration_ms).where(AgentRun.status == "completed", _REAL_RUNS)
     ).all()
     p0_draft_ms = _metric(
         "draft_generation_p50_ms",
         "方案草稿生成耗时中位数（agent 路）",
         value=median(completed_durations) if completed_durations else None,
         sample_size=len(completed_durations),
-        definition="completed run 的 duration_ms 中位数；人工路无计时埋点，↓≥50% 基线对比待积累（挂账）",
+        definition="completed run（排除演练 run）的 duration_ms 中位数；人工路无计时埋点，↓≥50% 基线对比待积累（挂账）",
     )
 
     # ---- P0：SOW 一次拍板通过率（goal-d9 埋点转实：signoff 拍板事件序）----
@@ -143,7 +153,7 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
     )
 
     # ---- P1 试点：run 一次通过率（终态 completed 占比）----
-    status_rows = session.scalars(select(AgentRun.status)).all()
+    status_rows = session.scalars(select(AgentRun.status).where(_REAL_RUNS)).all()
     completed_count = sum(1 for status in status_rows if status == "completed")
     terminal_count = sum(1 for status in status_rows if status == "completed" or status in _TERMINAL_FAILED)
     p1_first_pass = _metric(
@@ -151,12 +161,12 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
         "run 一次通过率",
         value=round(completed_count / terminal_count, 4) if terminal_count else 0.0,
         sample_size=terminal_count,
-        definition="终态 completed 占比（retry 幂等链未折算，细化口径挂账）",
+        definition="终态 completed 占比（排除演练 run；retry 幂等链未折算，细化口径挂账）",
     )
 
     # ---- P1 试点：降级率（降级产物占比，>30% 暂停扩大授权）----
     degraded_count = session.scalar(
-        select(func.count()).select_from(AgentRun).where(AgentRun.degraded.is_(True))
+        select(func.count()).select_from(AgentRun).where(AgentRun.degraded.is_(True), _REAL_RUNS)
     )
     p1_degraded = _metric(
         "run_degraded_share",
@@ -165,18 +175,18 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
         if completed_count
         else 0.0,
         sample_size=completed_count,
-        definition="degraded=true 的 run 数 / completed run 数（持续 >30% 暂停扩大 agent 授权范围）",
+        definition="degraded=true 的 run 数 / completed run 数（均排除演练 run；持续 >30% 暂停扩大 agent 授权范围）",
         target=0.30,
     )
 
     # ---- 持续观测：单 run 成本中位数（token_cost，O-3 口径单位）----
-    token_costs = session.scalars(select(AgentRun.token_cost)).all()
+    token_costs = session.scalars(select(AgentRun.token_cost).where(_REAL_RUNS)).all()
     ongoing_cost = _metric(
         "run_cost_median_units",
         "单 run 成本中位数",
         value=median(token_costs) if token_costs else None,
         sample_size=len(token_costs),
-        definition="全部 run 的 token_cost 中位数（O-3 计量单位）",
+        definition="全部 run（排除演练零计量行）的 token_cost 中位数（O-3 计量单位）",
     )
 
     # ---- 持续观测：输出拦截率（goal-d9 埋点转实：422 拦截事件计数）----
