@@ -89,3 +89,42 @@ def dispatch_pending(
         session.rollback()
         raise
     return DispatchResult(dispatched=dispatched)
+
+
+# outbox last_error 与业务行同宽纪律：只留截断后的失败摘要（Text 列，
+# 2000 字上限与后台 job 诊断口径一致）。
+_OUTBOX_ERROR_MAX = 2000
+
+
+def mark_completed(session: Session, job_type: str, target_id: str) -> int:
+    """Settle the dispatched events for a succeeded job (V3 T-J1 / WB-DEF-9).
+
+    Outbox events had no completed/failed write point: dispatched was a
+    terminal leak. The linkage key is (topic, aggregate_id) == (job_type,
+    target_id) — the same pair ``dispatch_pending`` deduped on, so all events
+    coalesced into this job settle together. Events still pending (not yet
+    claimed) are untouched: they belong to a future dispatch.
+    """
+    return _settle_for_job(session, job_type, target_id, "completed", "")
+
+
+def mark_failed(
+    session: Session, job_type: str, target_id: str, last_error: str = ""
+) -> int:
+    """Settle the dispatched events for a failed job, keeping the error digest."""
+    return _settle_for_job(session, job_type, target_id, "failed", last_error[:_OUTBOX_ERROR_MAX])
+
+
+def _settle_for_job(
+    session: Session, job_type: str, target_id: str, status: str, last_error: str
+) -> int:
+    result = session.execute(
+        update(OutboxEvent)
+        .where(
+            OutboxEvent.topic == job_type,
+            OutboxEvent.aggregate_id == target_id,
+            OutboxEvent.status == "dispatched",
+        )
+        .values(status=status, last_error=last_error)
+    )
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]  # 与 dispatch_pending 同口径

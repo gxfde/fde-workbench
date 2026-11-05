@@ -870,3 +870,74 @@ def test_expired_approval_is_persisted_when_reviewer_arrives_too_late(
     run = db_session.get(AutomationTaskRun, run_id)
     assert run.status == "failed"
     assert run.error_code == "approval_expired"
+
+
+def test_scheduler_sweep_expires_stale_pending_approvals(
+    authorized_client_factory, db_session, app
+):
+    """V3 T-P1-5（WB-DEF-3）：无人触碰的过期审批由后台清扫落 expired——
+    与 decide 惰性判定完全同语义（run → failed/approval_expired）；未过期
+    pending 不动；幂等（第二轮零翻转）。"""
+    from fde_api.control.scheduler import sweep_expired_approvals
+
+    leader = authorized_client_factory("project_lead")
+    project, _ = create_project_with_task(db_session, leader.user)
+    created = leader.post(
+        "/api/v1/task-center/automations",
+        json={
+            "title": "过期审批清扫测试",
+            "project_id": project.id,
+            "source": "desktop",
+            "schedule_kind": "once",
+            "schedule_expression": "2026-09-05T09:00:00+08:00",
+            "timezone": "Asia/Shanghai",
+            "prompt": "测试过期审批清扫。",
+            "requested_capabilities": ["project.read", "task.batch_assign"],
+        },
+    )
+    queued = leader.client.post(
+        f"/api/v1/task-center/automations/{created.json['data']['id']}/runs",
+        headers={**leader.headers, "Idempotency-Key": "sweep-approval-run"},
+    )
+    run_id = queued.json["data"]["id"]
+    db_session.rollback()
+    db_session.get(AutomationTaskRun, run_id).status = "running"
+    db_session.commit()
+
+    class ApprovalRuntime:
+        def verify_service_token(self, candidate):
+            return candidate == "runtime-approval-secret"
+
+    app.extensions["fde_api_dsh_runtime"] = ApprovalRuntime()
+    proposed = leader.client.post(
+        f"/api/v1/internal/dsh/executions/{run_id}/approvals",
+        headers={"Authorization": "Bearer runtime-approval-secret"},
+        json={
+            "request_id": "sweep-tool-call",
+            "capability": "task.batch_assign",
+            "tool_name": "project_tasks.batch_assign",
+            "arguments": {"task_ids": ["task-1"], "assignee_user_id": leader.user.id},
+            "risk_level": 3,
+        },
+    )
+    approval_id = proposed.json["data"]["id"]
+
+    db_session.rollback()
+    # 未过期：清扫零翻转，pending 原样
+    assert sweep_expired_approvals() == 0
+    approval = db_session.get(AutomationApproval, approval_id)
+    assert approval.status == "pending"
+
+    approval.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.commit()
+
+    flipped = sweep_expired_approvals()
+    assert flipped == 1
+
+    db_session.expire_all()
+    assert db_session.get(AutomationApproval, approval_id).status == "expired"
+    run = db_session.get(AutomationTaskRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "approval_expired"
+    # 幂等：再扫零翻转
+    assert sweep_expired_approvals() == 0

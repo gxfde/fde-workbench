@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P1 残尾清偿：outbox 状态闭环 + 终审双闸 + 审批过期清扫（2026-11-05）
+
+### 服务端（三 S 同轮：T-J1 / T-P1-4 / T-P1-5；T-OBS1 核验销号；零迁移零路由零桌面）
+
+- **T-J1 outbox 状态闭环（WB-DEF-9）**：outbox 事件此前只有 pending→dispatched，终态永无写入点（dispatched 即泄漏）。新增 `outbox.mark_completed/mark_failed`（联动键 `(topic, aggregate_id)==(job_type,target_id)`，只收 dispatched 行、未派发 pending 不动、失败摘要截 2000 字），覆盖**全部三个 job 终态写入点**：`worker._settle`（与 job 终态同事务）、`worker._claim` no_handler（同 claim 事务）、`reconcile._fail_job`（worker 失联终失败）。
+- **T-P1-4 resolve_signoff 双闸（WB-DEF-2）**：终审拍板原仅 can_view+AI 档位——viewer 被授予高档后即可代拍。改为项目 `can_manage`（`_require_project_manager`）+ 档位双闸（与 `generate_agent_solution` 权限双层同款）；viewer+`system_operator` 档 → 403 `forbidden`（拦截者显式为项目闸而非档位闸）。
+- **T-P1-5 审批过期清扫（WB-DEF-3）**：过期翻转从 decide/状态查询两处内联重复提取为唯一原语 `control/service._expire_approval`（行为零变化），新增 `scheduler.sweep_expired_approvals`（`skip_locked` 与并发拍板互不阻塞）接入 scheduler 循环（与派单同拍）——无人触碰的过期 pending 审批不再永挂任务中心。
+- **T-OBS1 降级 chat 落审计（WB-DEF-4）核验销号**：chat 直调 `execute_ai_prompt`，降级直连腿的审计+月账本入账已随 #112（CR-006）落地，本轮零补码销号（`direct-chat-*` 前缀方案由 purpose+used_fallback 取代，区分度更优）。
+- 测试与口径：pytest +7（outbox 收口 2 + worker 端到端 3 + viewer 双闸 1 + 清扫 1）＝**1912 收集 = 1906 passed + 6 skipped**；105 表 / 迁移头 `e2c6a8f4d1b3` / 路由 297 / ENTRIES 94 / vitest 771 不变（需 rebuild 三镜像，无迁移）。P1 仅剩 T-J2（重试落地时 outbox failed 只准在最终失败分支翻转——backlog 已留注）。
+
 ## [未发布] — V3 实施 T-UI1 三页核销 + GateBoard 候选来源徽标（2026-11-05）
 
 ### 桌面端（服务端零改动；T-W7 桌面挂账清偿 + backlog 销号）

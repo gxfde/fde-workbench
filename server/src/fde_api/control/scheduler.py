@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from fde_api.control.models import AutomationTask, AutomationTaskRun
+from fde_api.control.models import AutomationApproval, AutomationTask, AutomationTaskRun
 from fde_api.extensions import db
 from fde_api.jobs.outbox import enqueue_outbox
 
@@ -90,6 +90,35 @@ def dispatch_due_automations(*, now: datetime | None = None, limit: int = 100) -
                 task.last_run_at = scheduled_for
                 task.next_run_at = next_schedule_time(kind=task.schedule_kind, expression=task.schedule_expression, timezone=task.timezone, after=scheduled_for) if task.schedule_kind != "once" else None
         return dispatched
+    finally:
+        session.close()
+
+
+def sweep_expired_approvals(*, now: datetime | None = None, limit: int = 100) -> int:
+    """过期审批后台清扫（V3 T-P1-5 / WB-DEF-3）。
+
+    此前过期翻转只有两处惰性判定（decide 拍板时 / dsh 状态查询时），无人
+    触碰的过期审批永远停在 pending——任务中心一直显示可拍。本清扫与调度
+    循环同拍（cli scheduler 命令），批量把 pending+过期行经唯一翻转原语
+    ``_expire_approval`` 落 expired（与拍板时的惰性判定完全同语义）。
+    返回本轮翻转数；skip_locked 与并发拍板互不阻塞。
+    """
+    from fde_api.control.service import _expire_approval  # 延迟导入防环（service 反向依赖调度面）
+
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    session = db.session()
+    try:
+        with session.begin():
+            approvals = list(session.scalars(
+                select(AutomationApproval)
+                .where(AutomationApproval.status == "pending", AutomationApproval.expires_at <= current)
+                .order_by(AutomationApproval.expires_at, AutomationApproval.id)
+                .with_for_update(skip_locked=True)
+                .limit(limit)
+            ))
+            for approval in approvals:
+                _expire_approval(session, approval, reviewer=None, now=current)
+            return len(approvals)
     finally:
         session.close()
 

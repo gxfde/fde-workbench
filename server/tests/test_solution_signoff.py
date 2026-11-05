@@ -489,3 +489,38 @@ def test_ensure_pending_signoff_idempotent_and_backfills_run_link(d4_client, db_
     db_session.commit()
     assert fourth.id != first.id
     assert len(_checkpoints(db_session, solution)) == 2
+
+
+def test_signoff_viewer_with_high_ai_level_still_forbidden(d4_client, db_session, d4_settings) -> None:
+    """V3 T-P1-4（WB-DEF-2）：拍板权限双层——viewer 即便被显式授予
+    system_operator 档（AI 档位闸本可通过）也必须被项目 can_manage 闸拦下；
+    拦截面是 forbidden 而非 signoff_level_required（证明档位闸不是拦截者）。
+    负向对照：同项目 project_lead（can_manage+档位双过）照常拍板。"""
+    from fde_api.control.models import UserAIAccessGrant
+    from fde_api.workbench.models import ProjectMember
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"SG{uuid4().hex[:4]}")
+    solution = _solution(db_session, project, leader.user)
+    checkpoint = _checkpoint(db_session, solution)  # required_level=project_manager
+
+    viewer = api_client(d4_client, db_session, d4_settings, "viewer")
+    db_session.add(ProjectMember(project_id=project.id, user_id=viewer.user.id, role="viewer"))
+    db_session.add(
+        UserAIAccessGrant(
+            user_id=viewer.user.id,
+            access_level="system_operator",
+            granted_by_user_id=leader.user.id,
+        )
+    )
+    db_session.commit()
+
+    body = _signoff(viewer, project, solution, {"decision": "approved"})
+    assert body.status_code == 403
+    assert body.json["error"]["code"] == "forbidden"
+    db_session.refresh(checkpoint)
+    assert checkpoint.status == "pending"
+    assert checkpoint.reviewer_user_id is None
+
+    approved = _signoff(leader, project, solution, {"decision": "approved"})
+    assert approved.status_code == 200, approved.json

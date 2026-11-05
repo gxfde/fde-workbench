@@ -211,7 +211,7 @@ def register_cli(app: Flask) -> None:
     @click.option("--once", is_flag=True, help="Dispatch due tasks once and exit.")
     @click.option("--interval", default=30, type=click.IntRange(5, 300), show_default=True)
     def scheduler(once: bool, interval: int) -> None:
-        from fde_api.control.scheduler import dispatch_due_automations
+        from fde_api.control.scheduler import dispatch_due_automations, sweep_expired_approvals
         from fde_api.health.heartbeat import beat
 
         click.echo("scheduler started")
@@ -227,6 +227,11 @@ def register_cli(app: Flask) -> None:
             dispatched = dispatch_due_automations()
             if dispatched:
                 click.echo(f"dispatched={dispatched}")
+            # V3 T-P1-5（WB-DEF-3）：过期审批后台清扫——与派单同拍，
+            # 无人工触碰的过期 pending 也按时落 expired。
+            expired_approvals = sweep_expired_approvals()
+            if expired_approvals:
+                click.echo(f"expired_approvals={expired_approvals}")
             # goal-r6（P1-7）：派单维护作业 24h 节流到期即投递（超时释放 /
             # 留存扫描 / T+30 对账；topic 即 job_type=dispatch.maintenance，
             # target=当日 token 由 ensure_background_job 天然去重）。

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload
 
 from fde_api.auth.models import User
 from fde_api.auth.service import AuthServiceError, verify_current_password
@@ -698,6 +698,28 @@ def list_automation_approvals(*, user: User) -> dict[str, Any]:
         session.close()
 
 
+def _expire_approval(
+    session: Session, approval: AutomationApproval, *, reviewer: User | None, now: datetime
+) -> None:
+    """pending+过期 → expired 终态的唯一翻转原语（V3 T-P1-5 / WB-DEF-3）。
+
+    三处共用：decide 惰性判定 / dsh_approval_status 查询翻转 / scheduler
+    后台清扫——语义钉死为一处：审批行 expired+version+1；挂 automation run
+    的把 run 落 failed(approval_expired)；workflow 节点审批走
+    _settle_workflow_node(approved=None)（断链语义，节点 failed 并重投）。
+    """
+    approval.status = "expired"
+    automation_run = approval.run
+    if automation_run is not None:
+        automation_run.status = "failed"
+        automation_run.error_code = "approval_expired"
+        automation_run.error_message = "操作审批已过期。"
+        automation_run.finished_at = now
+    else:
+        _settle_workflow_node(session, approval, approved=None, reviewer=reviewer)
+    approval.version += 1
+
+
 def decide_automation_approval(
     *, user: User, approval_id: str, decision_value: str, password: str, reason: str
 ) -> dict[str, Any]:
@@ -724,16 +746,7 @@ def decide_automation_approval(
                 return _serialize_approval(approval, can_review=False)
             now = datetime.now(UTC)
             if approval.expires_at <= now:
-                approval.status = "expired"
-                automation_run = approval.run
-                if automation_run is not None:
-                    automation_run.status = "failed"
-                    automation_run.error_code = "approval_expired"
-                    automation_run.error_message = "操作审批已过期。"
-                    automation_run.finished_at = now
-                else:
-                    _settle_workflow_node(session, approval, approved=None, reviewer=user)
-                approval.version += 1
+                _expire_approval(session, approval, reviewer=user, now=now)
                 session.flush()
                 result = _serialize_approval(approval, can_review=False)
                 expired = True
@@ -800,15 +813,7 @@ def dsh_approval_status(*, approval_id: str) -> dict[str, Any]:
             if approval is None:
                 raise ControlServiceError("approval_not_found", "审批请求不存在。", 404)
             if approval.status == "pending" and approval.expires_at <= datetime.now(UTC):
-                approval.status = "expired"
-                automation_run = approval.run
-                if automation_run is not None:
-                    automation_run.status = "failed"
-                    automation_run.error_code = "approval_expired"
-                    automation_run.error_message = "操作审批已过期。"
-                    automation_run.finished_at = datetime.now(UTC)
-                else:
-                    _settle_workflow_node(session, approval, approved=None, reviewer=None)
+                _expire_approval(session, approval, reviewer=None, now=datetime.now(UTC))
             return _serialize_approval(approval, can_review=False, include_arguments=False)
     finally:
         session.close()

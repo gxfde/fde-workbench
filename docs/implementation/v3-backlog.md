@@ -275,20 +275,31 @@
   - **统计读出（零新路由，283 不变）**：GET …/extensions/skills/{id}/versions 响应新增 `usage` 块——`{total, chat, workflow, last_used_at, by_version, truncated}`；有界扫描（最近 1000 条消费事件，新→旧）Python 侧聚合（metrics/service 同款模式），触顶 `truncated=true` 诚实标注；治理事件不进 usage；by_version 供回滚决策（旧版本还在被 workflow pinned 引用吗）。桌面端本就不消费 versions 端点，零桌面改动（vitest 731 不变）。
   - 测试：test_skill_lifecycle.py **7→11**（治理事件四类+闸失败零事件 / chat 计数+回滚存活+404 不计数 / usage 汇总含零值与按版本 / truncated 诚实标注）+ test_workflow_executor.py 两用例扩展（pinned v1 消费断言 / 失败 attempt 不计消费）；零迁移零新表（operation_events 直落），test_migrations HEAD 不变 `b5d9e3f7a1c6`。
 
-### T-J1 outbox 状态闭环（WB-DEF-9）
+### T-J1 outbox 状态闭环（WB-DEF-9）— **DONE（2026-11-05，与 T-P1-4/T-P1-5 同轮）**
 - 修改文件：`jobs/outbox.py`（mark_completed/mark_failed）、`jobs/worker.py`（settle 时回写）。测试：test_outbox 扩展。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - 联动键 = `(topic, aggregate_id) == (job_type, target_id)`（`dispatch_pending` 去重所用的同一对），落库为 `outbox.mark_completed/mark_failed(session, job_type, target_id[, last_error])`——只翻转仍处 `dispatched` 的事件；未派发的 `pending` 行不动（属于未来派发），`last_error` 截断 2000 字。
+  - **三个终态写入点全覆盖**（原设计只列 worker.settle 一处）：①`worker._settle` 成功/失败与 job 终态**同事务**收口；②`worker._claim` no_handler 终失败在 claim 事务内同步收口；③`reconcile._fail_job`（worker 失联终失败）同键收口。settle 的 stale-token/already-terminal 分支不写 outbox（归属新 claim 的 settle）。
+  - 测试：test_outbox +2（completed 只收 dispatched/pending 不动/未知键零命中；failed 错误摘要 2000 截断）+ test_worker +3（成功/失败/no_handler 三条端到端：enqueue→dispatch→run_job→事件终态断言）。
 
-### T-J2 handler 自动重试 + job 取消 API（域 14）
+### T-J2 handler 自动重试 + job 取消 API（域 14）— **P1 唯一剩余项**
 - 修改文件：`jobs/worker.py`（指数退避≤max_attempts）、NEW admin 路由（POST /api/v1/admin/jobs/{id}/cancel，admin）。测试：test_worker/test_job_reconcile 扩展。复杂度：**M**。
+- 注：重试落地时失败语义从「首败即 failed」变「退避重试至 attempts 耗尽」——outbox failed 收口（T-J1）必须只在最终失败分支触发，不得每败一次就翻转。
 
-### T-P1-4 resolve_signoff 双闸（WB-DEF-2）
+### T-P1-4 resolve_signoff 双闸（WB-DEF-2）— **DONE（2026-11-05，与 T-J1/T-P1-5 同轮）**
 - 修改文件：`solutions/service.py`（can_manage+档位）。测试：负向用例（viewer+高 AI 档→403）。复杂度：**S**。
+- **实施记录**：`_load_project_for_view`（can_view）→ `_load_project_for_update` + `_require_project_manager`（can_manage），与 `generate_agent_solution` 的「权限双层」同款先例；错误面靠既有别名 `SolutionServiceError = DocumentDraftServiceError` 直接面世 403 `forbidden`。测试：test_solution_signoff +1——viewer 成员 + 显式 `UserAIAccessGrant(system_operator)`（档位闸可通过）仍 403 `forbidden`（证明拦截者是 can_manage 而非档位闸）+ checkpoint 留 pending + 同项目 lead 照常拍板 200。
 
-### T-P1-5 审批过期清扫（WB-DEF-3）
+### T-P1-5 审批过期清扫（WB-DEF-3）— **DONE（2026-11-05，与 T-J1/T-P1-4 同轮）**
 - 修改文件：`control/scheduler.py`。测试：test_scheduling 扩展。复杂度：**S**。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - 先把过期翻转从 decide/`dsh_approval_status` 两处**内联重复**提取为唯一原语 `control/service._expire_approval(session, approval, *, reviewer, now)`（审批行 expired+version+1；挂 automation run → failed(approval_expired)；workflow 节点审批 → `_settle_workflow_node(approved=None)` 断链语义）——两处惰性判定改调原语，行为零变化。
+  - `scheduler.sweep_expired_approvals(now=None, limit=100)`：pending+expires_at 到期批量经原语翻转，`with_for_update(skip_locked=True)` 与并发拍板互不阻塞；**接线在 `cli.py` scheduler 命令循环**（派单同拍，`expired_approvals=N` 回显；`--once` 同样生效）——backlog 原列文件不含 cli.py，此为必要接缝。
+  - 测试落点：审批测试在 control 面而非 test_scheduling（那是工作台任务排期）——test_control_plane_api +1（未过期零翻转不动 → 过期翻转 1 且 run→failed/approval_expired → 幂等二轮零翻转）。
 
-### T-OBS1 降级 chat 落审计（WB-DEF-4）
+### T-OBS1 降级 chat 落审计（WB-DEF-4）— **DONE（2026-11-05 核验收口，由 #112 CR-006 覆盖）**
 - 修改文件：`ai/ai_server_client.py`、`control/ai_tool_loop.py`（request_id 前缀 direct-chat-*，成功/失败均 record）。测试：test_ai_server_direct_fallback 扩展。复杂度：**S**。
+- **核验记录（零补码）**：chat 入口 `control/chat.py` 直调 `execute_ai_prompt`——DSH 降级直连腿即其内部 `_degraded_direct_result`，已被 #112（CR-006 统一入账轮）补上成功/失败审计腿（used_fallback=True、provider_usage 计额入 `ai_monthly_token_budget` 月账本），WB-DEF-4 的两个病灶（不落 ai_call_audits / 月预算失真）均已闭环，测试见 test_ai_server_budget_audit.py。设计里的 `direct-chat-*` request_id 前缀不再需要：#112 的审计行携带 purpose + used_fallback + execution_id（=chat turn id 原样），区分度优于前缀方案。
 
 ## P2（交付编译与质量闭环）
 

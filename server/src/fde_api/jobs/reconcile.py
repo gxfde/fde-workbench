@@ -48,7 +48,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.jobs.handlers import get_job_failure_handler
 from fde_api.jobs.models import BackgroundJob
-from fde_api.jobs.outbox import utcnow
+from fde_api.jobs.outbox import mark_failed, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +195,9 @@ def _fail_job(session: Session, job: BackgroundJob, reason: str) -> None:
     job.locked_until = None
     job.locked_by = None
     job.last_error = f"{WORKER_LOST_ERROR}:{reason}"
+    # T-J1（WB-DEF-9）：worker 失联终失败同样收口派生 outbox 事件——
+    # 与 worker._settle 同一把 (job_type, target_id) 键。
+    mark_failed(session, job.job_type, job.target_id, job.last_error)
     handler = get_job_failure_handler(job.job_type)
     if handler is None:
         return

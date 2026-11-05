@@ -320,7 +320,10 @@ def solution_review_trail(*, actor: User, project_id: str, solution_id: str) -> 
 def resolve_signoff(*, actor: User, project_id: str, solution_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """终审台拍板收口（goal-d9，总纲 U5/PRD §3.2 P3）：signoff checkpoint 的
     approved/rejected 是**人工拍板动作**——api_catalog 永不收编（红线：不收
-    代拍板写路径；本端点只由人调用，权限档闸 = checkpoint.required_level）。
+    代拍板写路径；本端点只由人调用）。
+
+    权限双层（V3 T-P1-4 / WB-DEF-2）：项目 can_manage（本函数）+ AI 档位闸
+    = checkpoint.required_level——viewer 即便被授予高档访问也不能拍板。
 
     attempt 计数 = 该方案此前已 rejected 的 signoff checkpoint 数 + 1（事件
     payload 携带，供「SOW 一次拍板通过率」口径复核；报表主口径走事件序）。
@@ -334,7 +337,11 @@ def resolve_signoff(*, actor: User, project_id: str, solution_id: str, payload: 
     if evidence_ref is not None and (not isinstance(evidence_ref, str) or not evidence_ref.strip() or len(evidence_ref) > 255):
         _error("invalid_request", "evidence_ref 须为 ≤255 字符的指针。")
     with db.session() as session, session.begin():
-        project = documents._load_project_for_view(session, actor, project_id)
+        # T-P1-4（WB-DEF-2）：can_view→can_manage——拍板是项目侧管理动作，
+        # 与 generate_agent_solution 同款「权限双层」：项目 can_manage +
+        # AI 档位（required_level）双闸缺一不可。
+        project = documents._load_project_for_update(session, project_id)
+        documents._require_project_manager(actor, project)
         solution = _load(session, project.id, solution_id)
         checkpoint = session.scalar(
             select(SolutionReviewCheckpoint)

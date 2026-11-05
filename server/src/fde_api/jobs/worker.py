@@ -33,7 +33,7 @@ from sqlalchemy import update
 from fde_api.extensions import db
 from fde_api.jobs.handlers import get_handler
 from fde_api.jobs.models import BackgroundJob
-from fde_api.jobs.outbox import utcnow
+from fde_api.jobs.outbox import mark_completed, mark_failed, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,9 @@ def _claim(session, job_id: str) -> _Claim:
             job.status = "failed"
             job.attempts += 1
             job.last_error = "no_handler_registered"
+            # T-J1（WB-DEF-9）：本 claim 事务内同步收口派生 outbox 事件，
+            # 否则 dispatched 行永远无人翻转。
+            mark_failed(session, job.job_type, job.target_id, "no_handler_registered")
             return _Claim("no_handler")
 
         job.status = "running"
@@ -137,6 +140,9 @@ def _settle(
     the (renewal-broken) handler was still running and another worker
     claimed it, the stale worker must not overwrite the new claim's state.
     Returns whether the write happened.
+
+    T-J1（WB-DEF-9）：终态落库与派生 outbox 事件收口同事务——job 行与
+    outbox 行要么一起翻转，要么一起留在原状。
     """
     # 结束可能残留的隐式事务（handler 若碰过同一 session）：`session.begin()`
     # 要求当前没有活动事务。
@@ -156,6 +162,10 @@ def _settle(
         job.locked_by = None
         if last_error:
             job.last_error = last_error
+        if status == "succeeded":
+            mark_completed(session, job.job_type, job.target_id)
+        else:
+            mark_failed(session, job.job_type, job.target_id, last_error)
         return True
 
 
