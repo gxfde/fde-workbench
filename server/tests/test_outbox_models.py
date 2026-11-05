@@ -71,6 +71,23 @@ def test_database_rejects_unknown_job_status(db_session):
         db_session.commit()
 
 
+def test_database_accepts_cancelled_status_and_frees_slot(db_session):
+    """V3 T-J2：cancelled 是真终态——CHECK 接受、槽位释放（active_key NULL），
+    同键可立刻开新 job（取消后合法新工作不被旧行占位）。"""
+    cancelled = BackgroundJob(
+        job_type="file.scan", target_id="v2", status="cancelled"
+    )
+    db_session.add(cancelled)
+    db_session.commit()
+    db_session.refresh(cancelled)
+    assert cancelled.active_key is None
+
+    fresh = BackgroundJob(job_type="file.scan", target_id="v2", status="pending")
+    db_session.add(fresh)
+    db_session.commit()
+    assert fresh.id is not None
+
+
 def test_database_rejects_negative_job_attempts(db_session):
     db_session.add(
         BackgroundJob(

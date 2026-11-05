@@ -218,7 +218,9 @@ def maintenance_due(session: Session, *, now: datetime | None = None) -> bool:
     last_finished_at = session.scalar(
         select(func.max(BackgroundJob.updated_at)).where(
             BackgroundJob.job_type == _MAINTENANCE_JOB_TYPE,
-            BackgroundJob.status.in_(("succeeded", "failed")),
+            # T-J2：cancelled 也是「已完结」终态——被取消的维护 job 不把
+            # 24h 节拍门挂死在旧的 succeeded 时间戳上。
+            BackgroundJob.status.in_(("succeeded", "failed", "cancelled")),
         )
     )
     if last_finished_at is None:

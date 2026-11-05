@@ -96,6 +96,12 @@ WORKER_LOST_ERROR = "worker_lost"
 # How many candidates one sweep looks at.
 RECONCILE_LIMIT = 100
 
+# T-J2：due 重投的迟滞窗。退避到期的重试行（queued + available_at 已过）
+# 由本 sweep 补投 redis；短窗把「刚 requeue、条目已在 redis 里」的正常行
+# 挡在门外（requeue 落库即投递），只有退避等待行才需要它。投递语义是
+# at-least-once：重复条目由 claim 侧 already_terminal/not_due 守卫消化。
+DUE_REQUEUE_DELAY_SECONDS = 10
+
 
 @dataclass(frozen=True, slots=True)
 class ReconcileResult:
@@ -104,6 +110,8 @@ class ReconcileResult:
     scanned: int
     requeued: int
     failed: int
+    # T-J2：退避到期行的 redis 补投数（行不动，只投递）。
+    due_enqueued: int = 0
 
     @property
     def changed(self) -> int:
@@ -127,13 +135,22 @@ def reconcile_jobs(
     """
     current = now or utcnow()
     grace_cutoff = current - timedelta(seconds=ORPHAN_GRACE_SECONDS)
+    # due 面下限：晚于孤儿宽限线（与孤儿 shape 不相交）、早于迟滞窗
+    # （刚 requeue 的行已投递，不重复投）。
+    due_floor = current - timedelta(seconds=DUE_REQUEUE_DELAY_SECONDS)
     requeue_ids: list[str] = []
+    due_ids: list[str] = []
     failed = 0
     requeued = 0
     scanned = 0
     try:
         candidates = list(session.scalars(
             select(BackgroundJob)
+            # 陈旧身份映射防护（_settle 的 populate_existing 同款）：调用方
+            # session 里若残留本行的旧实例（如同事务早前读过的 pending 态），
+            # 普通 SELECT 会把行解析到旧实例上，per-row 判定读到内存陈值
+            # 走错分支。execution_options 写法兼容 1.4/2.0。
+            .execution_options(populate_existing=True)
             .where(
                 or_(
                     and_(
@@ -147,6 +164,13 @@ def reconcile_jobs(
                         BackgroundJob.status.in_(("pending", "queued")),
                         BackgroundJob.available_at < grace_cutoff,
                     ),
+                    # T-J2：退避到期的重试行——redis 条目从未投出（run_job
+                    # 的重试分支只落库不投递），这里补投。
+                    and_(
+                        BackgroundJob.status == "queued",
+                        BackgroundJob.available_at < due_floor,
+                        BackgroundJob.available_at >= grace_cutoff,
+                    ),
                 )
             )
             .order_by(BackgroundJob.created_at, BackgroundJob.id)
@@ -156,6 +180,16 @@ def reconcile_jobs(
         ))
         scanned = len(candidates)
         for job in candidates:
+            # due 面：退避到期且仍在迟滞窗内的 queued 行——只补投不改行。
+            # 可恢复性在重试分支落库时已判过，这里不再二次淘汰。
+            is_due = (
+                job.status == "queued"
+                and job.available_at < due_floor
+                and job.available_at >= grace_cutoff
+            )
+            if is_due:
+                due_ids.append(job.id)
+                continue
             if job.attempts >= job.max_attempts:
                 _fail_job(session, job, "attempts_exhausted")
                 failed += 1
@@ -177,11 +211,16 @@ def reconcile_jobs(
 
     for job_id in requeue_ids:
         queue.enqueue(job_id)  # type: ignore[attr-defined]
-    if requeued or failed:
+    for job_id in due_ids:
+        queue.enqueue(job_id)  # type: ignore[attr-defined]
+    if requeued or failed or due_ids:
         logger.warning(
-            "job reconciliation requeued=%s failed=%s scanned=%s", requeued, failed, scanned
+            "job reconciliation requeued=%s failed=%s due=%s scanned=%s",
+            requeued, failed, len(due_ids), scanned,
         )
-    return ReconcileResult(scanned=scanned, requeued=requeued, failed=failed)
+    return ReconcileResult(
+        scanned=scanned, requeued=requeued, failed=failed, due_enqueued=len(due_ids)
+    )
 
 
 def _fail_job(session: Session, job: BackgroundJob, reason: str) -> None:

@@ -269,6 +269,98 @@ def test_non_recoverable_job_type_is_failed(db_session):
     assert queue.enqueued == []
 
 
+# --- V3 T-J2（域 14）：退避重试的 due 补投面 --------------------------------
+
+
+def test_due_retry_job_is_reenqueued_without_row_change(db_session):
+    """退避到期的重试行补投 redis：行不动（queued/available_at 保持），
+    重置等待是 run_job 重试分支的职责，补投只递条目。"""
+    job = _job(
+        db_session,
+        job_type="file.scan",
+        status="queued",
+        available_at=_past(seconds=60),
+    )
+    queue = _FakeQueue()
+
+    result = reconcile_jobs(db_session, queue)
+
+    db_session.refresh(job)
+    assert result.due_enqueued == 1
+    assert result.requeued == 0
+    assert result.failed == 0
+    assert job.status == "queued"
+    assert queue.enqueued == [job.id]
+
+
+def test_backoff_waiting_job_is_left_alone(db_session):
+    """退避等待中（available_at 未来）：不是孤儿、不到 due，零动作。"""
+    job = _job(
+        db_session,
+        job_type="file.scan",
+        status="queued",
+        available_at=_future(seconds=30),
+    )
+    queue = _FakeQueue()
+
+    result = reconcile_jobs(db_session, queue)
+
+    db_session.refresh(job)
+    assert result.scanned == 0
+    assert result.due_enqueued == 0
+    assert job.status == "queued"
+    assert queue.enqueued == []
+
+
+def test_cancelled_job_is_never_swept(db_session):
+    """域 14 验收：取消后不再被 reconcile 重排或复活（终态不在候选集）。"""
+    job = _job(
+        db_session,
+        job_type="file.scan",
+        status="cancelled",
+        available_at=_past(seconds=ORPHAN_GRACE_SECONDS + 60),
+    )
+    queue = _FakeQueue()
+
+    result = reconcile_jobs(db_session, queue)
+
+    db_session.refresh(job)
+    assert result.scanned == 0
+    assert result.requeued == 0
+    assert result.failed == 0
+    assert job.status == "cancelled"
+    assert queue.enqueued == []
+
+
+def test_due_sweep_delivers_retry_job_to_completion(db_session):
+    """完整闭环：handler 瞬时失败退避 → due 补投 → 二跑成功。"""
+    job = _job(db_session, job_type="file.scan", status="pending")
+    calls: list[int] = []
+
+    def flaky(current):
+        calls.append(current.attempts)
+        if len(calls) == 1:
+            raise RuntimeError("transient")
+
+    register_handler("file.scan", flaky)
+    queue = _FakeQueue()
+    try:
+        assert run_job(job.id) == "retrying"
+        # 模拟退避到期（worker 循环里由 reconcile 的 due 面补投）
+        job.available_at = _past(seconds=60)
+        db_session.commit()
+        result = reconcile_jobs(db_session, queue)
+        assert result.due_enqueued == 1
+        outcome = run_job(queue.enqueued[0])
+    finally:
+        clear_handlers()
+
+    db_session.refresh(job)
+    assert outcome == "succeeded"
+    assert calls == [1, 2]
+    assert job.status == "succeeded"
+
+
 # --- business rows ---------------------------------------------------------
 
 

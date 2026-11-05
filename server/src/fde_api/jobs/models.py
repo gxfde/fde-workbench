@@ -20,7 +20,20 @@ from fde_api.auth.models import UTCDateTime, UTC_TIMESTAMP_SQL
 from fde_api.workbench.models import Base, TimestampMixin, VersionedMixin, new_uuid
 
 OUTBOX_STATUSES = ("pending", "dispatched", "completed", "failed")
-BACKGROUND_JOB_STATUSES = ("pending", "queued", "running", "succeeded", "failed")
+BACKGROUND_JOB_STATUSES = (
+    "pending",
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+)
+# V3 T-J2（域 14）：cancelled 是独立终态——幂等取消要能区分「已取消」
+# （200 cancelled=false）与「跑完/失败」（409 already_terminal），不能靠
+# failed+last_error 前缀猜。槽位语义与 succeeded/failed 一致（释放
+# (job_type, target_id)，active_key 生成列对一切非活跃态本就取 NULL，
+# 故迁移只需置换 CHECK 约束，无需重建生成列）。
+TERMINAL_JOB_STATUSES = ("succeeded", "failed", "cancelled")
 
 # Terminal statuses free the (job_type, target_id) slot for a fresh active job.
 # v0.2 (PG 迁移): 原用 CONCAT(job_type, ':', target_id)。PG 的 concat() 是 STABLE
@@ -69,7 +82,7 @@ class BackgroundJob(Base, TimestampMixin, VersionedMixin):
     __tablename__ = "background_jobs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'queued', 'running', 'succeeded', 'failed')",
+            "status IN ('pending', 'queued', 'running', 'succeeded', 'failed', 'cancelled')",
             name="ck_background_jobs_status",
         ),
         CheckConstraint("attempts >= 0", name="ck_background_jobs_attempts"),

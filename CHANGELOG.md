@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 T-J2 收官：handler 自动重试 + admin 任务取消 API（2026-11-05，P1 全清）
+
+### 服务端（域 14 最后一块；迁移 +1 纯 CHECK 置换；路由 +1；零桌面）
+
+- **handler 自动重试**：可恢复类型（复用 reconcile `RECOVERABLE_JOB_TYPES` 幂等白名单）handler 抛错不再首败即终——指数退避重投（30s×2 封顶 15 分钟）直至 `attempts` 耗尽；重试期间 outbox 事件保持 `dispatched`（T-J1 红线：只有最终失败才收口 failed），退避到期由 reconcile 新增 due 补投面送回队列（at-least-once，认领侧 `not_due` 守卫消化重复条目）；外副作用类型（automation.execute）维持首败即 failed。candidates 查询补 `populate_existing`（同 session 残留旧实例会让分支判定读内存陈值——实测踩中）。
+- **admin 任务取消 API**：`POST /api/v1/admin/jobs/{id}/cancel`（admin，幂等）——**cancelled 成为真状态**（迁移 `d9f4a7c2e6b1` 纯 CHECK 置换，active_key 生成列天然兼容零重建）；重复取消 200 `cancelled=false`、终态 409 `already_terminal`、运行中活租约 409 `job_running` 不强杀（等租约过期后可接管）、过期租约=worker 已死可安全取消（迟到 settle 被终态守卫拒绝）；取消同事务三面收口：job 行 + 同键 outbox 事件（pending+dispatched 一并收口，防下一轮 dispatch 复活）+ `operation_events job_cancelled` 留痕。不进 api_catalog（平台运维面）。
+- 测试与口径：pytest +21（worker 重试 7 + reconcile due 面 4 + cancelled CHECK 1 + NEW test_admin_jobs 9）＝**1933 收集 = 1927 passed + 6 skipped**；105 表 / 迁移头 `d9f4a7c2e6b1`（35 rev）/ 路由 298 / ENTRIES 94 / vitest 771 不变。**至此 V3 P1 任务全部交付**（T-J1/T-J2/T-P1-4/T-P1-5/T-OBS1）；CR-016 outbox 死信闭环补齐（取消/重试双路径均以终态收口）。
 ## [未发布] — V3 P3 立项轮：高级自主化四项立项合同（2026-11-05）
 
 ### 文档（零代码零迁移零路由零桌面；口径不变）

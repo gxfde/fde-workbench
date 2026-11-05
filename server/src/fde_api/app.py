@@ -72,6 +72,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # S1 编程工作台（goal-d4）：agent 注册表 + run 生命周期（适配器/溯源/成本）
     from fde_api.agents.routes import agents_blueprint
     app.register_blueprint(agents_blueprint)
+    # V3 T-J2（域 14）：admin 后台任务取消面（幂等/不强杀/留痕，不进 api_catalog）
+    from fde_api.jobs.admin_routes import admin_jobs_blueprint
+    app.register_blueprint(admin_jobs_blueprint)
     # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
     from fde_api.meetings.routes import meetings_blueprint
     app.register_blueprint(meetings_blueprint)

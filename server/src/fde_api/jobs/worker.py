@@ -32,8 +32,9 @@ from sqlalchemy import update
 
 from fde_api.extensions import db
 from fde_api.jobs.handlers import get_handler
-from fde_api.jobs.models import BackgroundJob
+from fde_api.jobs.models import TERMINAL_JOB_STATUSES, BackgroundJob
 from fde_api.jobs.outbox import mark_completed, mark_failed, utcnow
+from fde_api.jobs.reconcile import RECOVERABLE_JOB_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,14 @@ LEASE_MINUTES = 5
 # How often the lease is renewed while a handler runs. Well below the lease
 # itself, so a live job never looks expired to the reconciler.
 LEASE_RENEW_SECONDS = 60
+
+# V3 T-J2（域 14）：handler 抛错不再首败即 failed——可重试类型按指数退避
+# 重投（30s 起步、翻倍、封顶 15min），直到 attempts 耗尽才终失败。可重试
+# 集合就是 reconcile 的 RECOVERABLE_JOB_TYPES：handler 中途抛错意味着副作用
+# 状态未知，只有声明过幂等跳过的 handler 才允许重跑（automation.execute
+# 这类外副作用类型维持首败即 failed，语义不变）。
+RETRY_BACKOFF_BASE_SECONDS = 30
+RETRY_BACKOFF_MAX_SECONDS = 900
 
 
 @dataclass(slots=True)
@@ -77,10 +86,7 @@ def run_job(job_id: str) -> str:
             stop.set()
             if renewer is not None:
                 renewer.join(timeout=1)
-            settled = _settle(
-                session, job_id, claim.token, status="failed", last_error=str(exc)
-            )
-            return "failed" if settled else "settled_elsewhere"
+            return _handle_failure(session, job_id, claim.token, error=str(exc))
         stop.set()
         if renewer is not None:
             renewer.join(timeout=1)
@@ -101,7 +107,7 @@ def _claim(session, job_id: str) -> _Claim:
         job = session.get(BackgroundJob, job_id, with_for_update=True)
         if job is None:
             return _Claim("not_found")
-        if job.status in ("succeeded", "failed"):
+        if job.status in TERMINAL_JOB_STATUSES:
             return _Claim("already_terminal")
         if (
             job.status in ("queued", "running")
@@ -109,6 +115,11 @@ def _claim(session, job_id: str) -> _Claim:
             and job.locked_until > utcnow()
         ):
             return _Claim("leased")
+        # T-J2：退避等待中的重试行（queued + 未来 available_at）不认领。
+        # 允许 at-least-once 重复投递，认领侧守卫把早到的条目丢回——到期
+        # 后由 reconcile 的 due 重投面再送一次（条目丢失也自愈）。
+        if job.status == "queued" and job.available_at > utcnow():
+            return _Claim("not_due")
 
         handler = get_handler(job.job_type)
         if handler is None:
@@ -155,7 +166,7 @@ def _settle(
             return False
         if job.locked_by is not None and job.locked_by != token:
             return False
-        if job.status in ("succeeded", "failed"):
+        if job.status in TERMINAL_JOB_STATUSES:
             return False
         job.status = status
         job.locked_until = None
@@ -167,6 +178,54 @@ def _settle(
         else:
             mark_failed(session, job.job_type, job.target_id, last_error)
         return True
+
+
+def _retry_delay(attempts: int) -> int:
+    """Exponential backoff for the nth failed attempt (T-J2).
+
+    ``attempts`` is the count already burned (claim increments it), so the
+    first failure waits the base delay: 30s → 60s → 120s → 240s → … capped
+    at 15 minutes.
+    """
+    return min(
+        RETRY_BACKOFF_BASE_SECONDS * 2 ** max(attempts - 1, 0),
+        RETRY_BACKOFF_MAX_SECONDS,
+    )
+
+
+def _handle_failure(session, job_id: str, token: str, *, error: str) -> str:
+    """Retry a recoverable job with backoff, or settle it failed (V3 T-J2).
+
+    Decision transaction first, terminal write second: ``_settle`` opens its
+    own transaction (and rolls the session back on entry), so the retry
+    branch must be committed before the failure settle runs.
+
+    T-J1 红线：outbox 的 failed 收口只在**最终失败**分支（``_settle`` 内）
+    触发——中间每一次重试都必须让已派发的事件保持 ``dispatched``，否则
+    重试成功后没人再把它们翻成 completed。
+    """
+    session.rollback()
+    with session.begin():
+        job = session.get(
+            BackgroundJob, job_id, with_for_update=True, populate_existing=True
+        )
+        if (
+            job is not None
+            and (job.locked_by is None or job.locked_by == token)
+            and job.status not in TERMINAL_JOB_STATUSES
+            and job.job_type in RECOVERABLE_JOB_TYPES
+            and job.attempts < job.max_attempts
+        ):
+            job.status = "queued"
+            job.locked_until = None
+            job.locked_by = None
+            job.last_error = error
+            job.available_at = utcnow() + timedelta(
+                seconds=_retry_delay(job.attempts)
+            )
+            return "retrying"
+    settled = _settle(session, job_id, token, status="failed", last_error=error)
+    return "failed" if settled else "settled_elsewhere"
 
 
 def _renew_lease(app, job_id: str, token: str, stop: threading.Event) -> None:

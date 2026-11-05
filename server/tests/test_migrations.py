@@ -57,7 +57,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-O4b：project_research_subjects +merged_into_subject_id（合并指向，复合外键+CHECK）
 # V3 T-G1：gates +evidence_candidates JSON 可空列（任务产物→门禁证据候选，建议性）
 # V3 T-D1：document_generation_jobs +ai_request_id（WB-DEF-6 文档血缘：job 行反查 ai_call_audits）
-HEAD_REVISION = "e2c6a8f4d1b3"
+# V3 T-J2：background_jobs 状态值域 +cancelled（admin 取消面，纯 CHECK 置换零列重建）
+HEAD_REVISION = "d9f4a7c2e6b1"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1056,13 +1057,13 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
 
 
 def test_known_alembic_revisions_covers_current_head(test_settings):
-    """本树判定基准必须包含当前 HEAD_REVISION（含 34 个迁移文件全集）。"""
+    """本树判定基准必须包含当前 HEAD_REVISION（含 35 个迁移文件全集）。"""
     from alembic.config import Config
 
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    assert len(known) == 34  # 与 inventory revision_count 对齐
+    assert len(known) == 35  # 与 inventory revision_count 对齐
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

@@ -282,9 +282,16 @@
   - **三个终态写入点全覆盖**（原设计只列 worker.settle 一处）：①`worker._settle` 成功/失败与 job 终态**同事务**收口；②`worker._claim` no_handler 终失败在 claim 事务内同步收口；③`reconcile._fail_job`（worker 失联终失败）同键收口。settle 的 stale-token/already-terminal 分支不写 outbox（归属新 claim 的 settle）。
   - 测试：test_outbox +2（completed 只收 dispatched/pending 不动/未知键零命中；failed 错误摘要 2000 截断）+ test_worker +3（成功/失败/no_handler 三条端到端：enqueue→dispatch→run_job→事件终态断言）。
 
-### T-J2 handler 自动重试 + job 取消 API（域 14）— **P1 唯一剩余项**
+### T-J2 handler 自动重试 + job 取消 API（域 14）— **DONE（2026-11-05，独立轮）**
 - 修改文件：`jobs/worker.py`（指数退避≤max_attempts）、NEW admin 路由（POST /api/v1/admin/jobs/{id}/cancel，admin）。测试：test_worker/test_job_reconcile 扩展。复杂度：**M**。
 - 注：重试落地时失败语义从「首败即 failed」变「退避重试至 attempts 耗尽」——outbox failed 收口（T-J1）必须只在最终失败分支触发，不得每败一次就翻转。
+- **实施记录（与设计的偏差，按主报告纪律回写）**：
+  - **重试**：`run_job` 异常分支改走 `_handle_failure`——决策事务先行（retry 分支提交后再走 `_settle`，后者自开事务且入口先 rollback）；可重试集合**复用 reconcile 的 `RECOVERABLE_JOB_TYPES`**（handler 抛错=副作用状态未知，只有声明过幂等跳过的类型才可重跑），非可恢复类型（automation.execute）维持首败即 failed。退避 30s 起步 ×2 封顶 900s（`_retry_delay(attempts)`）；重试行落 `queued`+未来 `available_at`，**outbox 事件保持 dispatched 不动**（T-J1 红线，专项测试钉住）。终失败（耗尽/非可恢复）才经 `_settle` 收口 outbox failed。
+  - **due 重投面（设计未列，必要补码）**：重试分支只落库不投 redis——`available_at` 过期后的补投由 reconcile 新增第三候选 shape 承担（queued + available_at ∈ [grace_cutoff, due_floor)，`DUE_REQUEUE_DELAY_SECONDS=10` 迟滞窗把刚 requeue 已投递的正常行挡在门外），投递语义 at-least-once（`ReconcileResult.due_enqueued` 计数，行不动）；认领侧配套 `_claim` 新增 `not_due` 守卫（queued+未来 available_at 不认领），重复投递的早到条目被安全丢弃、不烧 attempts。
+  - **陈旧身份映射防护**：candidates 查询加 `execution_options(populate_existing=True)`——同 session 残留旧行实例（内存 pending 态）会让 per-row 判定读到内存陈值走错分支（实测踩中：无防护时重试等待行被误判孤儿重排）；`_settle` 的 populate_existing 同款先例。
+  - **cancelled 是真状态（设计未提，迁移 `d9f4a7c2e6b1` 35 rev）**：幂等取消要区分「已取消」（200 cancelled=false）与「跑完/失败」（409 already_terminal），failed+last_error 前缀区分不了；纯 CHECK 约束置换零数据迁移——active_key 生成列对一切非活跃态本就产出 NULL，cancelled 天然释放 (job_type,target_id) 槽位，无需重建生成列。`TERMINAL_JOB_STATUSES` 常量统一三终态；`_claim`/`_settle` 终态检查、`dispatch/maintenance` 24h 节拍门（cancelled 计入「已完结」）同步。
+  - **cancel 路由**：NEW `jobs/admin_routes.py`（blueprint `/api/v1/admin/jobs`，注册 app.py，路由 297→298）——admin 门（service 层 role 判，agents 先例）；**不强杀**：running+活租约 409 `job_running`（线程杀不掉，强落终态只会白烧外呼；运营正确动作=停 worker 等租约过期），running+**过期**租约=worker 已死可安全接管（迟到 settle 被终态守卫拒绝，专项测试钉住）；幂等：重复取消 200 cancelled=false 且不追加留痕；同事务三面收口=job 行+`outbox.cancel_for_job`（**pending+dispatched 一并收口**——与 mark_failed 只收 dispatched 的刻意差异：留着 pending 行下一轮 dispatch 会为同键新建 job 复活已取消工作；取消后新提交事件照常新建 job 属合法新工作）+ `operation_events job_cancelled`（changes 只落 job_type/target_id/previous_status/outbox_closed，E7 纪律）。不进 api_catalog（平台运维面，evidence/本体治理同款边界）。
+  - 测试：test_worker +7（退避字段与 attempt 计数/outbox 中间态保持 dispatched 红线/耗尽终失败才收口 outbox/瞬时故障恢复全链 completed/非可恢复首败即终/not_due 守卫不烧 attempts/取消后迟到失败不覆盖）+ test_job_reconcile +4（due 补投行不动/退避等待零动作/cancelled 永不被清扫/失败→due 补投→二跑成功闭环）+ test_outbox_models +1（CHECK 接受 cancelled 且槽位释放同键可开新 job）+ test_admin_jobs NEW 9 条（主路径三面收口+reconcile 不复活/幂等/终态 409×2/活租约 409/过期租约接管/pending 可取消/非 admin 403/404）+ test_migrations HEAD 推进 35。**零桌面改动**（vitest 771 不变）。
 
 ### T-P1-4 resolve_signoff 双闸（WB-DEF-2）— **DONE（2026-11-05，与 T-J1/T-P1-5 同轮）**
 - 修改文件：`solutions/service.py`（can_manage+档位）。测试：负向用例（viewer+高 AI 档→403）。复杂度：**S**。

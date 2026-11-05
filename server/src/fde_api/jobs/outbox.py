@@ -128,3 +128,25 @@ def _settle_for_job(
         .values(status=status, last_error=last_error)
     )
     return int(result.rowcount or 0)  # type: ignore[attr-defined]  # 与 dispatch_pending 同口径
+
+
+def cancel_for_job(
+    session: Session, job_type: str, target_id: str, reason: str = ""
+) -> int:
+    """Close every unsettled event for a cancelled job (V3 T-J2，域 14).
+
+    与 mark_failed（只收 dispatched）的刻意差异：取消还收掉仍处 pending 的
+    事件——运营者杀的是整个工作单元；留着 pending 行，下一轮 dispatch
+    会为同键新建 job，已取消的工作被复活。取消之后**新**提交的事件则照常
+    走新建 job（终态已释放槽位），属合法新工作。
+    """
+    result = session.execute(
+        update(OutboxEvent)
+        .where(
+            OutboxEvent.topic == job_type,
+            OutboxEvent.aggregate_id == target_id,
+            OutboxEvent.status.in_(("pending", "dispatched")),
+        )
+        .values(status="failed", last_error=reason[:_OUTBOX_ERROR_MAX])
+    )
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]  # 与 dispatch_pending 同口径
