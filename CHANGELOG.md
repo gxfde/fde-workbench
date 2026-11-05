@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c P3 测试补强：AI 机会主链组件 13 例覆盖 + sync-hash 断言加固（2026-11-05）
+
+### 桌面端（纯测试轮：生产代码零变更、服务端零改动）
+
+- **CR-037 ResearchOpportunity.tsx 零 vitest 覆盖清偿**：NEW `desktop/tests/renderer/research-opportunity.test.tsx` 13 例，全部落在新文件——
+  - 纯函数 8 例：`validateOpportunityProfile` 全分支（超长 301/1001 与临界 300/1000、状态/优先级/风险等级无效值、三项评分 0/6/小数拦截 + null 放行、负责人不在成员表）；`opportunityProfileInput` 裁剪两端空白并丢弃展示名；`opportunityProfileErrorMessage` 8 个错误码逐一映射 + 未知码兜底；`draftErrorMessage` PoV/SOW 双形全码 + 兜底。
+  - `OpportunityDetail` 组件 5 例：非编辑态档案网格中文渲染；canManage 经「更多」菜单删除联动；编辑态保存主链（PATCH 载荷逐字段断言 + 成功回执与提示）；保存失败按码映射 alert 且不回执；脏标记按 `opportunity-profile:<id>` 键置脏、卸载自动清脏。
+  - 变异验证：评分上界 5→6 → 评分用例红 → 还原 → 绿（生产代码 `git diff` 零残留）。
+- **CR-038 sync-hash 断言加固（CR-007 同型残留收尾）**：`new-project.test.tsx` 创建成功路径的 `location.hash` 同步读改 `await waitFor(...)`，与 `navigation.test.tsx` 已修的 5 处同型对齐；属加固型改动（当前同步写 hash 下两种写法均绿，防未来异步化复发），台账已如实注记无可做的红绿变异。
+- 口径：桌面 vitest **787/787**（+13）；typecheck 绿。测试文件不进应用包（asar），**无需重打包便携版**；105 表 / pytest 1942 / 路由 300 / ENTRIES 94 全部不变。
+
 ## [未发布] — goal-c P3 批清偿：术语页搜索守卫 + 状态值域 + alembic 日志基建（2026-11-05）
 
 ### 桌面端（GlossaryPage 两项 P3；零服务端改动）

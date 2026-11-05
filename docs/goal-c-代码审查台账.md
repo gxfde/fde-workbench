@@ -57,8 +57,8 @@
 | CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
 | CR-035 | P3 | **fixed（CR-035 轮）** | GlossaryPage 术语搜索无序列守卫 → 加 `sequence` ref（旧响应丢弃，只最新一次可落表）+ 首屏之外不再整页 loading（**附带修掉「搜索框被卸载」**：改前每次按键后整页换成 loading 文案，搜索框随之卸载、焦点丢失，无法连续输入——比原登记的「闪空」更重） | desktop/…/ontology/GlossaryPage.tsx | c7 |
 | CR-036 | P3 | open（登记） | ResearchWorkspace 导出轮询 effect 无序列守卫（同文件 `loadResearch` 有 `sequence`、`ProjectDocuments` 有 `sequenceRef`，唯此缺）：在途 poll 期间表单新增导出 → 旧闭包 stale `active` 快照回写可让已完成条目「复活」为 pending（下轮自愈） | desktop/…/research/ResearchWorkspace.tsx:248-287 | c7 |
-| CR-037 | P3 | open（登记） | `ResearchOpportunity.tsx`（193 行：AI 机会删除/画像编辑/表单联动 + `validateOpportunityProfile` 7 条校验 + 错误码映射）零 vitest 覆盖；T-W6 三新页反而各有测试 | desktop/tests/renderer/（无 opportunityProfile 命中） | c7 |
-| CR-038 | P3 | open（登记，CR-007 同型残留） | `new-project.test.tsx:279` `expect(location.hash).toBe(…)` 同步读——创建成功路径当前同步写 hash 不翻车，但一旦 hash 写异步化即复发（与 CR-007 修复前同型），改 `waitFor` 一行 | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
+| CR-037 | P3 | **fixed（CR-037 轮）** | `ResearchOpportunity.tsx` 零 vitest 覆盖 → NEW `research-opportunity.test.tsx` 13 例：纯函数 8（`validateOpportunityProfile` 全部分支 + `opportunityProfileInput` 裁剪 + `opportunityProfileErrorMessage` 8 码映射与兜底 + `draftErrorMessage` PoV/SOW 双形）+ 组件 5（档案网格中文化/更多菜单删除/PATCH 保存主链/错误码映射提示/脏标记 profileKey 置脏与卸载清脏） | desktop/tests/renderer/research-opportunity.test.tsx（NEW） | c7 |
+| CR-038 | P3 | **fixed（CR-038 轮）** | `new-project.test.tsx:279` 同步读 `location.hash` → `await waitFor(...)`（同 CR-007 修法）；加固型断言，当前同步写 hash 下两种写法均绿，变异无从做起（无生产代码变更） | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
 | CR-039 | P3 | open（登记） | `gui-harness/shots.mjs` 13 页走查未含 T-W6 三面（WorkflowConsole/GlossaryPage 为项目详情子 tab 需真实 fixture、SkillVersionsPage 为 #extensions 内展开子视图，默认截图态不展开）——功能面已有三 vitest 兜住，纯视觉走查缺口 | desktop/gui-harness/shots.mjs:19-34 | c7 |
 | CR-040 | P3 | **fixed（CR-040 轮）** | GlossaryPage `TERM_STATUS_LABEL` 值域漂移 → 对齐服务端 `TERM_STATUSES=(draft,confirmed,superseded,merged)`（删 candidate/retired，补 draft→草稿 / superseded→已取代），状态列不再回显英文原值 | desktop/…/ontology/GlossaryPage.tsx | c7 |
 | CR-041 | P3 | **fixed（CR-041 轮）** | alembic `env.py` `fileConfig` 默认 `disable_existing_loggers=True` 把导入期创建的模块级 logger 全量置 disabled → caplog 永远空捕 → env.py 显式 `disable_existing_loggers=False`（一行；生产不受影响＝迁移独立进程）+ NEW 专项测试钉住 | server/migrations/env.py:31 | c13 |
@@ -478,17 +478,22 @@
 
 ## CR-037 · P3 · ResearchOpportunity.tsx 零 vitest 覆盖（193 行主链组件）
 
-- **状态**：open（登记；深度不足非完全裸奔）
+- **状态**：open（登记；深度不足非完全裸奔）→ **fixed（CR-037 轮，2026-11-05）**——NEW `desktop/tests/renderer/research-opportunity.test.tsx` 13 例，全部落在新文件（不碰并发轮在途的 `project-research.test.tsx`/`ResearchWorkspace.tsx`，零重叠）：
+  - 纯函数 8 例：`validateOpportunityProfile` 全分支（合法空串/超长 301·1001 与临界 300·1000/状态·优先级·风险等级无效值/三评分 0·6·2.5 拦截+null 放行/负责人不在成员表）；`opportunityProfileInput` 裁剪两端空白且丢 `owner_display_name`；`opportunityProfileErrorMessage` 8 码逐一映射+未知码兜底+非 ApiClientError；`draftErrorMessage` PoV/SOW 双形全部 8 码+兜底；另钉 `createEmptyOpportunityProfile` 直接过校验。
+  - 组件 5 例（`OpportunityDetail`）：非编辑态档案网格中文渲染（评估中/优先级高/业务价值 4/5/空表单提示）；canManage 经「更多」菜单删除联动；编辑态保存主链（PATCH 载荷逐字段断言＝裁剪后说明+`opportunityProfileInput` 形状，成功回执 `onOpportunityUpdated`+status 提示）；保存失败按码映射 alert（stale_version）且不回执；脏标记联动（说明键入 → `("opportunity-profile:opp-1", true)`，卸载自动清脏 false）。
+  - 变异验证：`validateOpportunityProfile` 评分上界 5→6 → 评分用例红 → 还原 → 绿（`git diff src/` 零残留，生产代码零变更）。
 - **file:line**：`desktop/src/renderer/src/research/ResearchOpportunity.tsx`（`OpportunityDetail`/`OpportunityProfileFields` 10 字段表单/`opportunityProfileInput`/`validateOpportunityProfile` 7 规则/`opportunityProfileErrorMessage` 错误码映射）；`tests/renderer/` 零命中（`ai-opportunity-discovery`/`opportunity-adjustment` 测的是另两个组件）。
+- **修复 PR**：本轮 PR（goal-c CR-037/038 测试补强轮）。
 - **驳斥记录**：「`project-research.test.tsx`（75 例）覆盖 workspace 主流程间接路径」——成立，是深度缺口；纯函数已 export 可单测，成本最低的一条 P3。
 - **建议修法**：补 `validateOpportunityProfile`/`opportunityProfileErrorMessage`/`draftErrorMessage` 三纯函数单测 + OpportunityDetail 删除/编辑联动用例。
 
 ## CR-038 · P3 · new-project.test.tsx:279 同步读 location.hash（CR-007 同型残留）
 
-- **状态**：open（登记；一行修）
+- **状态**：open（登记；一行修）→ **fixed（CR-038 轮，2026-11-05）**——`:279` 改 `await waitFor(() => expect(location.hash).toBe("#projects/created-project"))`（同 CR-007 修法）并留注释钉住同型风险。**如实注记**：当前 `NewProjectPage.tsx:243` 仍同步写 hash，同步/异步两种断言此刻均绿，属**加固型**改动（防未来异步化复发），无可做的红绿变异。
 - **file:line**：`desktop/tests/renderer/new-project.test.tsx:279`（`expect(location.hash).toBe("#projects/created-project")` 同步读；当前 `NewProjectPage.tsx:243` 同步写 hash 不翻车，一旦异步化即复发——与 CR-007 修复前 CI 间歇红同型）。
 - **驳斥记录**：「React 18 合成事件同步提交下稳定」——成立故 P3；`navigation.test.tsx` 已修 5 处，此文件是漏网同型。
 - **建议修法**：改 `await waitFor(() => expect(location.hash).toBe(...))`（同 CR-007 修法）。
+- **修复 PR**：本轮 PR（goal-c CR-037/038 测试补强轮）。
 
 ## CR-039 · P3 · gui-harness/shots.mjs 13 页走查未含 T-W6 三面
 

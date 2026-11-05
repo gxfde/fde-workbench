@@ -276,7 +276,8 @@ describe("四步项目创建向导", () => {
         module_keys: ["pre_diagnosis", "pov"],
       },
     })))
-    expect(location.hash).toBe("#projects/created-project")
+    // CR-038：与 CR-007 同型残留——同步读 location.hash，创建成功路径一旦异步写 hash 即间歇红。
+    await waitFor(() => expect(location.hash).toBe("#projects/created-project"))
   })
 
   it("项目名称、客户代号和开始日期缺失时不允许进入下一步", async () => {
