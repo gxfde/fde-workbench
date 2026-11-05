@@ -310,7 +310,7 @@
 - 修改文件：`workflows/executor.py`（call/skill :725 与 agent :1194 两处成功点读标记）、`projects/gate_service.py`（新原语 `attach_workflow_evidence_candidate`，≈40 行，复用 ensure_project_gates / MAX 上限 / 事件）；坏标记跳过 + 事件 `gate_evidence_candidate_skipped`。
 - 契约要点：dedup=(source_uri, content_hash, `wf:{run_id}:{node_key}`)；attempt 重试同指纹幂等、换指纹新候选并存（CR-019 代际语义）；`captured_from=workflow_node:{run_id}:{node_key}`（T-E3 已预留前缀）；候选行 `source_kind: "task"|"workflow"`（旧行读时缺省 task）；**零 DDL 零迁移零路由**（v1 不预写 project_evidence 一等表——偏差已回写 workflow-dag-v1 §4 注记）。
 - 测试：test_workflow_executor / 候选面扩展（验收 12 八段：出现/幂等/换指纹并存/坏标记跳过/无标记零副作用/失败路径不登记/采纳剪除回归/缺键兼容）。桌面 GateBoard 来源徽标另开 S 轮。复杂度：**M**。前置：T-G1 / T-W3 / T-W4（均已 DONE）。
-- **实施记录（2026-11-05）**：`gate_service.attach_workflow_evidence_candidate`（四形状校验 → 坏标记 skipped 事件挂 project 目标 → ensure_project_gates 懒初始化 → dedup（含哈希大小写归一）→ 挂行（§5 shape 逐键）→ attached 事件挂 gate 目标）；executor `_attach_gate_evidence_marker` 接线 `_settle_node_success`（call/skill/agent 共用成功点）与 `settle_approval_node` 批准分支（现合同 output 无标记=零副作用，接线为未来包装层零改生效）——同事务原子（节点成功与候选一并回滚）；非对象标记在 executor 层拦下（skipped 挂 workflow_run 目标）；`_serialize_gate` 的 evidence_candidates 读时缺省 `source_kind="task"`（旧行不回填，沿 T-E2 先例）。**与立项稿偏差=零**：D3 的 captured_from 仅属未来一等表写入路径（D4 裁决 v1 不预写 project_evidence），故候选行不落该键。测试新文件 `test_workflow_gate_evidence.py` 7 例（失败路径与恢复并成一例）+ 邻近回归（candidates/gates_api/executor 49 例）全绿；`event code` 侧 `gate_evidence_candidate_skipped` 已入 GATE_EVENT_TYPES（feed 可见）。
+- **实施记录（2026-11-05）**：`gate_service.attach_workflow_evidence_candidate`（四形状校验 → 坏标记 skipped 事件挂 project 目标 → ensure_project_gates 懒初始化 → dedup（含哈希大小写归一）→ 挂行（§5 shape 逐键）→ attached 事件挂 gate 目标）；executor `_attach_gate_evidence_marker` 接线 `_settle_node_success`（call/skill/agent 共用成功点）与 `settle_approval_node` 批准分支（现合同 output 无标记=零副作用，接线为未来包装层零改生效）——同事务原子（节点成功与候选一并回滚）；非对象标记在 executor 层拦下（skipped 挂 workflow_run 目标）；`_serialize_gate` 的 evidence_candidates 读时缺省 `source_kind="task"`（旧行不回填，沿 T-E2 先例）。**与立项稿偏差=零**：D3 的 captured_from 仅属未来一等表写入路径（D4 裁决 v1 不预写 project_evidence），故候选行不落该键。测试新文件 `test_workflow_gate_evidence.py` 7 例（失败路径与恢复并成一例）+ 邻近回归（candidates/gates_api/executor 49 例）全绿；`event code` 侧 `gate_evidence_candidate_skipped` 已入 GATE_EVENT_TYPES（feed 可见）。**桌面挂账销账（2026-11-05 T-UI1 核销轮）**：GateBoard 候选来源徽标已落地——候选载荷扩为 `source_kind` 判别联合（task 旧行读时缺省 / workflow 带 run·节点键·label），分形守卫顺带修复 T-G1 守卫硬性要求 task 三键致 workflow 候选行整板拒载的潜伏 bug；workflow 行「工作流」徽标+出处行、采纳走既有提交闸、uri>500 可见禁采；vitest +4（→771）。
 
 ### T-G2 template_hash 漂移呈现（WB-DEF-5）— **DONE（2026-11-04）**
 - 修改文件：gate_service._serialize_gate（比对存储值 vs 当前 gates.json sha256，响应加 template_outdated: bool）。测试：test_gates_api。复杂度：**S**。
@@ -357,8 +357,9 @@
   - **测试**：NEW `test_ontology_impact.py` 6 例（名字域四路全命中+子串不命中+三面清单与 counts / 并入行查询解析到 canonical / 未知与跨项目术语 404 / 零引用空面 / HTTP 面+访问控制 / 红线钉子不进 catalog）+ 热修回归钉 1 例。
   - **口径**：105 表不变（零 DDL）、迁移头 `e2c6a8f4d1b3`（34 rev）不变、业务路由 **296→297**（+1 只读，不进 api_catalog）、ENTRIES 94 不变、pytest **1884 收集 = 1878 passed + 6 skipped**（本轮 +7；基线 `8f10771` 实测 1877）、mypy 基线 **279 不变**（新代码零新增）、桌面 vitest 765 不变（零改动）。改 server（零迁移）⇒ rebuild 三镜像。
 
-### T-UI1 桌面控制台三页（域 16）
+### T-UI1 桌面控制台三页（域 16）— **DONE（2026-11-05，核销轮——零补码）**
 - WorkflowConsole / GlossaryPage / SkillVersionsPage + vitest 用例。前置：对应 API。复杂度：**M**。
+- **核销记录（2026-11-05）**：三页已随 T-W6（#88）同名全量交付（`workflows/WorkflowConsole.tsx` / `ontology/GlossaryPage.tsx` / `extensions/SkillVersionsPage.tsx` + vitest 5/6/7 例 + typecheck 绿，本轮基线复核 767 全绿）——按「已由先导轮兑现」销号，零补码。同轮附带清偿 T-W7 桌面挂账：GateBoard 候选来源徽标（`source_kind` 判别联合 + 分形守卫，修复 workflow 候选行整板拒载的潜伏 bug；vitest +4 → 771），见 T-W7 实施记录尾注。
 
 ## P3（高级自主化——本轮仅立项不排期）
 

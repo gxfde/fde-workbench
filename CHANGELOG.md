@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 实施 T-UI1 三页核销 + GateBoard 候选来源徽标（2026-11-05）
+
+### 桌面端（服务端零改动；T-W7 桌面挂账清偿 + backlog 销号）
+
+- **T-UI1 核销（零补码）**：WorkflowConsole / GlossaryPage / SkillVersionsPage 三页已随 T-W6（#88）同名全量交付（vitest 5/6/7 例 + typecheck 绿，本轮基线复核 767 全绿）——backlog 条目按「已由先导轮兑现」销号。
+- **候选来源徽标**：`GateBoard` 候选载荷扩为 `source_kind` 判别联合——task 形（T-G1 旧行，服务端读时缺省）与 workflow 形（T-W7 运行时保留键 `gate_evidence` 的节点产物，带 `workflow_run_id`/`workflow_node_key`/`label`）。**修复潜伏兼容 bug**：T-G1 守卫硬性要求 task 三键，T-W7 workflow 候选行会让整板 isGatesView 拒载；分形守卫后 workflow 缺 run/节点键仍整板拒载（沿「在场必须形状齐全」口径）。workflow 行带「工作流」徽标 + run/节点出处行；采纳走既有提交闸零新入口；同指纹任务/工作流候选并存各占一行（React 键域 `wf:run|node` 分开防撞）；uri>500（人工提交闸上限，与手填表单同限）候选可见但禁采并 title 报因。
+- 测试与口径：gate-board +4（徽标呈现+采纳提交体 / 同指纹两形并存 / 超限禁采 / 坏形状整板拒载），vitest **771**；服务端零改动（本轮零增量；全仓 pytest 口径随同日 #112 CR-006 前进至 1905 收集 = 1899 passed + 6 skipped，105 表 / 路由 297 / ENTRIES 94 / mypy 279 不变，无需 rebuild）。
+
 ## [未发布] — goal-c CR-006 统一入账+统一闸：DSH 主路径/kimi 本地腿补预算门与 `ai_call_audits` 记账腿（2026-11-05）
 
 ### 服务端（用户拍板「统一入账+统一闸」落地；零迁移零路由零桌面改动）

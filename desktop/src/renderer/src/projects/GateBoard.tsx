@@ -24,7 +24,10 @@ interface ChecklistItem {
 
 // V3 T-G1：任务产物候选（服务端建议性提示；采纳走既有提交闸）。可选键——
 // 旧服务端载荷不带此键时照常渲染（读时兼容）。
-interface GateEvidenceCandidate {
+// V3 T-W7 桌面腿：候选按 source_kind 分两形——task 形（T-G1 起旧行读时缺省）
+// 与 workflow 形（运行时保留键 gate_evidence 的节点产物）；两形都只收指针+指纹。
+interface TaskEvidenceCandidate {
+  source_kind?: "task"
   source_uri: string
   content_hash: string
   task_id: string
@@ -33,6 +36,19 @@ interface GateEvidenceCandidate {
   proposed_by_user_id: string
   proposed_at: string
 }
+
+interface WorkflowEvidenceCandidate {
+  source_kind: "workflow"
+  source_uri: string
+  content_hash: string
+  workflow_run_id: string
+  workflow_node_key: string
+  label: string
+  proposed_by_user_id: string
+  proposed_at: string
+}
+
+type GateEvidenceCandidate = TaskEvidenceCandidate | WorkflowEvidenceCandidate
 
 interface GateDto {
   gate_key: string
@@ -90,9 +106,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function isGateEvidenceCandidate(value: unknown): value is GateEvidenceCandidate {
+// V3 T-W7：候选守卫按 source_kind 分形——workflow 形带 run/节点键与 label
+// （缺任一即整板拒载，沿 T-G1「在场必须形状齐全」口径）；task 形三键齐全，
+// source_kind 读时缺省（服务端旧行不带该键，读时合并为 "task"）。
+function isTaskEvidenceCandidate(value: unknown): value is TaskEvidenceCandidate {
   return (
     isRecord(value) &&
+    (value.source_kind === undefined || value.source_kind === "task") &&
     typeof value.source_uri === "string" &&
     typeof value.content_hash === "string" &&
     typeof value.task_id === "string" &&
@@ -101,6 +121,24 @@ function isGateEvidenceCandidate(value: unknown): value is GateEvidenceCandidate
     typeof value.proposed_by_user_id === "string" &&
     typeof value.proposed_at === "string"
   )
+}
+
+function isWorkflowEvidenceCandidate(value: unknown): value is WorkflowEvidenceCandidate {
+  return (
+    isRecord(value) &&
+    value.source_kind === "workflow" &&
+    typeof value.source_uri === "string" &&
+    typeof value.content_hash === "string" &&
+    typeof value.workflow_run_id === "string" &&
+    typeof value.workflow_node_key === "string" &&
+    typeof value.label === "string" &&
+    typeof value.proposed_by_user_id === "string" &&
+    typeof value.proposed_at === "string"
+  )
+}
+
+function isGateEvidenceCandidate(value: unknown): value is GateEvidenceCandidate {
+  return isWorkflowEvidenceCandidate(value) || isTaskEvidenceCandidate(value)
 }
 
 function isGatesView(value: unknown): value is GatesView {
@@ -285,7 +323,8 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
   const [result, setResult] = useState<string>("pass")
   const [g8Decision, setG8Decision] = useState<string>("proceed")
   const [note, setNote] = useState("")
-  // V3 T-G1：候选采纳的目标清单项选择（键 = task_key|uri|hash 复合）
+  // V3 T-G1：候选采纳的目标清单项选择（task 形键 = task_key|uri|hash 复合；
+  // T-W7：workflow 形键 = wf:run|node|uri|hash——同指纹两形并存时键域不撞）
   const [candidateLabels, setCandidateLabels] = useState<Record<string, string>>({})
 
   const submittable = gate.status === "pending" || gate.status === "failed"
@@ -340,23 +379,37 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
       </ul>
 
       {candidates.length > 0 ? (
-        <section className="gate-candidates" aria-label="任务产物候选">
+        <section className="gate-candidates" aria-label="产物候选">
           <p className="supporting-copy">
-            任务产物候选（完成任务的指针+指纹，已登记为一等证据；采纳走提交闸标 claimed）
+            产物候选（任务/工作流产物的指针+指纹，已登记为一等证据；采纳走提交闸标 claimed）
           </p>
           <ul>
             {candidates.map((candidate) => {
-              const key = `${candidate.task_key}|${candidate.source_uri}|${candidate.content_hash}`
+              const isWorkflow = candidate.source_kind === "workflow"
+              const key = isWorkflow
+                ? `wf:${candidate.workflow_run_id}:${candidate.workflow_node_key}|${candidate.source_uri}|${candidate.content_hash}`
+                : `${candidate.task_key}|${candidate.source_uri}|${candidate.content_hash}`
+              const displayName = isWorkflow ? candidate.label : candidate.task_key
               const chosen = candidateLabels[key] ?? gate.checklist[0]?.label ?? ""
+              // 人工提交闸 uri 上限 500（与手填表单同限）：超限候选可见但不可采
+              const uriOverCap = candidate.source_uri.length > 500
               return (
                 <li key={key} className="gate-candidate-row">
-                  <span className="gate-check-label">{candidate.task_key} · {candidate.task_name}</span>
+                  <span className="gate-check-label">
+                    {isWorkflow ? <span className="badge muted">工作流</span> : null}
+                    {isWorkflow ? candidate.label : `${candidate.task_key} · ${candidate.task_name}`}
+                  </span>
+                  {isWorkflow ? (
+                    <small className="gate-evidence-uri">
+                      run {candidate.workflow_run_id.slice(0, 8)} · 节点 {candidate.workflow_node_key}
+                    </small>
+                  ) : null}
                   <small className="gate-evidence-uri">{candidate.source_uri}</small>
                   <small className="gate-evidence-uri">{candidate.content_hash}</small>
                   {adoptable ? (
                     <span className="gate-candidate-adopt">
                       <select
-                        aria-label={`候选 ${candidate.task_key} 的目标清单项`}
+                        aria-label={`候选 ${displayName} 的目标清单项`}
                         value={chosen}
                         onChange={(event) =>
                           setCandidateLabels((current) => ({ ...current, [key]: event.target.value }))
@@ -369,7 +422,8 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                       <button
                         className="secondary-button"
                         type="button"
-                        disabled={busy || !chosen}
+                        disabled={busy || !chosen || uriOverCap}
+                        title={uriOverCap ? "URI 超过人工提交闸 500 上限，无法采纳" : undefined}
                         onClick={() => {
                           void onSubmitEvidence(gate, [
                             { label: chosen, source_uri: candidate.source_uri, content_hash: candidate.content_hash },

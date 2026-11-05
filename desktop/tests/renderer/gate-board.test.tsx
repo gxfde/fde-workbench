@@ -266,7 +266,7 @@ it("T-G1: renders task evidence candidates and adopts via the existing submit ga
   )
   render(<GateBoard projectId="gate-project" canManage />)
 
-  const section = await screen.findByRole("region", { name: "任务产物候选" })
+  const section = await screen.findByRole("region", { name: "产物候选" })
   expect(section).toBeVisible()
   expect(screen.getByText(/diagnosis_report · 产出诊断报告/)).toBeVisible()
 
@@ -299,7 +299,7 @@ it("T-G1: candidates stay read-only for viewers and legacy payloads without the 
     gateView({ gates: [{ ...base[0], evidence_candidates: [candidateEntry] }] }),
   )
   const { unmount } = render(<GateBoard projectId="gate-project" canManage={false} />)
-  expect(await screen.findByRole("region", { name: "任务产物候选" })).toBeVisible()
+  expect(await screen.findByRole("region", { name: "产物候选" })).toBeVisible()
   expect(screen.queryByRole("button", { name: "采纳到清单" })).not.toBeInTheDocument()
   unmount()
   cleanup()
@@ -308,7 +308,7 @@ it("T-G1: candidates stay read-only for viewers and legacy payloads without the 
   mocks.apiRequest.mockResolvedValue(gateView())
   render(<GateBoard projectId="gate-project" canManage />)
   expect(await screen.findByRole("heading", { name: /G3 ·/ })).toBeVisible()
-  expect(screen.queryByRole("region", { name: "任务产物候选" })).not.toBeInTheDocument()
+  expect(screen.queryByRole("region", { name: "产物候选" })).not.toBeInTheDocument()
 })
 
 it("T-G1: malformed candidate shapes fail validation instead of rendering half a board", async () => {
@@ -322,5 +322,104 @@ it("T-G1: malformed candidate shapes fail validation instead of rendering half a
 
   const alert = await screen.findByRole("alert")
   expect(alert).toHaveTextContent("门禁数据加载失败，请稍后重试。")
-  expect(screen.queryByRole("region", { name: "任务产物候选" })).not.toBeInTheDocument()
+  expect(screen.queryByRole("region", { name: "产物候选" })).not.toBeInTheDocument()
+})
+
+// V3 T-W7：workflow 形候选（运行时保留键 gate_evidence 的节点产物）。
+const workflowCandidateEntry = {
+  source_kind: "workflow",
+  source_uri: "fdeops://engagements/demo/.fde/gates/G3/impact.md",
+  content_hash: "d".repeat(64),
+  workflow_run_id: "run-20261105-abcdef01",
+  workflow_node_key: "build_report",
+  label: "影响分析产物",
+  proposed_by_user_id: "actor-1",
+  proposed_at: "2026-11-05T08:00:00+00:00",
+}
+
+it("T-W7: renders workflow candidates with the source badge and adopts via the existing gate", async () => {
+  const user = userEvent.setup()
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({ gates: [{ ...base[0], evidence_candidates: [workflowCandidateEntry] }] }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  const section = await screen.findByRole("region", { name: "产物候选" })
+  expect(section).toBeVisible()
+  expect(screen.getByText("工作流")).toBeVisible()
+  expect(screen.getByText("影响分析产物")).toBeVisible()
+  expect(screen.getByText(/run run-2026 · 节点 build_report/)).toBeVisible()
+
+  // 采纳走既有 evidence 闸（默认选第一个清单项），提交体与任务形同构
+  await user.click(screen.getByRole("button", { name: "采纳到清单" }))
+  await waitFor(() => expect(evidenceRequestBodies()).toHaveLength(1))
+  expect(evidenceRequestBodies()[0]).toEqual({
+    items: [
+      {
+        label: "深度诊断报告",
+        source_uri: workflowCandidateEntry.source_uri,
+        content_hash: workflowCandidateEntry.content_hash,
+      },
+    ],
+  })
+})
+
+it("T-W7: task and workflow candidates with the same fingerprint coexist as separate rows", async () => {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  const samePointerTaskEntry = {
+    ...candidateEntry,
+    source_uri: workflowCandidateEntry.source_uri,
+    content_hash: workflowCandidateEntry.content_hash,
+  }
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [{ ...base[0], evidence_candidates: [samePointerTaskEntry, workflowCandidateEntry] }],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  await screen.findByRole("region", { name: "产物候选" })
+  // 同指针+指纹两形并存（T-W7 dedup 按来源粒度隔离）：任务行无徽标，工作流行带徽标
+  expect(screen.getByText(/diagnosis_report · 产出诊断报告/)).toBeVisible()
+  expect(screen.getByText("影响分析产物")).toBeVisible()
+  expect(screen.getAllByText(workflowCandidateEntry.source_uri)).toHaveLength(2)
+  expect(screen.queryAllByText("工作流")).toHaveLength(1)
+  expect(screen.getAllByRole("button", { name: "采纳到清单" })).toHaveLength(2)
+})
+
+it("T-W7: candidates whose uri exceeds the human submit cap stay visible but not adoptable", async () => {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [
+        {
+          ...base[0],
+          evidence_candidates: [
+            { ...workflowCandidateEntry, source_uri: `fdeops://engagements/demo/.fde/${"x".repeat(600)}/report.md` },
+          ],
+        },
+      ],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  await screen.findByRole("region", { name: "产物候选" })
+  const button = screen.getByRole("button", { name: "采纳到清单" })
+  expect(button).toBeDisabled()
+  expect(button).toHaveAttribute("title", "URI 超过人工提交闸 500 上限，无法采纳")
+})
+
+it("T-W7: workflow-tagged rows missing run/node keys fail validation like malformed task rows", async () => {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [{ ...base[0], evidence_candidates: [{ ...candidateEntry, source_kind: "workflow" }] }],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  const alert = await screen.findByRole("alert")
+  expect(alert).toHaveTextContent("门禁数据加载失败，请稍后重试。")
+  expect(screen.queryByRole("region", { name: "产物候选" })).not.toBeInTheDocument()
 })
