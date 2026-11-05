@@ -400,15 +400,15 @@
 |---|---|---|---|---|
 | B#1 | 跳数熔断（workflow 自触发链 hops 上限） | 代码+**迁移** | `workflow_runs` 加 `hops` 列 + 执行器入口 >8 → failed(`hops_exceeded`) + 留痕 + 通知；拍板重投**继承不清零**用例 | **B#1+B#28 合并同一迁移窗口（rebuild+alembic 一次）——需拍板** |
 | B#2 | 回执「写错不重做」 | 代码 | `agents/service.py` 增 `succeeded_but_receipt_invalid` 终态；与 V8 失败终态拒同键重跑的交互写清；repair 按 CLI 能力降级 | 零迁移；zcode 会话能力未核实（待澄清 6.1-4） |
-| B#3 | 审查不执行被审代码（红线） | 文档 | AGENTS.md 红线 +1（未来上 AI 审查时加 CI 断言） | 立规≈0 成本 |
+| B#3 | 审查不执行被审代码（红线） | 文档 | AGENTS.md 红线 +1（未来上 AI 审查时加 CI 断言） | 立规≈0 成本。**✅ 已落盘（P0 文档级子批 #128：AGENTS 红线节第 7 条）** |
 | B#4 | purity 架构测试 | 测试 | pytest：workflows/ 不 import control service/routes 层（环导入实证已存在）、kernel 类模块不读 os.environ/flask、无产品硬编码 | 成本=1 测试文件 |
 | B#5 | 审批退避提醒 + SLA 统计 | 代码 | 挂起审批按退避序列提醒（复用任务中心，勿新开外发通道）+ 挂起时长统计进 run 详情 | 零迁移 |
 | B#6 | 状态归属与对账框架 | 文档+测试 | 《状态归属与对账》自检清单（project_evidence/ontology_*/workflow_*/documents 四层）+ pytest 断言（候选 confirm 前不物化/快照可重建/指纹不一致拒绝） | 零迁移 |
-| B#21 | 交付效果评测协议 v0（uplift 算分口径） | 文档 | `docs/`：result 字段清单 + G9「上线门」exit_condition「验收线达成」挂接；**不引入任何代码** | 无 oracle 不得出分（`insufficient_data`）；Q1–Q3 影响深度 |
-| B#22 | 门禁判据升格（三锚点+四类反例） | 文档 | 与 B#21 同一份文档一章 + pytest 断言模板（先成文不接线）；实施落点=B#11（不另立判据）；**阈值须我方数据校准，不得照抄上游** | 同 B#21 |
-| B#27 | DSH 适配层决策记录 | 文档 | 写明 `fde-dsh-v1` 是自定协议、官方源码零命中端点；若启用 `FDE_DSH_*` 须自写适配层（lock 八字段+三方合并升级法）；**维持「当前不装」裁决** | 零代码 |
+| B#21 | 交付效果评测协议 v0（uplift 算分口径） | 文档 | `docs/`：result 字段清单 + G9「上线门」exit_condition「验收线达成」挂接；**不引入任何代码** | 无 oracle 不得出分（`insufficient_data`）；Q1–Q3 影响深度。**✅ 协议已落盘（#128 `docs/architecture/交付效果评测协议-v0.md` §1/§2/§5）；gates.json 种子挂接=接线项归代码级子批同窗口** |
+| B#22 | 门禁判据升格（三锚点+四类反例） | 文档 | 与 B#21 同一份文档一章 + pytest 断言模板（先成文不接线）；实施落点=B#11（不另立判据）；**阈值须我方数据校准，不得照抄上游** | 同 B#21。**✅ 已落盘（#128 同文档 §3；接线归代码级子批）** |
+| B#27 | DSH 适配层决策记录 | 文档 | 写明 `fde-dsh-v1` 是自定协议、官方源码零命中端点；若启用 `FDE_DSH_*` 须自写适配层（lock 八字段+三方合并升级法）；**维持「当前不装」裁决** | 零代码。**✅ 已落盘（#128 `docs/architecture/DSH-适配层决策记录-v1.md`）** |
 | B#28 | 门禁精确 revision CAS + 生命周期版本隔离 | 代码+**迁移** | `decide_gate` 增 `expected_revision` 必填 + `project_gates` 加 `revision`/`lifecycle_version`；版本交叉 409 不推进 revision | **与 B#1 合并迁移窗口——需拍板** |
-| B#29 | 验证/验收合同契约（五点） | 文档 | 并入 B#21 一章（G8 conditional_pass / G9 有条件接受语义对齐）；schema 落 B#23 夹具期 | 与 B#21 同期 |
+| B#29 | 验证/验收合同契约（五点） | 文档 | 并入 B#21 一章（G8 conditional_pass / G9 有条件接受语义对齐）；schema 落 B#23 夹具期 | 与 B#21 同期。**✅ 已落盘（#128 同文档 §4）** |
 
 ### P1 第二批（总览建议 1–2 月窗口，登记不展开）
 
