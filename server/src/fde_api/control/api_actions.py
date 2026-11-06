@@ -25,6 +25,24 @@ from fde_api.workbench.models import OperationEvent
 actions_blueprint = Blueprint("ai_actions", __name__, url_prefix="/api/v1/ai/actions")
 SECRET_KEYS = {"password", "api_key", "token", "access_token", "refresh_token", "authorization", "credential", "credential_ciphertext", "secret"}
 
+# B#13-C（到期语义与主动超时治理 v1 §5）：一次性确认窗口的唯一权威。
+# deadline = ai.api.requested.created_at + CONFIRMATION_WINDOW，deadline <= now
+# 即到期（等于边界也到期，与 B#13-B 上传会话/审批域边界同拍）。pending 列表、
+# action_status、decide_action 三处推导必须共用 confirmation_expired 原语，
+# 禁止再各自手写 15 分钟比较。
+CONFIRMATION_WINDOW = timedelta(minutes=15)
+
+
+def confirmation_expired(original: OperationEvent, *, now: datetime) -> bool:
+    """迟到确认的统一到期谓词（B#13-C derived-state 裁决）。
+
+    OperationEvent 保持 append-only：到期不追加事件、不 UPDATE/DELETE 原
+    request 行；三处消费方各自即时推导，无后台 sweep、无过期写路径。
+    到期结果不可触发目标操作；started-but-uncertain 的防重放保护优先于
+    到期判定（_result 先于本谓词被消费方调用）。
+    """
+    return original.created_at <= now - CONFIRMATION_WINDOW
+
 
 def _safe(value, *, incoming=False):
     if isinstance(value, dict):
@@ -191,7 +209,10 @@ def _run(session, user, identifier, spec, data, password=None):
 def pending_actions(user):
     with db.session() as session:
         rows = session.scalars(select(OperationEvent).where(OperationEvent.actor_user_id == user.id,
-            OperationEvent.event_type == "ai.api.requested", OperationEvent.created_at >= datetime.now(UTC) - timedelta(minutes=15))
+            OperationEvent.event_type == "ai.api.requested",
+            # 窗口外裁剪与 confirmation_expired 同源同界（B#13-C）：到期即
+            # created_at <= now - CONFIRMATION_WINDOW，列表只保留窗口内行。
+            OperationEvent.created_at > datetime.now(UTC) - CONFIRMATION_WINDOW)
             .order_by(OperationEvent.created_at.desc()).limit(50)).all()
         return [{"id": row.target_id, "description": row.changes["description"],
                  "operation": row.changes["operation"], "parameters": row.changes["parameters"], "body": row.changes["body"]}
@@ -208,7 +229,9 @@ def action_status(user, identifier):
             return previous
         original = next((e for e in events if e.event_type == "ai.api.requested"), None)
         if original:
-            return {"status": "expired" if original.created_at < datetime.now(UTC) - timedelta(minutes=15) else "awaiting_confirmation"}
+            if confirmation_expired(original, now=datetime.now(UTC)):
+                return {"status": "expired", "message": "确认窗口已过，请重新发起操作。"}
+            return {"status": "awaiting_confirmation"}
         return {"status": "not_completed", "message": "尚未确认完成，请勿声称成功。"}
 
 
@@ -225,7 +248,7 @@ def decide_action(user, identifier, password, approve=True):
             if previous:
                 return previous
             original = next((e for e in events if e.event_type == "ai.api.requested"), None)
-            if not original or not original.changes.get("confirmation_required") or original.created_at < datetime.now(UTC) - timedelta(minutes=15):
+            if not original or not original.changes.get("confirmation_required") or confirmation_expired(original, now=datetime.now(UTC)):
                 raise ControlServiceError("action_expired", "确认请求不存在或已过期，请重新发起操作。", 409)
             data = original.changes
             if not approve:

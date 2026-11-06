@@ -2,6 +2,27 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 到期治理收口：B#13-C API confirmation 主动超时 + B#13-D 跨域只读投影（2026-11-06）
+
+### B#13-C（零迁移零路由零新依赖；server 变更 ⇒ 合并后 rebuild 三镜像）
+
+- **derived state 裁决落地**：`OperationEvent` append-only 完整保留——到期不追加 expiry event、不 UPDATE/DELETE 原 request 行、不建后台 sweep（该域无清理副作用，持久化过期事实零行为收益，反而引入系统 actor 与事件生命周期两个新语义面）。
+- `control/api_actions.py` 新增唯一窗口常量 `CONFIRMATION_WINDOW`（15 分钟）与到期谓词 `confirmation_expired`；pending 列表 / `action_status` / `decide_action` 三处此前各自手写的 `timedelta(minutes=15)` 全部收敛到该原语。
+- **边界统一**：从严格 `<`（恰等于 15 分钟仍有效）对齐为 `deadline <= now`（恰等于即过期），与立项合同 §3.3 / B#13-B 上传会话 / 审批域同拍。
+- 到期行为：过期确认从 pending 列表筛除、status 返回 `expired`、迟到 decision 409 `action_expired` 且**零事件/目标副作用**（不落 started/finished、不触碰目标对象）；started-but-uncertain 防重放保护**优先于到期**（不报 expired、绝不重放），finished replay 越窗仍有效；auth_version/fingerprint/password 防线原位不动。
+- NEW `server/tests/test_api_confirmation_expiry.py` 7 例（常量值钉/谓词边界/窗口内全待/过期全拒+零副作用/uncertain 优先/越窗 replay/窗口常量放大变异证明三路径+投影同源）。
+
+### B#13-D（零 DDL；+1 路由）
+
+- **NEW `fde_api/expirations.py`**：跨域到期只读投影——服务层只读 union + admin-only `GET /api/v1/expirations`，输出立项合同 §2 六字段逻辑视图（`domain`/`object_id`/`deadline_at`/`state`/`due`/`expiry_action`）。不建 SQL view 的决定性理由：api_confirmation 截止时刻是派生值，SQL view 会把窗口规则复制成第二权威；服务层直接复用 B#13-C 同一常量与谓词。
+- 四域接入：automation_approval（pending）/ upload_session（uploading）/ api_confirmation（awaiting_confirmation，derived）/ dispatch_offer（offered，`offer_deadline` 派生）；`due` 统一按 `deadline_at <= now`；dispatch 原生转换器保留严格边界（边界瞬间读数先行一拍，只读不写回）。
+- 权限与面：admin-only（运营看板视角；触发条件=用户明确指示实施）；`limit` 默认 100 上限 500，排序 `(deadline_at, domain, object_id)` 稳定升序，`domain`/`due` 过滤；只投影元数据（不外泄确认 body/审批 arguments/对象键/客户资料）；`expiry_action` 只是符号名指针不执行；**不进 api_catalog**。
+- NEW `server/tests/test_expirations_projection.py` 8 例；审计清单重生成：route **302**（+1）/ blueprint **40**（+1）；105 表、迁移头 `b2e8f4a6c9d3`（36 rev）不变。
+
+### 口径
+
+pytest **2029 收集 = 2023 passed + 6 skipped**（CI 实测；本地专项 15 例 + 邻域 89 例全绿）／mypy 基线 **279** 不变／蓝图路由 **302**（+1）／业务表 **105**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，零迁移）。
+
 ## [未发布] — V3 B#14 executor 对抗性测试直补（2026-11-06）
 
 ### 对抗钉（纯测试轮，零迁移零路由零业务代码）

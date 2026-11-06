@@ -67,6 +67,7 @@ from fde_api.control.mcp_gateway import mcp_blueprint
 from fde_api.control.task_board import task_board_blueprint
 from fde_api.dispatch.admin_routes import admin_dispatch_blueprint  # goal-c CR-027
 from fde_api.evidence.routes import evidence_blueprint, fact_chain_blueprint  # 借鉴 B#9 事实链只读面
+from fde_api.expirations import blueprint as expirations_blueprint  # B#13-D 跨域到期投影
 from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14）
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
@@ -96,6 +97,7 @@ BLUEPRINTS = [
     evidence_blueprint,
     fact_chain_blueprint,  # 借鉴 B#9：app.py 注册序紧随 evidence_blueprint
     ontology_blueprint,  # V3 T-O2
+    expirations_blueprint,  # B#13-D：app.py 注册序紧随 ontology_blueprint
     workflows_blueprint,
     dispatch_blueprint,
     guidance_blueprint,
