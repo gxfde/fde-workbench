@@ -27,12 +27,13 @@ import re
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from fde_api.auth.models import User
+from fde_api.evidence.models import ProjectEvidence
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
@@ -149,8 +150,16 @@ def list_project_gates(*, actor: User, project_id: str) -> dict[str, Any]:
             sop_nodes = _sop_nodes_for_templates(session, templates)
             order = {row["gate_key"]: index for index, row in enumerate(_gate_templates())}
             gates.sort(key=lambda gate: order.get(gate.gate_key, 99))
+            # B#30-A 前置复核：算出被同 uri 更新 hash 行超越的证据 id（只读检测，
+            # 四不动——状态机/claim_status/拍板有效性/AI 权限均不因此改变）。
+            superseded_ids = _superseded_evidence_ids(session, project.id, gates)
             items = [
-                _serialize_gate(gate, templates.get(gate.gate_key), sop_nodes)
+                _serialize_gate(
+                    gate,
+                    templates.get(gate.gate_key),
+                    sop_nodes,
+                    frozenset(superseded_ids),
+                )
                 for gate in gates
             ]
             events = _recent_gate_events(session, project.id)
@@ -328,7 +337,14 @@ def submit_gate_evidence(
             session.flush()
             templates = _template_index()
             sop_nodes = _sop_nodes_for_templates(session, templates)
-            return _serialize_gate(gate, templates.get(gate.gate_key), sop_nodes)
+            # B#30-A：提交后一并回传「证据已换版」提示位（只读呈现，四不动）
+            superseded_ids = _superseded_evidence_ids(session, project.id, [gate])
+            return _serialize_gate(
+                gate,
+                templates.get(gate.gate_key),
+                sop_nodes,
+                frozenset(superseded_ids),
+            )
     except GateServiceError:
         raise
     except RuntimeError as error:
@@ -556,7 +572,11 @@ def decide_gate(
             record_event(session, actor, "gate_decided", gate, changes)
             session.flush()
             sop_nodes = _sop_nodes_for_templates(session, templates)
-            result_payload = _serialize_gate(gate, template, sop_nodes)
+            # B#30-A：拍板后一并回传「证据已换版」提示位（只读呈现，四不动）
+            superseded_ids = _superseded_evidence_ids(session, project.id, [gate])
+            result_payload = _serialize_gate(
+                gate, template, sop_nodes, frozenset(superseded_ids)
+            )
             if settlement is not None:
                 result_payload["g8_stop_settlement"] = settlement
             if acceptance is not None:
@@ -668,10 +688,69 @@ def _optional_note(payload: Mapping[str, Any]) -> str | None:
     return note.strip()
 
 
+def _superseded_evidence_ids(
+    session: Session, project_id: str, gates: Sequence[Gate]
+) -> set[str]:
+    """B#30-A 前置复核：检出「同一 source_uri 已被更新 hash 行超越」的证据 id。
+
+    判据（`docs/architecture/门禁前置复核与回退留痕立项-v1.md` §2-A）：同
+    `project_id + kind="gate"` 下存在 `source_uri` 相同、`id != evidence_id`、
+    `content_sha256` 不同且**创建更晚**的证据行 ⇒ 原证据行已被超越。
+
+    **呈现即提示，四不动**：门禁状态机、`claim_status`、拍板有效性、AI 权限
+    一律不动——本函数只产出「哪些证据行已过期」，由序列化层如实呈现。
+
+    **有界性**：只比较清单项引用到的 `source_uri` 行集（每门清单项数天然有界），
+    不做全项目证据扫描。
+    """
+    refs: dict[str, tuple[str, str]] = {}
+    source_uris: set[str] = set()
+    for gate in gates:
+        for item in gate.evidence_checklist or []:
+            evidence_id = item.get("evidence_id")
+            source_uri = item.get("source_uri")
+            content_hash = item.get("content_hash")
+            if not (evidence_id and source_uri and content_hash):
+                continue
+            refs[evidence_id] = (source_uri, str(content_hash).lower())
+            source_uris.add(source_uri)
+    if not refs:
+        return set()
+    rows = list(
+        session.scalars(
+            select(ProjectEvidence).where(
+                ProjectEvidence.project_id == project_id,
+                ProjectEvidence.kind == "gate",
+                ProjectEvidence.source_uri.in_(source_uris),
+            )
+        )
+    )
+    by_uri: dict[str, list[ProjectEvidence]] = {}
+    for row in rows:
+        by_uri.setdefault(row.source_uri, []).append(row)
+    superseded: set[str] = set()
+    for evidence_id, (source_uri, content_hash) in refs.items():
+        candidates = by_uri.get(source_uri, [])
+        current = next((row for row in candidates if row.id == evidence_id), None)
+        if current is None:
+            continue
+        for row in candidates:
+            if row.id == evidence_id:
+                continue
+            if (row.content_sha256 or "").lower() == content_hash:
+                continue
+            # 更晚 ⇒ 该行是「证据已换版」的新版本，原行被超越
+            if row.created_at > current.created_at:
+                superseded.add(evidence_id)
+                break
+    return superseded
+
+
 def _serialize_gate(
     gate: Gate,
     template: dict[str, Any] | None,
     sop_nodes: Mapping[str, SopNode],
+    superseded_evidence_ids: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     node = sop_nodes.get(template.get("node_key")) if template else None
     return {
@@ -694,6 +773,11 @@ def _serialize_gate(
                 "content_hash": item.get("content_hash"),
                 # V3 T-E2：一等证据引用；T-E2 之前提交的清单项无此键 → null（读时合并）
                 "evidence_id": item.get("evidence_id"),
+                # B#30-A 前置复核：同一 source_uri 已被更新的 hash 行超越 ⇒ 如实
+                # 标记「证据已换版」。呈现即提示——状态机/claim_status/拍板有效性/
+                # AI 权限四者一律不动；不携带新行指针（跳转走 evidence 登记簿面）。
+                "evidence_superseded": bool(item.get("evidence_id"))
+                and item.get("evidence_id") in superseded_evidence_ids,
             }
             for item in gate.evidence_checklist
         ],

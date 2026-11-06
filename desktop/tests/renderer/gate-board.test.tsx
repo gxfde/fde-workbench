@@ -507,3 +507,54 @@ it("B#28: 并发拍板冲突（409）如实呈现并刷新面板，不假装成�
     expect(callCount(gatesPath())).toBeGreaterThan(1)
   })
 })
+
+it("B#30-A: 证据已换版项呈现警示 badge，未换版项与旧载荷（无键）不受影响", async () => {
+  mocks.apiRequest.mockResolvedValue(
+    gateView({
+      gates: [
+        {
+          gate_key: "G2",
+          status: "evidence",
+          decision: null,
+          submitted_at: "2026-11-05T08:00:00+00:00",
+          decided_at: null,
+          checklist: [
+            {
+              label: "现状与痛点清单",
+              claim_status: "claimed",
+              source_uri: "fdeops://x/old",
+              content_hash: "a".repeat(64),
+              evidence_superseded: true,
+            },
+            {
+              label: "解决方案概要",
+              claim_status: "accepted",
+              source_uri: "fdeops://x/new",
+              content_hash: "b".repeat(64),
+            },
+          ],
+          gate_name: "诊断门",
+          node_key: "S5",
+          exit_condition: "诊断报告确认",
+          evidence_location: "fdeops .fde/",
+          contract_payment: null,
+          signer_role: null,
+          fail_exit: null,
+          decision_semantics: null,
+          template_source_uri: null,
+        },
+      ],
+    }),
+  )
+  render(<GateBoard projectId="gate-project" canManage={false} />)
+
+  expect(await screen.findByRole("heading", { name: /G2 · 诊断门/ })).toBeVisible()
+  // 仅换版项带警示 badge（title 说明四不动边界），另一项不出现
+  const badges = screen.getAllByText("证据已换版")
+  expect(badges).toHaveLength(1)
+  expect(badges[0]).toHaveAttribute(
+    "title",
+    "同一出处指针已登记更新的指纹，该项证据已换版——请核对后自行决定是否重验",
+  )
+  expect(screen.getByText("解决方案概要")).toBeVisible()
+})

@@ -478,3 +478,72 @@ def test_gate_view_exposes_revision_and_decision_accepts_it(
     assert response.json["data"]["status"] == "passed"
     # 拍板生效即推进 revision（与既有 B#28 语义一致）
     assert response.json["data"]["revision"] == fresh["revision"] + 1
+
+
+def test_gate_evidence_superseded_flag_detects_recollected_source(
+    admin_client, gate_project, db_session
+):
+    """B#30-A 前置复核：同一 source_uri 被重新采集（换 hash）⇒ 项级证据已换版。
+
+    场景：清单项拍板引用 E1(hash=h1)；其后同一 source_uri 重新登记产生 E2(hash=h2)
+    （T-G1 幂等语义：新行并存）⇒ 清单项仍指向 E1，平台须如实提示「证据已换版」。
+
+    判据（立项文档 §2-A）：序列化必含 evidence_superseded=true，且**四不动**——
+    门禁状态机五值、claim_status、拍板有效性均不变（呈现即提示）。
+    """
+    project, gates_url, leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G8")
+
+    gates = admin_client.get(gates_url).json["data"]["gates"]
+    g8 = next(gate for gate in gates if gate["gate_key"] == "G8")
+    item = g8["checklist"][0]
+    assert item["evidence_superseded"] is False
+    original_uri = item["source_uri"]
+    original_hash = item["content_hash"]
+    original_evidence_id = item["evidence_id"]
+
+    # 同一 source_uri 重新采集 → 换 hash 的新证据行（kind=gate，与清单项同域）
+    response = admin_client.post(
+        f"/api/v1/projects/{project['id']}/evidence",
+        json={
+            "kind": "gate",
+            "source_uri": original_uri,
+            "content_sha256": hashlib.sha256(b"recollected").hexdigest(),
+            "origin": "gate:G8/recollected",
+            "captured_from": "human",
+        },
+    )
+    assert response.status_code == 201, response.get_data(as_text=True)
+    new_evidence = response.json["data"]["evidence"]
+    assert new_evidence["id"] != original_evidence_id
+    assert new_evidence["content_sha256"] != original_hash  # 换版前提：指纹确已不同
+
+    db_session.expire_all()
+    after = admin_client.get(gates_url).json["data"]["gates"]
+    after_g8 = next(gate for gate in after if gate["gate_key"] == "G8")
+    after_item = after_g8["checklist"][0]
+
+    # 呈现即提示：该项标记证据已换版
+    assert after_item["evidence_superseded"] is True
+    assert after_item["evidence_id"] == original_evidence_id  # 仍指向原行（不自动改指针）
+    # 四不动：状态机五值 / claim_status / 拍板有效性 均不变
+    assert after_g8["status"] == g8["status"] == "evidence"
+    assert after_item["claim_status"] == g8["checklist"][0]["claim_status"] == "claimed"
+    assert after_g8["decision"] == g8["decision"] is None
+    # 不携带新行指针（跳转走既有 evidence 登记簿面）
+    assert "superseded_evidence_id" not in after_item
+
+
+def test_gate_evidence_superseded_flag_stays_false_without_recollection(
+    admin_client, gate_project
+):
+    """B#30-A 阴性：无重新采集时不得误报「证据已换版」。"""
+    _project, gates_url, _leader_client = gate_project
+    _submit_all_evidence(admin_client, gates_url, "G8")
+
+    gates = admin_client.get(gates_url).json["data"]["gates"]
+    g8 = next(gate for gate in gates if gate["gate_key"] == "G8")
+    assert all(item["evidence_superseded"] is False for item in g8["checklist"])
+    # 未提交的清单项（无 evidence_id）不得带此键为真
+    pending = next(gate for gate in gates if gate["gate_key"] == "G1")
+    assert all(item["evidence_superseded"] is False for item in pending["checklist"])

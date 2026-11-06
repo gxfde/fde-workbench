@@ -21,6 +21,11 @@ interface ChecklistItem {
   claim_status: string | null
   source_uri: string | null
   content_hash: string | null
+  /**
+   * B#30-A 前置复核：同一 source_uri 已被更新的 hash 行超越 ⇒ 该项证据已换版。
+   * 可选键——旧服务端载荷不带此键时缺省为未换版（读时兼容）。
+   */
+  evidence_superseded?: boolean
 }
 
 // V3 T-G1：任务产物候选（服务端建议性提示；采纳走既有提交闸）。可选键——
@@ -158,7 +163,12 @@ function isGatesView(value: unknown): value is GatesView {
       typeof gate.status === "string" &&
       Array.isArray(gate.checklist) &&
       gate.checklist.every(
-        (item) => isRecord(item) && typeof item.label === "string",
+        (item) =>
+          isRecord(item) &&
+          typeof item.label === "string" &&
+          // B#30-A：evidence_superseded 可选键——旧载荷缺省合法；在场则必须是布尔
+          (item.evidence_superseded === undefined ||
+            typeof item.evidence_superseded === "boolean"),
       ) &&
       // V3 T-G1：候选可选键——旧载荷缺省合法；在场则必须形状齐全
       (gate.evidence_candidates === undefined ||
@@ -387,6 +397,13 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
             <span className={`badge ${item.claim_status === "accepted" ? "success" : item.claim_status === "claimed" ? "warning" : "muted"}`}>
               {item.claim_status === "accepted" ? "accepted" : item.claim_status === "claimed" ? "claimed" : "未提交"}
             </span>
+            {/* B#30-A 前置复核：证据已换版——同一出处指针下已存在更新的指纹，
+                核验人须自行判断是否重验（平台不自动改状态、不自动回退）。 */}
+            {item.evidence_superseded ? (
+              <span className="badge warning" title="同一出处指针已登记更新的指纹，该项证据已换版——请核对后自行决定是否重验">
+                证据已换版
+              </span>
+            ) : null}
             {item.source_uri ? <small className="gate-evidence-uri">{item.source_uri}</small> : null}
           </li>
         ))}
