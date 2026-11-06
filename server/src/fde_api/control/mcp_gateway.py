@@ -221,7 +221,16 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
         return help_bundle.fetch_section(heading=str(arguments.get("heading", "")), start=offset if type(offset) is int else 0)
     rows = _skills(session, user, allowed)
     if name == "skill_list":
-        return {"items": [{"id": s.id, "name": s.name, "description": s.description, "scope": s.scope} for s, _ in rows]}
+        # #8 两级注入·第一级：列表带 when_to_use 摘要（取自 use_boundaries 组），
+        # AI 选技能前先看触发条件；未填该组的技能不带此键（缺省＝不误导）。
+        items = []
+        for s, v in rows:
+            item = {"id": s.id, "name": s.name, "description": s.description, "scope": s.scope}
+            when_to_use = (v.manifest_json or {}).get("use_boundaries", {}).get("when_to_use")
+            if isinstance(when_to_use, str) and when_to_use.strip():
+                item["when_to_use"] = when_to_use
+            items.append(item)
+        return {"items": items}
     row = next(((s, v) for s, v in rows if s.id == arguments.get("skill_id")), None)
     if row is None:
         raise ControlServiceError("not_found", "技能不存在或无权使用。", 404)
@@ -238,9 +247,21 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
         from fde_api.control.extensions_service import record_skill_usage
         record_skill_usage(actor_id=user.id, skill_id=row[0].id, surface="chat",
                            version=row[1].version_number)
-    return {"name": row[0].name, "instructions": text[offset:end], "version": row[1].version_number,
-            "offset": offset, "next_offset": end if end < len(text) else None,
-            "total_characters": len(text)}
+    result = {"name": row[0].name, "instructions": text[offset:end], "version": row[1].version_number,
+              "offset": offset, "next_offset": end if end < len(text) else None,
+              "total_characters": len(text)}
+    # #8 两级注入·第二级：首页带必读引用清单（references 组）——引用是仓库内相对
+    # 路径，消费方用既有只读工具自行读取；引用不携带内容、不产生新读取权限。
+    # 只在首页（offset=0）给：续页是同一正文的延续，重复带引用是噪音。
+    if offset == 0:
+        manifest = row[1].manifest_json
+        refs = manifest.get("references") if isinstance(manifest, dict) else None
+        if isinstance(refs, dict):
+            for key in ("required_reading", "authoritative_sources"):
+                value = refs.get(key)
+                if isinstance(value, list) and value and all(isinstance(x, str) and x.strip() for x in value):
+                    result[key] = value
+    return result
 
 
 def extract_file_text(raw: bytes, extension: str) -> str:

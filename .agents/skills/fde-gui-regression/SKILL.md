@@ -1,6 +1,12 @@
 ---
 name: fde-gui-regression
 description: Browser-driven UI regression for the FDE workbench renderer. Use when the user asks to 跑一遍界面回归 / UI 回归 / 浏览器里点一遍 / 验一下指引链界面 / 验一下集成桥页面 / 确认并用于项目指引按钮还在不在 / GUI 测试 — covers the harness server (desktop/gui-harness), the seeded fixture, the two regression chains (指引链只读草稿确认 + 集成桥采集/刷新), and where the screenshots land.
+use_boundaries.when_to_use: 要跑界面回归或验证桌面 UI 改动未破坏指引链与集成桥两条关键交互链时
+use_boundaries.when_not_to_use: 纯服务端改动且 CI desktop job 已绿时，不必人工跑界面回归
+references.required_reading: ["desktop/gui-harness/shots.mjs"]
+references.authoritative_sources: ["desktop/gui-harness/shots.mjs"]
+
+
 ---
 
 # FDE 工作台 GUI 回归（浏览器驱动）
@@ -73,3 +79,8 @@ node desktop/gui-harness/regression.mjs
 - Playwright 的 `getByRole(name)` 对中文是**整名匹配**且不唯一时报 count>1，按容器限定。
 - 一次只留一个 harness 进程：多个实例抢 5199 端口，代理会慢到 9 秒/请求，登录看着像卡死。
 - Git Bash → WSL → 容器传中文会被编码搞坏：脚本文件写 ASCII，中文用 `\uXXXX` 转义。
+
+## 契约键语义锚
+
+- required_reading（执行前必读）：desktop/gui-harness/shots.mjs、desktop/tests/README.md——gui-harness 目录（shots.mjs 与 fixture 种子）是回归链定义的唯一权威。
+- authoritative_sources（冲突裁决）：desktop/gui-harness/——技能正文是操作化展开，冲突以权威为准。

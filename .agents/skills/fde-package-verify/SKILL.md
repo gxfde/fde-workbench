@@ -1,6 +1,12 @@
 ---
 name: fde-package-verify
 description: How to build, verify and hand off the Windows x64 portable build (便携版) of the FDE desktop app. Use whenever the user asks to 打包 / 出便携版 / 重新打一版 / 交付新版本给蔡工 / verify app.asar / 打包验证 — covers electron-builder output, delivery directory naming (r N+1), sha256, and the Chinese-marker byte verification that prevents false negatives.
+use_boundaries.when_to_use: 要打包便携版并做 asar 字节验证交付给用户时
+use_boundaries.when_not_to_use: 开发自测走 typecheck 与 test:desktop，不是打包交付，不需要本 runbook
+references.required_reading: ["README.md", "desktop/package.json"]
+references.authoritative_sources: ["README.md"]
+
+
 ---
 
 # FDE 便携版打包与验证
@@ -64,3 +70,8 @@ cp -r win-unpacked "蔡工FDE-<版本>-便携版-r<N+1>"   # r3 存在则命名 
 - `release/` 已 gitignore，产物永不进 git。
 - 便携版只含客户端；用户机器仍需可达的后端 API（README「快速搭建」）。
 - 未签名的安装包不得对外发布宣传（README 明文约束）。
+
+## 契约键语义锚
+
+- required_reading（执行前必读）：README.md、desktop/package.json——README「打包桌面端」节是部署命令与产物形态的唯一权威（本技能正文已声明冲突以 README 为准）。
+- authoritative_sources（冲突裁决）：README.md——技能正文是操作化展开，冲突以权威为准。

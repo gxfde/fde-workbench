@@ -2,6 +2,38 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 两级注入全链路：契约 references 组 + 消费面两层接线（#8，2026-11-06）
+
+### 契约扩组（技能结构化契约 v1 §2.6，零迁移零路由零新表）
+
+- NEW `references` 必读引用组：`required_reading`（执行前必读，硬前置）＋ `authoritative_sources`（冲突裁决，软引用）。语义锚＝`fde-package-verify` 手写规则「README 冲突以 README 为准」——把「权威在技能正文之外」的约束从散文升级为机器可读引用。
+- 键空间闭合枚举同步扩组（`test_skill_contract` `CONTRACT_GROUPS` +references），B#37 静态闸验证通过。
+
+### 消费面两级接线（mcp_gateway）
+
+| 级 | 工具 | 内容 |
+|---|---|---|
+| **第一级**（选技能前） | `skill_list` | item 带 `when_to_use` 摘要（取自 `use_boundaries` 组；未填不带键——缺省＝不误导） |
+| **第二级**（读正文前） | `skill_read` 首页（offset=0） | 带 `required_reading`/`authoritative_sources` 引用清单；**续页不带**（同一正文延续，重复是噪音）；良构校验（list[str] 全非空才出，不猜不放宽） |
+
+- **引用不携带内容、不产生新读取权限**：引用是仓库内相对路径，消费方用既有只读工具自行读取；`skill_list`/`skill_read` 工具 schema 静态钉住不变。
+- **T-S2 计数语义不变**：首页带引用不改变「仅首读计一次」。
+- 4 个 runbook 按「平铺点路径 + JSON 数组字面量」回填 `use_boundaries`+`references`（**种子 13 条维持 B#36「不回填」裁决不动**）。
+
+### 测试
+
+NEW `server/tests/test_skill_readbefore.py` 5 例；**变异三连逐一转红**：列表不带摘要／续页也带引用／坏引用透传。技能域回归 25 passed。
+
+### 口径
+
+pytest **2056 收集 = 2050 passed + 6 skipped**（+5）／vitest **858**（零桌面改动，校正自 B#30-A 基线 839——main CI run 42251482875 实测 858，其间 #163/#164 并发 +19）／mypy **279**（不变）／蓝图路由 **304**（不变）／业务表 **105**（不变）／api_catalog ENTRIES **94**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。
+
+> 口径基线取 main HEAD `5b47c07` CI run 42251482875 实测 2045 passed＋6 skipped＝2051 收集；本地 collect 2056＝2051+5 交叉对齐。
+
+### 同轮核销
+
+- 借鉴总览 #36/#37 四处「✅ 已实施 · 未提交（b36b37 轮）」过时状态核销为「✅ 已实施 · #140」（#140 已于 fork/main 合入）。
+
 ## [未发布] — V3 B#30-A 门禁证据漂移呈现：同源换版只读复核（2026-11-06）
 
 ### 行为变更（零迁移零路由零新表；server 变更 ⇒ 合并后 rebuild 三镜像；桌面变更 ⇒ 便携版重打包挂账）

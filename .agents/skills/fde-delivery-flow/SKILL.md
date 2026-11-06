@@ -1,6 +1,12 @@
 ---
 name: fde-delivery-flow
 description: The standard change-delivery checklist for the fde-workbench repo — feature branch, push to fork (never origin), PR, wait for all 4 CI jobs, merge, fast-forward local main, delete branch. Use whenever the user asks to 提交代码 / 发 PR / 合并 / 交付这个改动 / 走交付流 / push 上去, or before pushing anything in this repo.
+use_boundaries.when_to_use: 要提交代码改动走 feature 分支、push fork、PR、CI 全绿、合并、ff 本地 main、删分支时，push 前也应核对一遍
+use_boundaries.when_not_to_use: 只读浏览与检索类操作不产生提交，不需要走交付流
+references.required_reading: ["AGENTS.md", "CONTRIBUTING.md"]
+references.authoritative_sources: ["AGENTS.md"]
+
+
 ---
 
 # FDE 标准交付流检查单
@@ -59,3 +65,8 @@ description: The standard change-delivery checklist for the fde-workbench repo �
 | 定向测试绿但全量红 | 第 2 步明文全量；CI 也是全量 |
 | main 与 fork/main 分叉 | 第 5 步 ff-only，失败即查而不是强推 |
 | 密钥进历史 | 第 1 步自查 + gitleaks job 兜底，红了不算事故、绿了也别大意 |
+
+## 契约键语义锚
+
+- required_reading（执行前必读）：AGENTS.md、CONTRIBUTING.md——AGENTS.md「工作流与陷阱」节是分支与合并纪律的唯一权威；CONTRIBUTING.md 是贡献口径。
+- authoritative_sources（冲突裁决）：AGENTS.md——技能正文是操作化展开，冲突以权威为准。

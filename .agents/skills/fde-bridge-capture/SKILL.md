@@ -1,6 +1,12 @@
 ---
 name: fde-bridge-capture
 description: Runbook for triggering and verifying a manual integration-bridge (集成桥) capture run in the FDE workbench. Use whenever the user asks to 采集 / 手动采集 / 立即采集 / 跑一轮桥 / 采集没反应 / bridge poll / FDE-Bridge-Poll / 看看桥的最新快照 — covers schtasks trigger with Git Bash double-slash, log location, why server changes need an image rebuild, and the read-only discipline of the collector.
+use_boundaries.when_to_use: 用户要求采集/手动采集/立即采集/跑一轮桥，或采集没反应需要核实桥的最新快照时
+use_boundaries.when_not_to_use: 与集成桥采集无关的日常排查，先走 system-health 与日志定位，不要把本 runbook 当通用运维入口
+references.required_reading: ["scripts/bridge-poll.mjs", "AGENTS.md"]
+references.authoritative_sources: ["AGENTS.md"]
+
+
 ---
 
 # FDE 集成桥手动采集 runbook
@@ -52,3 +58,8 @@ MSYS_NO_PATHCONV=1 wsl -d Ubuntu-24.04 -- docker compose up -d
 - `bridge-poll.mjs` **只读**：只调 openfde 只读 CLI + 读文件，绝不写真相层；不要给它加任何写路径。
 - 采集只在 Windows 宿主跑；CI/Ubuntu 上相关测试必须显式传 platform（可注入）。
 - `--check` 模式（ orphan 项目 > 0 退出码 2）是铁律巡检，不要改动其语义。
+
+## 契约键语义锚
+
+- required_reading（执行前必读）：scripts/bridge-poll.mjs、AGENTS.md——AGENTS.md「集成桥手动采集」节是命令与纪律的唯一权威；scripts/bridge-poll.mjs 是被调用的采集器本体（只读纪律在其头部声明）。
+- authoritative_sources（冲突裁决）：AGENTS.md——技能正文是操作化展开，冲突以权威为准。

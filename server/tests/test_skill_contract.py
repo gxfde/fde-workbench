@@ -44,6 +44,9 @@ CONTRACT_GROUPS: dict[str, dict[str, type]] = {
     "evidence": {"artifacts_as_pointers": bool, "evidence_gates": list},
     "verification": {"verified_scenarios": list, "unverified_note": str},
     "failure_behavior": {"failure_reporting": str, "degrade_policy": str},
+    # 2.6 references 必读引用组（#8 两级注入载体，2026-11-06 扩组）：引用是仓库内
+    # 相对路径清单；消费方用既有只读工具自行读取，引用不携带内容、不产生新权限。
+    "references": {"required_reading": list, "authoritative_sources": list},
 }
 BASE_MANIFEST_KEYS = {"version", "source", "read_only"}
 GATE_IDS = {f"G{i}" for i in range(1, 10)}
