@@ -66,10 +66,16 @@ export function UsersPage() {
     }
   }, [resetTarget])
 
+  // 提交失败后把焦点交回输入框，让用户直接改密码重试。
+  // 竞态来源：输入框带 autoFocus，而提交失败时 setResetError 与 finally 里的
+  // setResetSubmitting(false)/setResetPassword("") 会同批渲染——
+  // autoFocus 只在挂载时生效一次，但 disabled 切换与清空会触发重渲染，
+  // 浏览器可能把焦点留在「确认重置」按钮上（实测 desktop CI 偶发红：
+  // users.test.tsx 期望 input 聚焦、实得按钮聚焦）。
+  // 修法：焦点统一由本 effect 管理，输入框不再声明 autoFocus（避免两个来源竞争）。
   useEffect(() => {
-    if (resetError && !resetSubmitting) {
-      resetInputRef.current?.focus()
-    }
+    if (!resetError || resetSubmitting) return
+    resetInputRef.current?.focus()
   }, [resetError, resetSubmitting])
 
   useEffect(() => {
@@ -354,7 +360,7 @@ export function UsersPage() {
             <h2 id="reset-title">重置 {resetTarget.username} 的密码</h2>
             <p className="supporting-copy">重置后，该用户需在下次登录时修改密码。</p>
             <form onSubmit={(event) => void resetUserPassword(event)}>
-              <div className="field"><label htmlFor="reset-password">新临时密码</label><input ref={resetInputRef} autoFocus id="reset-password" type="password" autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} value={resetPassword} disabled={resetSubmitting} aria-invalid={Boolean(resetError)} aria-describedby={resetError ? "reset-error" : undefined} onChange={(event) => setResetPassword(event.target.value)} /></div>
+              <div className="field"><label htmlFor="reset-password">新临时密码</label><input ref={resetInputRef} id="reset-password" type="password" autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} value={resetPassword} disabled={resetSubmitting} aria-invalid={Boolean(resetError)} aria-describedby={resetError ? "reset-error" : undefined} onChange={(event) => setResetPassword(event.target.value)} /></div>
               {resetError ? <p id="reset-error" className="form-error" role="alert">{resetError}</p> : null}
               <div className="dialog-actions"><button className="secondary-button" type="button" disabled={resetSubmitting} onClick={closeResetDialog}>取消</button><button ref={resetConfirmRef} className="primary-button" type="submit" disabled={resetSubmitting}>{resetSubmitting ? "正在重置" : "确认重置"}</button></div>
             </form>

@@ -379,3 +379,50 @@
   font-size: var(--font-label);
   line-height: var(--lh-body);
 }
+/* 章节导语：每节开头一句话说明这节解决什么问题，比正文更醒目 */
+.help-lead {
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  font-size: var(--font-body);
+  line-height: var(--lh-relaxed);
+}
+/* 操作步骤：带序号徽标的编号列表，视觉上与正文段落区分 */
+.help-steps {
+  counter-reset: help-step;
+  list-style: none;
+  padding-left: 0 !important;
+  gap: var(--space-2) !important;
+}
+.help-steps > li {
+  position: relative;
+  padding-left: 30px;
+  counter-increment: help-step;
+}
+.help-steps > li::before {
+  content: counter(help-step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-blue-faint);
+  color: var(--brand-blue-deep);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  line-height: 1;
+}
+/* 补充说明：比警告弱一档，用于「注意事项 / 注意」类中性提示 */
+.help-note {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--line);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-2);
+  color: var(--muted-strong);
+  font-size: var(--font-label);
+  line-height: var(--lh-body);
+}

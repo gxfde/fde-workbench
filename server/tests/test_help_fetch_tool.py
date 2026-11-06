@@ -19,6 +19,7 @@ from pathlib import Path
 
 _BUNDLED = Path(__file__).resolve().parents[1] / "src" / "fde_api" / "control" / "bundled" / "help_manual.md"
 _HELP_PAGE = Path(__file__).resolve().parents[2] / "desktop" / "src" / "renderer" / "src" / "help" / "HelpPage.tsx"
+_DOCS_COPY = Path(__file__).resolve().parents[2] / "docs" / "工作台操作使用手册.md"
 pytestmark = pytest.mark.skipif(not _BUNDLED.exists(), reason="bundled help manual not shipped with this checkout")
 
 
@@ -151,3 +152,47 @@ def test_manual_gate_sop_mapping_matches_seeds():
     for gate in gates:
         pair = f"{gate['gate_key']}↔{gate['node_key']}"
         assert pair in manual_text, f"内置手册缺少门禁↔SOP 阶段对应：{pair}"
+
+
+def test_docs_copy_of_manual_stays_identical_to_bundled():
+    """docs/ 的手册副本必须与烤进镜像的 bundled 副本逐字一致。
+
+    两份是同名副本，靠人工保持一致、无生成脚本——改一处忘另一处就会漂移：
+    docs 里是新口径、镜像里是旧口径，AI 助手 help_fetch 检索到的内容与界面不一致。
+    本守卫把「两份必须相同」变成 CI 断言。
+    """
+    if not _DOCS_COPY.exists():
+        pytest.skip("docs manual copy not present in this checkout")
+    assert _DOCS_COPY.read_text("utf-8") == _BUNDLED.read_text("utf-8"), (
+        "docs/工作台操作使用手册.md 与 bundled/help_manual.md 不一致——"
+        "改手册内容时必须同步两份（无生成脚本，靠人工保持一致）"
+    )
+
+
+def test_manual_and_ui_page_agree_on_key_facts():
+    """UI 帮助页与内置手册的关键事实口径必须一致。
+
+    help_fetch 按手册原文作答，界面按 UI 文案展示——两者口径分叉时，
+    用户在界面看到的与 AI 助手说的会不一样（例如标签页数量、门禁结论范围）。
+    这些事实都来自代码常量，改代码时必须三处同步：
+    代码 / UI 帮助页 / 内置手册。
+    """
+    if not _HELP_PAGE.exists():
+        pytest.skip("desktop help page not present in this checkout")
+    page_text = _HELP_PAGE.read_text("utf-8")
+    manual_text = _BUNDLED.read_text("utf-8")
+    # 关键事实：(说明, 必须同时出现在 UI 页与手册)
+    facts = [
+        ("项目详情标签页数", "12 个标签页"),
+        ("执行事实面板存在", "执行事实"),
+        ("有条件通过仅 G9", "conditional_pass"),
+        ("G8 书面拍板三态", "proceed"),
+        ("文件上传上限", "100MB"),
+        ("采集断连阈值（分钟）", "360"),
+        ("访问令牌过期（分钟）", "15 分钟"),
+        ("刷新令牌有效期（天）", "30 天"),
+        ("证据核验双态", "claimed"),
+    ]
+    for label, token in facts:
+        assert token in page_text, f"UI 使用帮助缺少关键事实（{label}）：{token}"
+        assert token in manual_text, f"内置手册缺少关键事实（{label}）：{token}"
