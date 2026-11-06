@@ -152,6 +152,11 @@ def test_skeleton_composes_from_guidance_with_industry_template(db_session, lead
     assert "门店巡检靠人工" in design and "high/门店运营" in design
     assert "补货预测不准" in design
     assert "## 方案设想（待人工修订）" in design
+    # T-A5：三选项 + 取舍 + 明确不做三段齐备（行业模板路径同样受益）。
+    assert "## 方案选项与取舍" in design
+    assert "选项 A" in design and "选项 B" in design and "选项 C" in design and "取舍" in design
+    assert "## 明确不做（本阶段不包含）" in design
+    assert "本轮不含仓储机器人" in design
     assert "巡检覆盖率≥90%" in item["acceptance_criteria"] and "验收口径待补" in item["acceptance_criteria"]
     assert "ERP 仅开放只读接口" in item["data_systems"]
     assert "预调研" in item["schedule"] and "培训与交接" in item["schedule"], "行业模板模块应进入排期骨架"

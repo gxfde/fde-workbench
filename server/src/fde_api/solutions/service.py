@@ -923,9 +923,26 @@ def _skeleton_text_fields(
     ]
     design += [f"- {module_name}：待补解决思路与预期收益" for module_name in module_names] \
         if module_names else ["- 待补：按模块概述解决思路"]
-    design += ["## 实施路径（待人工修订）"]
+    # T-A5：方案三选项 + 取舍——骨架模板化，降低售前从零起草成本。
+    # 只**追加**独立段，不改既有段标题（既有 delivery compiler 用例钉住
+    # 「## 方案设想（待人工修订）」）。段前后留空行：售前是在 textarea 里
+    # 直接改这段原始 markdown 的，空行是可扫读性的实际成本。
+    design += [
+        "",
+        "## 方案选项与取舍",
+        "- 选项 A：待补（针对哪个问题—怎么解—预期收益）",
+        "- 选项 B：待补（针对哪个问题—怎么解—预期收益）",
+        "- 选项 C：待补（针对哪个问题—怎么解—预期收益）",
+        "- 取舍：待补（选哪一个、为何放弃其余、依据是什么）",
+    ]
+    design += ["", "## 实施路径（待人工修订）"]
     design += [f"- {module_name}：待补阶段与里程碑" for module_name in module_names] \
         if module_names else ["- 待补：对齐 SOP 阶段与门禁计划"]
+    # T-A5：「明确不做」独立成段（台账验收：out_of_scope 单独可见）。
+    # 本段**不带前缀**——前缀（「本阶段不包含：」）是给 risks 段混排用的，
+    # 独立成段后重复一遍就是噪音。risks 段仍保留三类前缀（既有用例钉住）。
+    design += ["", "## 明确不做（本阶段不包含）"]
+    design += _skeleton_lines(analysis.out_of_scope_json) or ["- 待补：本阶段明确不做的范围"]
     deliverables = _skeleton_lines([{"text": f"{module_name}：待补交付物清单"} for module_name in module_names]) or ["- 待补：核心交付物清单"]
     acceptance = [
         f"{line}（验收口径待补）" if line.startswith("- ") and "待补）" not in line else line

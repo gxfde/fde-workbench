@@ -515,6 +515,29 @@
 - 测试：服务端既有 solution 用例不回归 + 桌面模板渲染用例。
 - 验收：三选项 + 取舍 + out_of_scope + 验收标准四段齐备且可导出。
 - 回滚：revert 单 commit。风险：低。依赖：T-A4。复杂度：**S**。
+- **实施轮勘误（2026-11-06，T-A5 实测，与登记原文三处出入）**：
+  1. **「out_of_scope 段即『明确不做』」不成立——既有六段里没有独立的「明确不做」段**：实测 `_skeleton_text_fields` 的六段是 `design_markdown` / `deliverables` / `acceptance_criteria` / `data_systems` / `schedule` / `risks_dependencies`（`HEALTH_COVERAGE_FIELDS`），其中 **`out_of_scope` 只混排在 `risks_dependencies` 段里**，与「假设」「待确认问题」三类前缀同段（`- 本阶段不包含：…`）。⇒ 要满足验收的「out_of_scope 单独可见」，**必须新增一个独立段**（追加，不动既有段，否则既有 goal-d2 用例判红）。
+  2. **「桌面模板渲染用例」不成立——桌面零改动**：实测桌面用**通用 Markdown 渲染器**消费 `design_markdown`（`desktop/src/renderer/src/solutions/SolutionDetailPage.tsx:94` 的 `MemoMarkdown`、`SolutionEditor.tsx:121` 的预览），**无任何硬编码段落清单** ⇒ 新增 `##` 段自动渲染。登记时误以为桌面需配套改代码 + 补用例，实际**桌面一行都不用改**。
+  3. **另有一条骨架构建路径未接线**：`server/src/fde_api/workflows/compiler.py:compile_delivery_preview`（本体编译路径）**全仓无生产调用方**（仅 `server/tests/test_delivery_compiler.py` 引用）⇒ 本条**不覆盖该路径**——不扩大范围，不给未接线路径埋一套没人看的文案。
+- **实施轮实际改动**：`server/src/fde_api/solutions/service.py` 的 `_skeleton_text_fields`（**唯一改动的生产文件**）——
+  1. `design_markdown` **追加**「## 方案选项与取舍」段（选项 A / B / C + 取舍，四个占位行均带「待补」提示）；
+  2. `design_markdown` **追加**「## 明确不做（本阶段不包含）」段（从 `analysis.out_of_scope_json` 搬运，无条目时落「- 待补：本阶段明确不做的范围」占位行；**本段不带 risks 段的「本阶段不包含：」前缀**——前缀是给 risks 段三类混排用的，独立成段后重复一遍就是噪音）；
+  3. 新段前后留空行（含给既有「## 实施路径」段补一个前置空行）——售前是在 textarea 里直接改这段原始 markdown 的，空行是可扫读性的实际成本；**仅空白，不动任何既有段标题与条目文本**。
+  - **只追加、不改既有段标题**：`## 方案设想（待人工修订）` / `## 实施路径（待人工修订）` 标题与 risks 段三类前缀全部原样保留（既有 delivery compiler 与 goal-d2 用例钉住）。
+  - **段序固定**：方案设想 → 方案选项与取舍 → 实施路径 → 明确不做。
+
+#### ✅ T-A5 实施轮（2026-11-06，状态：**已实施，待合并**——PR #172，sha `8d44b68`（rebase 到 fork/main `f7ace0e` 后），CI 4 job 全绿，服务端零桌面改动）
+
+**四段验收逐条落位**（台账验收口径）：
+| 验收项 | 落位 | 形态 |
+|---|---|---|
+| 三选项 + 取舍 | `design_markdown` 新增「## 方案选项与取舍」段 | 选项 A/B/C + 取舍各一行，均带「待补」提示 |
+| out_of_scope 单独可见 | `design_markdown` 新增「## 明确不做（本阶段不包含）」段 | 从 `out_of_scope_json` 搬运；无条目时落占位行 |
+| 验收标准 | 既有 `acceptance_criteria` 段 | 成功标准条目 + 「（验收口径待补）」标记（既有行为，本轮钉住不回归） |
+| 可导出 | `export_sow` 冻结快照 | `content_snapshot_json["solution"]["design_markdown"]` 含上述两段 |
+
+**测试**：新增 `server/tests/test_solution_skeleton_options.py` **6 例**——三选项与取舍占位齐备（含「待补」提示）、「明确不做」独立成段且 risks 段既有「本阶段不包含」前缀不回归、段序固定、无 out_of_scope 时段落不消失（落占位行）、验收标准段搬运成功标准条目、新段进得去冻结的 SOW 快照（可导出）。既有 `test_goal_d2_s0_closeout.py` 追加 T-A5 断言（行业模板路径同样受益）；`test_delivery_compiler.py` / `test_project_solutions.py` / `test_solution_validation.py` 零回归（**36 passed**）。
+
 
 ### T-A6 报价 claims 核验 → 冻结 SOW 的桌面闭环 — **PROPOSED（登记轮，零代码）**
 - 目标：售前能自己把报价从「估算」推到「核验通过」，并在核验通过后冻结导出 SOW，**不依赖工程师介入**。
@@ -694,7 +717,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
