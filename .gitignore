@@ -70,3 +70,5 @@ resources/document-templates/_backup-pre-brand/
 # 桌面端构建产物（verify 快照）与替换下的旧图标
 desktop/src/renderer/out/
 desktop/build/icon-old-*
+# 本机 Agent 工具缓存（plans / workflow-drafts / workflow-runs），永不入库
+.zcode/

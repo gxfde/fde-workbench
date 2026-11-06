@@ -9,23 +9,21 @@
  * 注：`styles.css:2` 注释与 logo svg 的 `<title>` 为资产元数据非界面文案，
  * 不在扫描面内（与台账 CR-001「驳回/观察记录」口径一致）。
  */
-import { readFileSync, readdirSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { describe, expect, it } from "vitest"
 
+import { walkSourceFiles } from "./source-walk"
+
 const SRC_ROOT = join(fileURLToPath(new URL("../..", import.meta.url)), "src")
 const PRODUCT_FULL_NAME = "蔡工FDE智能交付系统"
 
 function walk(dir: string): string[] {
-  const out: string[] = []
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) out.push(...walk(full))
-    else if (/\.(ts|tsx|html)$/.test(entry)) out.push(full)
-  }
-  return out
+  // 排除构建产物目录（out/dist/build 等），避免本地打包残留让本闸假红；
+  // 真实源码仍全量扫描，约束不放宽。
+  return walkSourceFiles(dir, (name) => /\.(ts|tsx|html)$/.test(name))
 }
 
 const normalize = (p: string) => p.replace(/\\/g, "/")
