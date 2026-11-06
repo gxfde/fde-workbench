@@ -6,6 +6,8 @@ interface ResearchSubjectTreeProps {
   subjects: ResearchSubjectDto[]
   selectedId: string | null
   canFill: boolean
+  /** CR-032 写路径：注册对象类型（T-O2 注册表 active 行）——根级（无上级）创建入口。 */
+  registeredTypes?: string[]
   onSelect(subject: ResearchSubjectDto): void
   onCreate(type: Exclude<ResearchSubjectType, "project">): void
   onRename(subject: ResearchSubjectDto): void
@@ -15,7 +17,7 @@ interface ResearchSubjectTreeProps {
 }
 
 
-export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, onCreate, onRename, onArchive, onMerge, onReorder }: ResearchSubjectTreeProps) {
+export function ResearchSubjectTree({ subjects, selectedId, canFill, registeredTypes, onSelect, onCreate, onRename, onArchive, onMerge, onReorder }: ResearchSubjectTreeProps) {
   const dragged = useRef<string | null>(null)
   const [sorting, setSorting] = useState(false)
   const [sortError, setSortError] = useState("")
@@ -128,7 +130,7 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
     {canFill && onReorder ? <p className="research-sort-hint" role="status">{sorting ? "正在保存顺序…" : "拖动对象调整同级顺序；也可用 Alt + ↑ / ↓"}</p> : null}
     {sortError ? <p className="form-error" role="alert">{sortError}</p> : null}
     <div className="panel-heading"><h2>调研对象</h2><span>{active.length} 个</span></div>
-    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{researchSubjectLabel(type)}</button>)}{selected && selected.subject_type !== "project" && onMerge ? <button type="button" className="secondary-button compact" aria-label={`合并${selected.name}`} onClick={() => onMerge(selected)}>合并</button> : null}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
+    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{researchSubjectLabel(type)}</button>)}{(registeredTypes ?? []).map((type) => <button type="button" className="secondary-button compact" key={`registered:${type}`} title="注册对象类型：无上级归属，创建为根级对象" aria-label={`新增${researchSubjectLabel(type)}（根级）`} onClick={() => onCreate(type)}>新增{researchSubjectLabel(type)}（根级）</button>)}{selected && selected.subject_type !== "project" && onMerge ? <button type="button" className="secondary-button compact" aria-label={`合并${selected.name}`} onClick={() => onMerge(selected)}>合并</button> : null}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
     {root ? <ul className="research-tree" role="tree" aria-label="项目调研对象树" ref={treeRef} onKeyDown={handleKeyDown} onDragStart={(event) => {
       const { subject } = targetSubject(event.target)
       if (!canFill || !onReorder || sorting || !subject || subject.subject_type === 'project') { event.preventDefault(); return }

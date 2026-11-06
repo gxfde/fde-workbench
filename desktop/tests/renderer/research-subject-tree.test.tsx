@@ -120,3 +120,28 @@ function subject(id: string, type: ResearchSubjectType, parentId: string | null,
     links: [],
   }
 }
+
+describe("CR-032 写路径：注册对象类型根级入口", () => {
+  it("registeredTypes 渲染「新增X（根级）」按钮并回传注册码", async () => {
+    const onCreate = vi.fn()
+    const subjects = [
+      subject("project", "project", null, "示例企业"),
+      subject("department", "department", "project", "销售部"),
+    ]
+    render(<ResearchSubjectTree subjects={subjects} selectedId={null} canFill registeredTypes={["customer_site"]} onSelect={vi.fn()} onCreate={onCreate} onRename={vi.fn()} onArchive={vi.fn()} />)
+    const user = userEvent.setup()
+
+    const button = screen.getByRole("button", { name: "新增customer_site（根级）" })
+    expect(button).toBeVisible()
+    expect(button).toHaveAttribute("title", "注册对象类型：无上级归属，创建为根级对象")
+    await user.click(button)
+    expect(onCreate).toHaveBeenCalledWith("customer_site")
+  })
+
+  it("无 registeredTypes（旧载荷/拉取失败）不渲染注册类型按钮", () => {
+    const subjects = [subject("project", "project", null, "示例企业")]
+    render(<ResearchSubjectTree subjects={subjects} selectedId={null} canFill onSelect={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onArchive={vi.fn()} />)
+
+    expect(screen.queryByRole("button", { name: /（根级）/ })).not.toBeInTheDocument()
+  })
+})

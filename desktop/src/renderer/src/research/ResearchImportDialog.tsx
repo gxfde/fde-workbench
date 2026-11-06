@@ -15,12 +15,14 @@ interface Props {
   projectId: string
   projectVersion: number
   apiRequest<T>(path: string, options: RendererApiRequestOptions): Promise<T>
+  /** CR-032 写路径：注册对象类型（T-O2 注册表 active 行）——导入对象类型附加选项。 */
+  registeredTypes?: string[]
   onClose(): void
   onStale(): void
   onImported(result: ResearchImportResultDto): Promise<void> | void
 }
 
-export function ResearchImportDialog({ projectId, projectVersion, apiRequest, onClose, onStale, onImported }: Props) {
+export function ResearchImportDialog({ projectId, projectVersion, apiRequest, registeredTypes, onClose, onStale, onImported }: Props) {
   const [subjectType, setSubjectType] = useState<CreatableResearchSubjectType>("department")
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ResearchImportPreviewDto | null>(null)
@@ -95,7 +97,7 @@ export function ResearchImportDialog({ projectId, projectVersion, apiRequest, on
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}
       <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={resetPreview}>重新选择</button><button type="button" className="primary-button" disabled={busy || !preview.row_count || preview.errors.length > 0} onClick={() => void submitCommit()}>{busy ? "正在导入" : "确认导入"}</button></div>
     </> : <>
-      <label className="field"><span>对象类型</span><select value={subjectType} disabled={busy} onChange={(event) => { setSubjectType(event.target.value as CreatableResearchSubjectType); resetPreview() }}>{IMPORTABLE_SUBJECT_TYPES.map((type) => <option value={type} key={type}>{researchSubjectLabel(type)}</option>)}</select></label>
+      <label className="field"><span>对象类型</span><select value={subjectType} disabled={busy} onChange={(event) => { setSubjectType(event.target.value as CreatableResearchSubjectType); resetPreview() }}>{IMPORTABLE_SUBJECT_TYPES.map((type) => <option value={type} key={type}>{researchSubjectLabel(type)}</option>)}{(registeredTypes ?? []).map((type) => <option value={type} key={`registered:${type}`}>{researchSubjectLabel(type)}（注册类型）</option>)}</select></label>
       <label className="field"><span>导入文件（CSV 或 XLSX，≤10MB）</span><input aria-label="导入文件" type="file" accept=".csv,.xlsx" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); resetPreview() }} /></label>
       {file ? <p className="field-hint">已选择：{file.name}</p> : null}
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}

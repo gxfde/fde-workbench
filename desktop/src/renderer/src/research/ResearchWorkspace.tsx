@@ -15,6 +15,7 @@ import { ResearchImportDialog } from "./ResearchImportDialog"
 import { ProjectResearchFormBuilder, type ProjectResearchFormDraft } from "./ProjectResearchFormBuilder"
 import { ResearchForm } from "./ResearchForm"
 import { ResearchSubjectTree } from "./ResearchSubjectTree"
+import { useRegistrySubjectTypes } from "./useRegistrySubjectTypes"
 import { CHILD_TYPES_BY_PARENT, RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_TYPES, researchSubjectLabel, type AIOpportunityProfileDto, type ProjectResearchFormDto, type ResearchImportResultDto, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
 
 interface ResearchWorkspaceProps {
@@ -143,6 +144,9 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
   const { apiRequest } = useAuth()
   const { runAI } = useAIExecution()
   const dangerConfirm = useDangerConfirm()
+  // CR-032 写路径：注册对象类型（T-O2 注册表 active 行）作为创建/导入/表单的
+  // 附加选项；拉取失败静默降级为空集（值域权威在服务端闸门）。
+  const registeredSubjectTypes = useRegistrySubjectTypes(apiRequest, project.id)
   const [subjects, setSubjects] = useState<ResearchSubjectDto[]>([])
   const [forms, setForms] = useState<ProjectResearchFormDto[]>([])
   const [loadGeneration, setLoadGeneration] = useState(0)
@@ -415,14 +419,18 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
   }
 
   function beginCreate(type: Exclude<ResearchSubjectType, "project">): void {
-    if (!selected) {
-      setError("请先在对象树中选择上级调研对象，再新增下级。")
-      return
-    }
-    const allowed = CHILD_TYPES_BY_PARENT[selected.subject_type] ?? []
-    if (!allowed.includes(type)) {
-      setError(`不能在“${researchSubjectLabel(selected.subject_type)}”下新增${researchSubjectLabel(type)}。`)
-      return
+    // 注册类型（T-O2b）：无父级规则，仅根级（无上级）创建——不要求选中上级；
+    // 内置类型维持「必须选中上级 + 父子规则」现状。
+    if (!registeredSubjectTypes.includes(type)) {
+      if (!selected) {
+        setError("请先在对象树中选择上级调研对象，再新增下级。")
+        return
+      }
+      const allowed = CHILD_TYPES_BY_PARENT[selected.subject_type] ?? []
+      if (!allowed.includes(type)) {
+        setError(`不能在“${researchSubjectLabel(selected.subject_type)}”下新增${researchSubjectLabel(type)}。`)
+        return
+      }
     }
     if (!confirmDiscard("创建调研对象会切换工作区并放弃未保存修改，确定继续吗？")) return
     clearDirtyRegistry()
@@ -455,14 +463,17 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       return
     }
     const parent = selected
-    if (!parent) {
-      setError("无法确定上级调研对象。")
-      return
-    }
-    const allowed = CHILD_TYPES_BY_PARENT[parent.subject_type] ?? []
-    if (!allowed.includes(createType)) {
-      setError(`不能在“${researchSubjectLabel(parent.subject_type)}”下新增${researchSubjectLabel(createType)}。`)
-      return
+    const isRegisteredType = registeredSubjectTypes.includes(createType)
+    if (!isRegisteredType) {
+      if (!parent) {
+        setError("无法确定上级调研对象。")
+        return
+      }
+      const allowed = CHILD_TYPES_BY_PARENT[parent.subject_type] ?? []
+      if (!allowed.includes(createType)) {
+        setError(`不能在“${researchSubjectLabel(parent.subject_type)}”下新增${researchSubjectLabel(createType)}。`)
+        return
+      }
     }
     if (!confirmDiscard("创建调研对象会切换工作区并放弃未保存修改，确定继续吗？")) return
     if (createType === "opportunity") {
@@ -481,7 +492,9 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
           name: createName.trim(),
           description: createDescription.trim(),
           sort_order: subjects.filter((subject) => subject.subject_type === createType).length,
-          parent_subject_id: parent.id,
+          // 注册类型：根级创建（服务端 _validate_parent_type 对无父级规则的类型
+          // 有父即 400 invalid_subject_parent），显式 null = 无上级。
+          parent_subject_id: isRegisteredType ? null : (parent ? parent.id : null),
         },
       })
       if (!isResearchSubjectDto(value)) throw new Error("invalid research subject")
@@ -1009,7 +1022,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     </section> : null}
     {loading ? <p role="status">正在加载调研数据…</p> : <div className="research-workspace-grid">
       <div className="research-subject-column">
-        <ResearchSubjectTree subjects={subjects} selectedId={selectedId} canFill={canFill} onSelect={selectSubject} onCreate={beginCreate} onRename={beginRenameSubject} onArchive={(subject) => void archiveSubject(subject)} onMerge={(subject) => beginMergeSubject(subject)} onReorder={async (ordered) => {
+        <ResearchSubjectTree subjects={subjects} selectedId={selectedId} canFill={canFill} registeredTypes={registeredSubjectTypes} onSelect={selectSubject} onCreate={beginCreate} onRename={beginRenameSubject} onArchive={(subject) => void archiveSubject(subject)} onMerge={(subject) => beginMergeSubject(subject)} onReorder={async (ordered) => {
           if (dirtyForms.current.size) throw new Error("请先保存当前未保存的内容，再调整顺序。")
           try {
             const result = await apiRequest<{ items: ResearchSubjectDto[] }>(`/api/v1/projects/${project.id}/research/subjects/reorder`, { method: "POST", body: { items: ordered.map(item => ({ id: item.id, version: item.version })) } })
@@ -1024,7 +1037,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       <main className="research-form-column" aria-label="调研表单工作区">
         {viewedOpportunity
           ? <OpportunityDetail projectId={project.id} opportunity={viewedOpportunity} forms={opportunityForms} ownerOptions={opportunityOwnerOptions(project)} canManage={canManage} canFill={canFill} editing={editingOpportunity} apiRequest={apiRequest} onOpportunityUpdated={(updated) => { updateOpportunity(updated); setEditingOpportunity(false) }} onUpdate={updateForm} onDirtyChange={updateDirty} onEdit={() => setEditingOpportunity(true)} onDelete={() => void archiveSubject(viewedOpportunity)} onBack={() => { if (confirmDiscard("返回会退出 AI 机会详情，确定继续吗？")) { clearDirtyRegistry(); setViewedOpportunityId(null); setEditingOpportunity(false) } }} /> : null}
-        {formBuilderOpen ? <ProjectResearchFormBuilder key={formBuilderGeneration} projectId={project.id} subject={selected!} initialForm={initialFormDraft} editingForm={editingForm} apiRequest={apiRequest} onDirtyChange={(dirty) => updateDirty("research-form-builder", dirty)} onAIGenerate={canFill && !editingForm ? openAIFormAssistant : undefined} onCreated={(form) => { updateForm(form); setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null); setNotice(editingForm ? "调研表结构已更新，已填内容已保留。" : "调研表已创建。"); clearDirtyRegistry() }} onCancel={() => { if (confirmDiscard("取消会放弃未保存的结构修改，确定继续吗？")) { setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null) } }} /> : null}
+        {formBuilderOpen ? <ProjectResearchFormBuilder key={formBuilderGeneration} projectId={project.id} subject={selected!} initialForm={initialFormDraft} editingForm={editingForm} apiRequest={apiRequest} registeredTypes={registeredSubjectTypes} onDirtyChange={(dirty) => updateDirty("research-form-builder", dirty)} onAIGenerate={canFill && !editingForm ? openAIFormAssistant : undefined} onCreated={(form) => { updateForm(form); setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null); setNotice(editingForm ? "调研表结构已更新，已填内容已保留。" : "调研表已创建。"); clearDirtyRegistry() }} onCancel={() => { if (confirmDiscard("取消会放弃未保存的结构修改，确定继续吗？")) { setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null) } }} /> : null}
         {!viewedOpportunity && !formBuilderOpen && createType ? <section className="panel research-create-panel" aria-labelledby="create-research-subject"><h2 id="create-research-subject">新增{researchSubjectLabel(createType)}</h2><div className={createType === "opportunity" ? "opportunity-profile-form" : undefined}><label className={`field${createType === "opportunity" ? " wide" : ""}`}><span>{researchSubjectLabel(createType)}名称</span><input autoFocus value={createName} disabled={busy} onChange={(event) => setCreateName(event.target.value)} /></label>{createType === "opportunity" ? <OpportunityProfileFields description={createDescription} profile={createOpportunityProfile} ownerOptions={opportunityOwnerOptions(project)} disabled={busy} onDescriptionChange={setCreateDescription} onProfileChange={setCreateOpportunityProfile} /> : <label className="field"><span>说明</span><textarea value={createDescription} disabled={busy} onChange={(event) => setCreateDescription(event.target.value)} /></label>}</div><div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setCreateType(null)}>取消</button><button type="button" className="primary-button" disabled={busy} onClick={() => void createSubject()}>创建</button></div></section> : null}
         {selected && !viewedOpportunity && !formBuilderOpen ? <header className="research-selection-heading">
           <div className="research-selection-summary"><div className="research-selection-title"><span className="badge muted">{researchSubjectLabel(selected.subject_type)}</span><h2>{selected.name}</h2></div>{selected.description.trim() ? <p className="research-subject-description"><span>{researchSubjectLabel(selected.subject_type)}说明</span>{selected.description}</p> : null}</div>
@@ -1073,7 +1086,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
         <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setMergeSource(null)}>取消</button><button type="button" className="primary-button" disabled={busy || !mergeTargetId} onClick={() => void submitMerge()}>{busy ? "正在合并" : "确认合并"}</button></div>
       </section>
     </div> : null}
-    {importOpen ? <ResearchImportDialog projectId={project.id} projectVersion={projectVersion} apiRequest={apiRequest} onClose={() => setImportOpen(false)} onStale={() => void loadResearch()} onImported={(result) => void finishImport(result)} /> : null}
+    {importOpen ? <ResearchImportDialog projectId={project.id} projectVersion={projectVersion} apiRequest={apiRequest} registeredTypes={registeredSubjectTypes} onClose={() => setImportOpen(false)} onStale={() => void loadResearch()} onImported={(result) => void finishImport(result)} /> : null}
     {renameSubject ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setRenameSubject(null) }}>
       <section className="dialog research-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="research-rename-title">
         <div className="dialog-heading"><div><h3 id="research-rename-title">编辑{researchSubjectLabel(renameSubject.subject_type)}</h3><p className="supporting-copy compact-copy">修改名称或说明，已有调研表和填写内容都会保留。</p></div></div>

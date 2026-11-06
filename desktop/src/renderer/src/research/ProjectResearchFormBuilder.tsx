@@ -53,6 +53,8 @@ interface ProjectResearchFormBuilderProps {
   initialForm?: ProjectResearchFormDraft | null
   editingForm?: ProjectResearchFormDto | null
   apiRequest<T>(path: string, options: RendererApiRequestOptions): Promise<T>
+  /** CR-032 写路径：注册对象类型（T-O2 注册表 active 行）——「调研主体」下拉附加选项。 */
+  registeredTypes?: string[]
   onAIGenerate?(): void
   onCreated(form: ProjectResearchFormDto): void
   onCancel(): void
@@ -88,7 +90,7 @@ function fieldTypeLabel(type: ResearchFieldType): string {
   }[type]
 }
 
-export function ProjectResearchFormBuilder({ projectId, subject, initialForm, editingForm, apiRequest, onAIGenerate, onCreated, onCancel, onDirtyChange }: ProjectResearchFormBuilderProps) {
+export function ProjectResearchFormBuilder({ projectId, subject, initialForm, editingForm, apiRequest, registeredTypes, onAIGenerate, onCreated, onCancel, onDirtyChange }: ProjectResearchFormBuilderProps) {
   const [name, setName] = useState(initialForm?.name ?? "")
   const [formKey, setFormKey] = useState(initialForm?.form_key ?? "")
   const [description, setDescription] = useState(initialForm?.description ?? "")
@@ -230,7 +232,7 @@ export function ProjectResearchFormBuilder({ projectId, subject, initialForm, ed
       <div className="research-form-grid">
         <div className="field"><label htmlFor={nameId}>调研表名称</label><input id={nameId} value={name} onChange={(event) => setName(event.target.value)} /></div>
         <div className="field"><label htmlFor={keyId}>稳定标识</label><input id={keyId} value={formKey} disabled={Boolean(editingForm)} onChange={(event) => setFormKey(event.target.value)} /></div>
-        <div className="field"><label htmlFor={subjectId}>调研主体</label><select id={subjectId} value={subjectType} disabled={Boolean(editingForm)} onChange={(event) => setSubjectType(event.target.value as ResearchSubjectType)}>{RESEARCH_SUBJECT_TYPES.map((subject) => <option value={subject} key={subject}>{researchSubjectLabel(subject)}</option>)}</select></div>
+        <div className="field"><label htmlFor={subjectId}>调研主体</label><select id={subjectId} value={subjectType} disabled={Boolean(editingForm)} onChange={(event) => setSubjectType(event.target.value as ResearchSubjectType)}>{RESEARCH_SUBJECT_TYPES.map((subject) => <option value={subject} key={subject}>{researchSubjectLabel(subject)}</option>)}{(registeredTypes ?? []).map((type) => <option value={type} key={`registered:${type}`}>{researchSubjectLabel(type)}（注册类型）</option>)}</select></div>
         <div className="field"><label htmlFor={descriptionId}>说明</label><textarea id={descriptionId} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></div>
       </div>
       <div className="research-section-list">

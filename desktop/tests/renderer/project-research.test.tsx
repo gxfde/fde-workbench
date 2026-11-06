@@ -319,6 +319,7 @@ interface RenderResearchOptions {
   createStaleOnce?: boolean
   projectVersionAfterStale?: number
   initialPersonalMemos?: Array<{ subject_id: string; user_id: string; memo: string; version?: number }>
+  registryTypes?: Array<{ kind: string; status: string; code: string }>
 }
 
 function renderProjectResearch(options: RenderResearchOptions = {}) {
@@ -343,6 +344,7 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
   let createAttempts = 0
   const apiRequest = vi.fn(async (path: string, request: { method: string; body?: unknown }): Promise<ApiResult> => {
     if (path === `/api/v1/projects/${projectId}` && request.method === "GET") return apiOk(currentProject)
+    if (path.endsWith("/ontology/relation-types") && request.method === "GET") return apiOk({ items: options.registryTypes ?? [] })
     if (path.endsWith("/research/subjects") && request.method === "GET") return apiOk({ items: subjects })
     if (/\/research\/subjects\/[^/]+\/memo$/.test(path) && request.method === "GET") {
       const id = path.split("/").at(-2)!
@@ -2352,5 +2354,55 @@ describe("research form tri-state (T-A3)", () => {
     await user.click(screen.getByRole("button", { name: "提交驳回" }))
 
     expect(await screen.findByText("你没有权限执行该操作。")).toBeInTheDocument()
+  })
+})
+
+describe("CR-032 写路径：注册对象类型", () => {
+  it("注册类型经根级入口创建：不带上级，非 active 注册行不出现", async () => {
+    const apiRequest = renderProjectResearch({
+      registryTypes: [
+        { kind: "subject_type", status: "active", code: "customer_site" },
+        { kind: "subject_type", status: "draft", code: "draft_type" },
+        { kind: "subject_type", status: "retired", code: "old_site" },
+        { kind: "link_type", status: "active", code: "not_a_subject" },
+      ],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "新增customer_site（根级）" }))
+    expect(screen.queryByRole("button", { name: "新增draft_type（根级）" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "新增old_site（根级）" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "新增not_a_subject（根级）" })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText("customer_site名称"), "苏州工厂")
+    await user.click(screen.getByRole("button", { name: "创建" }))
+
+    expect(await screen.findByText("customer_site已创建。")).toBeVisible()
+    const createCall = apiRequest.mock.calls.find(
+      ([path, request]) => String(path).endsWith("/research/subjects") && request.method === "POST",
+    )
+    expect(createCall).toBeTruthy()
+    const body = createCall![1].body as Record<string, unknown>
+    expect(body.subject_type).toBe("customer_site")
+    // T-O2b：注册类型无父级规则——根级创建必须不带上级（服务端有父即 400）
+    expect(body.parent_subject_id).toBeNull()
+  })
+
+  it("导入对话框与表单构建器提供注册类型选项（标注「注册类型」）", async () => {
+    renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject],
+      registryTypes: [{ kind: "subject_type", status: "active", code: "customer_site" }],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "导入对象" }))
+    const dialog = await screen.findByRole("dialog", { name: "导入调研对象" })
+    const typeSelect = within(dialog).getByLabelText("对象类型")
+    expect(within(typeSelect).getByRole("option", { name: "customer_site（注册类型）" })).toBeVisible()
+    await user.click(within(dialog).getByRole("button", { name: "取消" }))
+
+    await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
+    await user.click(screen.getByRole("button", { name: "新增调研表" }))
+    const subjectSelect = await screen.findByLabelText("调研主体")
+    expect(within(subjectSelect).getByRole("option", { name: "customer_site（注册类型）" })).toBeVisible()
   })
 })
