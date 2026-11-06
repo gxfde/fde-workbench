@@ -1622,6 +1622,38 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .guidance-detail-section ul { display: grid; gap: 8px; margin: 0; padding-left: 20px; }
 .guidance-detail-section li { color: var(--text); line-height: var(--lh-body); }
 .guidance-detail-section .guidance-empty-copy { color: var(--muted); }
+/* 三层可视化（台账 T-A4）：客户事实 / AI 判断 / 待确认——客户原话与 AI 判断
+   在界面上必须一眼可分（红线：售前录入的事实需客户确认）。 */
+.guidance-layers { display: grid; gap: 10px; }
+.guidance-layer { padding: 12px; border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--radius-sm); background: var(--surface); }
+.guidance-layer-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.guidance-layer-heading h5 { margin: 0; font-size: var(--font-label); font-weight: var(--weight-medium); }
+.guidance-layer-count { color: var(--muted); font-size: var(--font-caption); }
+.guidance-layer-fact { border-left-color: var(--success-border); background: var(--success-soft); }
+.guidance-layer-ai { border-left-color: var(--info-border); background: var(--info-soft); }
+.guidance-layer-open { border-left-color: var(--warning-border); background: var(--warning-soft); }
+.guidance-layer-fact .guidance-layer-heading h5 { color: var(--success-ink); }
+.guidance-layer-ai .guidance-layer-heading h5 { color: var(--info); }
+.guidance-layer-open .guidance-layer-heading h5 { color: var(--warning-ink); }
+.guidance-layer-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.guidance-layer-item { display: grid; gap: 4px; }
+.guidance-classification-tag { justify-self: start; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text-soft); font-size: var(--font-caption); }
+.guidance-tag-customer_stated, .guidance-tag-human_added { border-color: var(--success-border); background: var(--success-soft); color: var(--success-ink); }
+.guidance-tag-ai_synthesized, .guidance-tag-ai_inferred { border-color: var(--info-border); background: var(--info-soft); color: var(--info); }
+.guidance-tag-open_question { border-color: var(--warning-border); background: var(--warning-soft); color: var(--warning-ink); }
+.guidance-item-text { color: var(--text); line-height: var(--lh-body); }
+.guidance-item-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: var(--font-caption); }
+.guidance-item-confirmed { color: var(--success-ink); }
+.guidance-item-unconfirmed { color: var(--warning-ink); }
+/* 条目粒度编辑器：元数据随条目对象走，不再按行号重排。 */
+.guidance-items-editor { display: grid; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.guidance-items-editor legend { padding: 0 6px; color: var(--text); font-size: var(--font-label); font-weight: var(--weight-medium); }
+.guidance-item-editor-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.guidance-item-editor { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-inset); }
+.guidance-item-editor-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.guidance-item-classification { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font-size: var(--font-label); }
+.guidance-item-confirmed-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: var(--font-label); }
+.guidance-item-editor textarea { width: 100%; }
 .guidance-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .guidance-overview-grid > div { padding: 18px; border-radius: 14px; background: var(--surface-2); }
 .guidance-overview-grid span { display: block; color: var(--text-muted, var(--muted)); margin-bottom: 8px; }

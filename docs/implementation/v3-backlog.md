@@ -448,7 +448,7 @@
 - 验收：三态可从桌面完成；member 可见 revise 不可见 confirm/reject；服务端 403/409 原样呈现。
 - 回滚：revert 单 commit。风险：中（回归面大）。依赖：T-A2（代号化后入库）。复杂度：**M**。
 
-#### ✅ T-A3 实施轮（2026-11-06，状态：实施中——桌面三态入口已落地，待 CI 与 PR 收尾）
+#### ✅ T-A3 实施轮（2026-11-06，状态：**已实施并合并**——PR #163 → `5e27e49`，CI 4 job 全绿，桌面全量 69 文件 / 848 例全绿，服务端零改动）
 
 **实施要点**：
 - **三态入口落在 `ResearchForm.tsx`**（调研表详情页底部独立区块，与「保存调研内容」动作分离——避免把「确认事实」误读成「保存」）：
@@ -469,11 +469,33 @@
 ### T-A4 事实/假设/待确认三层桌面可视化 — **PROPOSED（登记轮，零代码）**
 - 目标：客户原话 vs AI 推断 vs 待确认项**在桌面端视觉可分且可编辑**——支撑「售前录入的事实需客户确认」红线与 Q3 四闸的语义基础。
 - 现状实测：`server/src/fde_api/guidance/ai_schema.py:6` `CLASSIFICATIONS = {customer_stated, ai_synthesized, ai_inferred, open_question, human_added}` 五分类**已内建**；`:60` evidence 引用必须命中 `source_refs`，否则 `unknown_source_ref` **拒收**（fail-closed）。⇒ 缺的是**呈现与编辑面**，非模型面。
-- 修改文件：`desktop/src/renderer/src/guidance/`（三层分组呈现 + 每项来源锚点展示 + 编辑交互）。
+- **实施轮勘误（2026-11-06，T-A4 实测，与登记原文三处出入）**：
+  1. **fail-closed 只覆盖 AI 生成路径**：严格校验 `validate_guidance_output`（含 `:78` `missing_source_ref`「事实和 AI 判断必须引用原文」）**仅在 `guidance/jobs.py:144` 的 AI 生成路径调用**；**人工 PATCH 路径（`guidance/service.py:126`）只查「字段非空 + 是 list」，不查 `source_refs` 与 `classification` 合法性** ⇒ 「无锚点的事实类条目」在库里**确实可能存在**（历史数据 + 人工编辑留下的）。桌面侧的降级规则因此**不是冗余**，是必需的第二道闸。
+  2. **登记未识别编辑态的元数据错位缺陷**：编辑态原为「整字段一个 textarea + 按行号索引继承元数据」（`changeItems` 用 `previous[index]` 回填 classification / source_refs / severity / module）。插入或删除一行会让**其余条目的分类与原文锚点整体错位**（把 A 的锚点贴到 B 的文字上），叠加第 1 条的弱校验 ⇒ 错位**静默落库**，不报错、不拒收。
+  3. **服务端既有自动 fork 路径不记事件**：`_ensure_working_revision`（`form_service.py:915`）在 current 非 draft 时静默 fork 新修订且**不记 `operation_events`**；`revise_form` 才记 `project_research_form_revised` ⇒ 桌面侧若要做「谁在何时基于已确认版本发起修订」的留痕，必须走显式 revise 端点（与 T-A3 同一裁决）。
+- 修改文件：`desktop/src/renderer/src/guidance/classificationLayers.ts`（**新增**：五分类→三层归属纯函数 + 降级规则 + 分类下拉可选集）、`GuidanceReview.tsx`（只读态三层分组呈现 + 编辑态**条目粒度**编辑器）、`styles.css`（三层视觉）；测试 `desktop/tests/renderer/guidance-classification-layers.test.tsx`（**新增**）。
 - DB：无。API：无新增（消费既有 guidance 输出）。
-- 测试：桌面 vitest（五类各自呈现；`ai_inferred` 项须带来源锚点；无锚点项显示为待确认而非事实）。
+- 测试：桌面 vitest（五类各自呈现；`ai_inferred` 项须带来源锚点；无锚点项显示为待确认而非事实；**编辑不丢元数据**——改/删条目后其余条目的分类与锚点不错位；无锚点条目不得被改成事实类分类）。
 - 验收：客户原话与 AI 推断在界面上不可混淆；每条可溯源到具体访谈记录。
 - 回滚：revert 单 commit。风险：低。依赖：T-A3。复杂度：**M**。
+
+#### ✅ T-A4 实施轮（2026-11-06，状态：实施中——三层可视化与条目粒度编辑已落地，待 CI 与 PR 收尾）
+
+**三层归属规则**（`guidance/classificationLayers.ts`，纯函数）：
+- **客户事实层** = `customer_stated`（客户原话）+ `human_added`（人工补录）；
+- **AI 判断层** = `ai_synthesized`（AI 综合）+ `ai_inferred`（AI 推断）；
+- **待确认层** = `open_question`（开口问题）**+ 任何「无原文锚点且非 human_added」的条目**（降级规则）。
+- **降级规则的理由**：服务端 AI 路径已 fail-closed 拒收无锚点的事实/判断类（`ai_schema.py:78`），但人工 PATCH 路径弱校验不查 ⇒ 库里可能存在这类条目；桌面上把它们放进「客户事实」层等于替无锚点的判断背书。降级为「待确认」是保守且正确的呈现。
+
+**只读态呈现**（`GuidanceItems` → 三层分组）：每层一个带色边框的区块（事实=绿 / AI=蓝灰 / 待确认=琥珀），每条展示 **分类标签 + 文本 + 来源锚点（`来源：{source_filename}`，无锚点显式写「无原文锚点」）+ 事实层的确认状态（客户已确认 / 未确认）**。原先只读态把条目渲染成纯文本 `<li>`（分类、锚点、确认态全部丢弃）。
+
+**编辑态改造（顺带修掉元数据错位缺陷）**：从「整字段一个 textarea + 按行号继承元数据」改为**条目粒度编辑器**（每条一张卡片：分类下拉 + 锚点只读展示 + 「客户已确认」勾选 + 文本框 + 删除；字段级「新增条目」按钮默认 `human_added` / 无锚点 / 未确认）：
+- 元数据与**条目对象**绑定，不再按行号重排 ⇒ 插入/删除条目不会让其余条目错位；
+- **分类下拉的候选集受锚点约束**（无锚点条目只能选 `open_question` / `human_added`）——与服务端 `missing_source_ref` 同口径，不让桌面凭空造出「客户没说过的话」；
+- 历史数据里「无锚点却是事实类」的条目，其当前值仍在候选集内（否则下拉显示空白，一保存就静默改掉分类）；
+- 保存前过滤空文本条目（服务端 `invalid_text` 拒收空条目，而「新增条目」允许先建空行再填）。
+
+**测试**：`desktop/tests/renderer/guidance-classification-layers.test.tsx` **9 例**——三层归属、无锚点降级（不混进客户事实层）、五类标签可读且客户原话与 AI 推断不可混淆、条目粒度呈现、改文本不动其余条目元数据、删条目不使其余条目错位、无锚点条目的分类候选集受限、新增条目默认人工补录且空条目不随保存提交、保存时保留分类与锚点（含 `confirmed`）。既有 guidance 22 例零回归。
 
 ### T-A5 方案三选项 + 取舍 + 明确不做 + 验收标准 骨架模板 — **PROPOSED（登记轮，零代码）**
 - 目标：方案骨架模板化，降低售前从零起草成本。
@@ -660,7 +682,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
