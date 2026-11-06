@@ -65,7 +65,9 @@ from fde_api.control.lcsc_desktop import desktop_lcsc_blueprint
 from fde_api.control.lcsc_skills import lcsc_blueprint
 from fde_api.control.mcp_gateway import mcp_blueprint
 from fde_api.control.task_board import task_board_blueprint
+from fde_api.dispatch.admin_routes import admin_dispatch_blueprint  # goal-c CR-027
 from fde_api.evidence.routes import evidence_blueprint
+from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14）
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
@@ -97,6 +99,9 @@ BLUEPRINTS = [
     dispatch_blueprint,
     guidance_blueprint,
     agents_blueprint,
+    # app.py 注册序：agents 之后、meetings 之前挂两个 admin 面板（T-J2 / CR-027）
+    admin_jobs_blueprint,
+    admin_dispatch_blueprint,
     meetings_blueprint,
     metrics_blueprint,
     translator_blueprint,
