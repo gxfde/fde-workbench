@@ -57,7 +57,9 @@ class LcscSkillRun(Base, TimestampMixin):
 
 
 def _serialize(run: LcscSkillRun) -> dict:
-    return {"id": run.id, "execution_id": run.execution_id, "skill_key": run.skill_key, "query": run.query, "status": run.status,
+    # 外部文字禁入契约 J-2（P-3 结果级标记）：网页采集内容是不可信第三方资料，
+    # 与 file_read/help_fetch 同尺——结果自带 source 标记，消费方按标记框架处理。
+    return {"source": "untrusted_storefront_content", "id": run.id, "execution_id": run.execution_id, "skill_key": run.skill_key, "query": run.query, "status": run.status,
             "browser_url": run.browser_url, "steps": run.steps_json, "candidates": run.candidates_json,
             "result": run.result_json, "models": run.model_json, "usage": run.usage_json,
             "cost": run.cost_json, "duration_ms": run.duration_ms, "error_code": run.error_code,

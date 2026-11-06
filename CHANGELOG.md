@@ -2,6 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 提示词卫生 J 系接线：B#12+B#31 判据落地（2026-11-06）
+
+### 契约判据接线（零迁移零路由零新依赖；server 变更 ⇒ 合并后 rebuild 三镜像）
+
+- **NEW `server/tests/test_prompt_hygiene_jseries.py` 5 例**（承接《外部文字禁入与原件派生分离契约-v1.md》§5 可断言判据；组织同 B#4 purity 静态测试）：
+  - **J-1 静态钉**：全仓 system role 消息组装点 AST 枚举——content 必须是「常量／常量名／形参直传链／已登记例外」四形态之一，域外新增即红（PR 须对照契约 §2 表登记）；附钉 executor skill 节点 `system_prompt` 仍＝治理面发布 `instructions`（白名单④不旁路）。
+  - **J-2 行为钉**：四类「不可信资料」工具结果必须带结果级 `source` 标记——`file_read`/`help_fetch` 既有；**`lcsc_search`/`lcsc_runs_read` 本轮补 `untrusted_storefront_content`（契约 §4 差距①闭合，P-3 标记腿全满足）**；附钉 lcsc run 返回体单一形状源（`_serialize`）。
+  - **J-3 静态钉**：`documents/ai_content` 的 system 提示词是纯常量构造——payload/请求内容变量泄漏进构造即红。
+- **变异三连**逐一转红：lcsc 标记删除／executor 接 prompt 变量／system 拼接 payload。
+- **差距②开放保留**：`direct_tool_completion` 形参面无静态闸（形参直传链上游来源已逐点登记于测试 docstring；封堵须另轮）。
+
+### 口径
+
+pytest **1999 收集 = 1993 passed + 6 skipped**（+5）／mypy **279** 不变／蓝图路由 **301**（不变）／业务表 **105**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。
+
 ## [未发布] — V3 桌面实施轮①：B#28 门禁 revision CAS 桌面接线（2026-11-06）
 
 ### 服务端 + 桌面（零迁移零新路由；server 变更 ⇒ 合并后 rebuild 三镜像 + alembic 幂等）

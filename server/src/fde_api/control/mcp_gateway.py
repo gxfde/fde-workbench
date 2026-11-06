@@ -138,7 +138,7 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
             if isinstance(pins, dict):
                 pins['screenshot_available'] = bool(pins.pop('screenshot', None))
             items.append(value)
-        return {'items': items, 'comparison_note': '查询时间、目的、字段、候选商品和完成程度不同会影响比较；费用是估算，未知用量不得视为零。仅阅读已有记录，不重新运行。'}
+        return {'source': 'untrusted_storefront_content', 'items': items, 'comparison_note': '查询时间、目的、字段、候选商品和完成程度不同会影响比较；费用是估算，未知用量不得视为零。仅阅读已有记录，不重新运行。'}
     if name == "file_send_wechat":
         from fde_api.control.file_delivery import send_file
         return send_file(user=user, claims=claims, allowed=allowed, **arguments)
