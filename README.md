@@ -187,6 +187,7 @@ cd server
 | `FDE_PRODUCT_NAME` | 服务端侧产品名（默认与桌面 `desktop/src/shared/brand.ts` 同值，改名双侧同步）；chat 等服务端界面文案取值处 |
 | `FDE_AI_MONTHLY_TOKEN_BUDGET` | AI 调用月度 token 预算（按用户核算），超限拒绝新调用并留审计记录；`0` = 不限额 |
 | `FDE_AGENT_MONTHLY_BUDGET` | 平台月度 agent 预算（token 单位）；`0` = 不限额 |
+| `FDE_ENTERPRISE_DICT` | 可选：售前企业名脱敏的现场真实词典文件路径；缺省用仓库内种子词典（仅合成示例），真实词典文件永不进 git，文件缺失时 fail-closed 阻断入库 |
 
 不要在提交、issue、日志或截图中暴露 `.env`。生产环境切换 `FDE_JWT_SECRET` 前应先在系统配置中重新录入所有加密密钥，否则已保存的加密配置将无法解密。
 

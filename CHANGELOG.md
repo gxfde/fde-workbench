@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 洁癖收尾轮：口径全现测吻合 + 审计清单重生成 + 补账（2026-11-07）
+
+### 口径现测（七项逐位吻合，零漂移修正）
+
+以 fork/main `a0ed3ee` 为基线现测：蓝图路由 **304** / blueprint **40** / 业务表 **105** / 迁移头 `b2e8f4a6c9d3`（36 rev）/ api_catalog ENTRIES **94** / mypy 基线 **279**（`server/mypy-baseline.txt` 行数）——审计脚本自报与 AGENTS 口径行逐位一致；pytest **2050 passed + 6 skipped**＝2056 收集、vitest **858**（均为 main CI run 42255980781 实测，#166）。规则执行审计：`.env` 零跟踪、根级文档零冲突残渣、`origin` push URL 已锁（红线机械化）、版本三处同步 0.2.0。
+
+### 修复的三处漂移
+
+- **审计清单重生成**：`docs/audit/v3-route-inventory.csv` 落后 2 条路由（B#13-C/D 轮重生成于 302，#162 只读技能中心 +2 未刷）——`extract_workbench_inventory.py` 重生成，route CSV +2 行、JSON route_count 302→304，DB CSV 零变化。
+- **`FDE_ENTERPRISE_DICT` 补登记**（T-A2 遗漏）：`server/.env.example` 补「售前企业名脱敏」节（可选现场词典指针，缺省用种子词典，真实词典永不入库）；README 配置边界表同步补行。
+- **CHANGELOG/AGENTS 补账**：#156 T-A1／#160 T-A2／#163 T-A3／#164 T-A4 四轮此前只回写 backlog、未记 CHANGELOG 节与 AGENTS bullet（本轮下方补齐）；AGENTS「当前状态」bullet 断档自 #161 起一并补齐（#150/#152/#153/#154/#156/#157/#159/#160/#162/#163/#164/#166/#167）。backlog T-A4 状态行「实施中」→「已实施并合并 #164」。
+
+零代码零迁移零路由；无需重建镜像/alembic/重打包。
+
 ## [未发布] — CR-032 写路径清偿：调研注册对象类型接入创建/导入/表单面（2026-11-07）
 
 ### 行为变更（纯桌面零服务端零迁移零路由；桌面变更 ⇒ 便携版重打包挂账）
@@ -11,6 +25,51 @@
 - **数据源与降级**：选项来自既有只读路由 `GET /api/v1/projects/{id}/ontology/relation-types`（客户端过滤 active 行，draft/retired 不出现）；注册面拉取失败静默降级为仅内置五类——值域权威始终在服务端创建闸门。
 - **边界（偏差注记）**：调研定义编辑器与行业模板编辑器本轮未接——全局注册类型没有项目内只读路由可消费，随服务端路由补口后再接。
 - 测试：vitest +4（根级创建流不带上级／非 active 行过滤／导入与构建器选项／树按钮两态）。
+## [未发布] — T-A4 事实/假设/待确认三层桌面可视化：条目粒度编辑（2026-11-06）
+
+### 桌面（纯桌面零服务端改动零迁移零路由；详见 backlog T-A4 实施轮节）
+
+- NEW `desktop/src/renderer/src/guidance/classificationLayers.ts`：五分类（`customer_stated`/`ai_synthesized`/`ai_inferred`/`open_question`/`human_added`）→ 三层归属纯函数——客户事实层／AI 判断层／待确认层；**无锚点且非 human_added 一律降级「待确认」**（服务端 AI 路径 fail-closed 但人工 PATCH 弱校验 ⇒ 库里可能有无锚点条目，桌面降级是必需的第二道闸，不替无锚点判断背书）。
+- `GuidanceReview.tsx` 只读态三层分组呈现（分类标签+锚点+事实层确认状态，原先渲染纯文本 `<li>` 全部丢弃）；编辑态改**条目粒度编辑器**（每条卡片：分类下拉+锚点只读+确认勾选+文本+删除）——顺带修掉「整字段 textarea 按行号继承元数据」的错位缺陷（插入/删除行曾把 A 的锚点贴到 B 的文字上静默落库）；**分类下拉候选集受锚点约束**（无锚点只能选 `open_question`/`human_added`，与服务端 `missing_source_ref` 同口径）。
+- 测试：NEW `guidance-classification-layers.test.tsx` 9 例（三层归属/无锚点降级/条目粒度/改删不错位/候选集受限/空条目过滤/保存保留元数据）；既有 guidance 22 例零回归。
+
+### 口径
+
+vitest **858**（CI run 42251482875 实测；+19 含并发 #163）／pytest 不变／mypy 279／路由 302（当时）。
+
+## [未发布] — T-A3 调研表三态流转（confirm/reject/revise）桌面入口（2026-11-06）
+
+### 桌面（纯桌面零服务端改动零迁移零路由；详见 backlog T-A3 实施轮节）
+
+- `ResearchForm.tsx` 表单详情底部新增三态操作区（与「保存调研内容」分离，消费既有 confirm/reject/revise 三端点）：**确认事实**（can_manage，本地先按服务端同源口径校验必答缺失，不发请求）；**驳回并留意见**（理由必填，`{version, review_comment}`，驳回意见回显）；**创建修订版**（can_update_assigned_tasks，confirmed 态，`{version}` 开新 draft）。
+- 权限显隐与服务端同构（`canManage` 可选 prop **默认无权**——漏传时按钮不出现）；409 `stale_version` 走既有冲突面板不吞；未知错误码回落服务端原文。
+- **revise 定位裁决**：显式**留痕通道**而非唯一改稿路径——PATCH 的隐式 fork（`_ensure_working_revision`）不记事件，`revise_form` 记 `project_research_form_revised` 进事实链；「已确认表只读」收紧被既有用例判红后撤回（legacy 兼容契约维持）。
+- 测试：`project-research.test.tsx` 新增 tri-state describe 10 例；research 域 222 例压链全量回归后合入。
+
+### 口径
+
+vitest **848**（69 文件；CI 4 job 全绿）／pytest 不变。
+
+## [未发布] — T-A2 企业名自动替换层：presurvey 正文代号化三道防线（2026-11-06）
+
+### 服务端（零迁移零路由；详见 backlog T-A2 实施轮节）
+
+- NEW `guidance/enterprise_dict.py`（种子词典 + `FDE_ENTERPRISE_DICT` 现场补充、格式 fail-closed、通用词判定、中文候选前缀剥离）+ NEW `server/seeds/enterprise-names.txt`（**只放合成示例**，真实企业名永不进 git；CI pseudonymization `FDE_LEADS_MD` 改指此文件，一致性由哨兵测试钉死）。
+- `guidance/redaction.py` 扩展 `redact_text_detailed`/`redact_presurvey`（既有 `redact_text` 签名语义不变）；worker 链**三道防线**接入：①进模型前全文替换（本地抽取腿不落存储）②模型输出落库前兜底替换（文本+LIST_FIELDS+evidence）③复核清单落 `operation_events`（`guidance.redaction_review`，B#9 可查）。
+- **拍板口径「放行 = 不留库」**：疑似名同样替换为代号（替换目标=`projects.enterprise_code` 首段），记入复核清单交审核人 confirm 前复核；通用词（「技术公司」类）零改动不进清单。机制性故障 → `RedactionConfigError` → `pseudonym_dict_unavailable` 不重试，`project_draft` 503。
+- 测试：NEW `test_guidance_enterprise_redaction.py` 13 例 + `test_guidance_redaction_worker.py` 2 例（数据全合成）；**本轮未做**：执行面 `agents/context.py` 未接企业名替换（口径不同，另立条目）。
+
+### 口径
+
+pytest **2016 收集 = 2010 passed + 6 skipped**（+15）／桌面零改动。
+
+## [未发布] — T-A1 presurvey S3 前置闸桌面可读提示（2026-11-06）
+
+### 桌面（服务端零改动）
+
+- G3 诊断开工门 409 拦截态不再吞成通用文案：服务端 message 原文 + G3 四项清单（**claimed ≠ accepted 徽标**）+ 前往门禁页跳转锚（NEW `PresurveyGateHint.tsx`；服务端闸本体 `guidance/service.py:402` 已在，本轮只补桌面可读呈现）。
+- 测试：NEW `presurvey-gate-hint.test.tsx`（vitest **833** 全绿）；同轮回写改造方案 §拍板闸 6 全部收口（①②③⑥ DECIDED）。
+
 ## [未发布] — V3 两级注入全链路：契约 references 组 + 消费面两层接线（#8，2026-11-06）
 
 ### 契约扩组（技能结构化契约 v1 §2.6，零迁移零路由零新表）
