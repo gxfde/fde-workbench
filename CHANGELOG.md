@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 技能结构化契约 + 自洽校验（B#36+B#37，2026-11-06）
+
+### 契约与测试（零迁移零路由零桌面；零 src 改动——无需重建镜像）
+
+- **B#36 技能结构化契约 v1**（`docs/architecture/技能结构化契约-v1.md`）：`SkillVersion.manifest_json` 五组**可选**扩展键——`use_boundaries`（适用边界）/`effects`（副作用声明，`read_only`×`write_actions` 自洽律）/`evidence`（证据口径，指针+指纹语义）/`verification`（验证状态**非状态注记**，published=治理通过≠现场验证）/`failure_behavior`（失败诚实）；不设 `additionalProperties:false`、不换状态值、不改发布四闸；`.agents/skills/` 新技能 front matter 建议（name+description 必填+契约键平铺点路径），存量 4 runbook 与内置种子 manifest 均不回填；`instructions_text` 禁拆 YAML 双权威（DB 唯一权威）。字段全部我方独立设计（B#35 红线第 8 条履行，零 fde-skills 正文引用）。
+- **B#37 技能自洽校验**（`server/tests/test_skill_contract.py` 四钉，标准库+pytest 零新依赖）：仓库 runbook front matter 契约；内置种子清单静态契约（能力 ⊆ `CAPABILITY_REQUIREMENTS`）；种子 manifest 构造规则独立复算钉；**种子清单 ↔ DB 行对账**（`seed_public_skills` 端到端：全量落库逐位一致+幂等二轮 0+版本行不增殖）。变异四连逐一转红（read_only 推导翻转/name 脱离目录名/域外能力/version 分档漂移）。
+- 顺带核实销号 **B#35**：AGENTS 红线第 8 条+backlog 登记已随 #133 合入，修复项产出（PR 合入）达成。
+- 顺带卫生修复：移除 #139 合并在 CHANGELOG 遗留的孤立 `=======` 行（冲突标记残留，会污染后续 rebase 标记识别与渲染）。
+
 ## [未发布] — V3 报告待办池清欠（代码批）：skill_read 分页 + GlossaryPage 影响分析接线（2026-11-06）
 
 ### 行为变更（零迁移零路由；server 变更 ⇒ 一次 rebuild；桌面变更 ⇒ 便携版重打包挂账）
@@ -13,7 +22,6 @@
 ### 口径
 
 - 零迁移零路由：pytest **1972+5=1977 收集**（1971 passed + 6 skipped，CI 复核）/ mypy 279 不变 / vitest **787+4=791** / 105 表 / `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 不变。
-=======
 ## [未发布] — V3 外部模型依赖契约 v1（借鉴登记 B#10 文档批）（2026-11-06）
 
 ### 文档（零代码零迁移零路由零依赖；无需 rebuild / 重打包）
