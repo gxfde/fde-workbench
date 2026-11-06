@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 拍板收口：B#30-B=opt1 + 提示词卫生差距②静态钉（2026-11-06）
+
+### 交互拍板收口（①零代码 + ②纯测试轮，零迁移零路由）
+
+- **B#30-B 门禁终态回退语义＝opt1 维持现状**（交互拍板）：passed/conditional_pass 终态不可逆维持（重交 409 现状不变），**零代码零迁移**——回退通道引入状态机新分支+桌面回退 UI（≈1–2 人日），当前无真实场景推动，错误拍板走线下 OperationEvent 留痕追溯；opt2/opt3 保留候选、真实诉求出现时重开。backlog B#30 行与状态段已回写。
+- **提示词卫生契约差距②＝补静态钉**（交互拍板）：NEW `server/tests/test_prompt_entrypoint_gate.py` 3 例——受闸入口（`execute_ai_prompt`/`direct_tool_completion`/`direct_provider_completion`/`_degraded_direct_result`）的 `system_prompt` 实参来源 AST 允许名单（字面常量／形参直传链变量／`_workbench_system_prompt()` 白名单组装函数），域外形态即红；附钉定义落点锚（防定义漂移出受闸文件面）＋ **kwargs 透传禁令（防绕过 AST 形态判定）。**变异双红**验证：chat 接 `prompt` 变量进 system_prompt／structured 改 `**payload_kw` 展开——逐一转红。
+- 同日另三项拍板（T-A2 分层失败语义／T-A2 词典=种子文件／T-A7 谈判稿=复用 solution 版本行）由并发会话回写于主树，与本轮不重叠。
+
+### 口径
+
+pytest **2013 收集 = 2007 passed + 6 skipped**（+3）／mypy **279** 不变／蓝图路由 **301**（不变）／业务表 **105**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。
+
 ## [未发布] — V3 提示词卫生 J 系接线：B#12+B#31 判据落地（2026-11-06）
 
 ### 契约判据接线（零迁移零路由零新依赖；server 变更 ⇒ 合并后 rebuild 三镜像）
