@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-import { CHILD_TYPES_BY_PARENT, RESEARCH_SUBJECT_LABELS, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
+import { CHILD_TYPES_BY_PARENT, researchSubjectLabel, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
 
 interface ResearchSubjectTreeProps {
   subjects: ResearchSubjectDto[]
@@ -14,7 +14,6 @@ interface ResearchSubjectTreeProps {
   onReorder?(subjects: ResearchSubjectDto[]): Promise<void>
 }
 
-const typeLabels = RESEARCH_SUBJECT_LABELS
 
 export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, onCreate, onRename, onArchive, onMerge, onReorder }: ResearchSubjectTreeProps) {
   const dragged = useRef<string | null>(null)
@@ -129,7 +128,7 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
     {canFill && onReorder ? <p className="research-sort-hint" role="status">{sorting ? "正在保存顺序…" : "拖动对象调整同级顺序；也可用 Alt + ↑ / ↓"}</p> : null}
     {sortError ? <p className="form-error" role="alert">{sortError}</p> : null}
     <div className="panel-heading"><h2>调研对象</h2><span>{active.length} 个</span></div>
-    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{typeLabels[type]}</button>)}{selected && selected.subject_type !== "project" && onMerge ? <button type="button" className="secondary-button compact" aria-label={`合并${selected.name}`} onClick={() => onMerge(selected)}>合并</button> : null}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
+    {canFill ? <div className="research-create-actions" aria-label="新增调研对象">{creatableTypes.map((type) => <button type="button" className="secondary-button compact" key={type} onClick={() => onCreate(type)}>新增{researchSubjectLabel(type)}</button>)}{selected && selected.subject_type !== "project" && onMerge ? <button type="button" className="secondary-button compact" aria-label={`合并${selected.name}`} onClick={() => onMerge(selected)}>合并</button> : null}{selected && selected.subject_type !== "project" ? <button type="button" className="danger-button compact" aria-label={`停用${selected.name}`} onClick={() => onArchive(selected)}>停用</button> : null}</div> : null}
     {root ? <ul className="research-tree" role="tree" aria-label="项目调研对象树" ref={treeRef} onKeyDown={handleKeyDown} onDragStart={(event) => {
       const { subject } = targetSubject(event.target)
       if (!canFill || !onReorder || sorting || !subject || subject.subject_type === 'project') { event.preventDefault(); return }
@@ -151,7 +150,7 @@ export function ResearchSubjectTree({ subjects, selectedId, canFill, onSelect, o
       <button type="button" className="research-archived-toggle" aria-expanded={archivedOpen} onClick={() => setArchivedOpen((current) => !current)}><ChevronIcon expanded={archivedOpen} />已归档（{archived.length}）</button>
       {archivedOpen ? <ul className="research-archived-list">{archived.map((subject) => {
         const target = subject.merged_into_subject_id ? subjects.find((item) => item.id === subject.merged_into_subject_id) ?? null : null
-        return <li key={subject.id} className="research-archived-row"><span className="research-subject-type">{typeLabels[subject.subject_type]}</span><span className="research-archived-name">{subject.name}</span>{target ? target.status === "active" ? <button type="button" className="research-merged-link" onClick={() => onSelect(target)}>已并入 {target.name}</button> : <span className="research-merged-link static">已并入 {target.name}</span> : null}</li>
+        return <li key={subject.id} className="research-archived-row"><span className="research-subject-type">{researchSubjectLabel(subject.subject_type)}</span><span className="research-archived-name">{subject.name}</span>{target ? target.status === "active" ? <button type="button" className="research-merged-link" onClick={() => onSelect(target)}>已并入 {target.name}</button> : <span className="research-merged-link static">已并入 {target.name}</span> : null}</li>
       })}</ul> : null}
     </div> : null}
   </aside>
@@ -170,7 +169,7 @@ function SubjectNode({ subject, subjects, selectedId, expanded, canFill, onSelec
   const children = subjects.filter((candidate) => candidate.parent_subject_id === subject.id).sort(subjectSort)
   const isExpanded = children.length > 0 && expanded.has(subject.id)
   const canRename = canFill && ["department", "role", "process"].includes(subject.subject_type)
-  return <li role="none"><div draggable={canRename} className={`research-tree-row ${selectedId === subject.id ? "selected" : ""}`}><button type="button" role="treeitem" data-research-subject-id={subject.id} data-research-parent-id={subject.parent_subject_id ?? undefined} aria-selected={selectedId === subject.id} aria-expanded={children.length ? isExpanded : undefined} tabIndex={selectedId === subject.id ? 0 : -1} onClick={() => onSelect(subject)}><span className="research-subject-type">{typeLabels[subject.subject_type]}</span><strong>{subject.name}</strong></button>{children.length ? <button type="button" className="research-tree-toggle" aria-label={`${isExpanded ? "收起" : "展开"}${subject.name}的下级`} aria-expanded={isExpanded} onClick={() => onToggle(subject.id)}><ChevronIcon expanded={isExpanded} /></button> : null}{canRename ? <button type="button" className="research-rename-button" aria-label={`编辑${typeLabels[subject.subject_type]}：${subject.name}`} title="编辑" onClick={() => onRename(subject)}><RenameIcon /></button> : null}</div>{isExpanded ? <ul role="group">{children.map((child) => <SubjectNode key={child.id} subject={child} subjects={subjects} selectedId={selectedId} expanded={expanded} canFill={canFill} onSelect={onSelect} onRename={onRename} onToggle={onToggle} />)}</ul> : null}</li>
+  return <li role="none"><div draggable={canRename} className={`research-tree-row ${selectedId === subject.id ? "selected" : ""}`}><button type="button" role="treeitem" data-research-subject-id={subject.id} data-research-parent-id={subject.parent_subject_id ?? undefined} aria-selected={selectedId === subject.id} aria-expanded={children.length ? isExpanded : undefined} tabIndex={selectedId === subject.id ? 0 : -1} onClick={() => onSelect(subject)}><span className="research-subject-type">{researchSubjectLabel(subject.subject_type)}</span><strong>{subject.name}</strong></button>{children.length ? <button type="button" className="research-tree-toggle" aria-label={`${isExpanded ? "收起" : "展开"}${subject.name}的下级`} aria-expanded={isExpanded} onClick={() => onToggle(subject.id)}><ChevronIcon expanded={isExpanded} /></button> : null}{canRename ? <button type="button" className="research-rename-button" aria-label={`编辑${researchSubjectLabel(subject.subject_type)}：${subject.name}`} title="编辑" onClick={() => onRename(subject)}><RenameIcon /></button> : null}</div>{isExpanded ? <ul role="group">{children.map((child) => <SubjectNode key={child.id} subject={child} subjects={subjects} selectedId={selectedId} expanded={expanded} canFill={canFill} onSelect={onSelect} onRename={onRename} onToggle={onToggle} />)}</ul> : null}</li>
 }
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {

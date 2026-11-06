@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { ApiClientError } from "../api/client"
 import type { RendererApiRequestOptions } from "../api/client"
 import { isProjectResearchFormDto } from "./projectRuntimeValidation"
-import { RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_TYPES, RESEARCH_SUBJECT_LABELS, type ProjectResearchFormDto, type ResearchConditionDto, type ResearchFieldOptionsDto, type ResearchFieldType, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
+import { RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_TYPES, researchSubjectLabel, type ProjectResearchFormDto, type ResearchConditionDto, type ResearchFieldOptionsDto, type ResearchFieldType, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
 
 interface BuilderField {
   clientId: string
@@ -161,7 +161,7 @@ export function ProjectResearchFormBuilder({ projectId, subject, initialForm, ed
   function validationMessage(): string {
     if (!name.trim()) return "请填写调研表名称。"
     if (!/^[a-z][a-z0-9_]*$/.test(formKey.trim())) return "稳定标识只能使用小写英文、数字或下划线。"
-    if (subjectType !== subject.subject_type) return `调研主体必须与当前对象类型（${RESEARCH_SUBJECT_LABELS[subject.subject_type]}）一致。`
+    if (subjectType !== subject.subject_type) return `调研主体必须与当前对象类型（${researchSubjectLabel(subject.subject_type)}）一致。`
     if (!sections.length) return "请至少添加一个章节。"
     const fieldKeys = new Set<string>()
     for (const [index, section] of sections.entries()) {
@@ -230,7 +230,7 @@ export function ProjectResearchFormBuilder({ projectId, subject, initialForm, ed
       <div className="research-form-grid">
         <div className="field"><label htmlFor={nameId}>调研表名称</label><input id={nameId} value={name} onChange={(event) => setName(event.target.value)} /></div>
         <div className="field"><label htmlFor={keyId}>稳定标识</label><input id={keyId} value={formKey} disabled={Boolean(editingForm)} onChange={(event) => setFormKey(event.target.value)} /></div>
-        <div className="field"><label htmlFor={subjectId}>调研主体</label><select id={subjectId} value={subjectType} disabled={Boolean(editingForm)} onChange={(event) => setSubjectType(event.target.value as ResearchSubjectType)}>{RESEARCH_SUBJECT_TYPES.map((subject) => <option value={subject} key={subject}>{RESEARCH_SUBJECT_LABELS[subject]}</option>)}</select></div>
+        <div className="field"><label htmlFor={subjectId}>调研主体</label><select id={subjectId} value={subjectType} disabled={Boolean(editingForm)} onChange={(event) => setSubjectType(event.target.value as ResearchSubjectType)}>{RESEARCH_SUBJECT_TYPES.map((subject) => <option value={subject} key={subject}>{researchSubjectLabel(subject)}</option>)}</select></div>
         <div className="field"><label htmlFor={descriptionId}>说明</label><textarea id={descriptionId} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></div>
       </div>
       <div className="research-section-list">

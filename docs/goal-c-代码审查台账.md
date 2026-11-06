@@ -52,7 +52,7 @@
 | CR-029 | P3 | open（登记） | 集成桥 `captured_at` 单向采信宿主钟：`_parse_captured_at` 只校验格式不比对服务端钟，4h/360min stale 标记两侧都从宿主时间推 → NTP 前漂或带 token 方伪造快照可永久遮「采集断连」 | bridge/sync.py:190/212/310-321 | c6 |
 | CR-030 | P3 | **fixed（CR-031/030 轮·半 A）** | `_sync_bridge_evidence` 全表 ORM 水合 → 三列投影（id/openfde_engagement/fdeops_workspace）；**半 B 经核实登记失真**：r12 B-④/留注⑤ 重写后 `_city_order_rank` 已是单次 join+Python 计数，「循环 session.get」不存在（现存仅 `package_client_city` 每包一次正当 get；真实重复面=只被 simulator.py:580 工具循环逐包重跑全局 join，非 4h 热路径，P4 级维持观察不发明重构） | bridge/sync.py:108 | c6 |
 | CR-031 | P3 | **fixed（CR-031/030 轮）** | metrics 四个 AgentRun 查询统一加 `_REAL_RUNS`（`idempotency_key.notlike("rehearsal:%")`，复用 `agents/pilot.py::REHEARSAL_KEY_PREFIX` 单点常量）+ 四卡 definition 同步注明「排除演练」+ 模块 docstring 口径纪律补一行；专项测试钉 L1/L2 两形态四指标（变异：过滤中性化→四断言全红） | metrics/service.py | c6 |
-| CR-032 | P2 | open（登记，T-O2b 桌面同步面） | 桌面调研侧 subject_type 值域钉死内置五类（`RESEARCH_SUBJECT_TYPES`），服务端 T-O2b 已开放「内置∪注册表 active−project 根」：注册类型落库后桌面**读路径**（projectRuntimeValidation/runtimeValidation 五类守卫）整体校验失败 → 调研 tab 全不可读；写路径（导入/定义/表单 builder）注册类型不可选 | desktop/…/research/{types.ts:1,projectRuntimeValidation.ts:17,66,runtimeValidation.ts:48,ResearchImportDialog.tsx:11,ResearchDefinitionEditor.tsx:487/1009,ProjectResearchFormBuilder.tsx:233} | c7 |
+| CR-032 | P2 | **fixed（桌面实施轮②，T-O2b 桌面同步面）** | 桌面调研 DTO 读路径五类守卫（`isResearchSubjectDto`/`isResearchFormDto`/`isResearchImportPreviewDto`）改走 `isResearchSubjectType`（T-O2b 码格式 `^[a-z][a-z0-9_]{0,59}$`，与 DB CHECK 同尺）；`ResearchSubjectType` 放宽为 string＋`researchSubjectLabel`（内置取中文标签、注册码原样回显）；写路径五类下拉维持（注册类型选项＝后续轮，须接 ontology 只读 API） | desktop/…/research/{types.ts:17/22/38,projectRuntimeValidation.ts:17/66,runtimeValidation.ts:48,ResearchDefinitionEditor.tsx:1296}＋5 组件 label 走 researchSubjectLabel＋测试 +2 例 | c7 |
 | CR-033 | P3 | open（登记） | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
 | CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
 | CR-035 | P3 | **fixed（CR-035 轮）** | GlossaryPage 术语搜索无序列守卫 → 加 `sequence` ref（旧响应丢弃，只最新一次可落表）+ 首屏之外不再整页 loading（**附带修掉「搜索框被卸载」**：改前每次按键后整页换成 loading 文案，搜索框随之卸载、焦点丢失，无法连续输入——比原登记的「闪空」更重） | desktop/…/ontology/GlossaryPage.tsx | c7 |
@@ -442,7 +442,7 @@
 
 ## CR-032 · P2 · 桌面调研 subject_type 五类钉死（T-O2b 开放域滞后）
 
-- **状态**：open（登记；T-O2b 桌面同步面，非 c7 纯审范围→单独开）
+- **状态**：open（登记；T-O2b 桌面同步面，非 c7 纯审范围→单独开）→ **fixed（桌面实施轮②）**
 - **file:line**：`desktop/src/renderer/src/research/types.ts:1`（`RESEARCH_SUBJECT_TYPES` 五类）+ `projectRuntimeValidation.ts:17/66`（读路径 isResearchSubjectDto/ImportPreviewDto 五类守卫）+ `runtimeValidation.ts:48`（isResearchFormDto 五类）+ 写路径 `ResearchImportDialog.tsx:11`（四内置类 select）/`ResearchDefinitionEditor.tsx:487/1009`/`ProjectResearchFormBuilder.tsx:233`/`types.ts:21`（CHILD_TYPES_BY_PARENT）。
 - **意图锚**：服务端 T-O2b（`7f30ad0` #83）新建/表单/导入值域=「内置五类 ∪ 注册表 active − project 根」，`form_service.py:434/663`/`ai/research_form_service.py:87`/`industry_template_service.py:196` 均接受注册类型。
 - **触发路径**：某表单/对象 `subject_type` 落为注册类型（如 `vendor`）→ 桌面 `ResearchWorkspace.loadResearch`（:222）`isProjectResearchFormListDto` 失败 → 抛 "invalid research dto" → **整个调研 tab「数据格式异常」，项目内正常数据全不可读**；导入预览、创建/合并/重命名返回体同闸。

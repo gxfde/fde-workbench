@@ -1,6 +1,6 @@
 import {
+  isResearchSubjectType,
   RESEARCH_FIELD_TYPES,
-  RESEARCH_SUBJECT_TYPES,
   type ResearchConditionDto,
   type ResearchDefinitionDto,
   type ResearchFieldDto,
@@ -45,7 +45,7 @@ export function isResearchFormDto(value: unknown): value is ResearchFormDto {
     && isNonEmptyString(value.id)
     && isStableKey(value.form_key)
     && isNonEmptyString(value.name)
-    && isOneOf(value.subject_type, RESEARCH_SUBJECT_TYPES)
+    && isResearchSubjectType(value.subject_type)
     && (value.module_key === null || isStableKey(value.module_key))
     && isInteger(value.sort_order)
     && Array.isArray(value.sections)

@@ -192,7 +192,7 @@ describe("project research response guards", () => {
     expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: { ...summary, opportunity_profile: "moved" } })).toBe(true)
     expect(isResearchMergeResultDto({ subject: validSubject() })).toBe(false)
     expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: summary, project_version: 4 })).toBe(false)
-    expect(isResearchMergeResultDto({ subject: { ...validSubject(), subject_type: "nonsense" }, merge_summary: summary })).toBe(false)
+    expect(isResearchMergeResultDto({ subject: { ...validSubject(), subject_type: "9Bad" }, merge_summary: summary })).toBe(false)
     expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: { extra: true } })).toBe(false)
     expect(isResearchMergeResultDto({ subject: validSubject(), merge_summary: "moved" })).toBe(false)
     expect(isResearchMergeResultDto({ subject: "subject-1", merge_summary: summary })).toBe(false)
@@ -242,5 +242,15 @@ describe("isResearchSubjectDto merged_into_subject_id (V3 T-O4b)", () => {
     expect(isResearchSubjectDto({ ...validSubject(), status: "archived", merged_into_subject_id: "subject-2" })).toBe(true)
     expect(isResearchSubjectDto({ ...validSubject(), merged_into_subject_id: 3 })).toBe(false)
     expect(isResearchSubjectDto({ ...validSubject(), merged_into: "subject-2" })).toBe(false)
+  })
+
+  it("CR-032: accepts registered subject_type codes (T-O2b 开放域), rejects malformed codes", () => {
+    // 注册类型（如 customer）合法——读路径必须承接，否则整板拒载
+    expect(isResearchSubjectDto({ ...validSubject(), subject_type: "customer" })).toBe(true)
+    expect(isResearchSubjectDto({ ...validSubject(), subject_type: "supplier_x" })).toBe(true)
+    // 不符合 T-O2b 码格式的拒绝
+    expect(isResearchSubjectDto({ ...validSubject(), subject_type: "9Bad" })).toBe(false)
+    expect(isResearchSubjectDto({ ...validSubject(), subject_type: "Customer" })).toBe(false)
+    expect(isResearchSubjectDto({ ...validSubject(), subject_type: 7 })).toBe(false)
   })
 })

@@ -21,6 +21,7 @@ import {
   normalizeDecimalValue,
 } from "./conditionValueContract"
 import {
+  researchSubjectLabel,
   RESEARCH_FIELD_TYPES,
   RESEARCH_SUBJECT_TYPES,
   type ResearchConditionDto,
@@ -1293,7 +1294,7 @@ function optionChoices(options: ResearchFieldOptionsDto): string[] {
 }
 
 function subjectLabel(type: ResearchSubjectType): string {
-  return { project: "项目", department: "部门", role: "岗位", process: "流程", opportunity: "AI 机会" }[type]
+  return researchSubjectLabel(type)
 }
 
 function fieldTypeLabel(type: ResearchFieldType): string {

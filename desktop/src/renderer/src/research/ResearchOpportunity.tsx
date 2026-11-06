@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import { ApiClientError, type RendererApiRequestOptions } from "../api/client"
-import { RESEARCH_SUBJECT_LABELS, type AIOpportunityProfileDto, type OpportunityLevel, type OpportunityStatus, type ProjectResearchFormDto, type ResearchSubjectDto } from "./types"
+import { researchSubjectLabel, type AIOpportunityProfileDto, type OpportunityLevel, type OpportunityStatus, type ProjectResearchFormDto, type ResearchSubjectDto } from "./types"
 import { ResearchForm } from "./ResearchForm"
 import { OpportunityAdjustment } from "./OpportunityAdjustment"
 
@@ -77,7 +77,7 @@ export function OpportunityDetail({ projectId, opportunity, forms, ownerOptions,
 
   return <section className="panel research-opportunity-detail" aria-labelledby="opportunity-detail-heading">
     {adjusting ? <OpportunityAdjustment key={opportunity.id} projectId={projectId} opportunity={opportunity} apiRequest={apiRequest} onSaved={onOpportunityUpdated} onClose={() => setAdjusting(false)} /> : null}
-    <header className="research-selection-heading"><div><span className="badge muted">{RESEARCH_SUBJECT_LABELS[opportunity.subject_type]}</span><h2 id="opportunity-detail-heading">{opportunity.name}</h2>{opportunity.tracking_code ? <code>{opportunity.tracking_code}</code> : null}</div><div className="research-opportunity-actions">
+    <header className="research-selection-heading"><div><span className="badge muted">{researchSubjectLabel(opportunity.subject_type)}</span><h2 id="opportunity-detail-heading">{opportunity.name}</h2>{opportunity.tracking_code ? <code>{opportunity.tracking_code}</code> : null}</div><div className="research-opportunity-actions">
       {canFill || canManage ? <details className="opportunity-more-actions" ref={moreActions}>
         <summary className="secondary-button">更多 <svg className="opportunity-more-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
         <div className="opportunity-more-dropdown" onClick={(event) => { if (event.target instanceof HTMLButtonElement && !event.target.disabled && moreActions.current) moreActions.current.open = false }}>

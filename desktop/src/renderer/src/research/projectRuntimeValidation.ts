@@ -1,6 +1,6 @@
 import { isResearchFormDto } from "./runtimeValidation"
 import { isCanonicalDecimalValue, normalizeAsciiEdgeWhitespace, normalizeDecimalValue } from "./conditionValueContract"
-import { RESEARCH_SUBJECT_TYPES, type ProjectResearchFormDto, type ResearchAnswerValue, type ResearchFieldDto, type ResearchFormDto, type ResearchFormRevisionDto, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto, type ResearchMergeResultDto, type ResearchSubjectDto, type ResearchTableColumnDto } from "./types"
+import { isResearchSubjectType, type ProjectResearchFormDto, type ResearchAnswerValue, type ResearchFieldDto, type ResearchFormDto, type ResearchFormRevisionDto, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto, type ResearchMergeResultDto, type ResearchSubjectDto, type ResearchTableColumnDto } from "./types"
 
 const FILE_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const SCRIPT_MARKUP = /<\s*\/?\s*script\b/i
@@ -14,7 +14,7 @@ export function isResearchSubjectDto(value: unknown): value is ResearchSubjectDt
     && exact(value, ["id", "project_id", "parent_subject_id", "subject_type", "subject_key", "name", "description", "sort_order", "status", "tracking_code", "version", "links"], ["project_version", "opportunity_profile", "merged_into_subject_id"])
     && strings(value, ["id", "project_id", "subject_key", "name", "description"])
     && nullableString(value.parent_subject_id)
-    && RESEARCH_SUBJECT_TYPES.some((item) => item === value.subject_type)
+    && isResearchSubjectType(value.subject_type)
     && Number.isInteger(value.sort_order)
     && (value.status === "active" || value.status === "archived")
     && nullableString(value.tracking_code)
@@ -63,7 +63,7 @@ export function isResearchImportPreviewDto(value: unknown): value is ResearchImp
   return isRecord(value)
     && exact(value, ["preview_token", "subject_type", "row_count", "rows", "errors", "expires_in_seconds"])
     && typeof value.preview_token === "string" && value.preview_token.length > 0
-    && RESEARCH_SUBJECT_TYPES.some((item) => item === value.subject_type) && value.subject_type !== "project"
+    && isResearchSubjectType(value.subject_type) && value.subject_type !== "project"
     && nonNegativeInteger(value.row_count)
     && positiveInteger(value.expires_in_seconds)
     && Array.isArray(value.rows) && value.rows.every(isImportRow)

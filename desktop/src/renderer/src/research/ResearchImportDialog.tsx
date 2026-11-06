@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ApiClientError, type RendererApiRequestOptions } from "../api/client"
 import { isResearchImportPreviewDto, isResearchImportResultDto, parseResearchImportErrorDetails } from "./projectRuntimeValidation"
-import { RESEARCH_SUBJECT_LABELS, type CreatableResearchSubjectType, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto } from "./types"
+import { researchSubjectLabel, type CreatableResearchSubjectType, type ResearchImportErrorDto, type ResearchImportPreviewDto, type ResearchImportResultDto } from "./types"
 
 // V3 T-O4 桌面面：调研对象批量导入——CSV/XLSX 先解析预览（服务端签发 30 分钟
 // 一次性 token），确认后提交；与既有启用对象同名的行服务端会让位不新建，事后
@@ -80,7 +80,7 @@ export function ResearchImportDialog({ projectId, projectVersion, apiRequest, on
     <div className="dialog-heading"><div><h3 id="research-import-title">导入调研对象</h3><p className="supporting-copy compact-copy">上传 CSV 或 XLSX 批量创建调研对象，列名：名称（必填）、说明、父级（可选）。与既有启用对象同名的行会让位不新建，导入后在结果卡片中逐条回溯。</p></div><button className="secondary-button compact" type="button" disabled={busy} onClick={onClose}>关闭</button></div>
     {preview ? <>
       <div className="research-import-summary">
-        <span className="badge muted">{RESEARCH_SUBJECT_LABELS[preview.subject_type]}</span>
+        <span className="badge muted">{researchSubjectLabel(preview.subject_type)}</span>
         <span>共 {preview.row_count} 行</span>
         {preview.errors.length ? <span className="research-import-error-count">{preview.errors.length} 行有校验错误</span> : null}
         <span className="field-hint">预览 30 分钟内有效，提交一次后自动关闭。</span>
@@ -95,7 +95,7 @@ export function ResearchImportDialog({ projectId, projectVersion, apiRequest, on
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}
       <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={resetPreview}>重新选择</button><button type="button" className="primary-button" disabled={busy || !preview.row_count || preview.errors.length > 0} onClick={() => void submitCommit()}>{busy ? "正在导入" : "确认导入"}</button></div>
     </> : <>
-      <label className="field"><span>对象类型</span><select value={subjectType} disabled={busy} onChange={(event) => { setSubjectType(event.target.value as CreatableResearchSubjectType); resetPreview() }}>{IMPORTABLE_SUBJECT_TYPES.map((type) => <option value={type} key={type}>{RESEARCH_SUBJECT_LABELS[type]}</option>)}</select></label>
+      <label className="field"><span>对象类型</span><select value={subjectType} disabled={busy} onChange={(event) => { setSubjectType(event.target.value as CreatableResearchSubjectType); resetPreview() }}>{IMPORTABLE_SUBJECT_TYPES.map((type) => <option value={type} key={type}>{researchSubjectLabel(type)}</option>)}</select></label>
       <label className="field"><span>导入文件（CSV 或 XLSX，≤10MB）</span><input aria-label="导入文件" type="file" accept=".csv,.xlsx" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); resetPreview() }} /></label>
       {file ? <p className="field-hint">已选择：{file.name}</p> : null}
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}

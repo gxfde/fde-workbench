@@ -30,6 +30,17 @@ pytest **2014 收集 = 2008 passed + 6 skipped**（+4）／mypy **279** 不变�
 
 pytest **2010 收集 = 2004 passed + 6 skipped**（+3；**口径校正**：前值 2013 为本地推算重复计并发轮增量，CI run 42223701893 实测为准）／mypy **279** 不变／蓝图路由 **301**（不变）／业务表 **105**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。
 
+## [未发布] — 桌面实施轮②：CR-032 桌面调研 subject_type 读路径承接 T-O2b 注册类型（2026-11-06）
+
+### 桌面（零迁移零路由零服务端改动；无需 rebuild / alembic / 重打包）
+
+- **读路径守卫放宽（CR-032 核心）**：桌面调研 DTO 守卫此前把 `subject_type` 钉死内置五类枚举（`RESEARCH_SUBJECT_TYPES`），而服务端 T-O2b（#83）已把物理边界放宽为码格式 `^[a-z][a-z0-9_]{0,59}$`（迁移 `b5d9e3f7a1c6`）＋注册表 active 行——**注册类型（如 `vendor`）落库后，桌面 `ResearchWorkspace` 读路径校验即失败 → 整个调研 tab「数据格式异常」、项目正常数据全不可读**。修法：`ResearchSubjectType` 放宽为 `string`，新增 `isResearchSubjectType`（与 DB CHECK 同尺码格式守卫）承接读路径（`isResearchSubjectDto`／`isResearchFormDto`／`isResearchImportPreviewDto` 三处五类守卫改走同尺）；内置五类仍由 `RESEARCH_SUBJECT_TYPES` 承载写路径（创建/下拉/父子树，**写路径注册类型选项＝后续轮**——须接 ontology 只读 API＋父子约束，本轮不扩张功能面）；展示走新增 `researchSubjectLabel`（内置取中文标签、注册码原样回显，杜绝缺标签拒载/乱显示）。
+- **测试 +2 例**：注册类型码（`customer`/`supplier_x`）读路径承接＋非法规码（`9Bad`/`Customer`/超长/连字符）仍拒；既有用例同步（`"nonsense"` → `"9Bad"`）。
+
+### 口径
+
+- 桌面 vitest **838/838**（基线 **836**＝CI run 42223701893 实测 ＋2；桌面纯前端轮，零服务端改动）；pytest / mypy / 表 / 迁移 / 路由 / ENTRIES 全部不变。 (docs(v3): 校正桌面实施轮② vitest 口径 833→838（基线随 #156/#157 插队上移，现测为准）)
+
 ## [未发布] — V3 提示词卫生 J 系接线：B#12+B#31 判据落地（2026-11-06）
 
 ### 契约判据接线（零迁移零路由零新依赖；server 变更 ⇒ 合并后 rebuild 三镜像）

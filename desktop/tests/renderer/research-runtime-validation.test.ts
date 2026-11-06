@@ -117,7 +117,7 @@ describe("research definition runtime contract", () => {
 
   it("requires exact subject, nullable module key, boolean required, integer sorting, and array shapes", () => {
     const mutations = [
-      (value: any) => { value.forms[0].subject_type = "customer" },
+      (value: any) => { value.forms[0].subject_type = "9Bad" },
       (value: any) => { value.forms[0].module_key = 7 },
       (value: any) => { delete value.forms[0].module_key },
       (value: any) => { value.forms[0].sections[0].fields[0].is_required = 1 },
@@ -129,6 +129,24 @@ describe("research definition runtime contract", () => {
     for (const mutate of mutations) {
       const definition = clonedDefinition()
       mutate(definition)
+      expect(isResearchDefinitionDto(definition)).toBe(false)
+    }
+  })
+
+  it("CR-032: accepts registered subject_type codes (T-O2b 开放域) and rejects malformed codes", () => {
+    // 服务端 T-O2b 把 subject_type 物理边界放宽为码格式 `^[a-z][a-z0-9_]{0,59}$`，
+    // 注册类型（如 customer/supplier_x）合法。读路径须原样承接，否则整板拒载。
+    const validRegistered = ["customer", "supplier_x", "a", "asset_01"]
+    for (const code of validRegistered) {
+      const definition = clonedDefinition()
+      definition.forms[0].subject_type = code
+      expect(isResearchDefinitionDto(definition)).toBe(true)
+    }
+    // 不符合码格式的拒绝（首字母非小写字母 / 大写 / 超长 / 含非法字符）
+    const invalidCodes = ["9Bad", "Customer", "bad code", "a".repeat(61), "", "has-dash"]
+    for (const code of invalidCodes) {
+      const definition = clonedDefinition()
+      definition.forms[0].subject_type = code
       expect(isResearchDefinitionDto(definition)).toBe(false)
     }
   })

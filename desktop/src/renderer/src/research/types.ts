@@ -6,14 +6,37 @@ export const RESEARCH_SUBJECT_TYPES = [
   "opportunity",
 ] as const
 
-export type ResearchSubjectType = typeof RESEARCH_SUBJECT_TYPES[number]
+// V3 T-O2b（CR-032 清偿）：subject_type 物理边界已从「内置五类枚举」放宽为码格式
+// （迁移 b5d9e3f7a1c6 把三处 CHECK 换成 `^[a-z][a-z0-9_]{0,59}$`）。注册类型落库后
+// 桌面读路径必须原样承接——否则一条注册类型数据即令整个调研 tab 报「数据格式异常」。
+// 故 `ResearchSubjectType` 放宽为 string（任意合法对象类型码）：读路径校验走
+// `isResearchSubjectType`（与 DB CHECK 同尺）、展示走 `researchSubjectLabel`
+// （内置取中文标签、注册码原样显示）；内置五类仍由 `RESEARCH_SUBJECT_TYPES`
+// 承载写路径（创建/下拉/父子树）。
+export type ResearchSubjectType = string
 
-export const RESEARCH_SUBJECT_LABELS: Record<ResearchSubjectType, string> = {
+// T-O2b 对象类型码格式（与 server `subject_type ~ '^[a-z][a-z0-9_]{0,59}$'` CHECK 同尺）
+const RESEARCH_SUBJECT_TYPE_CODE = /^[a-z][a-z0-9_]{0,59}$/
+
+/** 读路径守卫：subject_type 是否为合法对象类型码（内置五类 ∪ 注册表 active 行皆可）。 */
+export function isResearchSubjectType(value: unknown): value is string {
+  return typeof value === "string" && RESEARCH_SUBJECT_TYPE_CODE.test(value)
+}
+
+export const RESEARCH_SUBJECT_LABELS: Record<string, string> = {
   project: "企业",
   department: "部门",
   role: "岗位",
   process: "流程",
   opportunity: "AI 机会",
+}
+
+/**
+ * 对象类型 → 显示标签。内置五类取中文标签；注册类型（T-O2b 开放域）无预置
+ * 标签，原样回显码本身（CR-032：数据合法、不可因缺标签而拒载或乱显示）。
+ */
+export function researchSubjectLabel(type: string): string {
+  return RESEARCH_SUBJECT_LABELS[type] ?? type
 }
 
 // Allowed child subject types for each subject type (used by both the tree's

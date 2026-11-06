@@ -15,7 +15,7 @@ import { ResearchImportDialog } from "./ResearchImportDialog"
 import { ProjectResearchFormBuilder, type ProjectResearchFormDraft } from "./ProjectResearchFormBuilder"
 import { ResearchForm } from "./ResearchForm"
 import { ResearchSubjectTree } from "./ResearchSubjectTree"
-import { CHILD_TYPES_BY_PARENT, RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_LABELS, RESEARCH_SUBJECT_TYPES, type AIOpportunityProfileDto, type ProjectResearchFormDto, type ResearchImportResultDto, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
+import { CHILD_TYPES_BY_PARENT, RESEARCH_FIELD_TYPES, RESEARCH_SUBJECT_TYPES, researchSubjectLabel, type AIOpportunityProfileDto, type ProjectResearchFormDto, type ResearchImportResultDto, type ResearchSubjectDto, type ResearchSubjectType } from "./types"
 
 interface ResearchWorkspaceProps {
   initialOpportunityId?: string
@@ -93,7 +93,6 @@ function isMemoMergeResultDto(value: unknown): value is MemoMergeResultDto {
     && value.change_summary.every((item) => typeof item === "string")
 }
 
-const subjectLabels = RESEARCH_SUBJECT_LABELS
 
 /**
  * J7b：把一轮轮询结果归类（可单测的纯函数）。
@@ -422,7 +421,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     }
     const allowed = CHILD_TYPES_BY_PARENT[selected.subject_type] ?? []
     if (!allowed.includes(type)) {
-      setError(`不能在“${subjectLabels[selected.subject_type]}”下新增${subjectLabels[type]}。`)
+      setError(`不能在“${researchSubjectLabel(selected.subject_type)}”下新增${researchSubjectLabel(type)}。`)
       return
     }
     if (!confirmDiscard("创建调研对象会切换工作区并放弃未保存修改，确定继续吗？")) return
@@ -462,7 +461,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     }
     const allowed = CHILD_TYPES_BY_PARENT[parent.subject_type] ?? []
     if (!allowed.includes(createType)) {
-      setError(`不能在“${subjectLabels[parent.subject_type]}”下新增${subjectLabels[createType]}。`)
+      setError(`不能在“${researchSubjectLabel(parent.subject_type)}”下新增${researchSubjectLabel(createType)}。`)
       return
     }
     if (!confirmDiscard("创建调研对象会切换工作区并放弃未保存修改，确定继续吗？")) return
@@ -498,7 +497,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       const returnedVersion = (created as ResearchSubjectDto & { project_version?: number }).project_version
       if (returnedVersion) setProjectVersion((current) => Math.max(current, returnedVersion))
       setCreateType(null)
-      setNotice(`${subjectLabels[createType]}已创建。`)
+      setNotice(`${researchSubjectLabel(createType)}已创建。`)
       clearDirtyRegistry()
       pendingFocusId.current = created.id
       await loadResearch(created.id)
@@ -633,7 +632,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       if (!isResearchSubjectDto(value)) throw new Error("invalid research subject")
       setSubjects((current) => current.map((item) => item.id === value.id ? value : item))
       setRenameSubject(null)
-      setNotice(`${subjectLabels[subject.subject_type]}信息已更新。`)
+      setNotice(`${researchSubjectLabel(subject.subject_type)}信息已更新。`)
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === "stale_version") await loadResearch(subject.id)
       setError(subjectMutationError(caught))
@@ -682,7 +681,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       setMemoDraft(value.memo)
       setMemoSaved(value.memo)
       updateDirty(`subject-memo:${subject.id}`, false)
-      setNotice(`${subjectLabels[subject.subject_type]}备忘录已保存。`)
+      setNotice(`${researchSubjectLabel(subject.subject_type)}备忘录已保存。`)
       return true
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === "stale_version") await loadResearch(subject.id)
@@ -862,7 +861,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       setMemoEditing(false)
       updateDirty(`subject-memo:${subject.id}`, false)
       setMemoMergeResult(null)
-      setNotice(`${subjectLabels[subject.subject_type]}共用备忘录已采用 AI 整理结果，个人备忘录保持不变。`)
+      setNotice(`${researchSubjectLabel(subject.subject_type)}共用备忘录已采用 AI 整理结果，个人备忘录保持不变。`)
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === "stale_version") {
         await loadResearch(subject.id)
@@ -1002,7 +1001,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
       {importOutcome.merge_candidates.length ? <ul className="research-import-candidates">{importOutcome.merge_candidates.map((candidate) => {
         const matched = subjects.find((subject) => subject.id === candidate.matched_subject.id && subject.status === "active") ?? null
         return <li key={`${candidate.row}:${candidate.matched_subject.id}`}>
-          <span>第 {candidate.row} 行「{candidate.name}」与既有{matched ? subjectLabels[matched.subject_type] : ""}「{candidate.matched_subject.name}」{candidate.matched_subject.tracking_code ? `（${candidate.matched_subject.tracking_code}）` : ""}同名，已让位未新建。</span>
+          <span>第 {candidate.row} 行「{candidate.name}」与既有{matched ? researchSubjectLabel(matched.subject_type) : ""}「{candidate.matched_subject.name}」{candidate.matched_subject.tracking_code ? `（${candidate.matched_subject.tracking_code}）` : ""}同名，已让位未新建。</span>
           {candidate.description.trim() ? <span className="research-import-candidate-note">文件中的说明：{candidate.description}</span> : null}
           {matched ? <button type="button" className="research-merged-link" onClick={() => { setImportOutcome(null); selectSubject(matched) }}>查看{matched.name}</button> : null}
         </li>
@@ -1026,15 +1025,15 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
         {viewedOpportunity
           ? <OpportunityDetail projectId={project.id} opportunity={viewedOpportunity} forms={opportunityForms} ownerOptions={opportunityOwnerOptions(project)} canManage={canManage} canFill={canFill} editing={editingOpportunity} apiRequest={apiRequest} onOpportunityUpdated={(updated) => { updateOpportunity(updated); setEditingOpportunity(false) }} onUpdate={updateForm} onDirtyChange={updateDirty} onEdit={() => setEditingOpportunity(true)} onDelete={() => void archiveSubject(viewedOpportunity)} onBack={() => { if (confirmDiscard("返回会退出 AI 机会详情，确定继续吗？")) { clearDirtyRegistry(); setViewedOpportunityId(null); setEditingOpportunity(false) } }} /> : null}
         {formBuilderOpen ? <ProjectResearchFormBuilder key={formBuilderGeneration} projectId={project.id} subject={selected!} initialForm={initialFormDraft} editingForm={editingForm} apiRequest={apiRequest} onDirtyChange={(dirty) => updateDirty("research-form-builder", dirty)} onAIGenerate={canFill && !editingForm ? openAIFormAssistant : undefined} onCreated={(form) => { updateForm(form); setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null); setNotice(editingForm ? "调研表结构已更新，已填内容已保留。" : "调研表已创建。"); clearDirtyRegistry() }} onCancel={() => { if (confirmDiscard("取消会放弃未保存的结构修改，确定继续吗？")) { setFormBuilderOpen(false); setInitialFormDraft(null); setEditingForm(null) } }} /> : null}
-        {!viewedOpportunity && !formBuilderOpen && createType ? <section className="panel research-create-panel" aria-labelledby="create-research-subject"><h2 id="create-research-subject">新增{subjectLabels[createType]}</h2><div className={createType === "opportunity" ? "opportunity-profile-form" : undefined}><label className={`field${createType === "opportunity" ? " wide" : ""}`}><span>{subjectLabels[createType]}名称</span><input autoFocus value={createName} disabled={busy} onChange={(event) => setCreateName(event.target.value)} /></label>{createType === "opportunity" ? <OpportunityProfileFields description={createDescription} profile={createOpportunityProfile} ownerOptions={opportunityOwnerOptions(project)} disabled={busy} onDescriptionChange={setCreateDescription} onProfileChange={setCreateOpportunityProfile} /> : <label className="field"><span>说明</span><textarea value={createDescription} disabled={busy} onChange={(event) => setCreateDescription(event.target.value)} /></label>}</div><div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setCreateType(null)}>取消</button><button type="button" className="primary-button" disabled={busy} onClick={() => void createSubject()}>创建</button></div></section> : null}
+        {!viewedOpportunity && !formBuilderOpen && createType ? <section className="panel research-create-panel" aria-labelledby="create-research-subject"><h2 id="create-research-subject">新增{researchSubjectLabel(createType)}</h2><div className={createType === "opportunity" ? "opportunity-profile-form" : undefined}><label className={`field${createType === "opportunity" ? " wide" : ""}`}><span>{researchSubjectLabel(createType)}名称</span><input autoFocus value={createName} disabled={busy} onChange={(event) => setCreateName(event.target.value)} /></label>{createType === "opportunity" ? <OpportunityProfileFields description={createDescription} profile={createOpportunityProfile} ownerOptions={opportunityOwnerOptions(project)} disabled={busy} onDescriptionChange={setCreateDescription} onProfileChange={setCreateOpportunityProfile} /> : <label className="field"><span>说明</span><textarea value={createDescription} disabled={busy} onChange={(event) => setCreateDescription(event.target.value)} /></label>}</div><div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setCreateType(null)}>取消</button><button type="button" className="primary-button" disabled={busy} onClick={() => void createSubject()}>创建</button></div></section> : null}
         {selected && !viewedOpportunity && !formBuilderOpen ? <header className="research-selection-heading">
-          <div className="research-selection-summary"><div className="research-selection-title"><span className="badge muted">{subjectLabels[selected.subject_type]}</span><h2>{selected.name}</h2></div>{selected.description.trim() ? <p className="research-subject-description"><span>{subjectLabels[selected.subject_type]}说明</span>{selected.description}</p> : null}</div>
+          <div className="research-selection-summary"><div className="research-selection-title"><span className="badge muted">{researchSubjectLabel(selected.subject_type)}</span><h2>{selected.name}</h2></div>{selected.description.trim() ? <p className="research-subject-description"><span>{researchSubjectLabel(selected.subject_type)}说明</span>{selected.description}</p> : null}</div>
           <div className="research-selection-side">
             <div className="research-selection-actions">{activeForm ? <button type="button" className="secondary-button compact" onClick={returnToFormList}>返回调研表列表</button> : canFill ? <button type="button" className="secondary-button compact" onClick={() => openFormBuilder()}>新增调研表</button> : null}</div>
             {!activeForm && selected.subject_type !== "opportunity" ? <div className="personal-memo-launcher" aria-label="项目成员个人备忘录"><span>个人备忘录</span>{personalMemos.map((item) => <button key={item.user_id} type="button" className={`secondary-button compact personal-memo-person${item.memo.trim() ? " has-content" : ""}${item.is_current_user ? " current" : ""}`} onClick={() => openPersonalMemo(item)} title={item.is_current_user ? "查看或编辑我的个人备忘录" : `查看${item.display_name}的个人备忘录`}>{item.display_name}</button>)}</div> : null}
           </div>
         </header> : null}
-        {selected && selected.subject_type !== "opportunity" && !viewedOpportunity && !formBuilderOpen && !activeForm ? <section className="panel subject-memo-panel" data-research-dirty={memoDraft !== memoSaved ? "true" : "false"} aria-labelledby="subject-memo-title"><div className="subject-memo-heading"><div><div className="subject-memo-title-row"><h3 id="subject-memo-title">{subjectLabels[selected.subject_type]}备忘录</h3><span className="badge muted">共用</span></div><p className="supporting-copy compact-copy">记录团队共享的访谈线索、现场情况和待跟进事项；个人记录请使用上方个人备忘录。</p></div>{canFill ? <div className="subject-memo-actions"><button type="button" className="secondary-button compact ai-memo-merge-button" disabled={memoMerging || (!memoDraft.trim() && !personalMemos.some((item) => item.memo.trim()))} onClick={() => void mergeMemosWithAI()}>{memoMerging ? "正在整理" : "AI 合并整理"}</button>{memoEditing ? <><button type="button" className="secondary-button compact" disabled={memoSaving} onClick={() => void finishMemoEditing()}>完成编辑</button><button type="button" className="primary-button compact" disabled={memoSaving || memoDraft === memoSaved} onClick={() => void saveSubjectMemo()}>{memoSaving ? "正在保存" : "保存备忘录"}</button></> : <button type="button" className="secondary-button compact" onClick={beginMemoEditing}>编辑</button>}</div> : null}</div>{memoEditing && canFill ? <div className="subject-memo-editor"><textarea ref={memoEditorRef} aria-label={`${subjectLabels[selected.subject_type]}备忘录`} rows={7} maxLength={20_000} value={memoDraft} disabled={memoSaving} placeholder="支持 Markdown。例如：记录当前情况、待确认问题和后续跟进事项。" onKeyDown={handleMemoKeyDown} onChange={(event) => updateMemoDraft(event.target.value)} /><p className="subject-memo-shortcut-hint">支持 Markdown；Command+S 保存，Tab 插入缩进。</p></div> : <div className="subject-memo-preview">{memoSaved ? <MemoMarkdown>{memoSaved}</MemoMarkdown> : <p className="empty-state compact">暂无共用备忘录。</p>}</div>}</section> : null}
+        {selected && selected.subject_type !== "opportunity" && !viewedOpportunity && !formBuilderOpen && !activeForm ? <section className="panel subject-memo-panel" data-research-dirty={memoDraft !== memoSaved ? "true" : "false"} aria-labelledby="subject-memo-title"><div className="subject-memo-heading"><div><div className="subject-memo-title-row"><h3 id="subject-memo-title">{researchSubjectLabel(selected.subject_type)}备忘录</h3><span className="badge muted">共用</span></div><p className="supporting-copy compact-copy">记录团队共享的访谈线索、现场情况和待跟进事项；个人记录请使用上方个人备忘录。</p></div>{canFill ? <div className="subject-memo-actions"><button type="button" className="secondary-button compact ai-memo-merge-button" disabled={memoMerging || (!memoDraft.trim() && !personalMemos.some((item) => item.memo.trim()))} onClick={() => void mergeMemosWithAI()}>{memoMerging ? "正在整理" : "AI 合并整理"}</button>{memoEditing ? <><button type="button" className="secondary-button compact" disabled={memoSaving} onClick={() => void finishMemoEditing()}>完成编辑</button><button type="button" className="primary-button compact" disabled={memoSaving || memoDraft === memoSaved} onClick={() => void saveSubjectMemo()}>{memoSaving ? "正在保存" : "保存备忘录"}</button></> : <button type="button" className="secondary-button compact" onClick={beginMemoEditing}>编辑</button>}</div> : null}</div>{memoEditing && canFill ? <div className="subject-memo-editor"><textarea ref={memoEditorRef} aria-label={`${researchSubjectLabel(selected.subject_type)}备忘录`} rows={7} maxLength={20_000} value={memoDraft} disabled={memoSaving} placeholder="支持 Markdown。例如：记录当前情况、待确认问题和后续跟进事项。" onKeyDown={handleMemoKeyDown} onChange={(event) => updateMemoDraft(event.target.value)} /><p className="subject-memo-shortcut-hint">支持 Markdown；Command+S 保存，Tab 插入缩进。</p></div> : <div className="subject-memo-preview">{memoSaved ? <MemoMarkdown>{memoSaved}</MemoMarkdown> : <p className="empty-state compact">暂无共用备忘录。</p>}</div>}</section> : null}
         {selected && !viewedOpportunity && !formBuilderOpen && !selectedForms.length ? <p className="empty-state">当前对象没有适用于已启用项目模块的调研表。可点击“新增调研表”为它配置调研表，或后续追加模块后刷新查看新表单。</p> : null}
         {!viewedOpportunity && !formBuilderOpen && !activeForm && selectedForms.length ? <div className="research-form-card-grid">{selectedForms.map((form) => <article className="panel research-form-summary-card" key={form.id}><div><h3>{form.name}</h3>{form.description ? <p className="supporting-copy">{form.description}</p> : null}</div><div className="research-card-progress"><span>完成度 {form.completion.completion_rate}%</span><progress max="100" value={form.completion.completion_rate}>{form.completion.completion_rate}%</progress><small>{form.completion.answered_visible}/{form.completion.visible_total} 项已填写</small></div><div className="research-card-actions">{canFill && form.completion.answered_visible > 0 ? <button type="button" className="secondary-button compact" disabled={busy || Boolean(submittingResearchFormId) || Boolean(researchExports[form.id])} onClick={() => void exportResearchResult(form)}>{submittingResearchFormId === form.id ? "正在提交…" : researchExports[form.id] ? "后台生成中…" : "导出到文件库"}</button> : null}{canFill ? <button type="button" className="primary-button compact" disabled={busy} onClick={() => setActiveFormId(form.id)}>填写</button> : <button type="button" className="secondary-button compact" disabled={busy} onClick={() => setActiveFormId(form.id)}>查看</button>}{canFill ? <button type="button" className="secondary-button compact" disabled={busy} onClick={() => editFormDefinition(form)}>修改结构</button> : null}{canManage ? <button type="button" className="danger-button compact" disabled={busy} onClick={() => void deleteForm(form)}>删除</button> : null}</div></article>)}</div> : null}
         {!viewedOpportunity && !formBuilderOpen && activeForm ? <ResearchForm key={`${activeForm.id}:${loadGeneration}`} projectId={project.id} form={activeForm} canFill={canFill} apiRequest={apiRequest} onUpdate={updateForm} onDirtyChange={(dirty) => updateDirty(activeForm.id, dirty)} onSaved={(saved) => { updateForm(saved); clearDirtyRegistry(); setActiveFormId(null); setNotice("调研内容已保存。") }} onCancel={returnToFormList} /> : null}
@@ -1042,7 +1041,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     </div>}
     {aiFormOpen && selected ? <div className="dialog-backdrop">
       <section className="dialog ai-research-form-dialog" role="dialog" aria-modal="true" aria-labelledby="project-ai-research-form-title">
-        <div className="dialog-heading"><div><h3 id="project-ai-research-form-title">AI 辅助生成调研表</h3><p className="supporting-copy compact-copy">当前对象：{subjectLabels[selected.subject_type]}“{selected.name}”。可直接生成，也可补充调研重点。</p></div><button className="secondary-button compact" type="button" disabled={aiGenerating} onClick={() => setAIFormOpen(false)}>关闭</button></div>
+        <div className="dialog-heading"><div><h3 id="project-ai-research-form-title">AI 辅助生成调研表</h3><p className="supporting-copy compact-copy">当前对象：{researchSubjectLabel(selected.subject_type)}“{selected.name}”。可直接生成，也可补充调研重点。</p></div><button className="secondary-button compact" type="button" disabled={aiGenerating} onClick={() => setAIFormOpen(false)}>关闭</button></div>
         <div className="field"><label htmlFor="project-ai-research-form-requirement">生成要求（可选）</label><textarea id="project-ai-research-form-requirement" rows={5} maxLength={4000} value={aiRequirement} disabled={aiGenerating} placeholder="例如：重点了解当前工作流程、痛点、数据现状和可量化目标。" onChange={(event) => setAIRequirement(event.target.value)} /></div>
         {aiError ? <p className="form-error banner" role="alert">{aiError}</p> : null}
         <div className="dialog-actions"><button className="secondary-button" type="button" disabled={aiGenerating} onClick={() => setAIFormOpen(false)}>取消</button><button className="primary-button" type="button" disabled={aiGenerating} onClick={() => void generateResearchFormWithAI()}>{aiGenerating ? "正在生成调研表" : "生成调研表"}</button></div>
@@ -1069,17 +1068,17 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
     </div> : null}
     {mergeSource ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setMergeSource(null) }}>
       <section className="dialog research-merge-dialog" role="dialog" aria-modal="true" aria-labelledby="research-merge-title">
-        <div className="dialog-heading"><div><h3 id="research-merge-title">合并{subjectLabels[mergeSource.subject_type]}</h3><p className="supporting-copy compact-copy">把“{mergeSource.name}”并入同类型的另一对象：调研表、填写内容、链接、子对象和备忘录会整体搬迁，本对象停用归档，稍后可在树底「已归档」中回溯。</p></div></div>
-        {mergeCandidates.length ? <label className="field"><span>并入目标</span><select value={mergeTargetId} disabled={busy} onChange={(event) => setMergeTargetId(event.target.value)}><option value="" disabled>请选择{subjectLabels[mergeSource.subject_type]}</option>{mergeCandidates.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}{subject.tracking_code ? `（${subject.tracking_code}）` : ""}</option>)}</select></label> : <p className="empty-state compact">当前没有同类型的其他启用对象可并入。</p>}
+        <div className="dialog-heading"><div><h3 id="research-merge-title">合并{researchSubjectLabel(mergeSource.subject_type)}</h3><p className="supporting-copy compact-copy">把“{mergeSource.name}”并入同类型的另一对象：调研表、填写内容、链接、子对象和备忘录会整体搬迁，本对象停用归档，稍后可在树底「已归档」中回溯。</p></div></div>
+        {mergeCandidates.length ? <label className="field"><span>并入目标</span><select value={mergeTargetId} disabled={busy} onChange={(event) => setMergeTargetId(event.target.value)}><option value="" disabled>请选择{researchSubjectLabel(mergeSource.subject_type)}</option>{mergeCandidates.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}{subject.tracking_code ? `（${subject.tracking_code}）` : ""}</option>)}</select></label> : <p className="empty-state compact">当前没有同类型的其他启用对象可并入。</p>}
         <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setMergeSource(null)}>取消</button><button type="button" className="primary-button" disabled={busy || !mergeTargetId} onClick={() => void submitMerge()}>{busy ? "正在合并" : "确认合并"}</button></div>
       </section>
     </div> : null}
     {importOpen ? <ResearchImportDialog projectId={project.id} projectVersion={projectVersion} apiRequest={apiRequest} onClose={() => setImportOpen(false)} onStale={() => void loadResearch()} onImported={(result) => void finishImport(result)} /> : null}
     {renameSubject ? <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setRenameSubject(null) }}>
       <section className="dialog research-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="research-rename-title">
-        <div className="dialog-heading"><div><h3 id="research-rename-title">编辑{subjectLabels[renameSubject.subject_type]}</h3><p className="supporting-copy compact-copy">修改名称或说明，已有调研表和填写内容都会保留。</p></div></div>
-        <label className="field"><span>{subjectLabels[renameSubject.subject_type]}名称</span><input autoFocus maxLength={160} value={renameSubjectName} disabled={busy} onChange={(event) => setRenameSubjectName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveSubjectName() } }} /></label>
-        <label className="field"><span>{subjectLabels[renameSubject.subject_type]}说明</span><textarea rows={5} value={renameSubjectDescription} disabled={busy} onChange={(event) => setRenameSubjectDescription(event.target.value)} /></label>
+        <div className="dialog-heading"><div><h3 id="research-rename-title">编辑{researchSubjectLabel(renameSubject.subject_type)}</h3><p className="supporting-copy compact-copy">修改名称或说明，已有调研表和填写内容都会保留。</p></div></div>
+        <label className="field"><span>{researchSubjectLabel(renameSubject.subject_type)}名称</span><input autoFocus maxLength={160} value={renameSubjectName} disabled={busy} onChange={(event) => setRenameSubjectName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveSubjectName() } }} /></label>
+        <label className="field"><span>{researchSubjectLabel(renameSubject.subject_type)}说明</span><textarea rows={5} value={renameSubjectDescription} disabled={busy} onChange={(event) => setRenameSubjectDescription(event.target.value)} /></label>
         <div className="dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => setRenameSubject(null)}>取消</button><button type="button" className="primary-button" disabled={busy || !renameSubjectName.trim()} onClick={() => void saveSubjectName()}>{busy ? "正在保存" : "保存"}</button></div>
       </section>
     </div> : null}
