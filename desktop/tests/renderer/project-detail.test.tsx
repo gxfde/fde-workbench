@@ -153,6 +153,7 @@ describe("project detail workspace", () => {
       "方案设计",
       "工作流",
       "术语表",
+      "执行事实",
       "文件库",
       "项目管理",
     ])

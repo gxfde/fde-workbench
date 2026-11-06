@@ -29,7 +29,16 @@
 - 新增 `docs/architecture/到期语义与主动超时治理-v1.md`：登记原生到期权威、状态转换、并发幂等、副作用与可观测合同；裁决「统一目录+各域原生转换器+条件触发只读投影」，不建复制 `expires_at` 的通用到期表。
 - 审批主动超时标记为既有基线（T-P1-5：`_expire_approval` + scheduler sweep）；UploadSession multipart abort、API confirmation append-only 超时列为独立候选阶段；跨域查询须有明确需求才排期。
 - 明确排除 worker lease/retry/outbox due、JWT/签名/Redis TTL、模型/进程 timeout 等异质时钟。本轮仅立项，零运行时代码、零迁移、零路由、零数据操作；B/C/D 仍 PROPOSED，不构成实施授权。
+=======
+## [未发布] — V3 只读执行事实链面板（B#9，2026-11-06）
 
+### 只读聚合面（+1 路由；server + desktop；零迁移零依赖）
+
+- **服务端**：NEW `GET /api/v1/projects/{id}/execution-facts`（can_view，`fact_chain_blueprint`，**不进 api_catalog**——AI 不经此面读审计原始流，与证据登记同纪律）。三源时间线归并：`project_evidence` ＋ `operation_events`（**项目维度**，过滤下推 SQL）＋ `ai_call_audits`（**账号维度**——该表无项目外键，按 actor 过滤且响应明示 `ai_call_audit_scope="actor"`，不作项目切分假装）。时间倒序、`limit` 1–200 有界＋`truncated`、非法参数 400。
+- **「外部完成无真实回执=未知」纪律的落法**：`operation_events.changes` 大载荷不外泄；AI 审计只投影调用事实元数据（模型/耗时/token/状态三值，无明文上下文）；**无回执即无行**，由前端呈现「无记录」，不由模型自述或时间线推断拼装任何「已完成」语义。
+- **桌面**：NEW `evidence/ExecutionFactChain.tsx` 只读面板，项目 tab +1「执行事实」（11 tab）：三源筛选、类型徽标、AI 调用「账号维度」明示、空态不编造、CR-035 同型序列守卫（筛选切换只认最新响应）。纯只读——无任何写操作按钮。
+- **测试**：NEW `server/tests/test_execution_fact_chain.py` 4 例（三源归并排序＋changes 不泄漏＋AI 字段白名单＋未知不编造／actor 隔离跨账号泄漏钉／过滤与 limit 有界＋非法 400／权限 viewer 200·外人 403·404·不进 api_catalog）＋**变异三连**（actor 过滤失效／changes 泄漏／scope 谎称 project）逐一转红；桌面改 1 处 tab 断言数组（vitest 用例数不变）。
+- **口径**：pytest **1985 收集 = 1979 passed + 6 skipped**（+4）／vitest **825**（本条自身不变；含并入的 UI-UX 黑金轮增量 791→825）／mypy **279**（不变）／蓝图路由 **301**（+1）／业务表 **105**（不变）／api_catalog ENTRIES **94**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。**server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`**（零迁移，幂等）；桌面便携版重打包挂账（随下次桌面交付轮）。
 ## [未发布] — V3 技能结构化契约 + 自洽校验（B#36+B#37，2026-11-06）
 
 ### 契约与测试（零迁移零路由零桌面；零 src 改动——无需重建镜像）

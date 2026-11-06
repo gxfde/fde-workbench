@@ -8,6 +8,34 @@ evidence_blueprint = Blueprint(
     "project_evidence", __name__, url_prefix="/api/v1/projects/<project_id>/evidence"
 )
 
+# 只读执行事实链（借鉴登记 #9）：独立全路径 blueprint——路径语义是「项目事实
+# 流」而非「证据簿」，与 T-W6 workflow-runs 只读挂件同范式（can_view、有界、
+# 只读、有意不进 api_catalog——AI 不经此面读审计原始流）。
+fact_chain_blueprint = Blueprint("execution_fact_chain", __name__)
+
+
+@fact_chain_blueprint.errorhandler(service.EvidenceServiceError)
+def fact_chain_service_error(error):
+    return error_response(error.code, error.message, error.status)
+
+
+@fact_chain_blueprint.get("/api/v1/projects/<project_id>/execution-facts")
+@require_auth
+def list_execution_facts(project_id):
+    """三源只读时间线（can_view）：?fact_type=evidence|operation_event|ai_call_audit；?limit=1–200。"""
+    raw_limit = request.args.get("limit")
+    try:
+        limit = int(raw_limit) if raw_limit is not None else None
+    except ValueError:
+        raise service.EvidenceServiceError("invalid_request", "limit 必须是整数。", 400)
+    data = service.execution_facts(
+        actor=g.current_user,
+        project_id=project_id,
+        fact_type=request.args.get("fact_type"),
+        limit=limit,
+    )
+    return jsonify({"data": data, "error": None})
+
 
 @evidence_blueprint.errorhandler(service.EvidenceServiceError)
 def service_error(error):

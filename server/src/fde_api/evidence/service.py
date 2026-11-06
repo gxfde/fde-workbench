@@ -6,6 +6,10 @@
 - ``register_evidence`` / ``list_evidence``：HTTP 面。写路径 can_manage（真人会
   话），读路径 can_view；登记路径有意不进 api_catalog（AI 不可写证据，与 signoff
   同纪律）。``referenced_by=gate:G5`` 反查门禁清单项挂接的证据（T-E2 唯一引用方）。
+- ``execution_facts``（借鉴登记 #9，只读执行事实链）：三源时间线归并——
+  project_evidence（项目维度）＋ operation_events（项目维度）＋ ai_call_audits
+  （**账号维度**：该表无项目外键，只能按 actor 归并，响应明示 scope=actor，
+  不得假装项目维度）。外部完成无真实回执＝未知，模型自述不作完成证据。
 """
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ from fde_api.evidence.models import CAPTURED_FROM_PREFIXES, EVIDENCE_KINDS, Proj
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
-from fde_api.workbench.models import Gate, Project
+from fde_api.workbench.models import AICallAudit, Gate, OperationEvent, Project
 
 _HEX64_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 _GATE_REF_PATTERN = re.compile(r"gate:(G[1-9])")
@@ -254,3 +258,116 @@ def list_evidence(
             query.order_by(ProjectEvidence.created_at.asc(), ProjectEvidence.id.asc())
         ).all()
         return {"items": [serialize_evidence(row) for row in rows]}
+
+
+# ---------------------------------------------------------------------------
+# 只读执行事实链（借鉴登记 #9；AGH「外部完成无真实回执=未知」纪律的我方落法）
+# ---------------------------------------------------------------------------
+
+_FACT_LIMIT_DEFAULT = 50
+_FACT_LIMIT_MAX = 200
+_FACT_TYPES = ("evidence", "operation_event", "ai_call_audit")
+
+
+def serialize_fact_event(row: OperationEvent) -> dict[str, Any]:
+    """operation_events 时间线条目——只投影元数据，不回传 changes 大载荷。"""
+    return {
+        "fact_type": "operation_event",
+        "id": row.id,
+        "actor_user_id": row.actor_user_id,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "event_type": row.event_type,
+        "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
+    }
+
+
+def serialize_fact_ai_audit(row: AICallAudit) -> dict[str, Any]:
+    """ai_call_audits 时间线条目——**账号维度**（无项目外键，scope 明示 actor）。"""
+    return {
+        "fact_type": "ai_call_audit",
+        "id": row.id,
+        "request_id": row.request_id,
+        "actor_user_id": row.actor_user_id,
+        "purpose": row.purpose,
+        "model": row.model,
+        "used_fallback": row.used_fallback,
+        "status": row.status,
+        "error_code": row.error_code,
+        "duration_ms": row.duration_ms,
+        "input_tokens": row.input_tokens,
+        "output_tokens": row.output_tokens,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def execution_facts(
+    *,
+    actor: User,
+    project_id: str,
+    fact_type: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """三源只读时间线（can_view）。
+
+    - project_evidence / operation_events：项目维度，过滤下推 SQL。
+    - ai_call_audits：无项目外键，按当前 actor 过滤（scope="actor"，响应明示；
+      跨项目共用一条 AI 审计流——这是账本真实形态，不作项目切分）。
+    - 归并后按时间倒序取前 N 条（有界 + truncated）；「外部完成无真实回执=
+      未知」在本视图的落法：ai_call_audit 只投影调用事实（status 三值 CHECK），
+      evidence 只存 sha256 指纹指针——无回执即无行，面板呈现为「无记录」，
+      不由模型自述或时间线推断拼装任何「已完成」语义。
+    """
+    effective_limit = _FACT_LIMIT_DEFAULT if limit is None else limit
+    if not isinstance(effective_limit, int) or not 0 < effective_limit <= _FACT_LIMIT_MAX:
+        raise EvidenceServiceError(
+            "invalid_request", f"limit 须为 1–{_FACT_LIMIT_MAX} 的整数。", 400
+        )
+    if fact_type is not None and fact_type not in _FACT_TYPES:
+        raise EvidenceServiceError(
+            "invalid_request",
+            "fact_type 仅可为 evidence/operation_event/ai_call_audit。",
+            400,
+        )
+    with db.session() as session:
+        project = _load_project(session, actor, project_id, manage=False)
+        items: list[dict[str, Any]] = []
+        counts = {"evidence": 0, "operation_event": 0, "ai_call_audit": 0}
+        if fact_type in (None, "evidence"):
+            evidence_rows = session.scalars(
+                select(ProjectEvidence)
+                .where(ProjectEvidence.project_id == project.id)
+                .order_by(ProjectEvidence.created_at.desc(), ProjectEvidence.id.desc())
+            ).all()
+            counts["evidence"] = len(evidence_rows)
+            items.extend({"fact_type": "evidence", **serialize_evidence(row)} for row in evidence_rows)
+        if fact_type in (None, "operation_event"):
+            event_rows = session.scalars(
+                select(OperationEvent)
+                .where(OperationEvent.project_id == project.id)
+                .order_by(OperationEvent.occurred_at.desc(), OperationEvent.id.desc())
+            ).all()
+            counts["operation_event"] = len(event_rows)
+            items.extend(serialize_fact_event(row) for row in event_rows)
+        if fact_type in (None, "ai_call_audit"):
+            # 账号维度：actor_user_id 有索引（ix_ai_call_audits_actor_created），过滤下推 SQL。
+            audit_rows = session.scalars(
+                select(AICallAudit)
+                .where(AICallAudit.actor_user_id == actor.id)
+                .order_by(AICallAudit.created_at.desc(), AICallAudit.id.desc())
+            ).all()
+            counts["ai_call_audit"] = len(audit_rows)
+            items.extend(serialize_fact_ai_audit(row) for row in audit_rows)
+        items.sort(
+            key=lambda item: item.get("occurred_at") or item.get("created_at") or "",
+            reverse=True,
+        )
+        truncated = len(items) > effective_limit
+        return {
+            "project_id": project.id,
+            "ai_call_audit_scope": "actor",
+            "counts": counts,
+            "items": items[:effective_limit],
+            "truncated": truncated,
+            "limit": effective_limit,
+        }

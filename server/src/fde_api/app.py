@@ -9,7 +9,7 @@ from fde_api.control.dsh_runtime import dsh_runtime
 from fde_api.documents.template_routes import document_templates_blueprint
 from fde_api.documents.project_routes import project_documents_blueprint
 from fde_api.dispatch.routes import blueprint as dispatch_blueprint
-from fde_api.evidence.routes import evidence_blueprint
+from fde_api.evidence.routes import evidence_blueprint, fact_chain_blueprint  # noqa: F401 借鉴#9
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
 from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
 from fde_api.solutions.routes import solutions_blueprint
@@ -63,6 +63,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(solutions_blueprint)
     # V3 T-E1：一等证据登记簿（只存指针+指纹；人工写路径有意不进 api_catalog）
     app.register_blueprint(evidence_blueprint)
+    app.register_blueprint(fact_chain_blueprint)
     # V3 T-O2：本体注册表路由（关系类型登记；术语面随 T-O3 开；人工路径不进 api_catalog）
     app.register_blueprint(ontology_blueprint)
     # V3 T-W3：Workflow 定义/运行路由（§5 五条；cancel/resume 随 T-W5 开）

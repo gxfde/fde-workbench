@@ -15,6 +15,7 @@ import { TaskTable } from "./TaskTable"
 import { ProjectLibrary } from "../library/ProjectLibrary"
 import { WorkflowConsole } from "../workflows/WorkflowConsole"
 import { GlossaryPage } from "../ontology/GlossaryPage"
+import { ExecutionFactChain } from "../evidence/ExecutionFactChain"
 import { ResearchWorkspace } from "../research/ResearchWorkspace"
 import { SolutionDesign } from "../solutions/SolutionDesign"
 import { allowNextHashNavigation, registerHashNavigationGuard } from "../routing/navigationGuard"
@@ -32,6 +33,7 @@ const tabs: Array<{ id: ProjectDetailTab; label: string }> = [
   { id: "delivery", label: "方案设计" },
   { id: "workflow", label: "工作流" },
   { id: "ontology", label: "术语表" },
+  { id: "facts", label: "执行事实" },
   { id: "library", label: "文件库" },
   { id: "management", label: "项目管理" },
 ]
@@ -187,6 +189,7 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
           {tab === "management" ? <ProjectManagement project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} /> : null}
           {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} /> : null}
           {tab === "ontology" ? <GlossaryPage projectId={project.id} canManage={canManage} /> : null}
+          {tab === "facts" ? <ExecutionFactChain projectId={project.id} /> : null}
           {tab === "library" ? <ProjectLibrary projectId={project.id} canManage={canManage} /> : null}
           {tab === "research" ? <ResearchWorkspace project={project} canFill={canFillResearch} canManage={canManage} onDirtyChange={setResearchDirty} initialOpportunityId={opportunityId} /> : null}
           {tab === "delivery" ? <SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} /> : null}

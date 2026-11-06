@@ -36,7 +36,7 @@ export type AppRoute =
 
 const projectsRoute: AppRoute = { kind: "projects" }
 const bridgeRoute: AppRoute = { kind: "bridge" }
-export const PROJECT_DETAIL_TABS = ["overview", "tasks", "gates", "commercial", "research", "delivery", "workflow", "ontology", "library", "management"] as const
+export const PROJECT_DETAIL_TABS = ["overview", "tasks", "gates", "commercial", "research", "delivery", "workflow", "ontology", "facts", "library", "management"] as const
 export type ProjectDetailTab = (typeof PROJECT_DETAIL_TABS)[number]
 
 const LEGACY_PROJECT_TABS: Record<string, ProjectDetailTab> = {
