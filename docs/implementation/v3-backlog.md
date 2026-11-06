@@ -526,7 +526,9 @@
   - **只追加、不改既有段标题**：`## 方案设想（待人工修订）` / `## 实施路径（待人工修订）` 标题与 risks 段三类前缀全部原样保留（既有 delivery compiler 与 goal-d2 用例钉住）。
   - **段序固定**：方案设想 → 方案选项与取舍 → 实施路径 → 明确不做。
 
-#### ✅ T-A5 实施轮（2026-11-06，状态：**已实施，待合并**——PR #172，sha `8d44b68`（rebase 到 fork/main `f7ace0e` 后），CI 4 job 全绿，服务端零桌面改动）
+#### ✅ T-A5 实施轮（2026-11-06，状态：**已实施并合并**——PR #172 → `880997f`，CI 4 job 全绿，服务端零桌面改动；rebase 到 fork/main `f7ace0e` 后提交）
+
+**合并过程留痕**（供后续轮复用）：首版 sha `3941522` 推送后，fork/main 已前进 6 个 PR（#166/#167/#168/#169/#171）⇒ 首次合并返回 405 `Pull Request has merge conflicts`。处置：rebase 到 `f7ace0e`，**仅台账一处冲突**（#169 洁癖收尾轮同时改写了 T-A4 状态行）——裁决取 HEAD 侧（#169 的版本更新更准，含 CI run id 与 vitest 858）；`solutions/service.py` 在 fork/main **未被改动，无代码冲突**。rebase 后定向回归 **42 passed**（含 fork/main 新增的 `test_guidance_confirm_review_gate` 6 例）。
 
 **四段验收逐条落位**（台账验收口径）：
 | 验收项 | 落位 | 形态 |
@@ -537,6 +539,8 @@
 | 可导出 | `export_sow` 冻结快照 | `content_snapshot_json["solution"]["design_markdown"]` 含上述两段 |
 
 **测试**：新增 `server/tests/test_solution_skeleton_options.py` **6 例**——三选项与取舍占位齐备（含「待补」提示）、「明确不做」独立成段且 risks 段既有「本阶段不包含」前缀不回归、段序固定、无 out_of_scope 时段落不消失（落占位行）、验收标准段搬运成功标准条目、新段进得去冻结的 SOW 快照（可导出）。既有 `test_goal_d2_s0_closeout.py` 追加 T-A5 断言（行业模板路径同样受益）；`test_delivery_compiler.py` / `test_project_solutions.py` / `test_solution_validation.py` 零回归（**36 passed**）。
+
+**CI 实测口径**（#172 PR-head CI run 42277662998）：pytest **2062 passed + 6 skipped**（2068 收集）／vitest **862**（70 文件，桌面零改动不变）／mypy 279／路由 **304**（零新增路由）／零迁移零新表零新字段。
 
 
 ### T-A6 报价 claims 核验 → 冻结 SOW 的桌面闭环 — **PROPOSED（登记轮，零代码）**

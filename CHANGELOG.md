@@ -32,6 +32,22 @@
 - **数据源与降级**：选项来自既有只读路由 `GET /api/v1/projects/{id}/ontology/relation-types`（客户端过滤 active 行，draft/retired 不出现）；注册面拉取失败静默降级为仅内置五类——值域权威始终在服务端创建闸门。
 - **边界（偏差注记）**：调研定义编辑器与行业模板编辑器本轮未接——全局注册类型没有项目内只读路由可消费，随服务端路由补口后再接。
 - 测试：vitest +4（根级创建流不带上级／非 active 行过滤／导入与构建器选项／树按钮两态）。
+## [未发布] — T-A5 方案骨架模板：三选项 + 取舍 + 明确不做 + 验收标准（2026-11-06）
+
+### 服务端（纯服务端模板文案，零迁移零路由零新字段；详见 backlog T-A5 实施轮节）
+
+- `solutions/service.py::_skeleton_text_fields` 的 `design_markdown` **追加两段**：「## 方案选项与取舍」（选项 A/B/C + 取舍，四个占位行均带「待补」提示）与「## 明确不做（本阶段不包含）」（搬运 `out_of_scope_json`，无条目时落占位行）。**只追加、不改既有段标题**——`## 方案设想（待人工修订）`/`## 实施路径（待人工修订）` 与 risks 段三类前缀原样保留（既有 goal-d2 / delivery compiler 用例钉住）。
+- 桌面**零改动**：桌面用通用 Markdown 渲染器消费 `design_markdown`（`MemoMarkdown`），无硬编码段落清单 ⇒ 新增 `##` 段自动渲染。
+- 测试：NEW `server/tests/test_solution_skeleton_options.py` 6 例（三选项与取舍占位齐备/「明确不做」独立成段且 risks 前缀不回归/段序固定/无 out_of_scope 时段落不消失/验收标准段搬运/新段进得去冻结的 SOW 快照）；既有 `test_goal_d2_s0_closeout.py` 追加 T-A5 断言。
+
+### 口径勘误（与登记原文三处出入，已回写 backlog）
+
+登记原文「`out_of_scope` 段即『明确不做』」不成立——既有六段里 `out_of_scope` 只混排在 `risks_dependencies` 段（与「假设」「待确认问题」三类前缀同段）⇒ 「单独可见」必须**新增独立段**；登记原文「桌面模板渲染用例」不成立——桌面零改动；另 `workflows/compiler.py::compile_delivery_preview`（本体编译路径）全仓无生产调用方 ⇒ 本条不覆盖该路径。
+
+### 口径
+
+#172 PR-head CI run 42277662998 实测 pytest **2062 passed＋6 skipped**（2068 收集）＋vitest **862**（70 文件，桌面零改动不变）／mypy 279 不变／路由 **304**（零新增路由，脚本现测）／蓝图 40／业务表 105／迁移头 `b2e8f4a6c9d3`（36 rev）／零迁移零新表零新字段。
+
 ## [未发布] — T-A4 事实/假设/待确认三层桌面可视化：条目粒度编辑（2026-11-06）
 
 ### 桌面（纯桌面零服务端改动零迁移零路由；详见 backlog T-A4 实施轮节）
