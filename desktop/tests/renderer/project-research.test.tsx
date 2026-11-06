@@ -305,6 +305,7 @@ interface RenderResearchOptions {
   initialSubjects?: ResearchSubjectDto[]
   initialForms?: ProjectResearchFormDto[]
   patchError?: { code: string; status?: number }
+  triStateError?: { code: string; status?: number }
   opportunityPatchError?: { code: string; status?: number }
   documentCreateError?: { code: string; status?: number }
   mergeError?: { code: string; status?: number }
@@ -528,6 +529,7 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
       const formId = formIdIn("/confirm")!
       const current = forms.find((item) => item.id === formId)
       if (!current) throw new Error(`no form ${formId}`)
+      if (options.triStateError) return apiError(options.triStateError.code, options.triStateError.status ?? 409)
       const confirmed: ProjectResearchFormDto = {
         ...current,
         current_revision: { ...current.current_revision!, status: "confirmed", version: current.current_revision!.version + 1 },
@@ -538,6 +540,7 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
     if (formIdIn("/revise") && request.method === "POST") {
       const formId = formIdIn("/revise")!
       const current = forms.find((item) => item.id === formId)!
+      if (options.triStateError) return apiError(options.triStateError.code, options.triStateError.status ?? 409)
       const revised: ProjectResearchFormDto = {
         ...current,
         version: current.version + 1,
@@ -556,6 +559,7 @@ function renderProjectResearch(options: RenderResearchOptions = {}) {
     if (formIdIn("/reject") && request.method === "POST") {
       const formId = formIdIn("/reject")!
       const current = forms.find((item) => item.id === formId)!
+      if (options.triStateError) return apiError(options.triStateError.code, options.triStateError.status ?? 409)
       const returned: ProjectResearchFormDto = {
         ...current,
         current_revision: {
@@ -2196,5 +2200,157 @@ describe("typed research fields", () => {
     expect(changes.files).toEqual(["file-123"])
     expect(screen.getByLabelText("文件引用（可关联文件库文件）")).toHaveValue("已关联 1 个文件")
     expect(screen.queryByRole("textbox", { name: /HTML/ })).not.toBeInTheDocument()
+  })
+})
+
+
+describe("research form tri-state (T-A3)", () => {
+  const salesForm = () => formFor(departmentSubject.id)
+  const confirmedSalesForm = () => {
+    const base = salesForm()
+    return formFor(departmentSubject.id, {
+      current_revision: {
+        ...base.current_revision!,
+        status: "confirmed",
+        version: 3,
+        answers: [{ field_key: "goal", value: "已确认目标" }],
+      },
+    })
+  }
+  const confirmPath = "/research/forms/form-subject-sales/confirm"
+  const rejectPath = "/research/forms/form-subject-sales/reject"
+  const revisePath = "/research/forms/form-subject-sales/revise"
+
+  async function openSalesForm(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
+    await openResearchForm(user)
+  }
+
+  it("草稿表：管理员可见确认与驳回，不可见创建修订版", async () => {
+    renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    expect(await screen.findByRole("button", { name: "确认事实" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "驳回并留意见" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "创建修订版" })).not.toBeInTheDocument()
+  })
+
+  it("草稿表：独立售前（member+fde_engineer）看不到确认与驳回", async () => {
+    renderProjectResearch({ user: engineerUser, initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await screen.findByRole("button", { name: "保存调研内容" })
+    expect(screen.queryByRole("button", { name: "确认事实" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "驳回并留意见" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "创建修订版" })).not.toBeInTheDocument()
+  })
+
+  it("已确认表：独立售前可见创建修订版，看不到确认与驳回", async () => {
+    renderProjectResearch({ user: engineerUser, initialSubjects: [rootSubject, departmentSubject], initialForms: [confirmedSalesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    expect(await screen.findByRole("button", { name: "创建修订版" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "确认事实" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "驳回并留意见" })).not.toBeInTheDocument()
+  })
+
+  it("创建修订版：按乐观锁版本发 revise，服务端返回 201 后落到新 draft 修订", async () => {
+    const apiRequest = renderProjectResearch({ user: engineerUser, initialSubjects: [rootSubject, departmentSubject], initialForms: [confirmedSalesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "创建修订版" }))
+    await waitFor(() => expect(mutationBodies(apiRequest, revisePath, "POST")).toHaveLength(1))
+    expect(mutationBodies(apiRequest, revisePath, "POST")[0]).toEqual({ version: 3 })
+    expect(await screen.findByText("已基于已确认版本创建修订版，可继续编辑。")).toBeInTheDocument()
+  })
+
+  it("确认事实：必填项缺失时本地拦截，不发请求", async () => {
+    const apiRequest = renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "确认事实" }))
+    expect(await screen.findByText(/必填项尚未完成/)).toBeInTheDocument()
+    expect(mutationBodies(apiRequest, confirmPath, "POST")).toHaveLength(0)
+  })
+
+  it("确认事实：必填齐全后发出 confirm 并转入已确认态", async () => {
+    const apiRequest = renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.type(screen.getByLabelText("核心目标"), "提升产线节拍")
+    await user.click(screen.getByRole("button", { name: "保存调研内容" }))
+    await screen.findByText("调研内容已保存。")
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "确认事实" }))
+    await waitFor(() => expect(mutationBodies(apiRequest, confirmPath, "POST")).toHaveLength(1))
+    expect(mutationBodies(apiRequest, confirmPath, "POST")[0]).toEqual({ version: 2 })
+    expect(await screen.findByText(/调研事实已确认/)).toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "创建修订版" })).toBeInTheDocument()
+  })
+
+  it("驳回：理由必填，缺失时本地拦截不发请求", async () => {
+    const apiRequest = renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "驳回并留意见" }))
+    await user.click(screen.getByRole("button", { name: "提交驳回" }))
+    expect(await screen.findByText("驳回必须填写理由，供填写人对照修改。")).toBeInTheDocument()
+    expect(mutationBodies(apiRequest, rejectPath, "POST")).toHaveLength(0)
+  })
+
+  it("驳回：填理由后发出 reject，并在表单上回显驳回意见", async () => {
+    const apiRequest = renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [salesForm()] })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "驳回并留意见" }))
+    await user.type(screen.getByLabelText("驳回理由（必填）"), "缺少产线节拍数据")
+    await user.click(screen.getByRole("button", { name: "提交驳回" }))
+
+    await waitFor(() => expect(mutationBodies(apiRequest, rejectPath, "POST")).toHaveLength(1))
+    expect(mutationBodies(apiRequest, rejectPath, "POST")[0]).toEqual({ version: 1, review_comment: "缺少产线节拍数据" })
+    expect(await screen.findByText("驳回意见：缺少产线节拍数据")).toBeInTheDocument()
+  })
+
+  it("409 版本冲突：原样呈现并给出刷新远端入口，不吞", async () => {
+    const apiRequest = renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject],
+      initialForms: [salesForm()],
+      triStateError: { code: "stale_version", status: 409 },
+    })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "驳回并留意见" }))
+    await user.type(screen.getByLabelText("驳回理由（必填）"), "缺少数据")
+    await user.click(screen.getByRole("button", { name: "提交驳回" }))
+
+    expect(await screen.findByText(/其他同事已更新该表单/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "刷新远端版本" })).toBeInTheDocument()
+    expect(mutationBodies(apiRequest, rejectPath, "POST")).toHaveLength(1)
+  })
+
+  it("403：权限不足原样呈现为可读提示", async () => {
+    renderProjectResearch({
+      initialSubjects: [rootSubject, departmentSubject],
+      initialForms: [salesForm()],
+      triStateError: { code: "forbidden", status: 403 },
+    })
+    const user = userEvent.setup()
+    await openSalesForm(user)
+
+    await user.click(await screen.findByRole("button", { name: "驳回并留意见" }))
+    await user.type(screen.getByLabelText("驳回理由（必填）"), "缺少数据")
+    await user.click(screen.getByRole("button", { name: "提交驳回" }))
+
+    expect(await screen.findByText("你没有权限执行该操作。")).toBeInTheDocument()
   })
 })

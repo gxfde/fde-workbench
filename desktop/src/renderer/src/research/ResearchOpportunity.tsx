@@ -99,7 +99,7 @@ export function OpportunityDetail({ projectId, opportunity, forms, ownerOptions,
         <ProfileItem label="说明" value={description} wide /><ProfileItem label="目标使用对象" value={profile.target_audience} wide /><ProfileItem label="负责人" value={profile.owner_display_name ?? ""} /><ProfileItem label="状态" value={STATUS_LABELS[profile.opportunity_status]} /><ProfileItem label="优先级" value={profile.priority ? LEVEL_LABELS[profile.priority] : ""} /><ProfileItem label="业务价值" value={scoreLabel("业务价值", profile.business_value_score)} /><ProfileItem label="实施可行性" value={scoreLabel("实施可行性", profile.feasibility_score)} /><ProfileItem label="数据准备度" value={scoreLabel("数据准备度", profile.data_readiness_score)} /><ProfileItem label="风险等级" value={profile.risk_level ? LEVEL_LABELS[profile.risk_level] : ""} /><ProfileItem label="下一步行动" value={profile.next_action} wide />
       </div>}
     </section>
-    {forms.length ? forms.map((form) => <ResearchForm key={form.id} projectId={projectId} form={form} canFill={canFill && editing} apiRequest={apiRequest} onUpdate={onUpdate} onDirtyChange={(dirty) => onDirtyChange(form.id, dirty)} onCancel={onBack} />) : <p className="empty-state">该 AI 机会暂无调研表，请先补充调研表。</p>}
+    {forms.length ? forms.map((form) => <ResearchForm key={form.id} projectId={projectId} form={form} canFill={canFill && editing} canManage={canManage} apiRequest={apiRequest} onUpdate={onUpdate} onDirtyChange={(dirty) => onDirtyChange(form.id, dirty)} onCancel={onBack} />) : <p className="empty-state">该 AI 机会暂无调研表，请先补充调研表。</p>}
   </section>
 }
 

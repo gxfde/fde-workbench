@@ -990,6 +990,14 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .research-choice-list { display: flex; flex-wrap: wrap; gap: 9px 18px; }
 .research-choice-list label, .table-choice-cell label { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: var(--font-label); }
 .research-form-actions, .research-conflict-actions, .research-review-actions { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+/* 三态流转区（台账 T-A3）：与表单内容分隔的独立区块，避免与「保存」动作混淆。 */
+.research-form-tri-state { display: grid; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.research-form-tri-state-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.research-form-tri-state-heading h3 { margin: 0; font-size: var(--font-body); }
+.research-form-return-comment { margin: 0; padding: 12px 14px; border-left: 3px solid var(--warning-border); border-radius: var(--radius-sm); background: var(--warning-soft); color: var(--warning); font-size: var(--font-caption); white-space: pre-wrap; }
+.research-form-reject-panel { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-inset); }
+.research-form-reject-panel > label { color: var(--text); font-size: var(--font-label); }
+.research-form-reject-panel textarea { width: 100%; min-height: 72px; resize: vertical; }
 .research-review-actions .field { min-width: min(100%, 420px); margin: 0; }
 .research-return-note { padding: 12px 14px; border-left: 3px solid var(--warning-border); background: var(--warning-soft); color: var(--warning); }
 .research-return-note p { margin: 6px 0 0; white-space: pre-wrap; }

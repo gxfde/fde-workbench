@@ -420,7 +420,7 @@
 - 回滚：开关关闭即回退（原文不落库，回滚无数据面残留）。风险：中（正则误替换，靠②钉死）。依赖：无。复杂度：**M**。
 - 闸：✅ **已拍板（2026-11-06，§拍板闸 6①）：分层失败语义**——替换器**异常**（词典加载失败/正则编译失败等机制性故障）→ **fail-closed 硬阻断入库**；**疑似企业名但词典未收录**（正则命中「技术公司」类通用词）→ **放行但记入待复核清单**，方案审核人 confirm 前必须复核。
 
-#### ✅ T-A2 实施轮（2026-11-06，状态：已实施，待 CI 与 PR 收尾）
+#### ✅ T-A2 实施轮（2026-11-06，状态：**已实施并合并**——PR #160 → `d467fac`，CI 4 job 全绿，服务端 2016 passed / 6 skipped）
 
 **实施澄清（与拍板原文的口径差异，须记入台账）**：闸①原文「疑似名**放行**但记入待复核清单」——若「放行」= 原文不改直接入库，则真实名仍进库，「客户真实资料永不进 git 与远端」红线在文件正文面失守。**实施口径取「放行 = 不阻断入库流程，原文不留库」**：疑似名**同样被替换为代号**（替换目标 = `projects.enterprise_code` 首段，如「客户A」），替换后记入复核清单交方案审核人 confirm 前复核。**通用词例外**（「技术公司」「制造公司」等无辨识度表述）→ 零改动、不进清单（哨兵②）。
 
@@ -437,13 +437,34 @@
 ### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **PROPOSED（登记轮，零代码）**
 - 目标：补齐「调研 → 方案」链路的桌面断点——三态流转目前**桌面零引用**（服务端状态机与端点已完整）。
 - 现状实测：`server/src/fde_api/research/project_routes.py` 三条端点（confirm/reject/revise）齐备；桌面端 `desktop/src/renderer/src/research/` 对其**零引用**（台账 `docs/后续需求台账-F5与D11.md:29` 已记同一缺口）。
-- **权限口径（2026-11-06 复审校准，方案 v1.2 §10 Q3）**：实测 `research/form_service.py`——`_require_fill`（`:966`）允许 `can_manage` **或** `can_update_assigned_tasks`（role≥fde_engineer），**revise 走 `_require_fill`（`:568`）⇒ member 可用**；`_require_confirm`（`:972`）强制 `can_manage`，**confirm/reject 调用点 `:347`/`:532` ⇒ member 恒 403**；`projects/permissions.py:35` member 角色 `can_manage=False`。⇒ **四闸校准后**：访谈助理=viewer（填表/提资料）；独立售前=fde_engineer+member（填表/**revise 打回重填**/录 presurvey 资料/生成方案草稿，**不可 confirm/reject 事实**）；方案审核=project_lead 或项目负责人（**confirm/reject 事实**、终审、导出 SOW）；交付专家=可声明 `agent_assisted`。**服务端权限模型零改动。**
-- 修改文件：`desktop/src/renderer/src/research/`（调研表详情页三按钮 + 权限显隐 + 必填理由校验 + 乐观锁 version 传递）。
+- **权限口径（2026-11-06 复审校准，方案 v1.2 §10 Q3；2026-11-06 实施轮再校准，见下）**：实测 `research/form_service.py`——`_require_fill`（`:966`）允许 `can_manage` **或** `can_update_assigned_tasks`（role≥fde_engineer），**revise 走 `_require_fill`（`:568`）⇒ member 可用**；`_require_confirm`（`:972`）强制 `can_manage`，**confirm/reject 调用点 `:347`/`:532` ⇒ member 恒 403**；`projects/permissions.py:35` member 角色 `can_manage=False`。⇒ **四闸校准后**：访谈助理=viewer（填表/提资料）；独立售前=fde_engineer+member（填表/**revise 打回重填**/录 presurvey 资料/生成方案草稿，**不可 confirm/reject 事实**）；方案审核=project_lead 或项目负责人（**confirm/reject 事实**、终审、导出 SOW）；交付专家=可声明 `agent_assisted`。**服务端权限模型零改动。**
+- ⚠️ **实施轮再校准（2026-11-06，T-A3 实施实测，登记原文两处与服务端契约不符）**：
+  1. **「revise 打回重填」口径错**——实测 `revise_form`（`form_service.py:561`）要求 `parent.status == "confirmed"`，否则 409 `research_form_not_confirmed`；它做的是「**基于已确认版本显式开新 draft 修订**」（记事件 `project_research_form_revised`），**不是打回重填**。真正的打回是 **reject**（`review_comment` 必填、**草稿保持可编辑**、记 `returned_by_user_id`/`return_comment`），但 reject 走 `_require_confirm` ⇒ **member 恒 403**。⇒ 校准后：**member 对已确认表可 revise（开新修订），对草稿表无任何三态动作**（打回只能由方案审核人做）。
+  2. **验收标准两处错**——「confirm 要求必答字段全 **accepted**」→ 实测是「**visible 必填 answers 非空**」，缺失返 422 `research_required_fields_missing`（`form_service.py:356`）；「**reject/revise** 必填理由」→ 实测**仅 reject** 必填 `review_comment`（路由层 `set(payload) == {"version", "review_comment"}`），**revise 只收 `{version}`**。
+- 修改文件：`desktop/src/renderer/src/research/ResearchForm.tsx`（三态操作区 + 权限显隐 + 必填校验 + 乐观锁 version 传递）、`ResearchWorkspace.tsx` / `ResearchOpportunity.tsx`（透传 `canManage`）、`styles.css`（三态区样式）；`desktop/tests/renderer/project-research.test.tsx`（用例）。
 - DB：无。API：无新增（消费既有三端点）。
-- 测试：桌面 vitest（三态按钮按权限显隐；confirm 要求必答字段全 accepted；reject/revise 必填理由；409 版本冲突原样呈现不吞）；服务端零改动。
+- 测试：桌面 vitest（三态按钮按权限显隐；confirm 必答字段缺失本地拦；reject 理由必填；409 版本冲突原样呈现不吞 + 403 可读提示）；服务端零改动。
 - **回归风险（实测登记）**：research 域现有 **222 例**压在同一条链上（服务端 99 + 桌面 123）⇒ 若动前端数据契约（状态映射、乐观锁 version 传递）回归面大，**必须先跑全量再合**。
-- 验收：三态可从桌面完成；member 可见 revise 不可见 confirm；服务端 403/409 原样呈现。
+- 验收：三态可从桌面完成；member 可见 revise 不可见 confirm/reject；服务端 403/409 原样呈现。
 - 回滚：revert 单 commit。风险：中（回归面大）。依赖：T-A2（代号化后入库）。复杂度：**M**。
+
+#### ✅ T-A3 实施轮（2026-11-06，状态：实施中——桌面三态入口已落地，待 CI 与 PR 收尾）
+
+**实施要点**：
+- **三态入口落在 `ResearchForm.tsx`**（调研表详情页底部独立区块，与「保存调研内容」动作分离——避免把「确认事实」误读成「保存」）：
+  - **确认事实**（`can_manage` 可见，仅 draft 态）：本地先按服务端同源口径校验 `completion.missing_required_field_keys`——缺失则本地拦下并点名字段，**不发请求**（服务端另有 422 `research_required_fields_missing` 兜底，两层同源不冲突）；
+  - **驳回并留意见**（`can_manage` 可见，仅 draft 态）：展开理由输入框，**理由必填**（空则本地拦），提交后调 `reject` 带 `{version, review_comment}`；驳回意见回显在表单上（`returned_by_user_id`/`return_comment`）；
+  - **创建修订版**（`can_update_assigned_tasks` 可见，仅 confirmed 态）：调 `revise` 带 `{version}`，服务端 201 返回新 draft 修订。
+- **乐观锁**：`revision.version` 随请求下发；409 `stale_version` / `research_form_conflict` 走既有「刷新远端版本 / 比较差异 / 放弃本地修改」冲突面板，**不吞**。
+- **错误呈现**：已知错误码给中文可执行提示（403 `forbidden`、422 `research_required_fields_missing`、409 `research_form_not_draft` / `research_form_not_confirmed`、400 `invalid_request`）；**未知错误码回落到服务端原文 `error.message`**，不吞不静默重试。
+- **权限显隐口径与服务端同构**：桌面 `canManage`（admin 或项目负责人且 project_lead）↔ 服务端 `can_manage`；桌面 `canFill` ↔ `_require_fill`（`can_manage` 或 `can_update_assigned_tasks`）。`canManage` 设为**可选 prop 且默认「无权」**——安全默认：漏传时三态按钮不出现，而非误开放。
+
+**与既有产品决策的冲突及裁决（重要）**：
+- 既有用例 `edits a legacy confirmed form through the canonical save route while preserving its original revision` 钉住了「**桌面刻意不暴露 revise**；已确认表直接走标准 PATCH 保存，服务端 `_ensure_working_revision` 自动 fork 出新 draft，原修订不变」——这是 legacy confirmed 表的迁移兼容路径。**本轮保留该行为**：保存仍走 PATCH、不触发 `/revise`；`revise` 是**并行的显式留痕通道**，不是保存的替代路径。
+- **revise 的增量价值**：PATCH 的隐式 fork（`_fork_working_revision`）**不记事件**，而 `revise_form` 记 `project_research_form_revised`（携 `parent_revision_number`/`revision_number`）⇒ 显式 revise 让「谁在何时基于已确认版本发起了修订」进 `operation_events` 事实链（B#9 可查）。台账登记时未识别这一增量价值，本轮明确其定位为**留痕通道**而非**唯一改稿路径**。
+- **未收紧「已确认表只读」**：实施中曾试把 confirmed 表改为只读（改稿只能走 revise），**被既有用例判红后撤回**——已确认表可编辑是既有契约，服务端 PATCH 允许，桌面单方面收紧会造成「服务端允许、桌面拒绝」的行为分叉。
+
+**测试**：`desktop/tests/renderer/project-research.test.tsx` 新增 describe「research form tri-state (T-A3)」**10 例**：权限显隐三态（管理员草稿 / 独立售前草稿 / 独立售前已确认）、创建修订版带版本、confirm 必答缺失本地拦、confirm 必答齐全后发出并转已确认态、reject 理由必填本地拦、reject 填理由后发出并回显意见、409 冲突原样呈现 + 刷新入口、403 可读提示。既有 63 例**零回归**（含被撤回的只读收紧那一条）。
 
 ### T-A4 事实/假设/待确认三层桌面可视化 — **PROPOSED（登记轮，零代码）**
 - 目标：客户原话 vs AI 推断 vs 待确认项**在桌面端视觉可分且可编辑**——支撑「售前录入的事实需客户确认」红线与 Q3 四闸的语义基础。
@@ -639,7 +660,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
