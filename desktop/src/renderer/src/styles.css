@@ -2113,3 +2113,26 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
     scroll-behavior: auto !important;
   }
 }
+
+/* T-A1：presurvey S3 前置闸拦截态（PresurveyGateHint）——复用 badge/claim 语义 */
+.presurvey-gate-hint {
+  display: grid;
+  gap: 8px;
+  max-width: 640px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+}
+
+.presurvey-gate-hint-title { margin: 0; color: var(--warning-ink); font-size: var(--font-label); font-weight: 600; }
+
+.presurvey-gate-hint-message { margin: 0; color: var(--text); font-size: var(--font-label); line-height: var(--lh-body); }
+
+.presurvey-gate-hint-checklist ul { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+
+.presurvey-gate-hint-checklist li { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: var(--font-label); }
+
+.presurvey-gate-hint-caption { margin: 8px 0 0; color: var(--muted); font-size: var(--font-caption); }
+
+.presurvey-gate-hint-link { color: var(--brand-blue); font-size: var(--font-label); }
