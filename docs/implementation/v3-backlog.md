@@ -2,6 +2,7 @@
 
 > 状态：**T-\* 任务 33 节全部 DONE**（P0–P2 全部 DONE 或核销；P3 四项已定案收口，见 §P3 与 v3-p3 三报告）；「开源借鉴清单登记」段 B#1–B#40（#127 登记 34 项＋#133 评审补登记 6 项）：**P0 先行批表 10 项 ✅ 已实施**（#128~#131），其余按逐条状态标注——PROPOSED/冻结/封存/修复项（登记≠排期≠默认实施）。任务 ID 与差距矩阵/风险登记册互引。
 > 复杂度：S（≤1 天）/ M（数天）/ L（≥1 周）。均按既有 goal-d 循环节奏逐个交付，不并行开双实施线。
+> **2026-11-06 新增节「售前主线登记（T-A 系列）」**：11 条（**T-A1..T-A9 / T-B1 / T-Z1**）**全部 PROPOSED（登记轮，零代码零迁移零路由）**——上位文档=`docs/architecture/售前驱动交付模式改造方案.md` v1.2，评审依据=`docs/audit/售前驱动交付模式改造方案-多专家评审-2026-11-06.md`（五专家 party mode）；**登记≠排期≠实施授权**，逐条闸见该节与 §拍板闸第 6 条。
 > 通用约定：所有服务端改动 → `docker compose build && up -d` → `alembic upgrade head`（README 纪律）；桌面改动 → 重打包 + asar 字节验证；CI 4 job 全绿才合并。
 
 ## P0（基线与数据治理）
@@ -388,6 +389,146 @@
 - 业务规则推理（ontology_rules 立项评估）——立项 §3；「无消费方不建空壳」维持；**状态轮裁决：ontology_rules 维持不建 PARK**（两候选消费方均「可做非被需要」——risk≥3 规则已内嵌且被 `test_catalog_effect_risk_invariants` 钉住、T-C1 编译校验无规则输入需求；重开触发器=第二条 risk≥3 规则需配置化 / T-C1 规则输入需求 / 业务点名规则）；**规则 9 强制化悬置线销号：维持告警**（执行层已硬闸——workflow call external 必 awaiting_confirmation 诚实失败 + DSH agent 节点走审批回调，定义期强制只省一次诚实失败的提前量，「P2 enforcement wave」不做）。
 - 有限自动执行开放评估（依赖 P0-P2 验收全绿）——立项 §4；**三道闸齐备（2026-11-05 状态轮清偿）**：T-J2 落定（#116）✅ + §16 用例族核对表全绿（32 例：30 直接绿+W-9 本轮补钉变异验证+W-3 input_schema 后腿裁决不建）✅ + 责任主体机制化方案成形（审批链人签五要素在表+系统自主动作封闭白名单，无结构性缺口）✅ → **评估报告轮解冻可排期**（余项=边界梯度分类学〔写类永不降级红线维持〕+调研会话衔接；运行证据待首批真实 run）；写类 external 免事前确认=红线级非目标。**评估报告轮已落定（同日，报告=`docs/implementation/v3-p3-评估报告-有限自动执行-v1.md`）**：三面目录实测（api_catalog 94 + MCP 17 + A 轨审批硬白名单 service.py:867）→ 八档分类学 G0–G7+S；**现役可降级集合=∅**（G3 产物出具两条/G5 不可逆写五条裁决不降级留痕可推翻；G6 发信类现役唯一成员 `file_send_wechat` 收件域封闭+事前密码确认红线钉死；G7 写外呼/付款构造性零条目）；§1.5 准入五要素模板（全 PROPOSED）+ §2.2 取数口径四条 + §3.2 责任主体断言 SQL 三条先行（活库审批行=0，首批真实 run 后评估复审轮）；调研会话《自动化运行-DSH替代可行性评估》已落盘、四条结论消费同向（P0 维持现状=本报告不开放互证）；**闸态变更数=0，零代码零配置零迁移**。
 
+## 售前主线登记（T-A 系列，2026-11-06 登记轮，**零代码零迁移零路由**）
+
+> **上位文档**：`docs/architecture/售前驱动交付模式改造方案.md` v1.2（商业模式侧上位文档）；**评审依据**：`docs/audit/售前驱动交付模式改造方案-多专家评审-2026-11-06.md`（五专家 party mode 独立意见在 `docs/audit/experts/`）。
+> **登记纪律**：本节**登记≠排期≠实施授权**（沿用开源借鉴登记段同款纪律）。每条须在实施轮启动前满足其「闸」列，且走既有 feature→PR→4 CI 流程。
+> **编号口径**：T-A 系列与本文 T-P0/T-E/T-W/T-S/T-G/T-C/T-I/T-UI/T-D 及借鉴登记 B# **均为独立编号**，不互相映射（借鉴总览文首已声明两套编号独立）。本节新登记编号 **T-A1..T-A9 / T-B1 / T-Z1** 均经全文件查重，无撞名（既有 T-C1=Delivery Compiler、T-D1=文档血缘补洞，故避开 C/D 前缀）。
+> **范围声明**：本主线是**售前业务链路**（访谈→事实分层→方案→报价→SOW），**不重造** V3 已收口的 workflow 定义/运行/节点/生命周期（T-W1..T-W5）、本体（T-O1..T-O4b）、Skill 治理（T-S1/T-S2）、门禁证据候选（T-G1/T-W7）、证据一等表（T-E1..T-E3）、Delivery Compiler（T-C1）、桌面控制台三页（T-W6/T-UI1）、只读执行事实链面板（B#9）。
+> **与既有已落地项的边界**：T-UI1/T-W6 已交付的「workflow/术语表/Skill 版本」三页与 B#9 的「执行事实」页**均不含**本主线所需的三态入口、售前三层可视化、agents run 列表、meetings 列表 ⇒ 不构成重复立项；本主线控制台（T-A8）与 B#9 **事实链面板**（项目 tab「执行事实」，只读三源聚合）在**数据源与用途上不重叠**（前者=智能体运行态，后者=证据/审计事实链），**建议合批但界面分离**（待 T-A8 开工前拍板，见 §拍板闸 6）。
+
+### T-A1 presurvey S3 前置闸的桌面可读提示与拦截反馈 — **PROPOSED（登记轮，零代码）**
+- 目标：G3（SOW-A 签署 + A 款预付到账 + 数据授权书四项勾选）未通过时，售前在桌面端能看见**可读的拦截原因与跳转入口**，而不是只见 409。
+- 现状实测（fork/main@d3adf1c）：**闸已落地**——`server/src/fde_api/guidance/service.py:402` `_require_s3_gate`，在 `:41`（`set_presurvey_source`）与 `:63`（`create_analysis`）**两处强制调用**，未通过即抛 409 `presurvey_s3_gate_open`（`:413` 文案含四项清单）；门禁种子 `server/seeds/gates.json` G3 `evidence_checklist` 四项逐项对应。⇒ **本条不是「闸未落地」，是「闸缺桌面呈现」**（原方案 §2.3 G2 缺口结论已在 v1.2 订正）。
+- 修改文件：`desktop/src/renderer/src/guidance/`（presurvey 录入卡）+ 错误码映射（复用既有 `GuidanceServiceError` → `error.details`，**零新错误码**）。
+- DB：无。API：无新增（仅消费既有 409 `presurvey_s3_gate_open`）。
+- 测试：桌面 vitest（拦截态渲染四项清单 + 跳转按钮存在/点击可达 G3 详情）；服务端零改动零用例。
+- 验收：G3 未通过时桌面显四项目录与跳转；通过时原路径不变。
+- 回滚：revert 单 commit（纯前端）。风险：低（错误体已含清单）。依赖：无。复杂度：**S**。
+- 闸：**无**（可随第一阶段任一轮开工）；须走 PR→4 CI。
+
+### T-A2 代号化自动替换层（入库前企业名→代号） — **PROPOSED（登记轮，零代码）**
+- 目标：售前上传访谈资料时，正文中的**真实企业名在入库前被自动替换为代号**，使「客户真实资料永不进 git 历史与远端」红线在**文件正文面**也成立（当前该红线只由 CI 扫数据库 dump 覆盖）。
+- 现状实测（fork/main@d3adf1c）：① `scripts/check-pseudonymization.sh` 只扫 `pg_dump --data-only --inserts`（`:104`），**不扫上传文件的二进制内容** ⇒ 文件正文含真实企业名时 CI **静默通过**；② `server/src/fde_api/guidance/redaction.py:22` `redact_text` 已脱敏 email/mobile/idcard/landline，**故意不脱企业名**（企业名非 PII 格式）；③ **`redact_presurvey`（`redaction.py:31`）全仓零调用点**（`git grep` 仅命中定义处自身）⇒ presurvey 链（`ai/kimi.py` 抽取 → 落库）**当前零脱敏**；④ `projects.enterprise_code` 已是三段式代号（`client·industry·city`，格式检查 `check-pseudonymization.sh:206`）。
+- 形态：**非-AI 纯函数层**（字典匹配 + 确定性替换，合借鉴登记 B#31「导入零模型调用」）。
+- 修改文件：`server/src/fde_api/guidance/redaction.py`（新增企业名替换函数，与 `redact_text` 串联）；词典**新表或种子文件**（见「词典来源」）；presurvey 抽取链接入点（`guidance/service.py` 的抽取落库前置）。
+- **词典来源纪律（红线级）**：词典**不得**取自真相层 `D:/test/FDE/leads.md`（执行面不可触真相层，AGENTS.md 红线）⇒ 词典**抽到 DB/仓库内**，执行面只读 DB；CI 侧沿用既有合成 fixture `.github/ci-assets/synthetic-leads-blacklist.txt`（`ci.yml:85/105`）。
+- **双向复用口径**：CI 扫库正则（`check-pseudonymization.sh:91` 中文 2–15 字 + 公司/集团/厂 结尾）与入库替换词典**须为同一份**——建议 bash/perl 侧提取收敛为 **Python 单点**（bash 调用），自测断言「替换器词典 == CI 词典」逐条一致。
+- DB：新表或种子（词典）——**具体形态待实施轮拍板**（表 vs 种子文件，取决于是否需运行时增补）。API：无新增（内部层）。
+- 测试：**哨兵自测**（借鉴登记 B#11「从未真正运行过的检查等于没有检查」）——① 注入合成企业名断言确实被替换；② **误替换钉死**（该正则固有会抓「技术公司」「制造公司」类通用词）；③ 词典一致性断言（替换器词典 == CI 词典逐条）；④ **测试数据只用合成 fixture，真实客户资料不可作测试素材**（AGENTS.md 红线）。
+- 验收：合成样本入库存中零真实企业名；非企业名文本零改动；误替换集合为空。
+- 回滚：开关关闭即回退（原文不落库，回滚无数据面残留）。风险：中（正则误替换，靠②钉死）。依赖：无。复杂度：**M**。
+- 闸：**词典未命中时的失败语义待拍板**（fail-closed 阻断 vs 保留原文+告警）——建议 fail-closed（与 `_render_context` 422 先例同构），见 §拍板闸 1。
+
+### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **PROPOSED（登记轮，零代码）**
+- 目标：补齐「调研 → 方案」链路的桌面断点——三态流转目前**桌面零引用**（服务端状态机与端点已完整）。
+- 现状实测：`server/src/fde_api/research/project_routes.py` 三条端点（confirm/reject/revise）齐备；桌面端 `desktop/src/renderer/src/research/` 对其**零引用**（台账 `docs/后续需求台账-F5与D11.md:29` 已记同一缺口）。
+- **权限口径（2026-11-06 复审校准，方案 v1.2 §10 Q3）**：实测 `research/form_service.py`——`_require_fill`（`:966`）允许 `can_manage` **或** `can_update_assigned_tasks`（role≥fde_engineer），**revise 走 `_require_fill`（`:568`）⇒ member 可用**；`_require_confirm`（`:972`）强制 `can_manage`，**confirm/reject 调用点 `:347`/`:532` ⇒ member 恒 403**；`projects/permissions.py:35` member 角色 `can_manage=False`。⇒ **四闸校准后**：访谈助理=viewer（填表/提资料）；独立售前=fde_engineer+member（填表/**revise 打回重填**/录 presurvey 资料/生成方案草稿，**不可 confirm/reject 事实**）；方案审核=project_lead 或项目负责人（**confirm/reject 事实**、终审、导出 SOW）；交付专家=可声明 `agent_assisted`。**服务端权限模型零改动。**
+- 修改文件：`desktop/src/renderer/src/research/`（调研表详情页三按钮 + 权限显隐 + 必填理由校验 + 乐观锁 version 传递）。
+- DB：无。API：无新增（消费既有三端点）。
+- 测试：桌面 vitest（三态按钮按权限显隐；confirm 要求必答字段全 accepted；reject/revise 必填理由；409 版本冲突原样呈现不吞）；服务端零改动。
+- **回归风险（实测登记）**：research 域现有 **222 例**压在同一条链上（服务端 99 + 桌面 123）⇒ 若动前端数据契约（状态映射、乐观锁 version 传递）回归面大，**必须先跑全量再合**。
+- 验收：三态可从桌面完成；member 可见 revise 不可见 confirm；服务端 403/409 原样呈现。
+- 回滚：revert 单 commit。风险：中（回归面大）。依赖：T-A2（代号化后入库）。复杂度：**M**。
+
+### T-A4 事实/假设/待确认三层桌面可视化 — **PROPOSED（登记轮，零代码）**
+- 目标：客户原话 vs AI 推断 vs 待确认项**在桌面端视觉可分且可编辑**——支撑「售前录入的事实需客户确认」红线与 Q3 四闸的语义基础。
+- 现状实测：`server/src/fde_api/guidance/ai_schema.py:6` `CLASSIFICATIONS = {customer_stated, ai_synthesized, ai_inferred, open_question, human_added}` 五分类**已内建**；`:60` evidence 引用必须命中 `source_refs`，否则 `unknown_source_ref` **拒收**（fail-closed）。⇒ 缺的是**呈现与编辑面**，非模型面。
+- 修改文件：`desktop/src/renderer/src/guidance/`（三层分组呈现 + 每项来源锚点展示 + 编辑交互）。
+- DB：无。API：无新增（消费既有 guidance 输出）。
+- 测试：桌面 vitest（五类各自呈现；`ai_inferred` 项须带来源锚点；无锚点项显示为待确认而非事实）。
+- 验收：客户原话与 AI 推断在界面上不可混淆；每条可溯源到具体访谈记录。
+- 回滚：revert 单 commit。风险：低。依赖：T-A3。复杂度：**M**。
+
+### T-A5 方案三选项 + 取舍 + 明确不做 + 验收标准 骨架模板 — **PROPOSED（登记轮，零代码）**
+- 目标：方案骨架模板化，降低售前从零起草成本。
+- **复用优先（登记即约束）**：`server/src/fde_api/solutions/service.py:895-945` **既有六段骨架**，`out_of_scope` 段即「明确不做」⇒ **零新列**，不新建方案结构。
+- 修改文件：既有 solution 骨架的模板文案与 `out_of_scope` 预填（**不新增字段、不新增表**）。
+- DB：无。API：无新增。
+- 测试：服务端既有 solution 用例不回归 + 桌面模板渲染用例。
+- 验收：三选项 + 取舍 + out_of_scope + 验收标准四段齐备且可导出。
+- 回滚：revert 单 commit。风险：低。依赖：T-A4。复杂度：**S**。
+
+### T-A6 报价 claims 核验 → 冻结 SOW 的桌面闭环 — **PROPOSED（登记轮，零代码）**
+- 目标：售前能自己把报价从「估算」推到「核验通过」，并在核验通过后冻结导出 SOW，**不依赖工程师介入**。
+- 现状实测：`server/src/fde_api/projects/quote_service.py` 链完整——`:137` B 层系数 = 0.9 + 总分×0.03；`:226` `_advance_claims` 逐字段推进 estimated→claimed；`:581` finalize；`:861` `claims_summary`（accepted/total）；`solutions/service.py` `export_sow` 强制传已冻结版本（AI 不二次改写）；`api_catalog.py:79` 建交付包需 `solution_id + quote_id`。
+- 修改文件：`desktop/src/renderer/src/projects/CommercialBoard.tsx`（既有报价/收款/合同面板已含 `calibrate`/`finalize`/`render` ⇒ **本条是补齐状态推进与门禁提示，不是新建面板**）。
+- DB：无。API：无新增。
+- 测试：桌面 vitest（claims 未核验时导出 SOW 按钮禁用并给出缺项清单；核验后放行）。
+- 验收：售前独立完成「报价核验 → 冻结 SOW」全链；未核验时导出被服务端闸拦住。
+- 回滚：revert 单 commit。风险：低。依赖：T-A5。复杂度：**S**。
+
+### T-A7 客户谈判版本管理（方案版本快照不可变，谈判稿与最终 SOW 分离） — **PROPOSED（登记轮，零代码）**
+- 目标：谈判过程中的多版方案可追溯，**最终 SOW 只认冻结版本**，谈判稿不进 SOW。
+- 现状实测：solution 版本冻结与 `export_sow` 强制传 version **已具备**（`solutions/service.py`）；缺的是**谈判稿与正式方案的分离位**与桌面呈现。
+- DB：无（复用既有 solution 版本行，**不新建谈判稿表**——若实施轮认为需要独立谈判稿实体，须先在本节登记口径后开工）。API：无新增（若复用 solution 版本行）。
+- 测试：桌面 vitest（谈判稿不出现在 SOW 导出内容中；版本快照只读）。
+- 验收：SOW 内容与所选冻结版本逐字一致；谈判稿可在版本列表中追溯但不可导出。
+- 回滚：revert 单 commit。风险：低。依赖：T-A6。复杂度：**S**。
+
+### T-A8 agents run 列表 + meetings 会议纪要 两个桌面控制台 — **PROPOSED（登记轮，零代码）**
+- 目标：让售前与专家**看得见**智能体干了什么——「人看不见的自动化等于没有自动化」，这是「多养售前、少量专家」组织形态的前提条件。
+- 现状实测（fork/main@d3adf1c）：`server/src/fde_api/agents/routes.py` **11 条**（list agents / run / run 详情 / handoff / retry / tool-calls / cost / fallback-rehearsal / recover / pilot-report / quota）、`server/src/fde_api/meetings/routes.py` **10 条**（创建/详情/插话/关闭/纪要/模板/清单/暂停/恢复/成本）——**两者均无列表端点**（`GET /agents/runs` 与 `GET /meetings` 零命中）⇒ **「服务端零改动」不成立**，列表 UI 无数据源。
+- 修改文件：`server/src/fde_api/agents/routes.py` + `server/src/fde_api/meetings/routes.py`（**各补 1 条只读列表路由**）；`desktop/src/renderer/src/` 新建 agents/meetings 控制台页（样式参照既有 `workflows/WorkflowConsole.tsx`）。
+- DB：无。API：**+2**（`GET /api/v1/agents/runs` 按 project/status/时间过滤＋分页；`GET /api/v1/meetings` 按 project 过滤）。
+- 测试：服务端（列表权限 can_view / 局外人 403 / 分页上界 / 列表行不带嵌套详情防 N+1）；桌面 vitest（run 详情 / tool-calls / cost 三面板渲染）。
+- **与 B#9 的关系（防重复立项）**：B#9 只读执行事实链面板（项目 tab「执行事实」，`GET /projects/{id}/execution-facts`，三源聚合 `project_evidence` + `operation_events` + `ai_call_audits`）**已于 2026-11-06 实施**（路由 +1=301，pytest 1985=1979+6s，桌面 `evidence/ExecutionFactChain.tsx`）⇒ **两者数据源与用途不重叠**（本条=智能体运行态与协作过程；B#9=证据/审计事实链）⇒ **建议同 PR 批次交付、界面分离**，最终并批口径见 §拍板闸 6。
+- **字段边界**：run 详情 / tool-calls / cost 三面板用现有单详情接口即可渲染；**diff / test_results / commit / known_risks 缺失**属 T-B1 artifacts 扩列范围，**不阻塞本条**。
+- 验收：售前能在桌面看到 run 列表→详情→tool-calls→成本，以及会议纪要。
+- 回滚：revert 单 commit（+2 路由零迁移可整撤）。风险：低。依赖：可与 T-A5..T-A7 并行。复杂度：**M**。
+
+### T-A9 录音转写草稿区 + 人工整理晋升机制（ASR 通道另立项） — **PROPOSED（登记轮，零代码）**
+- 目标：录音场景下，**转写结果只落草稿区**，售前人工整理为访谈纪要并经客户确认后才入正式库。
+- **红线依据（逐字）**：`D:/test/FDE/engagements/openfde/engagements/somwyn/raw/2026-10-27-FDE接触调研阶段资料入库SOP设计.md:109`「初诊录音转写（⚠️ **只转写不入正式库**，且必须先获口头同意）」、`:111`「**S2 明令「不录音转写入库」**…**边界是：企业主动发给你的文字可以存；你录的音不能存。** 这条线要守死」⇒ v1.1 原结论「转写文字可入库」**作废**（v1.2 §10 Q2 已改判）。
+- **ASR 通道现状**：`server/src/fde_api/ai/kimi.py:39-43` MiniMax 官方 purpose 枚举共 5 项（`voice_clone` / `prompt_audio` / `video_understanding` / `t2a_async_input` / `video_generation_input`），**无音频转写项** ⇒ **ASR 通道需独立立项**（本条只登记工作台侧承接机制）。
+- 修改文件：草稿区实体 + 清理作业（**独立表 + 独立文件根，物理隔离**）；presurvey 录入卡新增转写上传入口。
+- DB：新表（草稿区；**T+7 自动清理**，草稿行**不可被方案/报价/SOW 引用**）；API：草稿写入/读取（**不进 api_catalog**）。
+- 测试：服务端（草稿不可被正式库引用；清理作业按 T+7 生效；晋升须带客户确认人/时间戳/确认方式）；转写文本**同样过 T-A2 代号化管线**（不因「草稿」豁免）。
+- 验收：草稿与正式库物理隔离；无客户确认的转写文本**无法**进入正式库。
+- 回滚：alembic downgrade。风险：低。依赖：T-A2 + ASR 通道立项。复杂度：**M**。
+- 闸：**ASR 通道立项并跑通**（本条不预支）；且须先获**客户口头同意**方可录音。
+
+### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **PROPOSED（登记轮，零代码）**
+- 目标：run 产物从「有 sha256 但无结构化内容」变成可封包的结项交付物。
+- 现状实测：`agents/models.py:127` `AgentArtifact` 现有 `storage_ref`（指针）+ `sha256`（指纹）+ `kind` + `reviewed`，**无 diff / test_results 结构化列**；`dispatch/models.py:40-78` 已有 **`delivery_packages`（派单态，8 态机 + package_code + dispatch_round 唯一键 + sow_type）**；结项态交付包为台账 `docs/后续需求台账-F5与D11.md` §十三.4 **已裁决命名 `handover_packages`**（status draft→sealed→delivered + manifest_sha256 + 逐项 sha256 校验）⇒ **两包不可混用，产物闭环指向 `handover_packages`**。
+- **落库形态纪律（借鉴登记 B#6《状态归属与对账-v1》§1 不变量「引用方永不复制真相，只持指针」）**：新列只能是**指针 + 指纹 + 可重建派生**——`storage_ref` 指向 diff/test_results 原件（留项目工作目录）、`sha256` 记指纹、结构化摘要（passed/failed 计数、退出码）为**可从原件重建的派生**；**不得复制原件进库**。
+- **模块边界**：新列**只写不读**，dispatch 侧取数走 `project_evidence` 指针，避免 agents/dispatch/solutions 成环（否则须扩 `test_architecture_purity.py` 断言范围）。
+- DB：**新迁移（additive-only）**——artifacts 加列 + `handover_packages` 新表；**不得修改已发布迁移**（README 纪律），`test_migrations` HEAD 钉同步，版本号同步（`desktop/package.json` + `server/pyproject.toml`），rebuild 后 `alembic upgrade head`。
+- API：封包/解封/下载走新路由（**不进 api_catalog**——业务对象不走 change_set 双轨，沿用 `dispatch.packages_create` 的既有处理）。
+- 测试：服务端（派生摘要可从原件重建、指纹不一致拒绝、封包逐项 sha256 校验、delivered 不可逆、权限闸）；桌面（封包清单呈现）。
+- **封包前置**：D11 立项拍板 + 首批真实数据到位（**登记即声明：本条在两项前置未达成前只做 artifacts 扩列，封包部分待拍板**）。
+- 验收：一次 run 的产物可封包为 `handover_packages` 且逐项 sha256 可校验；原件不进库。
+- 回滚：alembic downgrade（新表零外键依赖安全）；**已封包行不可逆**（指纹链已出系统，需人工处置）。风险：中（迁移纪律）。依赖：T-A8。复杂度：**M**。
+
+### T-Z1 zcode 真机跑通 + 执行通道裁定 — **PROPOSED（登记轮，零代码；**方案 Q6 改判后拆分**）**
+- 目标：让编码智能体这条线**跑出真实证据**，同时**先实测再裁定执行通道形态**（不预先承诺复用 openfde）。
+- **实测事实（2026-11-06 复审，登记为裁决依据）**：① zcode 装在 `D:/software/zcode`（Electron 应用 + 内置 CLI **0.17.1**），**不在 PATH** ⇒ 需 wrapper；② **provider 根因＝查找路径错位，非文件缺失**——`zcode-builtin.json` 实存于 `resources/config/provider/`（约 260KB / 35 templateId），而 CLI 查的是 `resources\glm\provider\` 与 `D:/config/provider/`（两者不存在）⇒ 修复＝部署一份到 `D:/config/provider/`；③ **`ZcodeAdapter` 契约错位**——`agents/adapter.py` 的 `spawn_argv` 按 `zcode run --task --output --events ndjson` 调用，**真实 zcode 0.17.1 无 `run` 子命令、无 `--task`/`--events`**，真实形态为 `zcode -p/--mode/--json/--cwd` 或 `zcode app-server`（stdio ZCode Protocol）⇒ **适配器 CLI 调用段必须重写**；④ **`--resume` 为布尔开关**（`[["--resume"],0]`，无 sessionId 取值）⇒ **「会话续接」能力未验证**（借鉴总览 §6.6 采集项口径：未核实则以降级路径为默认；B#2 repair 增强档维持降级）；⑤ `--json` 事件流格式**未实测**（实跑被 429 截断）。
+- **执行通道关键实测（登记为开工前置）**：服务端跑在 Linux 容器内，**subprocess 够不到任何宿主侧编码 CLI**——`server/src/fde_api/bridge/__init__.py:3-8` 明示「openfde CLI 是宿主侧 Windows Node 工具（better-sqlite3 按 Win 编译 + pnpm/tsx），Linux 容器 subprocess 不到它——采集在宿主侧」；zcode 同为 Windows 宿主侧 Electron 工具 ⇒ **「工作台 Flask 侧直接 spawn zcode」不成立**，编码执行必须落在宿主侧进程空间。
+- **第三阶段开工前的半天实测（必做项）**：**zcode 能否进 `sandbox-runner` 容器内执行**（`compose.yaml` sandbox 服务：`privileged: false` + `network_mode: none` + `tmpfs /workspace:size=512m`）。**能** ⇒ 容器内直连 `ZcodeAdapter`（方案 §5.3 沙箱红线完整成立，且不引入第二运行时）；**不能** ⇒ 在「给 openfde 加 zcode executor」与「自建 Windows 宿主侧 zcode 代理」之间定稿（两条都须先扩写通道授权并修 AGENTS.md「bridge 只读」红线，且按借鉴登记 B#35 登记 openfde 版本/许可/快照日期——实测 MIT、HEAD `a54be6c` 2026-10-27，距今未超 30 天失效线，**当前未登记**）。
+- 修改文件：`agents/adapter.py`（CLI 调用段重写）；`docker/sandbox/Dockerfile`（zcode 0.17.1 CLI + provider 配置打进镜像或 wrapper 注入）；宿主侧代理脚本（路径待实测裁定）。
+- DB：无。API：无新增。测试：适配器契约用例（真实 CLI 形态的 spawn 参数断言）；**实机跑通 ≠ 可回归测试**——事件流契约须以固定夹具回放方式落 pytest（借鉴登记 B#14 executor 对抗性测试组织，**其前置「决策逻辑抽纯函数重构」不在本条范围**）。
+- 验收：① zcode 在隔离环境内完成一次非交互执行并产出可校验产物；② `--json` 事件流格式取得实测样本并落夹具；③ 执行通道形态经实测裁定并回写本条。
+- 回滚：适配器改动 revert 单 commit；镜像版本回退。风险：**高**（依赖外部 CLI 行为与配额）。依赖：T-B1。复杂度：**L**。
+- 闸：**开工前须拍板**——① zcode 会话续接核查 + 商用条款核验（借鉴总览 §6.6 采集项 + 方案 §5.2 必答项）② 执行通道形态（实测后）③ 降级声明：zcode 若始终跑不通，kind 维持 `adapter_missing`，**不阻塞第一阶段主线**。
+
+### 售前主线的度量口径（登记即声明，防「看起来达标」）
+
+| 指标 | 数据源 | 可反证 | 口径 | 备注 |
+|---|---|---|---|---|
+| 访谈 → 合格机会所需时间 | 调研表 revision 时间戳 | ✅ | live | — |
+| 方案从访谈到 SOW 的时间 | solution revision 时间戳 | ✅ | live | — |
+| G1/G2/G3 一次通过率 | gate revision | ✅ | live | — |
+| 人工返工率 | revision 版本差 | ✅ | live | — |
+| 编码智能体一次测试通过率 | **依赖 T-B1 扩 test_results ⇒ 数据源目前不存在** | ⚠️ 需先补字段 | live | T-B1 前不可作验收线 |
+| 智能体产物被人工接受率 | **`agent_artifacts.reviewed` 无写路径 ⇒ 接受率恒 0** | ⚠️ 需先补写路径 | live | 待 T-B1 同轮补 |
+| G9 结果验收线达成率 | G9 `exit_condition`（B#21 已接线） | ✅ 但**阈值 0.8 为占位待校准**（借鉴总览 R4 纪律） | live | `uplift`/`kpi_oracle` 服务端零命中 ⇒ 当前不可机器判定 |
+| 每项目占用工程师小时数 | **仓库自标 simulation 口径** | ❌ | simulation | **不可作商业主张验证依据** |
+| 交付毛利率 | 同上 | ❌ | simulation | **不可作商业主张验证依据** |
+
+**出口指标（登记口径）**：一个**代号化仿真项目**从访谈走到合格方案 + 冻结 SOW，每一步都有来源、版本、责任人和证据；**智能体不能越权修改、不能部署、不能自动过门**。⇒ **真实客户项目不可作测试素材**（AGENTS.md「客户真实资料永不进 git 历史与远端」红线），真实项目后置替换。
+
+**「客户现场问题数量」指标登记为删除项**（不报即达标的反向激励）。
+
 ## 开源借鉴清单登记（2026-11-05 消费登记轮 B#1–B#34 ＋ **2026-11-06 评审补登记 B#35–B#40**，登记轮零代码。当前：P0 先行批表 10 项 ✅ 已实施（#128~#131），其余按逐条状态标注——PROPOSED/冻结/封存/修复项）
 
 **来源**：调研会话《开源项目借鉴总览-2026-11-05》（横评**九项目**：fde-v2 / agent-autoloop / agnes-harness / giip-fde-agent / sample-fdep-mcp-server / fde-gym / FF-FDE-Delivery-Workbench / fde-skills / Frank-FDE-Skills）及分报告——`docs/audit/` 下**在途未提交产物**（落定回写归调研会话，本轮只消费登记、不代提交、不复制其证据链）。登记编号沿用总览原文 **B#1–B#40**；条目细节、来源 file:line、分项目裁决以总览原文为准，本节只挂决策骨架。
@@ -452,6 +593,15 @@ B#15 Lens 正交叠加（触发=多行业模板成本失控实测）｜B#16 交�
 3. **Q2** 是否有真实客户要求量化验收线？哪个环节？；**Q3** 是否存在可量化可回放 kpi、谁定义 oracle？（无 oracle ⇒ uplift 不成立，B#21/#22 停文档层）；
 4. Q4 代号化题库/隐藏数据落 fdeops 工作目录的落点与权限；Q5 每 run 一容器/境内模型口径；Q6 上游许可证链法务口径；
 5. 待澄清 6.1 原遗留：B#7 Skill 口径顺延与否、B#15/B#20 触发判据业务数据、zcode CLI 会话续接能力。
+6. **售前主线闸（T-A 系列登记轮新增，2026-11-06）**：
+   ① **T-A2 代号化未命中失败语义**——fail-closed 阻断 vs 保留原文+告警？**建议 fail-closed**（与 `_render_context` 422 先例同构）；
+   ② **T-A2 词典形态**——DB 表 vs 仓库内种子文件？取决于是否需运行时增补；
+   ③ **T-A7 谈判稿实体**——复用既有 solution 版本行（零新表）vs 独立谈判稿表（须新迁移）？**登记默认前者**；
+   ④ **T-B1 封包前置**——D11 立项拍板 + 首批真实数据到位；**未达成前只做 artifacts 扩列，封包部分不开工**；
+   ⑤ **T-Z1 执行通道形态**——开工前半天实测（zcode 能否进 sandbox-runner 容器）后拍板，**不预设复用 openfde**；
+   ⑥ **T-A8 与 B#9 合批口径**——建议同 PR 批次交付、界面分离（数据源与用途不重叠），最终口径待 T-A8 开工前拍板；
+   ⑦ **§度量口径与 G9 关系**——建议并存（过程指标不设阈值 + G9 结果验收线）；**「工程师小时数/交付毛利率」接受 simulation 口径**（埋点另立项）；
+   ⑧ **真实客户验收时点**——与总览 §6.5 Q2「暂无已确认客户验收线诉求」对齐，仿真口径先行。
 
 **红线对照（登记即声明，上位维持）**：B#25 客户资料红线（真相永不入库/不进 git）；B#34 交付进程红线（仅内部自检夹具）；B#3 与红线同向；**P3 评估报告 §1「写类外呼/发信/付款永不降级」红线对本清单全部条目上位维持**——任何借鉴项不得引入写类 external 免事前确认面。
 
@@ -469,4 +619,12 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-P0-1 / T-P1-4 / T-P1-5 / T-OBS1 / T-J1 / T-J2 / T-R1 / T-R2：独立可并行（但仍串行交付）
  T-D1 / T-G2：独立
  T-UI1：依赖各 API 落地
+
+ 售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
+ T-A2(代号化) ── T-A3(三态UI) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A1(S3闸提示)：独立，可与 T-A2 并行
+ T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
+ T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
+ T-B1(artifacts 扩列 + handover_packages 闭环)：依赖 T-A8；新迁移 additive-only
+ T-Z1(zcode 真机 + 执行通道裁定)：依赖 T-B1；开工前须实测 zcode 能否进 sandbox-runner 容器
 ```
