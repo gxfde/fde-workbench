@@ -208,6 +208,19 @@ flowchart TB
 6. **T-W4 执行器 agent/human_approval 节点**（M）——四类节点闭环；human_approval 复用 automation_approvals（迁移 `d5b8e2f4a7c9`：run_id 可空 + workflow_node_run_id 反链），拍板走既有任务中心零新路由，agent 走 agents.start_run 同闸（attempt 代际幂等键）。**→ 已完成（2026-11-03，feat/v3-t-w4-agent-approval-nodes；偏差——审批反链 FK CASCADE/迟到拍板中和/attempt 代际幂等/分派失败不叠加重试/capability 白名单=登记表去 system.*——见 backlog T-W4 实施记录；下一步 T-W5 / T-S1 / T-E3 / T-O1）**
 7. **T-W5 cancel/resume HTTP + reconcile 收敛**（M）——Workflow 服务端面收口：cancel（幂等，终态 409）/resume（failed-only，409 not_resumable）两条 can_manage 路由（276→278），reconcile 收敛已随 T-W3 落地无残留。**→ 已完成（2026-11-03，feat/v3-t-w5-cancel-resume；零服务层改动零迁移，服务层 cancel_run/resume_run 直挂 HTTP——见 backlog T-W5 实施记录；下一步 T-S1 / T-E3 / T-O1 或 T-W6 桌面控制台）**
 8. **T-S1 Skill 治理态扩展**（M）——`draft/in_review/published/deprecated` 四态 + 发布四闸（admin/密码确认/in_review/测试报告或 waive）+ `_skills` 只回 published；迁移 `c1e5f9a3d7b2`（27 rev），路由 +5（submit-review/publish/rollback/deprecate/versions）=283；T-W1/T-W3 的 skill published 挂账清偿。**→ 已完成（2026-11-03，feat/v3-t-s1-skill-governance；偏差——个人 Skill 自发布豁免/种子内部参数直发布/PATCH 启停开关旧值域作别名防旁路——见 backlog T-S1 实施记录；下一步 T-E3 / T-O1 / T-W6 / T-S2）**
+9. **T-S2 Skill 效果统计 + 治理留痕**（M）——双消费面计数 `skill_used_chat`／`skill_used_workflow`（失败不计、attempt 代际各计一次、`skill_list` 不计数）＋ versions 响应增 `usage` 块（total/chat/workflow/last_used_at/by_version/truncated，有界 1000 条 Python 聚合）＋ 治理四事件（skill_review_submitted/published/rolled_back/deprecated）直落 `operation_events`。**→ 已完成（2026-11-03，#86；零迁移零新路由零桌面改动；计数走独立微事务——直连 AI 工具循环每轮回滚共享会话，自带提交才能存活）**
+10. **T-W6 桌面控制台三面**（M）——NEW `WorkflowConsole.tsx`＋`GlossaryPage.tsx`＋`SkillVersionsPage.tsx`，另补两条 can_view 只读挂件（GET 定义列表／GET run 列表，有界 50/200＋truncated、**行不带 nodes 防 N+1**）。**→ 已完成（2026-11-04，#88；实现偏差——T-W5「HTTP 面即完整面」对 run 列表不成立，补两条只读挂件，路由 293→295；偏差已回写 backlog T-W6＋`workflow-dag-v1` §5 注记）**
+11. **T-O4b 桌面合并 UI ＋ T-O4 桌面导入 UI**（S）——对象树合并入口＋归档行回链（`ResearchMergeResultDto` 契约）；调研导入 preview/commit 两段式对话框＋导入结果让位回溯卡片。**→ 已完成（2026-11-04，#101/#102；服务端零改动）**
+12. **T-G2 门禁 template_hash 漂移呈现 ＋ T-D1 文档血缘补洞**（M）——`_serialize_gate` 增 `template_outdated`（冻结哈希 vs 现行 `gates.json`，NULL 判 false 不误报）；快照 `revision_id`＋gates 摘要＋AI `request_id` 闭环反查 `ai_call_audits`（单一谓词防幽灵血缘）。**→ 已完成（2026-11-04，#100/#104；T-D1 迁移 `e2c6a8f4d1b3`；T-G2 迁移 `f7a2c9e4b1d3` 回填）**
+13. **T-C1 Delivery Compiler ＋ T-I1 本体变更影响分析**（M）——`compile_delivery_preview` 纯函数（confirmed 变更集＋行业模板＋门禁摘要 → ①方案骨架 payload ②workflow 定义草稿 dag_json ③provenance；真实目录白名单全绿、落库走人工确认端点）；`impact_of_term` 名字域纽带三面清单（subjects/links/forms；引用合同＝名字域纽带，血缘闭包＝canonical 链到根∪并入行）。**→ 已完成（2026-11-05，#105/#107；T-C1 零迁移零路由零桌面；T-I1 +1 只读路由 297、不进 api_catalog；gates 面按验收权威 O-6 落三面＝偏差回写 backlog）**
+14. **T-W7 workflow 产物→证据候选 ＋ T-UI1 三页核销与 GateBoard 徽标**（M）——运行时保留键 `gate_evidence`＋坏标记不炸节点＋同事务原子挂候选；候选 `source_kind` 判别联合修复 workflow 候选整板拒载潜伏 bug。**→ 已完成（2026-11-05，#111/#113；**铁三角全链接线**——门禁候选采纳的唯一入口仍是真人提交闸）**
+15. **T-J2 handler 自动重试 ＋ admin 取消 API**（S）——`run_job` 异常走 `_handle_failure`（可重试集合复用 `RECOVERABLE_JOB_TYPES`、30s×2 封顶 900s、outbox 保持 `dispatched`＝T-J1 红线）＋NEW `jobs/admin_routes.py`；迁移 `d9f4a7c2e6b1`（35 rev，cancelled 真状态纯 CHECK 置换）。**→ 已完成（2026-11-05，#116；路由 297→298）**
+16. **P3 高级自主化四项**（—）——①多 Agent 自适应编排 ②Skill 运行反馈改进 ③业务规则推理 ④有限自动执行开放评估。**→ 已完成（2026-11-05 立项 #117 → 状态轮 #125 → 评估报告 #126）：四项全部定案收口**——①多 Agent 仍冻（活库 `agent_runs=0`／`workflow_runs=0`）②Skill 失败面维持「失败不计」、双面消费量闸未过仍冻③`ontology_rules` 维持不建 PARK＋**规则 9 强制化悬置线销号＝维持告警**（执行层硬闸已闭环，「P2 enforcement wave」不做）④评估轮解冻后报告落定（八档 G0–G7＋S、**现役可降级集合＝∅**、本报告不开放，闸态变更 0）。**→ 附：桌面影响分析消费面（GlossaryPage 行内三面清单）已随 2026-11-06 待办池清欠轮接线**
+17. **P0 先行批（开源借鉴线 B 系列）**（M）——**属另一条「七项目横评」借鉴线**（含 fde-v2 但编号体系独立，**不计入本报告 §二 的 fde-v2 迁移任务计数**）：代码级 **B#1 跳数熔断**（`workflow_runs.hops`＋`MAX_RUN_HOPS=8`）／**B#2 回执终态**（`succeeded_but_receipt_invalid`＋scanner 四态）／**B#4 purity 架构测试**（四断言静态探针）／**B#28 门禁 revision CAS**（`decide_gate` 增可选 `expected_revision`＋`gates.lifecycle_version`，409 `gate_revision_conflict`）／**B#5 审批退避提醒＋SLA 统计**；文档级 **B#3 审查不执行被审代码**（AGENTS 红线第 7 条）／**B#6 状态归属与对账**（四层归属总表＋六跨层钉 pytest）／**B#21 交付效果评测协议 v0**（uplift 算分口径＋三锚点四类反例＋G9 `exit_condition` 接线）／**B#22 门禁判据升格**／**B#27 DSH 适配层决策记录**（维持「当前不装」）／**B#29 验收合同五点**。**→ 已完成（2026-11-05~11-06，#128~#131＋#135；合并迁移 `b2e8f4a6c9d3`（36 rev）；Q1–Q3 未拍板前 B#21–#25 停文档/夹具层，B#23 离线夹具未解封）**
+18. **五份纯文档立项/契约**（S）——术语改名 SOP（`术语改名SOP-v1`，名字域纽带四步改名）／外部文字禁入与原件派生分离契约（提示词层白名单＋工件层五原则）／门禁判据实施落点（裁决＝评测器元验证层）／门禁前置复核与回退留痕立项（A 面证据漂移呈现候选 ＋ B 面回退语义待拍板 opt1/opt2/opt3）／到期语义与主动超时治理立项。**→ 已完成（2026-11-06，#137/#142/#143/#144/#141；零代码零迁移零路由零桌面；**立项≠实施授权**，实施排后续轮）**
+19. **UI-UX 黑金 B/S0/S1 全量落地 ＋ B#9 只读执行事实链面板**（M）——token 单一真源＋a11y 钩子＋品牌资产＋官网单页（155 文件（67 纯增／54 改／33 二进制／1 删；13557 插入＋591 删除）、**零 server 改动、零迁移改动**，删改集中于品牌资产与桌面 UI、**未触及任何 V3 轮次文件**，品牌单点 `desktop/src/shared/brand.ts` 未移动）；B#9 事实链只读面（NEW GET `…/projects/{id}/execution-facts`，can_view、三源归并、**有意不进 api_catalog**）＋桌面 NEW `ExecutionFactChain.tsx`（项目 tab 10→11）。**→ 已完成（2026-11-06，#132/#145；路由 300→301、pytest 1985 收集＝1979 passed＋6 skipped、桌面 vitest 825）**
+
+**§20 实施跟踪注记补齐说明（2026-11-06）**：本节此前停更于 T-S1（条目 8）——T-S2 及其后全部轮次无对应条目。原因是并发品牌·回滚轮在途，补注记须逐轮核对「哪些轮次仍在基线上」，**补即写即错**，故按 goal-c 台账 CR-003 挂账待落定后一次性补。**该回滚轮已于 2026-11-06 15:02 落定为 #132（零 server 改动、零迁移改动；删改集中于品牌资产与桌面 UI、未触及任何 V3 轮次文件）**，V3 实施进度对照报告 §三 全量判定逐行复测**无一被推翻**，故条目 9–19 一次性补齐。**注记口径**：每条只写「做了什么 ＋ 偏差指针」，实现细节一律指 backlog 实施记录与 `docs/implementation/v3-迁移进度对照-fde-v2建议-2026-11-04.md`（第七轮）；B 系列条目仅登记跨线事实、不改写本报告 §二 的 fde-v2 判定。
 
 ---
 
@@ -218,11 +231,11 @@ flowchart TB
 | docs/architecture/蔡工FDE_Workbench_fde-v2架构融合审计与V3升级实施方案.md（本文） | ✅ |
 | docs/audit/v3-baseline-workbench.md / v3-baseline-fde-v2.md | ✅ |
 | docs/audit/v3-workbench-module-inventory.md / v3-fde-v2-module-inventory.md | ✅ |
-| docs/audit/v3-route-inventory.csv（385 行，含 fde-v2 116）+ 分仓 csv | ✅ |
-| docs/audit/v3-database-inventory.csv（121 行）+ 分仓 csv | ✅ |
-| docs/audit/v3-test-inventory.md | ✅（pytest 1700+6s / vitest 730 / ops 14 实跑终录已回填） |
+| docs/audit/v3-route-inventory.csv（**workbench 302 行＝表头＋301 路由**；fde-v2 116 行已分仓至 `v3-route-inventory-fde-v2.csv` 117 行） | ✅（2026-11-06 第七轮随 #145 回刷：脚本补登 `fact_chain_blueprint` 后重生成） |
+| docs/audit/v3-database-inventory.csv（**workbench 106 行＝表头＋105 表**；fde-v2 25 行分仓至 `v3-database-inventory-fde-v2.csv` 26 行） | ✅ |
+| docs/audit/v3-test-inventory.md | ✅（pytest 1700+6s / vitest 730 / ops 14 实跑终录已回填——**此为审计期实跑快照记录，非当前口径**，当前口径见 AGENTS.md「当前状态」节） |
 | docs/audit/v3-gap-matrix.md（17 域）/ v3-risk-register.md | ✅ |
 | docs/audit/appendix/{A–F 六份行号级原始审计报告} | ✅ |
 | docs/architecture/ontology-registry-v1.md / workflow-dag-v1.md / agent-policy-v1.md | ✅ |
-| docs/implementation/v3-backlog.md（24 任务）/ v3-test-plan.md（四族用例） | ✅ |
+| docs/implementation/v3-backlog.md（**33 个 T-\* 任务节全 DONE ＋ 开源借鉴登记段 B#1–B#40**）/ v3-test-plan.md（四族用例） | ✅ |
 | scripts/audit/extract_{workbench,fde_v2}_inventory.py（可复现抽取） | ✅ |

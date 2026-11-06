@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 回滚轮落定重核（§三 逐行复测＋审计清单回刷＋CR-003 销号）（2026-11-06）
+
+### 文档与脚本（零业务代码零迁移零路由零桌面功能改动；无需 rebuild / alembic / 重打包）
+
+- **`docs/implementation/v3-迁移进度对照-fde-v2建议-2026-11-04.md` 第七轮同步**：§五-7「并发在途品牌·回滚轮」**结清并翻转**（回滚轮落定为 #132＝155 文件（67 纯增／54 改／33 二进制／1 删）**零 server 改动零迁移改动**；原拟撤的 T-W7/T-I1/T-C1 四件套实测全部存续；fork/main 无任何 revert 提交）→ **§三 全量 DONE 判定逐行复测无一被推翻**；新增 §五-9（审计清单落后 1 条 ＋ 抽取脚本蓝图硬编码漏登）与 §十三（第七轮增量记录）；§二 P1④／§四 C-4 补「skill_read 分页已实施」当前态标注。
+- **行号锚修 6 处**（基线 fork/main `d3adf1c`）：`workflows/models.py:157→:163`、`executor.py:694→:701`、`executor.py:1402-1413→:1373-1413`、`definition_service.py:118→:119`、`SkillVersionsPage.tsx 355→356 行`、§三 T-S1/S2 交叉引用 `§五-3→§五-5`——**前三处系第五轮声称「已修正 8 处漂移」而正文未落地**（「声称已修 vs 正文未改」），本轮当场补正。
+- **主报告 §20 实施跟踪注记补齐条目 9–19**（此前停更于 T-S1）：T-S2／T-W6／T-O4b·T-O4 桌面／T-G2·T-D1／T-C1·T-I1／T-W7·T-UI1／T-J2／P3 四项定案／P0 先行批 B 系列／五份纯文档／UI-UX 轮·B#9，并附「注记补齐说明」记录挂账前提与消解依据；`docs/goal-c-代码审查台账.md` **CR-003 随之销号**。
+- **审计抽取脚本补登 ＋ 三清单回刷**：`scripts/audit/extract_workbench_inventory.py` 的 `BLUEPRINTS` 硬编码列表补 `fact_chain_blueprint`（按 `app.py` 注册序紧随 `evidence_blueprint`）→ 重生成 `docs/audit/v3-route-inventory.csv`（+1 行＝新路由）与 `v3-workbench-inventory.json`；DB CSV 零变化。
+- **AGENTS.md**：工作流节新增「审计清单刷新有前置条件（`BLUEPRINTS` 硬编码列表须随蓝图增删同步登记——同一坑两次：T-J2/CR-027、#145 `fact_chain_blueprint`）」；补本轮 bullet；CR-003 挂账措辞更新为已销号。
+
+### 口径（现测，基线 fork/main `d3adf1c`）
+
+- 105 表 / 迁移头 `b2e8f4a6c9d3`（36 rev，#131~#145 全域零迁移）/ api_catalog ENTRIES 94 不变；**蓝图路由 300→301**（#145 +1：GET `…/projects/{id}/execution-facts`，不进 api_catalog）；pytest **1985 收集＝1979 passed＋6 skipped**／vitest **825**／mypy 基线 **279**（后三项取 #145 CI run 42183340134 实测）；审计脚本同源复测＝route 301 / blueprint 39 / table 105 / rev 36 / heads=[b2e8f4a6c9d3]。
+
 ## [未发布] — V3 门禁前置复核与回退留痕立项（借鉴 B#30 消费）（2026-11-06）
 
 ### 文档（零代码零迁移零路由；无需 rebuild / 重打包）

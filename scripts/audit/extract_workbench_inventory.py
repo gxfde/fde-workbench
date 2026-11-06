@@ -66,7 +66,7 @@ from fde_api.control.lcsc_skills import lcsc_blueprint
 from fde_api.control.mcp_gateway import mcp_blueprint
 from fde_api.control.task_board import task_board_blueprint
 from fde_api.dispatch.admin_routes import admin_dispatch_blueprint  # goal-c CR-027
-from fde_api.evidence.routes import evidence_blueprint
+from fde_api.evidence.routes import evidence_blueprint, fact_chain_blueprint  # 借鉴 B#9 事实链只读面
 from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14）
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
@@ -94,6 +94,7 @@ BLUEPRINTS = [
     project_documents_blueprint,
     solutions_blueprint,
     evidence_blueprint,
+    fact_chain_blueprint,  # 借鉴 B#9：app.py 注册序紧随 evidence_blueprint
     ontology_blueprint,  # V3 T-O2
     workflows_blueprint,
     dispatch_blueprint,
