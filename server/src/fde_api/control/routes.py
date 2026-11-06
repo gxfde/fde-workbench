@@ -40,6 +40,7 @@ from fde_api.control.extensions_service import (
     submit_skill_review,
 )
 from fde_api.control.dsh_market import search_dsh_market, sync_dsh_market
+from fde_api.control.skill_center import get_skill_document, list_skill_center
 from fde_api.control.access import authorize_ai_capability
 from fde_api.control.dsh_runtime import DSHRuntimeError, dsh_runtime
 from fde_api.errors import error_response
@@ -260,6 +261,32 @@ def task_center_route():
 @require_auth
 def task_center_approvals_route():
     return jsonify({"data": list_automation_approvals(user=g.current_user), "error": None})
+
+
+@control_blueprint.get("/skills")
+@require_auth
+def skill_center_route():
+    """只读技能中心（B#32 A 面）：列当前用户可见的已发布技能。
+
+    只读浏览面——不执行技能、不修改项目数据、不消费计数。
+    """
+    scope = request.args.get("scope")
+    try:
+        data = list_skill_center(user=g.current_user, scope=scope)
+    except ControlServiceError as error:
+        return _service_error(error)
+    return jsonify({"data": data, "error": None})
+
+
+@control_blueprint.get("/skills/<skill_id>/document")
+@require_auth
+def skill_center_document_route(skill_id: str):
+    """技能正文面：当前版本正文 + SHA-256 指纹 + 建议下载文件名。"""
+    try:
+        data = get_skill_document(user=g.current_user, skill_id=skill_id)
+    except ControlServiceError as error:
+        return _service_error(error)
+    return jsonify({"data": data, "error": None})
 
 
 @control_blueprint.post("/task-center/approvals/<approval_id>/decision")
