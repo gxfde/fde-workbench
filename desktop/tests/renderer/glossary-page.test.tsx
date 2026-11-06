@@ -258,3 +258,157 @@ it("keeps the current list visible while a new search is in flight (CR-035)", as
   expect(screen.getByText("初始术语")).toBeInTheDocument()
   expect(screen.queryByText("正在加载术语表…")).not.toBeInTheDocument()
 })
+
+function impact(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    term: term(),
+    resolved: { canonical_term_id: "term-1", lineage_term_ids: ["term-1"] },
+    subjects: [
+      {
+        id: "subj-1",
+        subject_key: "S-001",
+        name: "交付物",
+        subject_type: "artifact",
+        status: "active",
+        merged_into_subject_id: null,
+        matched_via: "term",
+        matched_term_id: "term-1",
+      },
+    ],
+    links: [
+      {
+        id: "link-1",
+        link_type: "belongs_to",
+        source_subject_id: "subj-1",
+        source_subject_name: "交付物",
+        target_subject_id: "subj-2",
+        target_subject_name: "里程碑",
+      },
+    ],
+    forms: [
+      {
+        id: "form-1",
+        form_key: "delivery-brief",
+        name: "交付简报",
+        subject_id: "subj-1",
+        subject_name: "交付物",
+        current_revision_status: "confirmed",
+      },
+    ],
+    counts: { subjects: 1, links: 1, forms: 1 },
+    ...overrides,
+  }
+}
+
+function withImpactMock(payload: unknown): void {
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms` || path.startsWith(`${base}/terms?`)) {
+      return Promise.resolve({ items: [term()] })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    if (path === `${base}/terms/term-1/impact`) return Promise.resolve(payload)
+    throw new Error(`unexpected api call: ${path}`)
+  })
+}
+
+it("expands the per-term impact panel with the three-face list (T-I1 接线)", async () => {
+  const user = userEvent.setup()
+  withImpactMock(impact())
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  await user.click(await screen.findByRole("button", { name: "影响分析" }))
+  // 计数行 + subjects 命中溯源 + 邻接边 + 表单
+  expect(await screen.findByText(/调研对象 1 · 关联边 1 · 表单 1/)).toBeInTheDocument()
+  expect(screen.getByText(/S-001/)).toBeInTheDocument()
+  expect(screen.getByText(/命中经 规范名/)).toBeInTheDocument()
+  expect(screen.getByText(/belongs_to/)).toBeInTheDocument()
+  expect(screen.getByText(/交付简报/)).toBeInTheDocument()
+})
+
+it("notes lineage resolution when querying a merged term", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms` || path.startsWith(`${base}/terms?`)) {
+      return Promise.resolve({ items: [term({ id: "term-old", term: "旧名", canonical_term_id: "term-1", status: "merged" })] })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    if (path === `${base}/terms/term-old/impact`) {
+      return Promise.resolve(
+        impact({
+          term: term({ id: "term-old", term: "旧名", canonical_term_id: "term-1", status: "merged" }),
+          resolved: { canonical_term_id: "term-1", lineage_term_ids: ["term-1", "term-old"] },
+        }),
+      )
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  await user.click(await screen.findByRole("button", { name: "影响分析" }))
+  expect(await screen.findByText(/并入行：已解析到存活概念/)).toBeInTheDocument()
+  expect(screen.getByText(/血缘 2 行/)).toBeInTheDocument()
+})
+
+it("surfaces impact fetch failure inside the panel", async () => {
+  const user = userEvent.setup()
+  const { ApiClientError } = await import("../../src/renderer/src/api/client")
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms` || path.startsWith(`${base}/terms?`)) {
+      return Promise.resolve({ items: [term()] })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    if (path === `${base}/terms/term-1/impact`) {
+      return Promise.reject(new ApiClientError({ code: "term_not_found", message: "术语不存在。" }, 404))
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  await user.click(await screen.findByRole("button", { name: "影响分析" }))
+  expect(await screen.findByRole("alert")).toHaveTextContent("术语不存在。")
+})
+
+it("keeps only the newest impact response when switching rows (序列守卫)", async () => {
+  const user = userEvent.setup()
+  const pending: Array<(value: Record<string, unknown>) => void> = []
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path === `${base}/terms` || path.startsWith(`${base}/terms?`)) {
+      return Promise.resolve({
+        items: [term({ term: "术语甲" }), term({ id: "term-2", term: "术语乙" })],
+      })
+    }
+    if (path === `${base}/relation-types`) return Promise.resolve({ items: [] })
+    if (path === `${base}/change-sets` || path.startsWith(`${base}/change-sets?`)) {
+      return Promise.resolve({ items: [] })
+    }
+    if (path === `${base}/terms/term-1/impact` || path === `${base}/terms/term-2/impact`) {
+      return new Promise((resolve) => {
+        pending.push(resolve as (value: Record<string, unknown>) => void)
+      })
+    }
+    throw new Error(`unexpected api call: ${path}`)
+  })
+  render(<GlossaryPage projectId={projectId} canManage={false} />)
+  const buttons = await screen.findAllByRole("button", { name: "影响分析" })
+  expect(buttons).toHaveLength(2)
+  await user.click(buttons[0]!) // 术语甲：在途
+  await user.click(buttons[1]!) // 术语乙：在途（甲的面板被顶替）
+  await waitFor(() => expect(pending.length).toBe(2))
+  await act(async () => {
+    pending[1]!({ ...impact(), term: term({ id: "term-2", term: "术语乙" }) })
+  })
+  expect(await screen.findByText(/调研对象 1 · 关联边 1 · 表单 1/)).toBeInTheDocument()
+  // 甲的旧响应后到：不得顶掉乙的面板（序列守卫）
+  await act(async () => {
+    pending[0]!({ ...impact(), term: term({ term: "术语甲" }) })
+  })
+  await waitFor(() => {
+    expect(screen.getAllByText(/调研对象 1 · 关联边 1 · 表单 1/).length).toBe(1)
+  })
+})

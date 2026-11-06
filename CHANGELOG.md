@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 报告待办池清欠（代码批）：skill_read 分页 + GlossaryPage 影响分析接线（2026-11-06）
+
+### 行为变更（零迁移零路由；server 变更 ⇒ 一次 rebuild；桌面变更 ⇒ 便携版重打包挂账）
+
+- **skill_read 分页（B#8+B#32 真缺口闭合）**：MCP `skill_read` 加 `offset` 入参——指南长文按 **16k 字符窗口**分页（与 file_read/help_fetch 同尺），响应新增 `offset`/`next_offset`/`total_characters`（`next_offset` 非空时用 offset 续取）；负数/非整数 offset → 400 `invalid_request`。**T-S2 消费计数收敛＝仅首读（offset=0）计一次**，续页是同一消费行为的延续不加计；未知技能 404 不计语义不变。新测试 `server/tests/test_skill_read_pagination.py` 五例（工具面登记形状/短文单页兼容/长文续取拼接无损/偏移形状闸/计数一次）。
+- **GlossaryPage 影响分析接线（T-I1 消费面，§六 P0 #1 清偿）**：术语表行内「影响分析」按钮展开 `GET terms/{id}/impact` 三面清单——counts 汇总＋subjects 命中溯源（matched_via 规范名/别名）＋links 邻接边＋forms 修订状态；并入行查询显示「已解析到存活概念」注记；连点不同行按序列号只认最新响应（CR-035 同型守卫）；失败在行内呈现不收行。
+- 文档批（PR #136）：六铁律裁决回写主报告 §17/§19、审计三清单全量刷新（补记⑤）、NEW 术语改名SOP-v1.md、AGENTS「口径数字引用前现测」纪律；报告 §十二 记录全轮。
+
+### 口径
+
+- 零迁移零路由：pytest **1972+5=1977 收集**（1971 passed + 6 skipped，CI 复核）/ mypy 279 不变 / vitest **787+4=791** / 105 表 / `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 不变。
+
 ## [未发布] — V3 报告待办池清欠（文档批）：六铁律裁决回写 + 审计清单全量刷新 + 改名 SOP + 数字现测纪律（2026-11-06）
 
 ### 文档（零代码零迁移零路由；无需 rebuild / 重打包）
