@@ -16,6 +16,7 @@ from fde_api.files.models import ProjectFileVersion
 from fde_api.guidance.ai_prompt import build_kimi_presurvey_analysis_messages
 from fde_api.guidance.ai_schema import GuidanceContractError, LIST_FIELDS, validate_guidance_output
 from fde_api.guidance.enterprise_dict import RedactionConfigError, enterprise_names
+from fde_api.guidance.models import REDACTION_EVENT_TYPE
 from fde_api.guidance.models import ProjectGuidanceAnalysis
 from fde_api.guidance.redaction import redact_text_detailed
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
@@ -53,9 +54,6 @@ DICT_FAILURE_MESSAGE = "企业名词典不可用，为守住「客户名不入�
 
 # T-A2 复核事件类型：疑似企业名清单落 operation_events（B#9 事实链三源之一），
 # 方案审核人 confirm 前可从执行事实页看到本次分析替换/疑似了哪些名字。
-REDACTION_EVENT_TYPE = "guidance.redaction_review"
-
-
 def _project_code(session: Session, project_id: str) -> str:
     """enterprise_code（三段式「客户A·行业·城市」）作为替换目标代号；取不到回退空。"""
     return session.scalar(select(Project.enterprise_code).where(Project.id == project_id)) or ""

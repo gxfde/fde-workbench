@@ -17,6 +17,11 @@ GUIDANCE_ANALYSIS_STATES = (
 # 售前轻量录入卡的访谈方式（PRD F1 / 决议 D16）。
 INTERVIEW_MODES = ("onsite", "remote", "hybrid")
 
+# T-A2 复核清单事件类型（#160 三道防线之三）：疑似/收录企业名替换条目落
+# operation_events，确认闸（confirm_analysis）与读面（get_analysis）消费同一
+# 事实源——常量住 models 层，jobs（写入方）与 service（消费方）共享单一权威。
+REDACTION_EVENT_TYPE = "guidance.redaction_review"
+
 
 class PresurveyIntake(Base, TimestampMixin):
     """售前轻量录入卡（PRD F1 / 决议 D16）。

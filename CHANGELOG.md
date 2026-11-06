@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — T-A2 补齐：confirm 复核闸（拍板 6① 机械强制，2026-11-07）
+
+- `guidance/service.py::confirm_analysis` 新增复核闸：确认前按分析聚合 `guidance.redaction_review` 事件（#160 落的复核清单事实源；同名跨事件 occurrences 累加、`matched_dict` 求并、按名称排序）——清单非空且请求未显式 `redaction_reviewed=true`（路由只认字面 true，fail 向安全侧）→ 409 `redaction_review_required`；带 ack 放行并随既有 `guidance_analysis_confirmed` 事件留痕 `redaction_reviewed`/`redaction_review_hits`。零新增状态面，闸与来源种类无关。
+- `get_analysis` 与 confirm 响应增派生字段 `redaction_review`（同一事件源聚合投影）——方案审核人复核的可见入口；桌面呈现随 T-A4/B#9 面接线。
+- `REDACTION_EVENT_TYPE` 常量归位 `guidance/models.py`（写入方与消费方共享单一权威，jobs 同名导入保持兼容）。
+- NEW `server/tests/test_guidance_confirm_review_gate.py` 6 例（无 ack 409+零变更 / ack 放行+事件留痕 / 干净免 ack / 读面形状与排序 / 跨事件合并 / 编辑不改写审计清单）。零迁移；既有端点加可选参数。
+
 ## [未发布] — 洁癖收尾轮：口径全现测吻合 + 审计清单重生成 + 补账（2026-11-07）
 
 ### 口径现测（七项逐位吻合，零漂移修正）

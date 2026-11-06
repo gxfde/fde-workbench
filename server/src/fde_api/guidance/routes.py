@@ -71,7 +71,8 @@ def revision_route(project_id: str, analysis_id: str):
 def confirm_route(project_id: str, analysis_id: str):
     payload = request.get_json(silent=True) or {}
     if type(payload.get("version")) is not int: return error_response("invalid_request", "缺少有效版本号。", 400)
-    try: return _ok(confirm_analysis(actor=g.current_user, project_id=project_id, analysis_id=analysis_id, expected_version=payload["version"]))
+    # T-A2 复核确认开关：只认字面 true，其余一律当未复核（fail 向安全侧）。
+    try: return _ok(confirm_analysis(actor=g.current_user, project_id=project_id, analysis_id=analysis_id, expected_version=payload["version"], redaction_reviewed=payload.get("redaction_reviewed") is True))
     except GuidanceServiceError as error: return _error(error)
 
 

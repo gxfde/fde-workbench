@@ -434,6 +434,16 @@
 
 **本轮未做（须后续登记，不得默认扩范围）**：`agents/context.py` 的 `redact_patterns`（执行面上下文脱敏，走盘符/令牌/禁区词口径与 fail-closed `forbidden_terms` 断言）**未接企业名替换**——两条线口径不同，混做会破坏执行面既有断言；接入前须另立条目。
 
+#### ✅ T-A2 补齐轮：confirm 复核闸（拍板 6① 机械强制；2026-11-07，消费 #160 事实源）
+
+**补的是什么**：#160 把复核条目落了 `operation_events`（`guidance.redaction_review`，仅 entries 非空才落），但「方案审核人 **confirm 前必须复核**」没有消费点——confirm 无闸、读面无清单（桌面 B#9 面板亦 PROPOSED），复核只靠流程自觉。本小轮在 #160 原语之上补齐消费侧，零新事实源：
+
+- **常量归位**：`REDACTION_EVENT_TYPE` 移到 `guidance/models.py`（写入方 jobs 与消费方 service 共享单一权威；jobs 以同名导入保持兼容，测试导入不受影响）。
+- **confirm 复核闸**（`guidance/service.py::confirm_analysis`）：确认前按分析聚合复核事件（同名跨事件合并：occurrences 累加、`matched_dict` 求并、按名称排序）——清单非空且请求未显式 `redaction_reviewed=true`（路由只认字面 true，fail 向安全侧）→ **409 `redaction_review_required`**；带 ack 放行，动作随既有 `guidance_analysis_confirmed` 事件留痕（`redaction_reviewed`/`redaction_review_hits` 增量键），零新增状态面。
+- **复核读面**：`get_analysis` 与 confirm 响应增派生字段 `redaction_review`（同一事件源聚合投影，不二次推导文本）——方案审核人的可见入口；桌面呈现随 T-A4/B#9 面接线（本小轮不做桌面）。
+- **闸与来源种类无关**（translator_draft / presurvey_docx 同闸）；复核清单是「历史上替换了什么」的审计事实，编辑正文不改写清单。
+- **测试**：NEW `server/tests/test_guidance_confirm_review_gate.py` 6 例（无 ack 409+零变更 / ack 放行+事件留痕 / 干净分析免 ack+事件 `redaction_reviewed=False` / 读面清单形状与排序 / 跨事件同名合并 / 编辑不改写审计清单）。零迁移零路由改动（既有端点加可选参数）零桌面改动；服务端变更 ⇒ 合并后 rebuild 三镜像（alembic 幂等 no-op）。
+
 ### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **PROPOSED（登记轮，零代码）**
 - 目标：补齐「调研 → 方案」链路的桌面断点——三态流转目前**桌面零引用**（服务端状态机与端点已完整）。
 - 现状实测：`server/src/fde_api/research/project_routes.py` 三条端点（confirm/reject/revise）齐备；桌面端 `desktop/src/renderer/src/research/` 对其**零引用**（台账 `docs/后续需求台账-F5与D11.md:29` 已记同一缺口）。
@@ -655,7 +665,7 @@ B#15 Lens 正交叠加（触发=多行业模板成本失控实测）｜B#16 交�
 4. Q4 代号化题库/隐藏数据落 fdeops 工作目录的落点与权限；Q5 每 run 一容器/境内模型口径；Q6 上游许可证链法务口径；
 5. 待澄清 6.1 原遗留：B#7 Skill 口径顺延与否、B#15/B#20 触发判据业务数据、zcode CLI 会话续接能力。
 6. **售前主线闸（T-A 系列登记轮新增，2026-11-06；同日拍板轮收口 ①②③⑥，④⑤⑦⑧ 按登记口径确认）**：
-   ① **T-A2 代号化未命中失败语义**——✅ **DECIDED（2026-11-06 拍板）：分层语义**——替换器**异常**（词典加载失败/正则编译失败等机制性故障）→ **fail-closed 硬阻断入库**（保红线完整性，与 `_render_context` 422 先例同构）；**疑似企业名但词典未收录**（正则命中「技术公司」类通用词）→ **放行但记入待复核清单**，方案审核人 confirm 前必须复核（复核点与「确认事实是拍板权」分工对齐，防全阻断崩可用性）；
+   ① **T-A2 代号化未命中失败语义**——✅ **DECIDED（2026-11-06 拍板）：分层语义**——替换器**异常**（词典加载失败/正则编译失败等机制性故障）→ **fail-closed 硬阻断入库**（保红线完整性，与 `_render_context` 422 先例同构）；**疑似企业名但词典未收录**（正则命中「技术公司」类通用词）→ **放行但记入待复核清单**，方案审核人 confirm 前必须复核（复核点与「确认事实是拍板权」分工对齐，防全阻断崩可用性）。**两半均已落地**：fail-closed 随 #160（`pseudonym_dict_unavailable` 不重试）；**confirm 复核闸随补齐轮（2026-11-07）**——409 `redaction_review_required` + `redaction_reviewed=true` ack 事件留痕，清单从 #160 事件源聚合；
    ② **T-A2 词典形态**——✅ **DECIDED（2026-11-06 拍板）：仓库内种子文件**——词典存 `server/seeds/`（CI 扫库与入库替换**读同一个文件**，「词典一致性断言」天然成立），企业名词典变动频率极低（新客户才加一词）撑不起 DB 表成本，零迁移零 DB 依赖，变更走 git 审计；
    ③ **T-A7 谈判稿实体**——✅ **DECIDED（2026-11-06 拍板）：复用既有 solution 版本行**（登记默认获确认）——谈判稿=未冻结版本，最终 SOW 只认 frozen，桌面把未冻结版本标注为「谈判稿」即可；**零新表零迁移**，独立谈判稿表=对「方案版本快照不可变」既有设计的重复建模；
    ④ **T-B1 封包前置**——✅ **确认（按登记口径）**——D11 立项拍板 + 首批真实数据到位前**只做 artifacts 扩列，封包部分不开工**；

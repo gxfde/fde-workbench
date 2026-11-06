@@ -19,12 +19,13 @@ from fde_api.guidance.models import (
     PresurveyIntake,
     ProjectGuidanceAnalysis,
     ProjectPresurveySource,
+    REDACTION_EVENT_TYPE,
 )
 from fde_api.jobs.outbox import enqueue_outbox
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.translator.models import TranslatorTranslation
-from fde_api.workbench.models import Gate, Project
+from fde_api.workbench.models import Gate, OperationEvent, Project
 
 
 class GuidanceServiceError(Exception):
@@ -100,9 +101,41 @@ def get_analysis(*, actor: User, project_id: str, analysis_id: str) -> dict[str,
         row = session.get(ProjectGuidanceAnalysis, analysis_id)
         if row is None or row.project_id != project_id:
             raise GuidanceServiceError("guidance_not_found", "项目指引版本不存在。", 404)
-        return serialize_analysis(row, session.get(ProjectPresurveySource, project_id))
+        data = serialize_analysis(row, session.get(ProjectPresurveySource, project_id))
+        # T-A2 复核读面：复核清单是 #160 落的 operation_events 派生投影——
+        # 方案审核人复核的可见入口（桌面呈现随 T-A4/B#9 面接线）。
+        data["redaction_review"] = _redaction_review_entries(session, row.id)
+        return data
     finally:
         session.close()
+
+
+def _redaction_review_entries(session: Any, analysis_id: str) -> list[dict[str, Any]]:
+    """按分析聚合复核清单（消费 #160 落的 guidance.redaction_review 事件）。
+
+    同名跨事件合并（occurrences 累加、matched_dict 求并），按名称排序输出——
+    事件 append-only，聚合口径与写入条目形状（name/occurrences/matched_dict）
+    保持单一权威，不在此二次推导文本。
+    """
+    events = session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "project_guidance_analysis",
+            OperationEvent.target_id == analysis_id,
+            OperationEvent.event_type == REDACTION_EVENT_TYPE,
+        )
+    ).all()
+    merged: dict[str, dict[str, Any]] = {}
+    for event in events:
+        for item in (event.changes or {}).get("entries", []):
+            name = str(item.get("name", ""))
+            if not name:
+                continue
+            slot = merged.setdefault(
+                name, {"name": name, "occurrences": 0, "matched_dict": bool(item.get("matched_dict"))}
+            )
+            slot["occurrences"] += int(item.get("occurrences", 1) or 0)
+            slot["matched_dict"] = slot["matched_dict"] or bool(item.get("matched_dict"))
+    return [merged[key] for key in sorted(merged)]
 
 
 def update_analysis(*, actor: User, project_id: str, analysis_id: str, expected_version: int, changes: Mapping[str, Any]) -> dict[str, Any]:
@@ -182,7 +215,10 @@ def create_manual_revision(*, actor: User, project_id: str, analysis_id: str, ex
         session.close()
 
 
-def confirm_analysis(*, actor: User, project_id: str, analysis_id: str, expected_version: int) -> dict[str, Any]:
+def confirm_analysis(
+    *, actor: User, project_id: str, analysis_id: str, expected_version: int,
+    redaction_reviewed: bool = False,
+) -> dict[str, Any]:
     session = db.session()
     try:
         with session.begin():
@@ -194,6 +230,17 @@ def confirm_analysis(*, actor: User, project_id: str, analysis_id: str, expected
                 raise GuidanceServiceError("guidance_not_confirmable", "只有分析完成的草稿可以确认。", 409)
             if row.version != expected_version:
                 raise GuidanceServiceError("stale_version", "项目指引已被更新，请刷新后重试。", 409)
+            # T-A2 复核闸（拍板 6①「方案审核人 confirm 前必须复核」的机械强制，
+            # 补齐 #160 缺口）：复核清单从写入方同一事件源聚合取得；清单非空且
+            # 请求未显式 redaction_reviewed=true（路由只认字面 true，fail 向
+            # 安全侧）→ 409 拦下。复核动作随确认事件留痕，不新增状态面。
+            review = _redaction_review_entries(session, row.id)
+            if review and not redaction_reviewed:
+                raise GuidanceServiceError(
+                    "redaction_review_required",
+                    f"存在 {len(review)} 个企业名替换待复核：请查看复核清单确认替换恰当，或修改正文后重试。",
+                    409,
+                )
             for old in session.scalars(select(ProjectGuidanceAnalysis).where(ProjectGuidanceAnalysis.project_id == project_id, ProjectGuidanceAnalysis.status == "confirmed")).all():
                 old.status = "superseded"
                 old.version += 1
@@ -234,13 +281,18 @@ def confirm_analysis(*, actor: User, project_id: str, analysis_id: str, expected
                         old_version.deprecation_reason = "预调研表新版本已确认"
             # goal-d2 P0 指标①埋点：售前「独立完成录入+确认」的确认侧事件
             # （录入侧为 presurvey_intake_saved）。纯增量审计，不影响返回值。
+            # T-A2：复核动作随事件留痕（redaction_reviewed / 命中数）——不新增状态面。
             record_event(session, actor, "guidance_analysis_confirmed", project, {
                 "analysis_id": row.id, "version_number": row.version_number,
                 "source_file_version_id": row.source_file_version_id,
                 "source_kind": row.source_kind,
+                "redaction_reviewed": redaction_reviewed,
+                "redaction_review_hits": len(review),
             })
             session.flush()
-            return serialize_analysis(row, source)
+            data = serialize_analysis(row, source)
+            data["redaction_review"] = review
+            return data
     finally:
         session.close()
 
