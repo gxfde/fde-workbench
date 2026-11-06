@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 门禁前置复核与回退留痕立项（借鉴 B#30 消费）（2026-11-06）
+
+### 文档（零代码零迁移零路由；无需 rebuild / 重打包）
+
+- **NEW `docs/architecture/门禁前置复核与回退留痕立项-v1.md`**：**A 面＝前置清单证据漂移自动复核呈现**（T-G2 同构：同 `source_uri` 新 hash 证据行超越清单项已引用 evidence ⇒ 项级 `evidence_superseded: true` 只读呈现，呈现即提示四不动〔状态机/claim_status/拍板有效性/AI 权限〕，零迁移可实施）＋**B 面＝拍板回退通道与留痕合同**（现状 `passed/conditional_pass` 终态不可逆、`failed` 有重交回环；三选项登记 opt1 维持现状／opt2 受限回退〔仅 conditional_pass 可退、passed 不退、`gate_rolled_back` reason 必填〕／opt3 只读复核队列——**是否开放终态回退＝业务拍板项，本文不预支裁决**）。不做清单：不动 evidence 不可变性／不做定时自动重核／AI 不代拍板不代回退。现状行级锚：状态机 CHECK 五值／重交闸／OperationEvent from→to 留痕。
+- backlog B#30 行回写（A 面随下次 gate 轮、B 面须拍板；立项≠实施授权）；AGENTS 补轮次 bullet。
+
+### 口径
+
+- 零代码零迁移——pytest 1981 收集（1975 passed + 6 skipped）/ mypy 279 / vitest 791 / 105 表 / `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 全部不变。
+
 ## [未发布] — V3 门禁判据实施落点设计（借鉴 B#11 消费）（2026-11-06）
 
 ### 文档（零代码零迁移零路由；无需 rebuild / 重打包）
