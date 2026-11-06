@@ -28,6 +28,28 @@
 
 - 105 表 / 迁移头 `b2e8f4a6c9d3`（36 rev，#131~#145 全域零迁移）/ api_catalog ENTRIES 94 不变；**蓝图路由 300→301**（#145 +1：GET `…/projects/{id}/execution-facts`，不进 api_catalog）；pytest **1985 收集＝1979 passed＋6 skipped**／vitest **825**／mypy 基线 **279**（后三项取 #145 CI run 42183340134 实测）；审计脚本同源复测＝route 301 / blueprint 39 / table 105 / rev 36 / heads=[b2e8f4a6c9d3]。
 
+## [未发布] — V3 回执 DSL 一期（B#7，2026-11-06）
+
+### 契约层（零迁移零路由零新表零依赖）
+
+- **NEW `server/src/fde_api/agents/receipt.py`**：回执 DSL 是**外部可写结构**，故按白名单逐字段校验——**未知字段一律拒绝**（不静默丢弃、不透传；否则外部多写一个键即绕过闸门）。容量上限对齐既有审批材料 **64KB** 语境（超限拒绝不截断）。
+- **两种人工介入动作**：
+  - **`ask`**＝请求人工拍板 → 落既有 `automation_approvals`（**零新表零新路由**，密码确认闸现成）：幂等＝`request_key` 由「项目＋能力＋规范化回执」派生并复用既有 pending 审批（崩溃恢复不重复建单）；能力须在 `CAPABILITY_REQUIREMENTS` 白名单且发起人**当下**仍具备；**风险档固定 4**（人工门＝保守高险，诚实标注）；敏感键拒绝入审。
+  - **`later`**＝请求延后复查 → 落**最小到期挂点**（`operation_events`，只表达 `due_at` 时点结构）。
+- **边界声明**：later **不实现**统一到期表／主动超时扫描／统一 cron 计算——那是 **B#13** 的 `deadlines()` 纯函数职责，本条不越界（B#13 落地时把 `due_at` 纳入其到期表即可，无需改动本条）。
+- DSL 不可解析 ⇒ 走 **B#2 降级路径**（业务动作可能已执行，不能重做 ⇒ 落独立终态 `succeeded_but_receipt_invalid`，拒绝同键重跑）。
+- **命名隔离**：既有 `AgentResult.receipt_state` 是**产物清单扫描**语义，与本条**人工介入动作**语义正交，两套并存不互相覆盖。
+- **实现要点**：`action` 用 **discriminated union**（按 `kind` 判别）——普通联合会逐分支尝试并汇总**所有分支**的错误（含无关分支字段名），错误信息冗长且误导；错误路径取完整 loc（`action.ask.bogus`）而非只报顶层。
+
+### 测试
+
+- NEW `server/tests/test_receipt_dsl.py` 8 例：顶层与 action 双层未知字段拒绝／非对象与未知动作拒绝／容量上限拒绝不截断／指纹顺序无关稳定／ask 建单与幂等复用＋风险档 4＋sha256 指纹／未知能力拒绝／敏感键拒绝／later 挂点字段闭集且无主动扫描器／delay 越界拒绝。
+- **变异五连**逐一转红：未知字段改为忽略／容量上限失效／敏感键扫描失效／ask 幂等失效／later 越界校验失效。
+
+### 口径
+
+pytest **1994 收集 = 1988 passed + 6 skipped**（+8）／vitest **828**（不变，回执 DSL 轮零桌面改动）／mypy **279**（不变）／蓝图路由 **301**（不变）／业务表 **105**（不变）／api_catalog ENTRIES **94**（不变）／迁移头 `b2e8f4a6c9d3`（36 rev，不变）。
+
 ## [未发布] — V3 门禁前置复核与回退留痕立项（借鉴 B#30 消费）（2026-11-06）
 
 ### 文档（零代码零迁移零路由；无需 rebuild / 重打包）
@@ -66,7 +88,6 @@
 - 新增 `docs/architecture/到期语义与主动超时治理-v1.md`：登记原生到期权威、状态转换、并发幂等、副作用与可观测合同；裁决「统一目录+各域原生转换器+条件触发只读投影」，不建复制 `expires_at` 的通用到期表。
 - 审批主动超时标记为既有基线（T-P1-5：`_expire_approval` + scheduler sweep）；UploadSession multipart abort、API confirmation append-only 超时列为独立候选阶段；跨域查询须有明确需求才排期。
 - 明确排除 worker lease/retry/outbox due、JWT/签名/Redis TTL、模型/进程 timeout 等异质时钟。本轮仅立项，零运行时代码、零迁移、零路由、零数据操作；B/C/D 仍 PROPOSED，不构成实施授权。
-=======
 ## [未发布] — V3 只读执行事实链面板（B#9，2026-11-06）
 
 ### 只读聚合面（+1 路由；server + desktop；零迁移零依赖）
