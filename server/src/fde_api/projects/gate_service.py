@@ -717,6 +717,10 @@ def _serialize_gate(
         "decision_semantics": template.get("decision_semantics") if template else None,
         "template_source_uri": template.get("source_uri") if template else None,
         "template_hash": gate.template_hash,
+        # B#28 门禁 revision CAS 的「当前值」回传：桌面拍板时随 expected_revision
+        # 带回，服务端据此做版本复核（并发拍板先到者胜）。≡ VersionedMixin.version
+        # ——与 lifecycle_version（语法代际）刻意分离：后者不随拍板推进。
+        "revision": gate.version,
         # V3 T-G2（WB-DEF-5）：冻结哈希 vs 现行 gates.json 比对呈现；NULL=未知出处不误报
         "template_outdated": bool(gate.template_hash)
         and gate.template_hash != _gates_file_hash(),

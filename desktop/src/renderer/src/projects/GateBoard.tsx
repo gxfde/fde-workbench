@@ -68,6 +68,12 @@ interface GateDto {
   fail_exit: string | null
   decision_semantics: string[] | null
   template_source_uri: string | null
+  /**
+   * B#28 门禁 revision CAS 基准：服务端回传的当前 revision。
+   * 拍板时随 expected_revision 带回，服务端做版本复核（并发拍板先到者胜）。
+   * 旧服务端载荷可能缺此键——缺省时不带 expected_revision（服务端按旧客户端处理）。
+   */
+  revision?: number
 }
 
 interface GateEventDto {
@@ -157,7 +163,9 @@ function isGatesView(value: unknown): value is GatesView {
       // V3 T-G1：候选可选键——旧载荷缺省合法；在场则必须形状齐全
       (gate.evidence_candidates === undefined ||
         (Array.isArray(gate.evidence_candidates) &&
-          gate.evidence_candidates.every(isGateEvidenceCandidate))),
+          gate.evidence_candidates.every(isGateEvidenceCandidate))) &&
+      // B#28：revision 可选键——旧服务端载荷缺省合法；在场则必须是数字
+      (gate.revision === undefined || typeof gate.revision === "number"),
   )
 }
 
@@ -246,6 +254,11 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
         return true
       } catch (caught) {
         setActionError(gateError(caught))
+        // B#28：revision 冲突＝另一端已推进门禁状态，本次拍板零变更。
+        // 刷新面板取新 revision（人可基于新状态重拍），不静默失败也不假装成功。
+        if (caught instanceof ApiClientError && caught.code === "gate_revision_conflict") {
+          await load()
+        }
         return false
       } finally {
         setBusyGate("")
@@ -572,6 +585,12 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                   }
                   if (isG8 && result === "pass") payload.decision = g8Decision
                   if (note.trim()) payload.note = note.trim()
+                  // B#28：把面板读到的当前 revision 带回，服务端做 CAS 版本复核——
+                  // 并发拍板先到者胜，后到者拿 409 且零变更（不静默覆盖）。
+                  // 旧服务端载荷无此键时不带（服务端按旧客户端兼容处理）。
+                  if (typeof gate.revision === "number") {
+                    payload.expected_revision = gate.revision
+                  }
                   // 失败不收表单（拍板 400 时勾选与说明不丢）
                   void onDecide(gate, payload).then((ok) => {
                     if (ok) setMode("idle")
@@ -625,6 +644,10 @@ function gateError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === "project_not_found") return "项目不存在或已被删除。"
     if (error.code === "forbidden") return "你没有该项目门禁的操作权限。"
+    // B#28：并发拍板冲突——本次未生效，面板已刷新，可基于新状态重拍。
+    if (error.code === "gate_revision_conflict") {
+      return "门禁状态已被其他操作推进，本次拍板未生效；面板已刷新，请核对最新状态后重试。"
+    }
     return `门禁操作失败：${error.message}`
   }
   return "门禁数据加载失败，请稍后重试。"

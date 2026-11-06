@@ -433,3 +433,48 @@ def test_gate_decision_rejects_non_integer_expected_revision(admin_client, gate_
         )
         assert response.status_code == 400, response.get_data(as_text=True)
         assert response.json["error"]["code"] == "invalid_request"
+
+
+def test_gate_view_exposes_revision_and_decision_accepts_it(
+    admin_client, gate_project, db_session
+):
+    """B#28 桌面接线：门禁视图回传当前 revision，桌面据此做 CAS 版本复核。
+
+    服务端 CAS 本身早已落地（decide_gate 收可选 expected_revision），但视图
+    不回传 revision ⇒ 桌面无从得知当前值、CAS 实际从未被启用。本用例钉住
+    「视图 revision ≡ 行 version」＋「用视图里的 revision 拍板可生效」。
+    """
+    project, gates_url, leader_client = gate_project
+    gates = admin_client.get(gates_url).json["data"]["gates"]
+    assert gates, "门禁视图不应为空"
+    by_key = {gate["gate_key"]: gate for gate in gates}
+    for gate in gates:
+        assert isinstance(gate["revision"], int)
+        assert gate["revision"] >= 1
+
+    db_session.expire_all()
+    row = db_session.scalar(
+        select(Gate).where(
+            Gate.project_id == project["id"], Gate.gate_key == by_key["G8"]["gate_key"]
+        )
+    )
+    assert row is not None
+    assert row.version == by_key["G8"]["revision"]
+
+    _submit_all_evidence(admin_client, gates_url, "G8")
+    fresh = {
+        gate["gate_key"]: gate
+        for gate in admin_client.get(gates_url).json["data"]["gates"]
+    }["G8"]
+    response = leader_client.post(
+        f"{gates_url}/G8/decision",
+        json={
+            "result": "pass",
+            "decision": "proceed",
+            "expected_revision": fresh["revision"],
+        },
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.json["data"]["status"] == "passed"
+    # 拍板生效即推进 revision（与既有 B#28 语义一致）
+    assert response.json["data"]["revision"] == fresh["revision"] + 1

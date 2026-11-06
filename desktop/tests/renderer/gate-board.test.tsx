@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../src/renderer/src/auth/AuthProvider", () => ({ useAuth: () => mocks }))
 
 import { GateBoard } from "../../src/renderer/src/projects/GateBoard"
+import { ApiClientError } from "../../src/renderer/src/api/client"
 
 function gatesPath(projectId = "gate-project"): string {
   return `/api/v1/projects/${projectId}/gates`
@@ -52,6 +53,12 @@ function gateView(overrides: Partial<Record<string, unknown>> = {}): Record<stri
 function evidenceRequestBodies(): Array<Record<string, unknown>> {
   return mocks.apiRequest.mock.calls
     .filter((call) => String(call[0]).endsWith("/gates/G3/evidence"))
+    .map((call) => (call[1] as { body: Record<string, unknown> }).body)
+}
+
+function decisionRequestBodies(gateKey = "G6"): Array<Record<string, unknown>> {
+  return mocks.apiRequest.mock.calls
+    .filter((call) => String(call[0]).endsWith(`/gates/${gateKey}/decision`))
     .map((call) => (call[1] as { body: Record<string, unknown> }).body)
 }
 
@@ -422,4 +429,81 @@ it("T-W7: workflow-tagged rows missing run/node keys fail validation like malfor
   const alert = await screen.findByRole("alert")
   expect(alert).toHaveTextContent("门禁数据加载失败，请稍后重试。")
   expect(screen.queryByRole("region", { name: "产物候选" })).not.toBeInTheDocument()
+})
+
+// ── B#28 门禁 revision CAS 的桌面接线 ────────────────────────────────
+// 服务端 CAS 已在 #130 落地（decide_gate 收可选 expected_revision，不符即
+// 409 gate_revision_conflict 且零变更）；桌面此前不知道当前 revision，CAS
+// 实际从未被启用。本组用例钉住「面板读到的 revision 原样带回」＋「冲突如实
+// 呈现并刷新」，杜绝静默覆盖前写。
+
+function decidableGate(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const base = gateView().gates as Array<Record<string, unknown>>
+  return {
+    ...base[0],
+    gate_key: "G6",
+    status: "evidence",
+    checklist: [
+      { label: "问题陈述（SCQA）", claim_status: "claimed", source_uri: "fdeops://x/y", content_hash: "a".repeat(64) },
+    ],
+    ...overrides,
+  }
+}
+
+it("B#28: 拍板请求带上服务端回传的 expected_revision", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockResolvedValue(gateView({ gates: [decidableGate({ revision: 7 })] }))
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
+  await user.click(screen.getByRole("checkbox"))
+  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
+
+  await waitFor(() => {
+    expect(decisionRequestBodies().length).toBe(1)
+  })
+  expect(decisionRequestBodies()[0].expected_revision).toBe(7)
+})
+
+it("B#28: 旧服务端载荷无 revision 键时不带 expected_revision（旧客户端兼容）", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockResolvedValue(gateView({ gates: [decidableGate()] }))
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
+  await user.click(screen.getByRole("checkbox"))
+  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
+
+  await waitFor(() => {
+    expect(decisionRequestBodies().length).toBe(1)
+  })
+  expect(decisionRequestBodies()[0]).not.toHaveProperty("expected_revision")
+})
+
+it("B#28: 并发拍板冲突（409）如实呈现并刷新面板，不假装成功", async () => {
+  const user = userEvent.setup()
+  const view = gateView({ gates: [decidableGate({ revision: 7 })] })
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (String(path).endsWith("/decision")) {
+      return Promise.reject(
+        new ApiClientError(
+          { code: "gate_revision_conflict", message: "门禁状态已被推进" },
+          409,
+        ),
+      )
+    }
+    return Promise.resolve(view)
+  })
+  render(<GateBoard projectId="gate-project" canManage />)
+
+  await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
+  await user.click(screen.getByRole("checkbox"))
+  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
+
+  const alert = await screen.findByRole("alert")
+  expect(alert).toHaveTextContent("门禁状态已被其他操作推进")
+  // 冲突后重新拉取门禁视图（拿新 revision，人可基于新状态重拍）
+  await waitFor(() => {
+    expect(callCount(gatesPath())).toBeGreaterThan(1)
+  })
 })

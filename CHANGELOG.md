@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 桌面实施轮①：B#28 门禁 revision CAS 桌面接线（2026-11-06）
+
+### 服务端 + 桌面（零迁移零新路由；server 变更 ⇒ 合并后 rebuild 三镜像 + alembic 幂等）
+
+- **服务端**：门禁视图（`GET …/projects/{id}/gates`）与拍板响应回传 `revision`（≡ 既有 `gates.version`，**零新增列**；与 `lifecycle_version`（语法代际）刻意分离——后者不随拍板推进）。
+- **桌面 `GateBoard.tsx`**：拍板请求原样带回 `expected_revision`（B#28 CAS 此前**服务端已就位而桌面从未启用**——桌面不知当前 revision）；409 `gate_revision_conflict` 如实呈现「本次拍板未生效；面板已刷新」并自动刷新面板（人可基于新状态重拍，不静默覆盖前写）；旧服务端载荷缺 `revision` 时不带该键（缺省＝旧客户端兼容）。
+- **测试**：服务端 +1 钉（视图 `revision` ≡ 行 `version`，且用视图值拍板可生效、revision 推进 +1）；桌面 +3 例（带入 `expected_revision`／旧载荷不带／409 冲突如实呈现并刷新）。
+
+### 口径
+
+- pytest **1986 收集＝1980 passed＋6 skipped**（+1）／vitest **828/828**（+3）／mypy 基线 **279** 不变／105 表／迁移头 `b2e8f4a6c9d3`（36 rev，零迁移）／蓝图路由 **301**／api_catalog ENTRIES **94**。
+
 ## [未发布] — V3 回滚轮落定重核（§三 逐行复测＋审计清单回刷＋CR-003 销号）（2026-11-06）
 
 ### 文档与脚本（零业务代码零迁移零路由零桌面功能改动；无需 rebuild / alembic / 重打包）
