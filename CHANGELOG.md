@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3 P0 先行批收官：审批退避提醒 + SLA 统计（2026-11-06）
+
+### 行为变更（零迁移；server 变更 ⇒ 一次 rebuild）
+
+- **B#5 审批退避提醒（复用任务中心，勿新开外发通道）**：新 `scheduler.remind_pending_approvals`（cli scheduler 循环，与派单/过期清扫同拍）——pending 审批按 `created_at` 起算 **10m→1h→4h→24h** 退避序列 catch-up 补发提醒（过夜可直达 4 级），账本=`result_json["approval_reminders"]`；幂等（已发等级不重发）、四级封顶；`skip_locked` 与并发拍板互不阻塞；非 pending 零触碰。红线对齐：不经微信/邮件主动推送，呈现面=任务中心审批列表。
+- **SLA 统计**：`_serialize_approval` 新增 `created_at`（此前未暴露）/ `pending_seconds`（仅 pending）/ `reminder_count` / `next_reminder_at`；workflow run 详情（`serialize_run`）在 `waiting_approval` 态带 `waiting_approval_seconds`（锚=`updated_at`），他态无该键。
+- 新测试 `server/tests/test_approval_reminder_sla.py` 五例 + 变异五连（红→反向替换还原→绿）。
+
+### 口径
+
+- 服务端 pytest **1972 收集 = 1966 passed + 6 skipped**（+5）；mypy 279/104 不变；vitest 787 / 105 表 / `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 不变。
+
 ## [未发布] — V3 迁移进度对照报告入库 + 动工前审查证据修正 + backlog 状态声明混合口径（2026-11-06）
 
 ### 文档（零代码零迁移零路由；无需 rebuild / 重打包）

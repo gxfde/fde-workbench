@@ -211,7 +211,11 @@ def register_cli(app: Flask) -> None:
     @click.option("--once", is_flag=True, help="Dispatch due tasks once and exit.")
     @click.option("--interval", default=30, type=click.IntRange(5, 300), show_default=True)
     def scheduler(once: bool, interval: int) -> None:
-        from fde_api.control.scheduler import dispatch_due_automations, sweep_expired_approvals
+        from fde_api.control.scheduler import (
+            dispatch_due_automations,
+            remind_pending_approvals,
+            sweep_expired_approvals,
+        )
         from fde_api.health.heartbeat import beat
 
         click.echo("scheduler started")
@@ -232,6 +236,10 @@ def register_cli(app: Flask) -> None:
             expired_approvals = sweep_expired_approvals()
             if expired_approvals:
                 click.echo(f"expired_approvals={expired_approvals}")
+            # B#5 审批退避提醒：与过期清扫同拍（10m→1h→4h→24h 序列补发）
+            approval_reminders = remind_pending_approvals()
+            if approval_reminders:
+                click.echo(f"approval_reminders={approval_reminders}")
             # goal-r6（P1-7）：派单维护作业 24h 节流到期即投递（超时释放 /
             # 留存扫描 / T+30 对账；topic 即 job_type=dispatch.maintenance，
             # target=当日 token 由 ensure_background_job 天然去重）。

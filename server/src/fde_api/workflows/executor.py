@@ -42,7 +42,7 @@ import json
 import logging
 import re
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Sequence
 from uuid import uuid4
 
@@ -408,9 +408,9 @@ def _iso(value: Any) -> str | None:
 
 
 def serialize_run(
-    run: WorkflowRun, nodes: Sequence[WorkflowNodeRun]
+    run: WorkflowRun, nodes: Sequence[WorkflowNodeRun], *, now: datetime | None = None
 ) -> dict[str, Any]:
-    return {
+    data = {
         "id": run.id,
         "definition_id": run.definition_id,
         "definition_version": run.definition_version,
@@ -425,6 +425,13 @@ def serialize_run(
         "created_at": _iso(run.created_at),
         "nodes": [_serialize_node(node) for node in nodes],
     }
+    # B#5 挂起时长统计进 run 详情：waiting_approval 的挂起秒数（锚=
+    # updated_at——状态翻进 waiting 的最近一次落库时刻；该态下无其他
+    # 常规写路径，resume 拍板即刻离态）。终态/他态不出该键。
+    if run.status == "waiting_approval" and run.updated_at is not None:
+        current = now or utcnow()
+        data["waiting_approval_seconds"] = int((current - run.updated_at).total_seconds())
+    return data
 
 
 def _serialize_node(node: WorkflowNodeRun) -> dict[str, Any]:

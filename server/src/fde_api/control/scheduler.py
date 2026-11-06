@@ -123,6 +123,62 @@ def sweep_expired_approvals(*, now: datetime | None = None, limit: int = 100) ->
         session.close()
 
 
+# B#5 审批退避提醒：pending 挂起按 10m→1h→4h→24h 退避序列升级提醒计数，
+# 留痕只进 approval.result_json["approval_reminders"]（零迁移）——呈现面=
+# 任务中心审批列表（pending_seconds / reminder_count / next_reminder_at），
+# 复用任务中心，勿新开外发通道（红线：不经微信/邮件主动推送）。
+APPROVAL_REMINDER_BACKOFF_MINUTES = (10, 60, 240, 1440)
+
+
+def remind_pending_approvals(*, now: datetime | None = None, limit: int = 100) -> int:
+    """挂起审批退避提醒（V3 P0 先行批 B#5）。
+
+    与派单/过期清扫同拍（cli scheduler 循环）。对每条 pending 审批按
+    ``created_at`` 起算的退避序列补发已到期等级（catch-up：一次 sweep 可
+    连升多级，如过夜后直达 4 级），账本 = result_json["approval_reminders"]
+    追加 {level, due_at, issued_at}；已发等级幂等不重发；非 pending 零触碰
+    （与 _expire_approval 判定域互斥，skip_locked 与并发拍板互不阻塞）。
+    返回本轮发出的提醒条数（非审批条数）。
+    """
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    session = db.session()
+    issued = 0
+    try:
+        with session.begin():
+            approvals = list(session.scalars(
+                select(AutomationApproval)
+                .where(AutomationApproval.status == "pending")
+                .order_by(AutomationApproval.created_at, AutomationApproval.id)
+                .with_for_update(skip_locked=True)
+                .limit(limit)
+            ))
+            for approval in approvals:
+                ledger = list((approval.result_json or {}).get("approval_reminders") or [])
+                age_minutes = (current - approval.created_at).total_seconds() / 60
+                while len(ledger) < len(APPROVAL_REMINDER_BACKOFF_MINUTES) and age_minutes >= APPROVAL_REMINDER_BACKOFF_MINUTES[len(ledger)]:
+                    level = len(ledger) + 1
+                    due_at = approval.created_at + timedelta(
+                        minutes=APPROVAL_REMINDER_BACKOFF_MINUTES[level - 1]
+                    )
+                    ledger.append(
+                        {
+                            "level": level,
+                            "due_at": due_at.isoformat(),
+                            "issued_at": current.isoformat(),
+                        }
+                    )
+                    issued += 1
+                if ledger:
+                    # JSON 列变更检测需整体重赋值（原地 append 不触发 UPDATE）
+                    approval.result_json = {
+                        **(approval.result_json or {}),
+                        "approval_reminders": ledger,
+                    }
+            return issued
+    finally:
+        session.close()
+
+
 def _cron_values(field: str, minimum: int, maximum: int) -> set[int]:
     values: set[int] = set()
     for part in field.split(","):

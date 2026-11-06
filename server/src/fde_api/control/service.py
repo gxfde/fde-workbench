@@ -1006,7 +1006,21 @@ def _serialize_approval(
     *,
     can_review: bool = False,
     include_arguments: bool = True,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
+    # B#5 SLA 统计：pending 挂起时长 + 退避提醒计数 + 下一提醒时刻（任务中心
+    # 审批面板呈现；退避序列与 scheduler.remind_pending_approvals 同源）。
+    from fde_api.control.scheduler import APPROVAL_REMINDER_BACKOFF_MINUTES
+
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    pending = approval.status == "pending"
+    reminder_count = len((approval.result_json or {}).get("approval_reminders") or [])
+    next_reminder_at = None
+    if pending and reminder_count < len(APPROVAL_REMINDER_BACKOFF_MINUTES):
+        next_reminder_at = (
+            approval.created_at
+            + timedelta(minutes=APPROVAL_REMINDER_BACKOFF_MINUTES[reminder_count])
+        ).isoformat()
     data = {
         "id": approval.id,
         "run_id": approval.run_id,
@@ -1024,6 +1038,11 @@ def _serialize_approval(
         "decision_reason": approval.decision_reason,
         "result": approval.result_json if approval.status == "executed" else None,
         "can_review": can_review and approval.status == "pending",
+        # B#5：created_at 此前未暴露；pending_seconds 只在 pending 时有值
+        "created_at": approval.created_at.isoformat() if approval.created_at else None,
+        "pending_seconds": int((current - approval.created_at).total_seconds()) if pending and approval.created_at else None,
+        "reminder_count": reminder_count if pending else 0,
+        "next_reminder_at": next_reminder_at,
     }
     if include_arguments:
         data["arguments"] = approval.arguments_json
