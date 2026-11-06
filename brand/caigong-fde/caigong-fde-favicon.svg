@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-labelledby="t">
+  <title id="t">蔡工FDE — favicon</title>
+  <desc>32px 网格 favicon，图形居中，favicon 最小尺寸仍可辨识</desc>
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="#14181C"/>
+  <g transform="translate(16,16) scale(0.115) translate(-256,-200)">
+  <g id="cg-fav">
+    <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#E8A33D" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 239.000,200.000 L 356.000,200.000" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  </g>
+  </g>
+</svg>

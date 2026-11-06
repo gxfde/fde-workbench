@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="156 100 200 200" width="200" height="200" role="img" aria-labelledby="t">
+  <title id="t">蔡工FDE — 图形标（反白）</title>
+  <desc>深色背景使用的反白纯图形标</desc>
+  <g id="cg-mark-inverse">
+    <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 239.000,200.000 L 356.000,200.000" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  </g>
+</svg>

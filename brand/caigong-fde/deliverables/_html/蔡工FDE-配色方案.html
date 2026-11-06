@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>蔡工FDE-配色方案</title>
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: 'Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;
+  color:#1A2027; font-size:10.2pt; line-height:1.72;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover {
+  min-height:252mm; background:#14181C; color:#FFFFFF;
+  padding:26mm 20mm 16mm; page-break-after:always; position:relative;
+}
+.cover .mark { width:34mm; height:34mm; margin-bottom:22mm; }
+.cover .kicker { color:#F5B44A; font-size:9pt; letter-spacing:.28em; text-transform:uppercase; }
+.cover h1 { font-size:30pt; line-height:1.3; font-weight:700; margin:10mm 0 6mm; border:0; color:#FFFFFF; page-break-before:auto; }
+.cover .gold-rule { width:44mm; height:2.2mm; background:#E8A33D; margin:8mm 0 10mm; }
+.cover .sub { font-size:12.5pt; color:#B9C2CB; line-height:1.8; max-width:130mm; }
+.cover .meta { position:absolute; bottom:18mm; left:20mm; right:20mm;
+  border-top:1px solid #3A4048; padding-top:5mm; font-size:8.6pt; color:#8A929E; }
+.cover .meta b { color:#F5B44A; font-weight:600; }
+.toc { page-break-after:always; min-height:230mm; }
+.toc h2 { border:0; font-size:17pt; color:#14181C; margin:0 0 8mm; }
+.toc ul { list-style:none; padding:0; margin:0; }
+.toc li { border-bottom:1px solid #E4E7EB; padding:2.4mm 0; font-size:10pt; }
+.toc a { color:#1A2027; text-decoration:none; }
+.toc .toc-num { color:#C98F2B; font-weight:700; margin-right:5mm; }
+h1 { font-size:19pt; color:#14181C; border-bottom:2px solid #E8A33D; padding-bottom:3mm;
+     margin:0 0 7mm; page-break-before:always; page-break-after:avoid; }
+h1:first-of-type { page-break-before:auto; }
+h2 { font-size:14pt; color:#14181C; margin:9mm 0 4mm; padding-left:3.5mm;
+     border-left:3px solid #C98F2B; page-break-after:avoid; }
+h3 { font-size:11.6pt; color:#23282E; margin:6mm 0 2.5mm; page-break-after:avoid; }
+p { margin:0 0 3.2mm; }
+strong { font-weight:700; color:#14181C; }
+a { color:#A3721F; }
+ul, ol { margin:0 0 4mm; padding-left:6mm; }
+li { margin-bottom:1.4mm; }
+table { width:100%; border-collapse:collapse; margin:3mm 0 6mm; font-size:9pt;
+        page-break-inside:avoid; }
+thead { display:table-header-group; }
+th { background:#14181C; color:#FFFFFF; text-align:left; padding:2.3mm 2.6mm;
+     font-weight:600; border:1px solid #23282E; }
+td { padding:2.1mm 2.6mm; border:1px solid #E4E7EB; vertical-align:top;
+     overflow-wrap:anywhere; word-break:break-word; }
+td:first-child { min-width:20mm; }
+th { overflow-wrap:anywhere; }
+tbody tr:nth-child(even) td { background:#F8F8F6; }
+blockquote { border-left:3px solid #E8A33D; background:#FBF3E2; margin:3mm 0 5mm;
+             padding:3mm 5mm; color:#3A4048; page-break-inside:avoid; }
+blockquote p { margin:0 0 2mm; }
+code { font-family:Consolas,'Courier New',monospace; font-size:8.8pt;
+       background:#F2F4F5; padding:0 1.2mm; color:#5A4312; }
+pre { background:#14181C; color:#F2F4F5; padding:4mm; font-size:8.4pt;
+      border-radius:2mm; white-space:pre-wrap; page-break-inside:avoid; }
+pre code { background:transparent; color:inherit; padding:0; }
+hr { border:0; border-top:1px solid #E4E7EB; margin:7mm 0; }
+.chip { display:inline-block; width:3.2mm; height:3.2mm; border:1px solid rgba(20,24,28,.18);
+        border-radius:.6mm; margin-right:1.8mm; vertical-align:-.4mm; }
+.swatch-cell code { background:transparent; padding:0; }
+mark, .warn { background:#FBEECC; padding:0 1mm; }
+</style></head><body>
+<section class="cover">
+  <svg class="mark" viewBox="156 100 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+</svg>
+  <div class="kicker">BRAND / COLOR SYSTEM</div>
+  <h1>蔡工FDE-配色方案</h1>
+  <div class="gold-rule"></div>
+  <div class="sub">独立配色系统文档 · 色阶 / 深浅适配 / UI 令牌 / 对比度实测 / 用色纪律<br><br>蔡工FDE智能交付系统　·　交付有据，一步到位</div>
+  <div class="meta"><b>v1.0</b>　｜　2026-11-05　｜　唯一真源：BRAND-COLOR-SPEC.md ｜ 上位：BRAND-LOGO-GUIDE.md §三 ｜ 状态：可直接归档，待确认项开放</div>
+</section>
+<section class="toc"><h2>目录</h2><ul><li><span class="toc-num">01</span><a href="#_1">一、为什么要独立成文</a></li><li><span class="toc-num">02</span><a href="#_2">二、色彩定位与角色定义</a></li><li><span class="toc-num">03</span><a href="#_3">三、完整色阶</a></li><li><span class="toc-num">04</span><a href="#_4">四、深浅背景适配</a></li><li><span class="toc-num">05</span><a href="#ui-stylescss-root">五、UI 设计令牌映射（styles.css :root）</a></li><li><span class="toc-num">06</span><a href="#_5">六、对比度与可访问性（实测）</a></li><li><span class="toc-num">07</span><a href="#_6">七、用色纪律（强制）</a></li><li><span class="toc-num">08</span><a href="#_8">八、跨介质说明（印刷参数待确认）</a></li><li><span class="toc-num">09</span><a href="#_9">九、数据可视化色板（条件待补）</a></li><li><span class="toc-num">10</span><a href="#_10">十、待确认项汇总</a></li><li><span class="toc-num">11</span><a href="#_11">十一、变更与引用</a></li></ul></section>
+<section class="body"><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文档名称</td>
+<td>《配色方案》</td>
+</tr>
+<tr>
+<td>版本</td>
+<td>v1.0</td>
+</tr>
+<tr>
+<td>编制日期</td>
+<td>2026-11-05</td>
+</tr>
+<tr>
+<td>口径修订</td>
+<td>2026-11-06：金系按钮文字色裁决落地（§六/§七/§十 同步）；行业口径见 <code>BRAND-LOGO-GUIDE.md §〇</code></td>
+</tr>
+<tr>
+<td>状态</td>
+<td>可直接归档；色值为已落地真值，新增介质参数待确认</td>
+</tr>
+<tr>
+<td>唯一真源</td>
+<td>本文（屏幕/UI 色值）；印刷色值待确认</td>
+</tr>
+<tr>
+<td>上位文档</td>
+<td><code>BRAND-LOGO-GUIDE.md</code>（主标规范）、《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code></td>
+</tr>
+<tr>
+<td>下游</td>
+<td><code>desktop/src/renderer/src/styles.css :root</code>、<code>site/index.html</code>、<code>BRAND-ASSET-CHECKLIST.md</code> B3、<code>specs/B-VI基础系统补齐.md</code> B3–B8、C/E 组全部物料</td>
+</tr>
+<tr>
+<td>PDF 成品</td>
+<td><code>deliverables/蔡工FDE-配色方案.pdf</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">一、为什么要独立成文</h2>
+<p>本次核查结论：<code>docs/</code> 全目录对「配色方案 / 品牌全案 / 品牌手册 / 品牌故事 / 话术口径」等词<strong>零命中</strong>；配色规范此前<strong>仅嵌在</strong> <code>BRAND-LOGO-GUIDE.md §三</code>，没有独立文档；《品牌全案策划书》此前实为 <code>BRAND-ASSET-CHECKLIST.md</code> 清单。</p>
+<p>这导致三个问题：色值散落在 LOGO 规范里、UI tokens 里、官网 HTML 里，没有一处可被引用的单一真源；配色调整时无法判断该改哪份文件；新增载体（图表、印刷、丝印）无规可依。</p>
+<p><strong>本文即为此缺口而建</strong>：把已落地的色值收拢为独立、可引用、可归档的配色方案；同时<strong>不新增任何未经确认的色值</strong>——未定事项一律写入 §十「待确认项」。</p>
+<hr />
+<h2 id="_2">二、色彩定位与角色定义</h2>
+<p>主标为「石墨黑 C 形环 + 右上单一金段」。配色系统从这个图形直接推导：<strong>结构是黑的，强调是金的，其余全是中性灰</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>名称</th>
+<th>色值</th>
+<th>用量占比</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主色</td>
+<td>石墨黑 Graphite</td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td>80%–85%</td>
+<td>结构与文字的锚，可靠、不喧哗</td>
+</tr>
+<tr>
+<td>辅色</td>
+<td>琥珀金 Amber</td>
+<td><code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>10%–15%</td>
+<td>全场唯一暖色，对应主标右上那一小段金</td>
+</tr>
+<tr>
+<td>辅色（深底提亮）</td>
+<td>亮琥珀金</td>
+<td><code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code></td>
+<td>深底专用</td>
+<td>深色背景上保证金段可辨</td>
+</tr>
+<tr>
+<td>交互主色</td>
+<td>金墨</td>
+<td><code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code></td>
+<td>UI 交互</td>
+<td>按钮 / 激活态 / 进度条</td>
+</tr>
+<tr>
+<td>交互深端</td>
+<td>深金</td>
+<td><code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code></td>
+<td>UI hover</td>
+<td>悬浮 / 按下态</td>
+</tr>
+<tr>
+<td>中性面（印刷）</td>
+<td>浅中性</td>
+<td><code><span class="chip" style="background:#F2F4F5"></span><code>#F2F4F5</code></code></td>
+<td>背景</td>
+<td>纸面底</td>
+</tr>
+<tr>
+<td>中性面（桌面端）</td>
+<td>页面底</td>
+<td><code><span class="chip" style="background:#F6F6F4"></span><code>#F6F6F4</code></code></td>
+<td>背景</td>
+<td>应用底色</td>
+</tr>
+<tr>
+<td>深底面</td>
+<td>深炭</td>
+<td><code><span class="chip" style="background:#1A1F24"></span><code>#1A1F24</code></code></td>
+<td>深色背景</td>
+<td>与 <code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code> 同为深底</td>
+</tr>
+<tr>
+<td>反白</td>
+<td>纯白</td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td>深底文字与图形</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>占比与角色定义来自 <code>BRAND-LOGO-GUIDE.md §三</code>，本文不改写；下节色阶与 <code>styles.css :root</code> 同源。</p>
+</blockquote>
+<hr />
+<h2 id="_3">三、完整色阶</h2>
+<h3 id="31-10">3.1 品牌双阶（10 色）</h3>
+<table>
+<thead>
+<tr>
+<th>金色阶</th>
+<th>色值</th>
+<th>石墨阶</th>
+<th>色值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gold-1</td>
+<td><code><span class="chip" style="background:#FBEECC"></span><code>#FBEECC</code></code></td>
+<td>ink-1</td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+</tr>
+<tr>
+<td>gold-2</td>
+<td><code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code></td>
+<td>ink-2</td>
+<td><code><span class="chip" style="background:#23282E"></span><code>#23282E</code></code></td>
+</tr>
+<tr>
+<td>gold-3</td>
+<td><code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>ink-3</td>
+<td><code><span class="chip" style="background:#3A4048"></span><code>#3A4048</code></code></td>
+</tr>
+<tr>
+<td>gold-4</td>
+<td><code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code></td>
+<td>ink-4</td>
+<td><code><span class="chip" style="background:#5A626D"></span><code>#5A626D</code></code></td>
+</tr>
+<tr>
+<td>gold-5</td>
+<td><code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code></td>
+<td>ink-5</td>
+<td><code><span class="chip" style="background:#8A929E"></span><code>#8A929E</code></code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>与 <code>BRAND-LOGO-GUIDE.md §三</code> 色阶表、<code>desktop/src/renderer/src/styles.css :root</code> 第 31–42 行逐值一致（本次已复核）。</p>
+</blockquote>
+<h3 id="32">3.2 桌面端中性面 / 描边 / 文字（已落地真值）</h3>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>token</th>
+<th>色值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>背景</td>
+<td><code>--bg</code></td>
+<td><code><span class="chip" style="background:#F6F6F4"></span><code>#F6F6F4</code></code></td>
+</tr>
+<tr>
+<td>卡面</td>
+<td><code>--surface</code></td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+</tr>
+<tr>
+<td>次级面</td>
+<td><code>--surface-2</code></td>
+<td><code><span class="chip" style="background:#EDEEEC"></span><code>#EDEEEC</code></code></td>
+</tr>
+<tr>
+<td>三级面</td>
+<td><code>--surface-3</code></td>
+<td><code><span class="chip" style="background:#F8F8F6"></span><code>#F8F8F6</code></code></td>
+</tr>
+<tr>
+<td>内凹面</td>
+<td><code>--surface-inset</code></td>
+<td><code><span class="chip" style="background:#FBFBFA"></span><code>#FBFBFA</code></code></td>
+</tr>
+<tr>
+<td>主文字</td>
+<td><code>--text</code></td>
+<td><code><span class="chip" style="background:#1A2027"></span><code>#1A2027</code></code></td>
+</tr>
+<tr>
+<td>次要文字</td>
+<td><code>--muted</code></td>
+<td><code><span class="chip" style="background:#6B7280"></span><code>#6B7280</code></code></td>
+</tr>
+<tr>
+<td>弱化文字</td>
+<td><code>--text-soft</code></td>
+<td><code><span class="chip" style="background:#7E8794"></span><code>#7E8794</code></code></td>
+</tr>
+<tr>
+<td>常规描边</td>
+<td><code>--line</code></td>
+<td><code><span class="chip" style="background:#E4E7EB"></span><code>#E4E7EB</code></code></td>
+</tr>
+<tr>
+<td>强描边</td>
+<td><code>--line-strong</code></td>
+<td><code><span class="chip" style="background:#BCC3CC"></span><code>#BCC3CC</code></code></td>
+</tr>
+<tr>
+<td>品牌浅描边</td>
+<td><code>--line-brand</code></td>
+<td><code><span class="chip" style="background:#F0D9AC"></span><code>#F0D9AC</code></code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>来源：<code>styles.css :root</code> 第 54–71 行。这些是<strong>中性/衍生面</strong>，不是新增品牌彩色。</p>
+</blockquote>
+<h3 id="33">3.3 语义色（不参与品牌表达）</h3>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>token</th>
+<th>色值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>成功</td>
+<td><code>--success</code></td>
+<td><code><span class="chip" style="background:#0F9D58"></span><code>#0F9D58</code></code></td>
+</tr>
+<tr>
+<td>警告</td>
+<td><code>--warning</code></td>
+<td><code><span class="chip" style="background:#B45309"></span><code>#B45309</code></code></td>
+</tr>
+<tr>
+<td>危险</td>
+<td><code>--danger</code></td>
+<td><code><span class="chip" style="background:#C0392B"></span><code>#C0392B</code></code></td>
+</tr>
+<tr>
+<td>信息</td>
+<td><code>--info</code></td>
+<td><code><span class="chip" style="background:#3D4653"></span><code>#3D4653</code></code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>纪律</strong>：语义色保持各自色相，<strong>不做品牌化改写</strong>；也不得被借用为数据序列色（见 §九 / B3）。功能性颜色不参与品牌表达。</p>
+</blockquote>
+<hr />
+<h2 id="_4">四、深浅背景适配</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>主标资产</th>
+<th>主色</th>
+<th>辅色</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>白 / 浅灰纸面</td>
+<td><code>caigong-fde-logo-master.svg</code></td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td><code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>首选</td>
+</tr>
+<tr>
+<td>深色 UI / 大屏</td>
+<td><code>caigong-fde-logo-inverse.svg</code></td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td><code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code></td>
+<td>金色必须提亮</td>
+</tr>
+<tr>
+<td>合同页眉 / 打印</td>
+<td><code>caigong-fde-logo-mono-dark.svg</code></td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td>单色、无金</td>
+</tr>
+<tr>
+<td>深底烫印 / 单色</td>
+<td><code>caigong-fde-logo-mono-light.svg</code></td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td>单色、无金</td>
+</tr>
+<tr>
+<td>应用图标 / favicon</td>
+<td><code>app-icon.svg</code> / <code>favicon.svg</code></td>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code> + <code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code> 底</td>
+<td><code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>规则</strong>：深色背景时金色必须提亮至 <code>#F5B44A</code>，否则对比不足（实测见 §六）；反白标<strong>不得</strong>放在浅底上（历史上登录页曾因此出现白 G 隐形）。</p>
+<hr />
+<h2 id="ui-stylescss-root">五、UI 设计令牌映射（<code>styles.css :root</code>）</h2>
+<table>
+<thead>
+<tr>
+<th>用途</th>
+<th>token</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>品牌主色</td>
+<td><code>--brand-ink</code></td>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+</tr>
+<tr>
+<td>品牌辅色</td>
+<td><code>--brand-gold</code></td>
+<td><code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+</tr>
+<tr>
+<td>深底提亮</td>
+<td><code>--brand-gold-bright</code></td>
+<td><code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code></td>
+</tr>
+<tr>
+<td>交互主色</td>
+<td><code>--brand-blue</code></td>
+<td><code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code></td>
+</tr>
+<tr>
+<td>hover 深端</td>
+<td><code>--brand-blue-deep</code></td>
+<td><code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code></td>
+</tr>
+<tr>
+<td>金色极浅面</td>
+<td><code>--brand-blue-soft</code></td>
+<td><code><span class="chip" style="background:#FBF3E2"></span><code>#FBF3E2</code></code></td>
+</tr>
+<tr>
+<td>金色微透面</td>
+<td><code>--brand-blue-faint</code></td>
+<td><code><span class="chip" style="background:#FDF9F0"></span><code>#FDF9F0</code></code></td>
+</tr>
+<tr>
+<td>聚焦环</td>
+<td><code>--brand-focus</code></td>
+<td><code>rgba(200, 143, 43, 0.28)</code></td>
+</tr>
+<tr>
+<td>主渐变</td>
+<td><code>--brand-gradient</code></td>
+<td><code>linear-gradient(120deg, <span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code> 0%, <span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code> 100%)</code></td>
+</tr>
+<tr>
+<td>品牌阴影</td>
+<td><code>--shadow-brand</code></td>
+<td><code>0 8px 22px rgba(201, 143, 43, 0.26)</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <code>--brand-blue</code> / <code>--brand-blue-deep</code> / <code>--brand-green</code> / <code>--brand-teal</code> 为<strong>历史变量名保留</strong>（<code>styles.css</code> 第 22–24 行说明），值已换为金系；<strong>不得</strong>因变量名含 blue/green/teal 而误判为蓝绿色残留，也不得改名——改名会打断 55 处既有引用。</p>
+</blockquote>
+<hr />
+<h2 id="_5">六、对比度与可访问性（实测）</h2>
+<p><strong>方法</strong>：WCAG 2.x 相对亮度公式（sRGB 线性化，阈值 0.04045、γ 2.4），对比度 = (L₁ + 0.05) / (L₂ + 0.05)。本次以脚本对本文所有色值重新计算。</p>
+<table>
+<thead>
+<tr>
+<th>前景 / 背景</th>
+<th>实测对比度</th>
+<th>WCAG AA 正文 (4.5:1)</th>
+<th>WCAG AA 大字 (3:1)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code> / <code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td>17.84:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code> / <code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>8.27:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code> / <code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code></td>
+<td>9.78:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#1A2027"></span><code>#1A2027</code></code> / <code><span class="chip" style="background:#F6F6F4"></span><code>#F6F6F4</code></code></td>
+<td>15.16:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#6B7280"></span><code>#6B7280</code></code> / <code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td>4.83:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#8A929E"></span><code>#8A929E</code></code> / <code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td>3.14:1</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code> / <code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code></td>
+<td>4.21:1</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code> / <code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code></td>
+<td>2.82:1</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code> / <code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code></td>
+<td>2.16:1</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code> / <code><span class="chip" style="background:#FFFFFF"></span><code>#FFFFFF</code></code></td>
+<td>2.82:1</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code> / <code><span class="chip" style="background:#C98F2B"></span><code>#C98F2B</code></code></td>
+<td>6.33:1</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code><span class="chip" style="background:#14181C"></span><code>#14181C</code></code> / <code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code></td>
+<td>4.23:1</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>与既有文档的差异（如实记录，不掩盖）</strong>：<code>BRAND-LOGO-GUIDE.md §三</code> 与清单 B3 记的约数为「琥珀金约 2.2:1 / 金墨约 3.4:1 / 深金约 4.8:1，白字对比达标 WCAG AA」。按 WCAG 公式实测分别为 <strong>2.16 / 2.82 / 4.21</strong>，且<strong>金墨、深金配白字均未达到 AA 正文 4.5:1</strong>（深金达到大字 3:1）。约数偏乐观，本文以实测为准。</p>
+<p><strong>处置（2026-11-06 已裁决并落地）</strong>：用户裁决 <strong>A「金系按钮文字改石墨黑字」</strong>。已把 <code>styles.css</code> / <code>pages.css</code> / <code>ai-server-chat.css</code> / <code>site/index.html</code> 中全部 9 处金底白字规则改为 <code>var(--brand-ink)</code> / <code>var(--ink)</code>，<code>BRAND-LOGO-GUIDE.md §三</code> 的偏乐观约数同步改为实测值；<strong>品牌色值本身零改动</strong>，深底侧边栏白字保持不变。§三 与清单 B3 的旧约数已作废。</p>
+<p>⚠️ <strong>残留风险（不改色值，如实登记）</strong>：hover 深金 <code>#A3721F</code> 上石墨黑字仅 <strong>4.23:1</strong>（白字 4.21:1），仍略低于 AA 正文 4.5:1，但达大字/图标 3:1。若要彻底达标须调整 hover 色值或改换 hover 反馈，属于<strong>色值变更（破坏性变更）</strong>，本次未擅自执行，列入 §十-8。</p>
+</blockquote>
+<hr />
+<h2 id="_6">七、用色纪律（强制）</h2>
+<ol>
+<li>金色只出现在<strong>一个</strong>位置（主标右上分段），是全场唯一暖色；任何画面中不得出现第二处金色强调——UI 交互色除外，它本来就是金色系。</li>
+<li>深色背景时金色必须提亮至 <code>#F5B44A</code>。</li>
+<li><strong>不得引入第三种彩色</strong>（蓝 / 绿 / 青 / 紫等）；所有非品牌色只能是石墨阶、中性灰、纯白。</li>
+<li>语义色保持原色相，不参与品牌表达；也不得被改写为金色。</li>
+<li>单色印刷/丝印/合同页眉只用石墨黑或纯白，不保留金段色相（靠 45° 斜切端头与缺口区分）。</li>
+<li>不得给主标或母题加渐变、投影、描边效果；<code>--brand-gradient</code> 仅用于 UI 控件，不用于主标。</li>
+</ol>
+<h3 id="_7">正误对照</h3>
+<table>
+<thead>
+<tr>
+<th>✅ 正确</th>
+<th>❌ 错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>浅底 <code>master</code> + 一处金</td>
+<td>浅底铺满金色块 / 多处金强调</td>
+</tr>
+<tr>
+<td>深底 <code>inverse</code> + <code><span class="chip" style="background:#F5B44A"></span><code>#F5B44A</code></code></td>
+<td>深底仍用 <code><span class="chip" style="background:#E8A33D"></span><code>#E8A33D</code></code>（对比不足）</td>
+</tr>
+<tr>
+<td>金系按钮/金底图标配石墨黑字（2026-11-06 起强制）</td>
+<td>金系按钮配白字（2.16–2.82:1，已禁用）</td>
+</tr>
+<tr>
+<td>图表状态用语义色</td>
+<td>把 success/danger 改成金色</td>
+</tr>
+<tr>
+<td>页面底色 <code><span class="chip" style="background:#F6F6F4"></span><code>#F6F6F4</code></code> + 石墨阶文字</td>
+<td>引入蓝灰/青绿作「品牌感」点缀</td>
+</tr>
+<tr>
+<td>单色稿用 <code>mono-dark</code>/<code>mono-light</code></td>
+<td>单色稿里硬留一小块金色</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_8">八、跨介质说明（印刷参数待确认）</h2>
+<table>
+<thead>
+<tr>
+<th>介质</th>
+<th>已确认</th>
+<th>待确认</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>屏幕 / UI</td>
+<td>全部 hex 已落地，见 §二–§五</td>
+<td>暗色主题完整 token 集（当前仅深底适配规则）</td>
+</tr>
+<tr>
+<td>官网 <code>site/index.html</code></td>
+<td>8 个品牌色值齐、深浅双区版式</td>
+<td>—</td>
+</tr>
+<tr>
+<td>纸面印刷</td>
+<td>浅中性 <code><span class="chip" style="background:#F2F4F5"></span><code>#F2F4F5</code></code>、单色版规则</td>
+<td><strong>CMYK 分色值、Pantone 对照、纸张与油墨型号——全部待确认，本文不提供任何臆造数值</strong></td>
+</tr>
+<tr>
+<td>丝印 / 雕刻</td>
+<td>单色轮廓化、最小线宽 ≥2mm（见 E1）</td>
+<td>供应商色卡、衣色 Pantone</td>
+</tr>
+<tr>
+<td>烫金 / 特殊工艺</td>
+<td>金色仅一处</td>
+<td>烫金箔型号与色差容差</td>
+</tr>
+<tr>
+<td>数据图表</td>
+<td>无条件色板</td>
+<td>见 §九</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>重要</strong>：hex → CMYK 不存在唯一换算，必须按实际纸张/油墨/ICC 打样确定。因此本文<strong>只给 sRGB hex</strong>，印刷落地时由供应商打样后回填并升版，不得由设计侧套用通用换算表。</p>
+</blockquote>
+<hr />
+<h2 id="_9">九、数据可视化色板（条件待补）</h2>
+<blockquote>
+<p><strong>⚠️ 保留原注记（逐字）</strong>：<strong>「数据可视化色板留待图表需求出现时补」</strong></p>
+<p>本方案<strong>不给出、不指定、不示意任何图表色值</strong>，也不以品牌色阶临时拼凑一套序列色充数。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>当前状态</td>
+<td>未发布 / 条件待补</td>
+</tr>
+<tr>
+<td>触发条件</td>
+<td>出现 ≥2 个数据 series、或需用颜色编码状态的图表需求</td>
+</tr>
+<tr>
+<td>补色约束</td>
+<td>遵守 §七「不得引入第三种彩色」；如确需多色，须先书面裁决豁免范围；语义色不得借作序列色；深底金提亮规则不变</td>
+</tr>
+<tr>
+<td>补色流程</td>
+<td>见 <code>specs/B-VI基础系统补齐.md</code> B3-3</td>
+</tr>
+<tr>
+<td>影响的下游</td>
+<td>C8 PPT 图表页（当前用单色占位并标注「数据色板待 B3 发布」）、C9 截图规范、官网门禁轨道图（现为文字+线条，不依赖色板）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_10">十、待确认项汇总</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>待确认事项</th>
+<th>影响</th>
+<th>建议决策方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>~~金系按钮白字对比度不达 AA 的修正方案~~</td>
+<td>✅ <strong>已关闭 2026-11-06</strong>：裁决 A，金系按钮/激活态/金底图标文字改石墨黑；9 处规则已落地，色值不变</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td>~~§三 / 清单 B3 对比度约数修正~~</td>
+<td>✅ <strong>已关闭 2026-11-06</strong>：约数 2.2/3.4/4.8 作废，统一为实测 2.16/2.82/4.21</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3</td>
+<td>CMYK / Pantone / 纸张 / 油墨 / 烫金箔型号</td>
+<td>全部印刷与实物物料</td>
+<td>印刷供应商 + 品牌责任人</td>
+</tr>
+<tr>
+<td>4</td>
+<td>暗色主题完整 token 集是否立项</td>
+<td>桌面端深色模式</td>
+<td>前端</td>
+</tr>
+<tr>
+<td>5</td>
+<td>数据可视化色板的触发与豁免裁决</td>
+<td>图表类物料</td>
+<td>品牌责任人（见 §九）</td>
+</tr>
+<tr>
+<td>6</td>
+<td>公章朱红与「不得引入第三种彩色」的冲突豁免</td>
+<td>D6 电子签章</td>
+<td>品牌责任人 + 法务</td>
+</tr>
+<tr>
+<td>7</td>
+<td>本文的发布审批人、生效日期与下次复审日期</td>
+<td>治理</td>
+<td>待确认</td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>hover 深金 <code><span class="chip" style="background:#A3721F"></span><code>#A3721F</code></code> 上石墨黑字 4.23:1 仍略低于 AA 正文 4.5:1</strong>；是否调整 hover 色值或改换 hover 反馈（属色值变更 / 破坏性变更）</td>
+<td>桌面端可访问性</td>
+<td>品牌责任人 + 前端；<strong>本次未擅自改动</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_11">十一、变更与引用</h2>
+<ul>
+<li>本文色值变更视为<strong>破坏性变更</strong>（F2）：须同步 <code>build_logo_svgs.py</code>、<code>styles.css :root</code>、<code>site/index.html</code>、8 个 SVG、名片 SVG、17 个 docx 模板、全部 PDF/PPTX 成品，并在 <code>BRAND-CHANGELOG.md</code> 留痕、触发 F3 全量巡检。</li>
+<li>引用方式：其他文档只写「见 <code>BRAND-COLOR-SPEC.md §X</code>」，<strong>不得复制色值另立一份表</strong>，避免双源走样。</li>
+<li>相关文件：<code>BRAND-LOGO-GUIDE.md §三</code>、<code>BRAND-ASSET-CHECKLIST.md</code> B3、<code>specs/B-VI基础系统补齐.md</code> B3、<code>specs/E-现场物料补齐.md</code>、<code>docs/品牌设计交付物索引.md</code>。</li>
+</ul></section>
+</body></html>

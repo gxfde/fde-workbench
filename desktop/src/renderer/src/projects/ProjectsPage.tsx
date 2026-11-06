@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthProvider"
 import { fetchAllPages, requirePage } from "../workbench/fetchAllPages"
 import { isProjectDto } from "../workbench/runtimeValidation"
 import type { PageDto, ProjectDto, ProjectStatus } from "../workbench/types"
+import { Loading } from "../components/ui"
 import {
   emptyProjectFilters,
   ProjectFilters,
@@ -120,7 +121,7 @@ export function ProjectsPage() {
           <h2 id="project-list-title">项目列表</h2>
           <span>{result?.total ?? 0} 个项目</span>
         </div>
-        {loading ? <p role="status">正在加载项目…</p> : error ? (
+        {loading ? <Loading label="正在加载项目…" /> : error ? (
           <p className="form-error" role="alert">{error}</p>
         ) : !result || result.items.length === 0 ? (
           <p className="empty-state">暂无符合条件的项目。</p>

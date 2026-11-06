@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from "../../../shared/contracts"
-import { DEVICE_LABEL, PRODUCT_NAME } from "../../../shared/brand"
+import { BRAND_SUBTITLE, DEVICE_LABEL, PRODUCT_NAME } from "../../../shared/brand"
 import { AuthUiError, useAuth } from "./AuthProvider"
+import logoMark from "../assets/logo-caigong-fde-light.svg"
 
 const LAST_USERNAME_KEY = "fde:last-username:v1"
 
@@ -64,8 +65,14 @@ export function LoginPage() {
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="login-title">
-        <p className="eyebrow">企业 AI 落地工作台</p>
-        <h1 id="login-title">{PRODUCT_NAME}</h1>
+        <div className="auth-brand">
+          <img className="auth-brand-mark" src={logoMark} alt="" aria-hidden="true" />
+          <div className="auth-brand-text">
+            <h1 id="login-title">{PRODUCT_NAME}</h1>
+            <p className="auth-brand-slogan">交付有据，一步到位</p>
+          </div>
+        </div>
+        <p className="eyebrow">{BRAND_SUBTITLE}</p>
         <p className="supporting-copy">使用管理员分配的企业账号登录。</p>
         <form onSubmit={(event) => void submit(event)} noValidate>
           <div className="field">

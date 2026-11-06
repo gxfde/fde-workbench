@@ -3,9 +3,11 @@ import { renderAsync } from "docx-preview"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { useDialogA11y } from "../common/useDialogA11y"
 import { decodeTextPreview, filePreviewKind } from "./fileCapabilities"
 import { isFileUrlDto } from "./runtimeValidation"
 import type { FileUrlDto, ProjectFileDto } from "./types"
+import { Loading } from "../components/ui"
 
 interface FilePreviewProps {
   projectId: string
@@ -16,6 +18,7 @@ interface FilePreviewProps {
 
 export function FilePreview({ projectId, file, canRegenerate = false, onClose }: FilePreviewProps) {
   const { apiRequest } = useAuth()
+  const dialogRef = useDialogA11y(onClose)
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -128,7 +131,7 @@ export function FilePreview({ projectId, file, canRegenerate = false, onClose }:
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={handleBackdrop}>
-      <div className="dialog file-preview-dialog" role="dialog" aria-modal="true" aria-label={`预览：${file.display_name}`} onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} className="dialog file-preview-dialog" role="dialog" aria-modal="true" aria-label={`预览：${file.display_name}`} onClick={(event) => event.stopPropagation()}>
         <div className="dialog-heading">
           <h3>预览：{file.display_name}</h3>
           <div className="row-actions">
@@ -136,7 +139,7 @@ export function FilePreview({ projectId, file, canRegenerate = false, onClose }:
             <button className="secondary-button compact" type="button" onClick={onClose}>关闭</button>
           </div>
         </div>
-        {loading ? <p role="status">正在加载预览…</p> : notReady ? (
+        {loading ? <Loading label="正在加载预览…" /> : notReady ? (
           <div className="preview-unavailable" data-testid="preview-unavailable">
             <p className="form-error" role="alert">预览生成失败，原文件可下载。</p>
             {regenerationQueued ? <p className="notice" role="status">已提交重新生成。稍后关闭并重新打开预览即可查看结果。</p> : null}

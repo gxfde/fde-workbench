@@ -157,7 +157,6 @@ function aiErrorMessage(error: unknown): string {
       ai_rate_limited: "请求过于频繁，请稍后重试。",
       ai_timeout: "生成超时，可保留当前对话后重试。",
       request_timeout: "AI 响应时间较长，请稍后重试；当前对话已保留。",
-      network_error: "无法连接本地服务，请确认服务已启动。",
       ai_empty_response: "AI 未返回有效内容，可重试。",
       ai_output_invalid: error.message || "AI 生成内容不符合模板要求，请重试。",
       generation_cancelled: "生成已取消，未创建草稿。",

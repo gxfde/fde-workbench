@@ -1,5 +1,6 @@
 import type { ReactElement } from "react"
-import { render } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
+import type userEvent from "@testing-library/user-event"
 import { vi, type Mock } from "vitest"
 
 import type {
@@ -100,4 +101,19 @@ export function deferred<T>(): {
     resolve = resolver
   })
   return { promise, resolve }
+}
+
+/**
+ * S2：确认框已从原生 `window.confirm` 换成统一 Modal（ConfirmProvider）。
+ * 原生 spy 不再能驱动确认，测试改用本助手操作 Modal 按钮。
+ *
+ * @param label 点击「确认」按钮的可见文案；传 "取消" 表示走取消路径
+ */
+export async function answerConfirmDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  label = "确定",
+): Promise<void> {
+  const dialog = await screen.findByRole("dialog")
+  const button = within(dialog).getByRole("button", { name: label })
+  await user.click(button)
 }

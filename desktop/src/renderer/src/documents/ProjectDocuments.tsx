@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type MouseE
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import { BUSINESS_CATEGORIES, BUSINESS_CATEGORY_LABELS, BUSINESS_CATEGORY_UNCATEGORIZED_LABEL } from "../businessCategory"
 import type { BusinessCategory } from "../businessCategory"
 import { isDocumentListDto } from "./runtimeValidation"
@@ -13,6 +14,7 @@ import type { ResearchSubjectDto } from "../research/types"
 import { OpportunityFilter } from './OpportunityFilter'
 import { DocumentPreview } from "./DocumentPreview"
 import { DocumentVersionTimeline, versionCanDownload, versionCanPreview } from "./DocumentVersionTimeline"
+import { Loading } from "../components/ui"
 
 interface ProjectDocumentsProps {
   projectId: string
@@ -26,6 +28,7 @@ const FALLBACK_TEMPLATE_VERSION_ID = "published"
 
 export function ProjectDocuments({ projectId, canManage, deliveryMode = false, historyMode = false }: ProjectDocumentsProps) {
   const { apiRequest } = useAuth()
+  const action = useAsyncAction()
   const dangerConfirm = useDangerConfirm()
   const [documents, setDocuments] = useState<DocumentSummaryDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -277,7 +280,7 @@ export function ProjectDocuments({ projectId, canManage, deliveryMode = false, h
       {!canManage ? <p className="field-hint">你可以查看并下载可用的文档，但当前角色无法创建或编辑。</p> : null}
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}
       {actionError ? <p className="form-error banner" role="alert">{actionError}</p> : null}
-      {loading ? <p role="status">正在加载文档…</p> : visibleDocuments.length === 0 ? <p className="empty-state">{documents.length ? '暂无符合筛选条件的文档。' : '暂无项目文档。'}</p> : (
+      {loading ? <Loading label="正在加载文档…" /> : visibleDocuments.length === 0 ? <p className="empty-state">{documents.length ? '暂无符合筛选条件的文档。' : '暂无项目文档。'}</p> : (
         <div className="table-scroll"><table aria-label="项目文档"><thead><tr><th>文档</th><th>状态</th><th>操作</th></tr></thead><tbody>
           {visibleDocuments.map((document) => (
             <tr key={document.id}>
@@ -320,20 +323,20 @@ export function ProjectDocuments({ projectId, canManage, deliveryMode = false, h
       buttons.push(<button key="versions" className="secondary-button compact" type="button" aria-label={`版本：${document.business_code}`} onClick={() => setTimeline(document)}>版本</button>)
     }
     if (version && versionCanDownload(version)) {
-      buttons.push(<button key="download" className="secondary-button compact" type="button" aria-label={`下载：${document.business_code}`} onClick={() => void downloadDocument(document)}>下载</button>)
+      buttons.push(<button key="download" className="secondary-button compact" type="button" aria-label={`下载：${document.business_code}`} disabled={action.isBusy} aria-busy={action.busyKey === `download:${document.business_code}`} onClick={() => void action.run(`download:${document.business_code}`, () => downloadDocument(document))}>{action.busyKey === `download:${document.business_code}` ? "处理中…" : "下载"}</button>)
     }
     if (version && versionCanPreview(version)) {
       buttons.push(<button key="preview" className="secondary-button compact" type="button" aria-label={`预览：${document.business_code}`} onClick={() => { if (versionId) setPreview({ title: document.business_code, versionId }) }}>预览</button>)
     }
     if (canManage && isDraft) {
-      if (!isSolutionExport) buttons.push(<button key="generate" className="secondary-button compact" type="button" aria-label={`生成：${document.business_code}`} onClick={() => void generateDocument(document)}>生成</button>)
+      if (!isSolutionExport) buttons.push(<button key="generate" className="secondary-button compact" type="button" aria-label={`生成：${document.business_code}`} disabled={action.isBusy} aria-busy={action.busyKey === `generate:${document.business_code}`} onClick={() => void action.run(`generate:${document.business_code}`, () => generateDocument(document))}>{action.busyKey === `generate:${document.business_code}` ? "处理中…" : "生成"}</button>)
       if (version) {
-        buttons.push(<button key="revise" className="secondary-button compact" type="button" aria-label={`在线修订：${document.business_code}`} onClick={() => void reviseDocument(document)}>在线修订</button>)
+        buttons.push(<button key="revise" className="secondary-button compact" type="button" aria-label={`在线修订：${document.business_code}`} disabled={action.isBusy} aria-busy={action.busyKey === `revise:${document.business_code}`} onClick={() => void action.run(`revise:${document.business_code}`, () => reviseDocument(document))}>{action.busyKey === `revise:${document.business_code}` ? "处理中…" : "在线修订"}</button>)
       }
       buttons.push(<button key="upload" className="secondary-button compact" type="button" aria-label={`人工上传：${document.business_code}`} onClick={() => requestManualUpload(document)}>人工上传</button>)
       if (version && version.status === "draft") {
-        buttons.push(<button key="confirm" className="secondary-button compact" type="button" aria-label={`确认：${document.business_code}`} onClick={() => void confirmVersion(document)}>确认</button>)
-        buttons.push(<button key="archive" className="secondary-button compact" type="button" aria-label={`标记为弃用：${document.business_code}`} onClick={() => void archiveVersion(document)}>标记为弃用</button>)
+        buttons.push(<button key="confirm" className="secondary-button compact" type="button" aria-label={`确认：${document.business_code}`} disabled={action.isBusy} aria-busy={action.busyKey === `confirm:${document.business_code}`} onClick={() => void action.run(`confirm:${document.business_code}`, () => confirmVersion(document))}>{action.busyKey === `confirm:${document.business_code}` ? "处理中…" : "确认"}</button>)
+        buttons.push(<button key="archive" className="secondary-button compact" type="button" aria-label={`标记为弃用：${document.business_code}`} disabled={action.isBusy} aria-busy={action.busyKey === `archive:${document.business_code}`} onClick={() => void action.run(`archive:${document.business_code}`, () => archiveVersion(document))}>{action.busyKey === `archive:${document.business_code}` ? "处理中…" : "标记为弃用"}</button>)
       }
     }
     return buttons.length > 0 ? <div className="row-actions">{buttons}</div> : null

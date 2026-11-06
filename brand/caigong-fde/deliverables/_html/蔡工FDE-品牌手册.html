@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>蔡工FDE-品牌手册</title>
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: 'Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;
+  color:#1A2027; font-size:10.2pt; line-height:1.72;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover {
+  min-height:252mm; background:#14181C; color:#FFFFFF;
+  padding:26mm 20mm 16mm; page-break-after:always; position:relative;
+}
+.cover .mark { width:34mm; height:34mm; margin-bottom:22mm; }
+.cover .kicker { color:#F5B44A; font-size:9pt; letter-spacing:.28em; text-transform:uppercase; }
+.cover h1 { font-size:30pt; line-height:1.3; font-weight:700; margin:10mm 0 6mm; border:0; color:#FFFFFF; page-break-before:auto; }
+.cover .gold-rule { width:44mm; height:2.2mm; background:#E8A33D; margin:8mm 0 10mm; }
+.cover .sub { font-size:12.5pt; color:#B9C2CB; line-height:1.8; max-width:130mm; }
+.cover .meta { position:absolute; bottom:18mm; left:20mm; right:20mm;
+  border-top:1px solid #3A4048; padding-top:5mm; font-size:8.6pt; color:#8A929E; }
+.cover .meta b { color:#F5B44A; font-weight:600; }
+.toc { page-break-after:always; min-height:230mm; }
+.toc h2 { border:0; font-size:17pt; color:#14181C; margin:0 0 8mm; }
+.toc ul { list-style:none; padding:0; margin:0; }
+.toc li { border-bottom:1px solid #E4E7EB; padding:2.4mm 0; font-size:10pt; }
+.toc a { color:#1A2027; text-decoration:none; }
+.toc .toc-num { color:#C98F2B; font-weight:700; margin-right:5mm; }
+h1 { font-size:19pt; color:#14181C; border-bottom:2px solid #E8A33D; padding-bottom:3mm;
+     margin:0 0 7mm; page-break-before:always; page-break-after:avoid; }
+h1:first-of-type { page-break-before:auto; }
+h2 { font-size:14pt; color:#14181C; margin:9mm 0 4mm; padding-left:3.5mm;
+     border-left:3px solid #C98F2B; page-break-after:avoid; }
+h3 { font-size:11.6pt; color:#23282E; margin:6mm 0 2.5mm; page-break-after:avoid; }
+p { margin:0 0 3.2mm; }
+strong { font-weight:700; color:#14181C; }
+a { color:#A3721F; }
+ul, ol { margin:0 0 4mm; padding-left:6mm; }
+li { margin-bottom:1.4mm; }
+table { width:100%; border-collapse:collapse; margin:3mm 0 6mm; font-size:9pt;
+        page-break-inside:avoid; }
+thead { display:table-header-group; }
+th { background:#14181C; color:#FFFFFF; text-align:left; padding:2.3mm 2.6mm;
+     font-weight:600; border:1px solid #23282E; }
+td { padding:2.1mm 2.6mm; border:1px solid #E4E7EB; vertical-align:top;
+     overflow-wrap:anywhere; word-break:break-word; }
+td:first-child { min-width:20mm; }
+th { overflow-wrap:anywhere; }
+tbody tr:nth-child(even) td { background:#F8F8F6; }
+blockquote { border-left:3px solid #E8A33D; background:#FBF3E2; margin:3mm 0 5mm;
+             padding:3mm 5mm; color:#3A4048; page-break-inside:avoid; }
+blockquote p { margin:0 0 2mm; }
+code { font-family:Consolas,'Courier New',monospace; font-size:8.8pt;
+       background:#F2F4F5; padding:0 1.2mm; color:#5A4312; }
+pre { background:#14181C; color:#F2F4F5; padding:4mm; font-size:8.4pt;
+      border-radius:2mm; white-space:pre-wrap; page-break-inside:avoid; }
+pre code { background:transparent; color:inherit; padding:0; }
+hr { border:0; border-top:1px solid #E4E7EB; margin:7mm 0; }
+.chip { display:inline-block; width:3.2mm; height:3.2mm; border:1px solid rgba(20,24,28,.18);
+        border-radius:.6mm; margin-right:1.8mm; vertical-align:-.4mm; }
+.swatch-cell code { background:transparent; padding:0; }
+mark, .warn { background:#FBEECC; padding:0 1mm; }
+</style></head><body>
+<section class="cover">
+  <svg class="mark" viewBox="156 100 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+</svg>
+  <div class="kicker">BRAND / GUIDELINES</div>
+  <h1>蔡工FDE-品牌手册</h1>
+  <div class="gold-rule"></div>
+  <div class="sub">执行规范完整版 · 主标 / 配色 / 字体 / 图形图标 / 动效 / 全载体应用示例 / 正误对照<br><br>蔡工FDE智能交付系统　·　交付有据，一步到位</div>
+  <div class="meta"><b>v1.0</b>　｜　2026-11-05　｜　对应清单 F1 ｜ PDF 成品 ｜ 状态：内容已齐，发布审批人与生效日期待确认</div>
+</section>
+<section class="toc"><h2>目录</h2><ul><li><span class="toc-num">01</span><a href="#00">00 · 如何使用本手册</a></li><li><span class="toc-num">02</span><a href="#01">01 · 品牌定位与话术</a></li><li><span class="toc-num">03</span><a href="#02">02 · 主标系统</a></li><li><span class="toc-num">04</span><a href="#03">03 · 色彩系统</a></li><li><span class="toc-num">05</span><a href="#04">04 · 字体与字号层级</a></li><li><span class="toc-num">06</span><a href="#05">05 · 辅助图形、图标、摄影、动效</a></li><li><span class="toc-num">07</span><a href="#06">06 · 数字载体应用示例</a></li><li><span class="toc-num">08</span><a href="#07">07 · 商务与现场载体应用示例</a></li><li><span class="toc-num">09</span><a href="#08">08 · 正误对照总表</a></li><li><span class="toc-num">10</span><a href="#09">09 · 资产台账、治理与待确认</a></li><li><span class="toc-num">11</span><a href="#_1">附录 · 文件索引</a></li></ul></section>
+<section class="body"><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>版本</td>
+<td>v1.0</td>
+</tr>
+<tr>
+<td>编制日期</td>
+<td>2026-11-05</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>可直接归档；发布审批人 / 生效日期待确认</td>
+</tr>
+<tr>
+<td>文档性质</td>
+<td><strong>执行规范</strong>（怎么用、用错长什么样），对应清单 F1</td>
+</tr>
+<tr>
+<td>PDF 成品</td>
+<td><code>deliverables/蔡工FDE-品牌手册.pdf</code></td>
+</tr>
+<tr>
+<td>优先级</td>
+<td>定稿话术 <code>BRAND-LOGO-GUIDE.md §〇</code> &gt; <strong>本手册</strong> &gt; <code>BRAND-MASTER-PLAN.md</code> &gt; <code>BRAND-ASSET-CHECKLIST.md</code></td>
+</tr>
+<tr>
+<td>引用原则</td>
+<td>本手册只引用各规范的章节号，<strong>不复制色值表、不复写话术</strong>，避免双源走样</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="00">00 · 如何使用本手册</h2>
+<ul>
+<li>做物料前先查<strong>第 08 章正误对照</strong>，再按载体查第 06/07 章应用示例，最后回到对应规范取精确参数。</li>
+<li>本手册与《品牌全案策划书》分工：策划书回答「为什么」，本手册回答「怎么用」；清单只用于看进度。</li>
+<li>需要改色值 → 只改 <code>BRAND-COLOR-SPEC.md</code> 与 <code>build_logo_svgs.py</code>，重跑生成器；<strong>不得</strong>直接改手册里的引用。</li>
+<li>本手册所有「待确认」项见第 09 章与 <code>BRAND-COMPLETION-INDEX.md</code>。</li>
+</ul>
+<hr />
+<h2 id="01">01 · 品牌定位与话术</h2>
+<h3 id="11-a1">1.1 命名层级（A1 已定稿）</h3>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>写法</th>
+<th>用在哪</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全称</td>
+<td>蔡工FDE智能交付系统</td>
+<td>正式物料、合同、页脚、邮件签名</td>
+</tr>
+<tr>
+<td>短名 / 标准字</td>
+<td>蔡工FDE（不拆行、不改大小写）</td>
+<td>主标组合、侧边栏</td>
+</tr>
+<tr>
+<td>英文</td>
+<td>CAIGONG FDE（全大写、字距 +0.2em）</td>
+<td>英文语境</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-slogan-a2a3">1.2 Slogan 与一段话介绍（A2/A3 已定稿）</h3>
+<ul>
+<li><strong>「交付有据，一步到位」</strong> — 正式物料带逗号；独立出现时可不加标点；<strong>不得</strong>调换前后半句顺序。</li>
+<li>一段话介绍：逐字引用 <code>BRAND-LOGO-GUIDE.md §〇</code>，100 字内全渠道统一，<strong>不得改写、缩写、扩写</strong>。</li>
+<li>英文短句候选 "Evidence in every delivery." <strong>未定稿，暂不得对外使用</strong>。</li>
+</ul>
+<h3 id="13-a5">1.3 事实口径（A5 术语表）</h3>
+<ul>
+<li>方法论：<strong>13 阶段交付 SOP + G1–G9 门禁</strong>。「九步交付法 / 九步法 / 9 步法」全仓禁用。</li>
+<li>G1–G9 名称逐字以 <code>server/seeds/gates.json</code> 为准：线索资格门 / 真需求门 / 诊断开工门 / 试点签约门 / 建档门 / 发现门 / 设计门 / 试点毕业门 / 上线门。</li>
+<li>品牌故事（A4）：仅使用已确认事实骨架，创始人背景、年限、案例、数字一律待确认，不得代填。</li>
+</ul>
+<blockquote>
+<p>完整术语表：<code>specs/A-品牌核心补齐.md</code> A5。</p>
+</blockquote>
+<hr />
+<h2 id="02">02 · 主标系统</h2>
+<h3 id="21">2.1 构造与几何</h3>
+<p>CG 环形标：C+G 对应「蔡工」；单笔连续成环 = 需求到验收的闭环；右上金色独立段为全场唯一暖色。参数（母版 <code>build_logo_svgs.py</code>）：画心 (256,200)、viewBox 512×460、R_OUT 100 / R_IN 71（笔画宽 29）、黑弧 0°→300°、金弧 305°→332°（45° 斜切端头）、G 杠 y=200 / x=239→356。</p>
+<h3 id="22">2.2 资产选择速查</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>白 / 浅灰纸面</td>
+<td><code>caigong-fde-logo-master.svg</code></td>
+</tr>
+<tr>
+<td>深色 UI / 大屏</td>
+<td><code>caigong-fde-logo-inverse.svg</code></td>
+</tr>
+<tr>
+<td>单色印刷 / 丝印 / 合同页眉 / 雕刻</td>
+<td><code>caigong-fde-logo-mono-dark.svg</code></td>
+</tr>
+<tr>
+<td>深底单色 / 烫白</td>
+<td><code>caigong-fde-logo-mono-light.svg</code></td>
+</tr>
+<tr>
+<td>头像 / 底纹 / 图标 / 水印</td>
+<td><code>caigong-fde-mark.svg</code> / <code>-mark-inverse.svg</code></td>
+</tr>
+<tr>
+<td>应用图标 / favicon</td>
+<td><code>caigong-fde-app-icon.svg</code> / <code>-favicon.svg</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <code>caigong-fde-logo-concepts.miora</code> 及 <code>_assets/</code> 内位图<strong>带平台「AI生成」溯源标识，禁止用于任何正式对外物料</strong>。</p>
+</blockquote>
+<h3 id="23">2.3 尺寸与留白</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>下限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>完整组合（含字标）</td>
+<td>宽 ≥ 120px</td>
+</tr>
+<tr>
+<td>纯图形标</td>
+<td>≥ 24px</td>
+</tr>
+<tr>
+<td>favicon</td>
+<td>16px 起（金点仍可辨）</td>
+</tr>
+<tr>
+<td>图形四周留白</td>
+<td>≥ 图形高度 1/4</td>
+</tr>
+<tr>
+<td>组合四周留白</td>
+<td>≥ 图形高度 1/2</td>
+</tr>
+<tr>
+<td>图形与字标间距</td>
+<td>图形高度 0.55 倍；字标总宽 ≥ 图形宽 1.0 倍</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24">2.4 禁用项</h3>
+<p>不得拉伸变形、不得改变环形开口方向、不得移动金色段位置；不得加描边、投影、渐变；不得在标准字内部换色；不得重排字标顺序或删改任一字符；不得把主标裁切/变形后当功能图标；不得把主标当印章使用（D6）。</p>
+<blockquote>
+<p>详见 <code>BRAND-LOGO-GUIDE.md §五/§六/§七</code>。</p>
+</blockquote>
+<hr />
+<h2 id="03">03 · 色彩系统</h2>
+<p><strong>完整规范见独立文档 <code>BRAND-COLOR-SPEC.md</code></strong>，本章只给使用要点：</p>
+<ol>
+<li>主色石墨黑 <code>#14181C</code>（80–85%）+ 辅色琥珀金 <code>#E8A33D</code>（10–15%）+ 中性灰，其余不引入第三种彩色。</li>
+<li>深底金色提亮 <code>#F5B44A</code>；UI 交互用金墨 <code>#C98F2B</code>、hover 深金 <code>#A3721F</code>。</li>
+<li>金色全场只出现一处；语义色（success/warning/danger）保持原色相，不参与品牌表达。</li>
+<li>单色印刷只用石墨黑或纯白，不保留金段色相。</li>
+<li>数据可视化色板<strong>未发布</strong>（保留「留待图表需求出现时补」注记），图表页不得自行造色。</li>
+<li>✅ <strong>金系按钮 / 激活态 / 金底图标一律配石墨黑字 <code>#14181C</code></strong>（2026-11-06 裁决）：白字实测 2.16–2.82:1 不达 AA，已全面替换；石墨黑字主态 6.33–8.27:1 达标。⚠️ hover 深金 4.23:1 残留见 <code>BRAND-COLOR-SPEC.md §十-8</code>。</li>
+</ol>
+<hr />
+<h2 id="04">04 · 字体与字号层级</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>规范</th>
+<th>出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中文标准字</td>
+<td>思源黑体 Source Han Sans SC Bold / 阿里巴巴普惠体 Bold，字重 700</td>
+<td><code>BRAND-LOGO-GUIDE.md §四</code></td>
+</tr>
+<tr>
+<td>英文标准字</td>
+<td>Montserrat Semi Bold / Inter Semi Bold，全大写，字距 +0.2em</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>屏内 UI 字阶</td>
+<td>caption 12 / label 13 / body 14 / section 16 / page 24 px；字重 400/500/600/700</td>
+<td><code>styles.css :root</code> 第 9 层</td>
+</tr>
+<tr>
+<td>数字</td>
+<td>等宽 + 等高数字，右对齐；候选 JetBrains Mono（<strong>选型待确认</strong>），字体文件未入库</td>
+<td><code>specs/B-VI基础系统补齐.md</code> B4</td>
+</tr>
+<tr>
+<td>跨介质字阶</td>
+<td>A4 / PPT / 展会为<strong>建议值 · 待确认</strong></td>
+<td>同上 B4-3</td>
+</tr>
+</tbody>
+</table>
+<p>标准字写法固定：「蔡工FDE」/「CAIGONG FDE」；字号层级<strong>不改变</strong>标准字的字重、字距与大小写。</p>
+<hr />
+<h2 id="05">05 · 辅助图形、图标、摄影、动效</h2>
+<table>
+<thead>
+<tr>
+<th>子系统</th>
+<th>要点</th>
+<th>规范</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>辅助图形</td>
+<td>三母题：金段弧线 / 进度刻度环 / 闭环箭头，均由主标几何推导；装饰级，不得替代主标；金仍只一处</td>
+<td>B5 + <code>assets/aux-*.svg</code></td>
+</tr>
+<tr>
+<td>UI 图标</td>
+<td>24px 网格、1.5px 线性圆角、2px 安全区；图标不得金色填充；状态用语义色</td>
+<td>B6</td>
+</tr>
+<tr>
+<td>摄影 / 插图</td>
+<td>轨道 A 现场摄影（低饱和、暖色只来自现场光源）/ 轨道 B 几何矢量插图；<strong>素材为零，授权待确认</strong></td>
+<td>B7</td>
+</tr>
+<tr>
+<td>动效</td>
+<td>核心母题 = 金段 305°→332° 随进度展开；不得整环旋转/闪烁/改开口方向；须支持 <code>prefers-reduced-motion</code></td>
+<td>B8</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="06">06 · 数字载体应用示例</h2>
+<table>
+<thead>
+<tr>
+<th>载体</th>
+<th>正确做法</th>
+<th>常见错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>桌面端侧边栏</td>
+<td>深底 + <code>mark-inverse</code> 反白图形标</td>
+<td>浅底放反白标（白 G 隐形）</td>
+</tr>
+<tr>
+<td>登录页</td>
+<td>图形标 + 产品名（取 <code>brand.ts</code>）+ slogan 全句，浅底用 <code>logo-caigong-fde-light.svg</code> 等价资产</td>
+<td>用反白标放白底</td>
+</tr>
+<tr>
+<td>官网 hero</td>
+<td>深底 <code>logo-inverse</code> + slogan + §〇 定稿介绍全句</td>
+<td>改写介绍、漏主标、写「九步」</td>
+</tr>
+<tr>
+<td>官网门禁轨道</td>
+<td>G1–G9 名称按 <code>gates.json</code>，文字+线条表达</td>
+<td>自造门禁名、擅自加图表色</td>
+</tr>
+<tr>
+<td>公众号头像</td>
+<td><code>app-icon</code> 或 <code>mark</code> 方形版，深底反白 + 单金段</td>
+<td>加文字/边框/概念稿位图</td>
+</tr>
+<tr>
+<td>邮件签名</td>
+<td><code>assets/email-signature.html</code>，全内联 CSS，字段 <code>[[待确认]]</code></td>
+<td>填入虚构联系方式、用外链字体</td>
+</tr>
+<tr>
+<td>PPT</td>
+<td><code>deliverables/caigong-fde-ppt-template.pptx</code>，封面/内页/图表页/封底</td>
+<td>图表页自行造色、封面漏 slogan</td>
+</tr>
+<tr>
+<td>产品截图</td>
+<td>1440×900 建议尺寸、2x PNG、全脱敏、无控制台/调试面板</td>
+<td>露出真实客户名、内网地址、半截卡片</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="07">07 · 商务与现场载体应用示例</h2>
+<table>
+<thead>
+<tr>
+<th>载体</th>
+<th>正确做法</th>
+<th>常见错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>17 个 docx 模板</td>
+<td>16 个图形版页眉（G 标 + 品牌名 + 金线）+ 统一页脚；contract 纯文字保守版</td>
+<td>重建后忘重跑品牌化脚本</td>
+</tr>
+<tr>
+<td>方案书封面</td>
+<td><code>proposal_cover.docx</code>：G 标 + 金线 + 方案名占位 + slogan</td>
+<td>填入虚构客户信息</td>
+</tr>
+<tr>
+<td>名片</td>
+<td><code>caigong-fde-card-front/back.svg</code>，90×54mm + 3mm 出血</td>
+<td>占位联系方式直接付印</td>
+</tr>
+<tr>
+<td>工牌 / 桌牌</td>
+<td>纯图形标 + 姓名，单色，不使用完整组合</td>
+<td>小面积烫金、加二维码（未确认）</td>
+</tr>
+<tr>
+<td>电子签章</td>
+<td>只定位置与留白；章样以实际备案为准；<strong>本节不提供章样</strong></td>
+<td>设计侧自绘公章、主标当印章</td>
+</tr>
+<tr>
+<td>工装 / 安全帽</td>
+<td><code>mono-dark</code>/<code>mono-light</code>，轮廓化，最小线宽 ≥2mm，单色出片</td>
+<td>单色稿里留一小块金</td>
+</tr>
+<tr>
+<td>设备铭牌 / 完成贴纸</td>
+<td>单色 + 一条金线；G9 名称用「上线门」</td>
+<td>写「G9 终验」、用 emoji 字体勾选符</td>
+</tr>
+<tr>
+<td>展会三件套</td>
+<td>深底反白 + 提亮金 + G1–G9 轨道 + 二维码占位</td>
+<td>印虚构二维码/电话、用概念稿位图</td>
+</tr>
+<tr>
+<td>礼品</td>
+<td>只印纯图形标，单色</td>
+<td>印 slogan 大字、叠加客户 LOGO</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="08">08 · 正误对照总表</h2>
+<table>
+<thead>
+<tr>
+<th>✅ 正确</th>
+<th>❌ 错误</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>13 阶段交付 SOP + G1–G9 门禁</td>
+<td>九步交付法 / 9 步法</td>
+<td>§八、<code>gates.json</code></td>
+</tr>
+<tr>
+<td>G9 上线门 / G1 线索资格门</td>
+<td>G9 终验门 / G1 立项门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>§〇 一段话介绍逐字引用</td>
+<td>自行改写、缩写、扩写</td>
+<td>§〇 使用规则</td>
+</tr>
+<tr>
+<td>浅底 <code>master</code>；深底 <code>inverse</code></td>
+<td>反白标放白底 / 深底用浅底彩色版</td>
+<td>§七</td>
+</tr>
+<tr>
+<td>深底金提亮 <code>#F5B44A</code></td>
+<td>深底仍用 <code>#E8A33D</code></td>
+<td><code>BRAND-COLOR-SPEC.md §四</code></td>
+</tr>
+<tr>
+<td>金系按钮配石墨黑字（8.27:1）</td>
+<td>白字配金（2.16–2.82:1）</td>
+<td>同上 §六</td>
+</tr>
+<tr>
+<td>全场金色一处</td>
+<td>满版金 / 多处金强调</td>
+<td>同上 §七</td>
+</tr>
+<tr>
+<td>语义色保持原色相</td>
+<td>把 success/danger 改成金色</td>
+<td>同上 §三</td>
+</tr>
+<tr>
+<td>正式对外用无标识 SVG</td>
+<td>用 <code>.miora</code> 概念稿位图</td>
+<td>§五 警告</td>
+</tr>
+<tr>
+<td>生成物重跑脚本</td>
+<td>手改 SVG / 手改 docx 页眉</td>
+<td>F2-2</td>
+</tr>
+<tr>
+<td>图表页单色占位 + 标注「待 B3」</td>
+<td>自行拼一套序列色</td>
+<td>B3 / §九</td>
+</tr>
+<tr>
+<td>截图全脱敏</td>
+<td>露真实客户名 / 内网地址</td>
+<td>C9</td>
+</tr>
+<tr>
+<td>签章只定版式位置</td>
+<td>自绘公章 / 主标当印章</td>
+<td>D6</td>
+</tr>
+<tr>
+<td>单色丝印轮廓化、线宽 ≥2mm</td>
+<td>直接缩放 SVG 出片</td>
+<td>E1</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="09">09 · 资产台账、治理与待确认</h2>
+<ul>
+<li>资产清单与进度：<code>BRAND-ASSET-CHECKLIST.md</code>（36 项，本次更新）。</li>
+<li>命名 / 版本 / 变更：<code>specs/F-治理补齐.md</code> F2 + <code>BRAND-CHANGELOG.md</code>。</li>
+<li>季度巡检：同上 F3（14 项巡检表）。</li>
+<li>待确认台账：<code>BRAND-COMPLETION-INDEX.md</code> §待确认汇总、<code>BRAND-MASTER-PLAN.md §九</code>。</li>
+</ul>
+<p><strong>发布状态</strong>：v1.0 内容已齐，但<strong>发布审批人、生效日期、复审周期未指定</strong>；拍板前不得对外宣称「品牌手册已正式发布」。</p>
+<hr />
+<h2 id="_1">附录 · 文件索引</h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>策略</td>
+<td><code>BRAND-MASTER-PLAN.md</code> + PDF/PPTX</td>
+</tr>
+<tr>
+<td>配色</td>
+<td><code>BRAND-COLOR-SPEC.md</code> + PDF</td>
+</tr>
+<tr>
+<td>主标</td>
+<td><code>BRAND-LOGO-GUIDE.md</code>、<code>build_logo_svgs.py</code>、8 个 SVG</td>
+</tr>
+<tr>
+<td>分组规范</td>
+<td><code>specs/A…F-*.md</code></td>
+</tr>
+<tr>
+<td>模板资产</td>
+<td><code>assets/email-signature.html</code>、<code>assets/aux-*.svg</code>、<code>deliverables/caigong-fde-ppt-template.pptx</code></td>
+</tr>
+<tr>
+<td>治理</td>
+<td><code>BRAND-CHANGELOG.md</code>、<code>BRAND-COMPLETION-INDEX.md</code></td>
+</tr>
+<tr>
+<td>入口</td>
+<td><code>docs/品牌设计交付物索引.md</code></td>
+</tr>
+<tr>
+<td>产品真值</td>
+<td><code>server/seeds/gates.json</code>、<code>desktop/src/renderer/src/styles.css</code>、<code>site/index.html</code></td>
+</tr>
+</tbody>
+</table></section>
+</body></html>

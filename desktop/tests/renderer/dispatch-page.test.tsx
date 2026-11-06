@@ -149,7 +149,7 @@ it("tab 切换回调携带子页键", async () => {
   mocks.apiRequest.mockImplementation(async () => [])
   const onTabChange = vi.fn()
   render(<DispatchPage tab="pool" onTabChange={onTabChange} />)
-  await userEvent.click(screen.getByRole("button", { name: "能力档案与产能" }))
+  await userEvent.click(screen.getByRole("tab", { name: "能力档案与产能" }))
   expect(onTabChange).toHaveBeenCalledWith("profiles")
 })
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { Loading } from "../components/ui"
 
 // V3 T-W6 Skill 版本治理视图（域 8 消费面）：版本历史 + 效果统计（T-S2 usage 块）
 // + 治理动作（提交评审/发布/回滚/弃用）。四闸语义在服务层（密码确认、材料闸、
@@ -191,7 +192,7 @@ export function SkillVersionsPage({ skill, onClose, onChanged }: SkillVersionsPa
     <div className="dialog-backdrop">
       <section className="dialog extension-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-versions-title">
         <h2 id="skill-versions-title">版本治理 · {skill.name}</h2>
-        {loading ? <p className="empty-copy" role="status">正在加载版本…</p> : null}
+        {loading ? <Loading label="正在加载版本…" /> : null}
         {error ? <p className="empty-copy" role="alert">{error}</p> : null}
         {data ? (
           <div className="page-stack">

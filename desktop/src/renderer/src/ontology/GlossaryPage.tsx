@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { Loading } from "../components/ui"
 
 // V3 T-W6 本体术语页（ontology-glossary-v1 §4 消费面）：术语只读清单 + 关系类型
 // 只读清单 + 变更集评审（propose 之外的 submit/confirm/reject 按钮）。写路径全部
@@ -274,7 +275,7 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
     }
   }
 
-  if (loading) return <p className="empty-copy" role="status">正在加载术语表…</p>
+  if (loading) return <Loading label="正在加载术语表…" />
   if (error) return <p className="empty-copy" role="alert">{error}</p>
 
   return (

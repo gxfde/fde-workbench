@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "../auth/AuthProvider"
+import { showToast } from "../components/ui"
 
 type Action = { id: string; description: string; operation: string; parameters: Record<string, string>; body: Record<string, unknown> }
 
@@ -35,7 +36,7 @@ export function AIActionConfirmation() {
       if (!mounted.current) return
       setPassword("")
       setActions(items => items.filter(item => item.id !== identifier))
-      if (result.status === "failed" || result.status === "uncertain") window.alert("操作未确认完成，请查询目标的最新状态，避免重复执行。")
+      if (result.status === "failed" || result.status === "uncertain") showToast("操作未确认完成，请查询目标的最新状态，避免重复执行。", "warning")
     } catch (caught) {
       if (mounted.current) { setPassword(""); setError(caught instanceof Error ? caught.message : "确认失败，请重试。") }
     } finally { if (mounted.current) setBusy(false) }

@@ -157,8 +157,8 @@ it("hides console tab for non-platform role", () => {
   mocks.user = { id: "fde-1", role: "fde_engineer" }
   stubApi({})
   render(<DispatchPage tab="pool" onTabChange={() => {}} />)
-  expect(screen.getByRole("button", { name: "派单池" })).toBeInTheDocument()
-  expect(screen.queryByRole("button", { name: "调度台" })).not.toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "派单池" })).toBeInTheDocument()
+  expect(screen.queryByRole("tab", { name: "调度台" })).not.toBeInTheDocument()
 })
 
 it("shows console tab for admin and renders console page", async () => {
@@ -167,7 +167,7 @@ it("shows console tab for admin and renders console page", async () => {
     profiles: [profileRow()],
   })
   render(<DispatchPage tab="console" onTabChange={() => {}} />)
-  expect(screen.getByRole("button", { name: "调度台" })).toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "调度台" })).toBeInTheDocument()
   expect(await screen.findByText("PKG-B2CON-01")).toBeInTheDocument()
   expect(screen.getByText("供给池候选（勾选后用于发布授权 / 指派 offer）")).toBeInTheDocument()
   expect(screen.getByText("张三")).toBeInTheDocument()

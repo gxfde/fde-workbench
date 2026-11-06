@@ -137,18 +137,18 @@ it("hides ops tabs for non-platform role", () => {
   mocks.user = { id: "fde-1", role: "fde_engineer" }
   stubApi({})
   render(<DispatchPage tab="pool" onTabChange={() => {}} />)
-  expect(screen.getByRole("button", { name: "派单池" })).toBeInTheDocument()
-  expect(screen.queryByRole("button", { name: "争议处理" })).not.toBeInTheDocument()
-  expect(screen.queryByRole("button", { name: "仿真对比" })).not.toBeInTheDocument()
-  expect(screen.queryByRole("button", { name: "开闸运维" })).not.toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "派单池" })).toBeInTheDocument()
+  expect(screen.queryByRole("tab", { name: "争议处理" })).not.toBeInTheDocument()
+  expect(screen.queryByRole("tab", { name: "仿真对比" })).not.toBeInTheDocument()
+  expect(screen.queryByRole("tab", { name: "开闸运维" })).not.toBeInTheDocument()
 })
 
 it("shows ops tabs for platform role", () => {
   stubApi({})
   render(<DispatchPage tab="pool" onTabChange={() => {}} />)
-  expect(screen.getByRole("button", { name: "争议处理" })).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "仿真对比" })).toBeInTheDocument()
-  expect(screen.getByRole("button", { name: "开闸运维" })).toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "争议处理" })).toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "仿真对比" })).toBeInTheDocument()
+  expect(screen.getByRole("tab", { name: "开闸运维" })).toBeInTheDocument()
 })
 
 // ---------------------------------------------------------------------------

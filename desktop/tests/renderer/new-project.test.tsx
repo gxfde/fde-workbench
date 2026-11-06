@@ -213,7 +213,6 @@ describe("四步项目创建向导", () => {
       if (path === "/api/v1/projects" && options?.method === "POST") return pending.promise
       return defaultApi(path, options)
     })
-    vi.spyOn(window, "confirm").mockReturnValue(false)
     renderNewProject(apiRequest, adminUser, true)
     const user = userEvent.setup()
     await completeBasics(user, "手动新建")
@@ -230,8 +229,12 @@ describe("四步项目创建向导", () => {
       project_snapshot: expect.objectContaining({ modules: [expect.objectContaining({ module_key: "pre_diagnosis" })] }),
     }) }))
     pending.resolve(apiOk({ ...createdProject(), template_version_id: null }, 201))
+    // S2：确认已改为统一 Modal——项目创建后询问是否另存为行业模板草稿。
+    // 确认是异步的，会阻塞后续跳转，因此先答 Modal 再断言路由。
+    const templateDialog = await screen.findByRole("dialog")
+    expect(templateDialog).toHaveTextContent("另存为行业模板草稿")
+    await user.click(within(templateDialog).getByRole("button", { name: "取消" }))
     await waitFor(() => expect(location.hash).toBe("#projects/created-project"))
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("另存为新的行业模板草稿"))
   })
 
   it("提交精确的企业、模板、负责人、日期、可选资料和模块 payload", async () => {

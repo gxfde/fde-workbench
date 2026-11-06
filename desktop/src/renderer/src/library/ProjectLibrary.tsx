@@ -2,8 +2,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { confirmAsync } from "../common/ConfirmProvider"
 import { BUSINESS_CATEGORIES, BUSINESS_CATEGORY_LABELS, BUSINESS_CATEGORY_UNCATEGORIZED_LABEL } from "../businessCategory"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import { DocumentPreview } from "../documents/DocumentPreview"
 import { DocumentVersionTimeline, versionCanDownload, versionCanPreview } from "../documents/DocumentVersionTimeline"
 import { isDocumentListDto } from "../documents/runtimeValidation"
@@ -21,6 +23,7 @@ type PreviewTarget = { kind: "file"; file: ProjectFileDto } | { kind: "document"
 export function ProjectLibrary({ projectId, canManage, documentType }: { projectId: string; canManage: boolean; documentType?: "sow" }) {
   const { apiRequest, user } = useAuth()
   const dangerConfirm = useDangerConfirm()
+  const action = useAsyncAction()
   const titleId = useId()
   const libraryTitle = documentType === "sow" ? "SOW 文件" : "文件库"
   const [files, setFiles] = useState<ProjectFileDto[]>([])
@@ -126,7 +129,7 @@ export function ProjectLibrary({ projectId, canManage, documentType }: { project
 
   async function retryGeneration(file: ProjectFileDto) {
     if (!file.generation_form_id) return
-    if (!window.confirm(`确定重新生成“${file.display_name}”吗？\n\n确认后系统会在后台生成，期间可继续使用其他功能。`)) return
+    if (!(await confirmAsync({ title: "重新生成", description: `确定重新生成“${file.display_name}”吗？确认后系统会在后台生成，期间可继续使用其他功能。`, confirmLabel: "重新生成" }))) return
     setActionError("")
     try {
       await apiRequest(`/api/v1/projects/${encodeURIComponent(projectId)}/research/forms/${encodeURIComponent(file.generation_form_id)}/export`, { method: "POST", body: {} })
@@ -194,12 +197,12 @@ export function ProjectLibrary({ projectId, canManage, documentType }: { project
           <div className="library-card-time"><dt>上传时间</dt><dd>{formatTime(row.updatedAt)}</dd></div>
         </dl>}
         <footer className="library-card-actions"><div className="row-actions">
-          {rowDownloadable(row) ? <button className="secondary-button compact" type="button" onClick={() => void download(row)}>下载</button> : null}
+          {rowDownloadable(row) ? <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `download:${row.id}`} onClick={() => void action.run(`download:${row.id}`, () => download(row))}>{action.busyKey === `download:${row.id}` ? "处理中…" : "下载"}</button> : null}
           {rowPreviewable(row) ? <button className="secondary-button compact" type="button" onClick={() => setPreview(row.kind === "file" ? { kind: "file", file: fileAtCardVersion(row.source) } : { kind: "document", document: row.source })}>预览</button> : null}
           {cardVersion(row) ? <button className="secondary-button compact" type="button" onClick={() => setTimeline(row.kind === "file" ? { kind: "file", file: row.source } : { kind: "document", document: row.source })}>版本</button> : null}
-          {canManage && rowDeprecatable(row) ? <button className="danger-button compact" type="button" onClick={() => void deprecate(row)}>标记为弃用</button> : null}
-          {canManage && rowDeprecated(row) ? <button className="secondary-button compact" type="button" onClick={() => void restore(row)}>恢复</button> : null}
-          {canManage && row.kind === "file" && row.source.generation_status === "failed" && row.source.generation_form_id ? <button className="secondary-button compact" type="button" onClick={() => void retryGeneration(row.source)}>重新生成</button> : null}
+          {canManage && rowDeprecatable(row) ? <button className="danger-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `deprecate:${row.id}`} onClick={() => void action.run(`deprecate:${row.id}`, () => deprecate(row))}>{action.busyKey === `deprecate:${row.id}` ? "处理中…" : "标记为弃用"}</button> : null}
+          {canManage && rowDeprecated(row) ? <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `restore:${row.id}`} onClick={() => void action.run(`restore:${row.id}`, () => restore(row))}>{action.busyKey === `restore:${row.id}` ? "处理中…" : "恢复"}</button> : null}
+          {canManage && row.kind === "file" && row.source.generation_status === "failed" && row.source.generation_form_id ? <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `retry:${row.id}`} onClick={() => void action.run(`retry:${row.id}`, () => retryGeneration(row.source))}>{action.busyKey === `retry:${row.id}` ? "处理中…" : "重新生成"}</button> : null}
         </div></footer>
       </article>)}
     </div>}

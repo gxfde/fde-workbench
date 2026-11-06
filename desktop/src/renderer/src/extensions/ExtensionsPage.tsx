@@ -5,6 +5,7 @@ import { ModelPreferencesPanel } from "./ModelPreferencesPanel"
 import { LcscToolCard } from "./LcscToolCard"
 import { SkillVersionsPage } from "./SkillVersionsPage"
 import "./extensions.css"
+import { Loading } from "../components/ui"
 
 interface Skill { id: string; scope: "public" | "personal"; key: string; name: string; description: string; status: string; current_version: number; can_edit: boolean }
 interface SkillDetail extends Skill { instructions: string; manifest: Record<string, unknown>; required_capabilities: string[] }
@@ -85,7 +86,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
     <header className="page-heading"><div><p className="eyebrow">能力配置</p><h1>AI 与扩展</h1><p>集中查看 Skills、可调用工具与已登记插件，以及模型配置。</p></div></header>
     {error ? <p className="form-error banner" role="alert">{error}</p> : null}
     {notice ? <p className="notice" role="status">{notice}</p> : null}
-    {!data ? <p role="status">正在加载扩展配置…</p> : <div className="extension-stack">
+    {!data ? <Loading label="正在加载扩展配置…" /> : <div className="extension-stack">
       <div className="extension-tabs" role="tablist" aria-label="AI 与扩展分类"><button id="skills-tab" role="tab" aria-selected={tab === "skills"} aria-controls="skills-panel" onClick={() => setTab("skills")}>Skills</button><button id="tools-tab" role="tab" aria-selected={tab === "tools"} aria-controls="tools-panel" onClick={() => setTab("tools")}>工具 / 插件</button><button id="models-tab" role="tab" aria-selected={tab === "models"} aria-controls="models-panel" onClick={() => setTab("models")}>模型管理</button></div>
       {tab === "skills" ? <section id="skills-panel" role="tabpanel" aria-labelledby="skills-tab" className="panel extension-panel"><div className="panel-heading"><div><h2>Skills</h2><p>公共 Skill 供所有已开通 AI 的账号使用；个人 Skill 仅自己可见。</p></div><div className="extension-heading-actions">
         {canManage ? <button className="secondary-button" onClick={() => { setDraft(emptySkill); setSkillScope("public"); setEditingSkill(true) }}>新建公共 Skill</button> : null}

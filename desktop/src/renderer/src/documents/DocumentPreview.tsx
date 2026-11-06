@@ -2,6 +2,7 @@ import { useEffect, useState, type MouseEvent } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { useDialogA11y } from "../common/useDialogA11y"
 import { isDocumentUrl } from "./runtimeValidation"
 import type { DocumentUrlDto } from "./types"
 
@@ -14,6 +15,7 @@ interface DocumentPreviewProps {
 
 export function DocumentPreview({ projectId, title, versionId, onClose }: DocumentPreviewProps) {
   const { apiRequest } = useAuth()
+  const dialogRef = useDialogA11y(onClose)
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -75,7 +77,7 @@ export function DocumentPreview({ projectId, title, versionId, onClose }: Docume
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={handleBackdrop}>
-      <div className="dialog file-preview-dialog" role="dialog" aria-modal="true" aria-label={`预览：${title}`} onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} className="dialog file-preview-dialog" role="dialog" aria-modal="true" aria-label={`预览：${title}`} onClick={(event) => event.stopPropagation()}>
         <div className="dialog-heading">
           <h3>预览：{title}</h3>
           <div className="row-actions">

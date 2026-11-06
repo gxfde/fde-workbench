@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react"
+import { useId, useState } from "react"
 import { ApiClientError, type RendererApiRequestOptions } from "../api/client"
+import { Modal, UiButton } from "../components/ui"
 import type { ResearchSubjectDto } from "./types"
 
 type Proposal = { name: string; description: string; target_audience: string; next_action: string }
@@ -10,12 +11,12 @@ export function OpportunityAdjustment({ projectId, opportunity, apiRequest, onSa
   apiRequest<T>(path: string, options: RendererApiRequestOptions): Promise<T>
   onSaved(value: ResearchSubjectDto): void; onClose(): void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
   const [instructions, setInstructions] = useState("")
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close() }, [])
+  const instructionsId = useId()
+
   async function generate() {
     setBusy(true); setError(""); setResult(null)
     try {
@@ -39,12 +40,86 @@ export function OpportunityAdjustment({ projectId, opportunity, apiRequest, onSa
   }
   const labels: Record<keyof Proposal, string> = { name: "机会名称", description: "说明", target_audience: "目标使用对象", next_action: "下一步行动" }
   const limits = { name: 160, description: 12000, target_audience: 300, next_action: 1000 }
-  return <dialog ref={dialog} className="dialog opportunity-adjustment-dialog" aria-labelledby="opportunity-adjust-title" onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}>
-    <h2 id="opportunity-adjust-title">AI 调整机会</h2>
-    <p>调整「{opportunity.name}」的名称、说明、目标使用对象和下一步行动。已有调研表仅作参考，不改动编号、关联关系、负责人、状态及评分。</p>
-    <label>调整要求<textarea autoFocus value={instructions} maxLength={4000} rows={4} disabled={busy} placeholder="例如：聚焦 BOM 审核，缩小首期范围，并明确下一步需要验证的内容。" onChange={(event) => { setInstructions(event.target.value); setResult(null) }} /></label>
-    {result ? <section><h3>调整预览（可继续编辑）</h3>{(Object.keys(labels) as Array<keyof Proposal>).map((key) => <label key={key}>{labels[key]}<textarea rows={key === "description" ? 6 : 2} maxLength={limits[key]} disabled={busy} value={result.proposal[key]} onChange={(event) => setResult({ ...result, proposal: { ...result.proposal, [key]: event.target.value } })} /></label>)}</section> : null}
-    {error ? <p role="alert" className="form-error">{error}</p> : null}
-    <div className="opportunity-adjustment-actions"><button className="secondary-button" disabled={busy || !instructions.trim()} onClick={() => void generate()}>{busy ? "处理中…" : result ? "重新生成" : "生成调整建议"}</button><button className="secondary-button" disabled={busy} onClick={onClose}>取消</button><button className="primary-button" disabled={busy || !result?.proposal.name.trim()} onClick={() => void save()}>确认保存到原机会</button></div>
-  </dialog>
+
+  // S2：原生 <dialog> 归一为统一 Modal 原语——补 aria-modal、焦点陷阱与焦点归还。
+  return (
+    <Modal
+      title="AI 调整机会"
+      description={`调整「${opportunity.name}」的名称、说明、目标使用对象和下一步行动。已有调研表仅作参考，不改动编号、关联关系、负责人、状态及评分。`}
+      busy={busy}
+      onClose={onClose}
+    >
+      <label className="field" htmlFor={instructionsId}>
+        <span>调整要求</span>
+        <textarea
+          id={instructionsId}
+          autoFocus
+          value={instructions}
+          maxLength={4000}
+          rows={4}
+          disabled={busy}
+          placeholder="例如：聚焦 BOM 审核，缩小首期范围，并明确下一步需要验证的内容。"
+          onChange={(event) => { setInstructions(event.target.value); setResult(null) }}
+        />
+      </label>
+      {result ? (
+        <section>
+          <h3>调整预览（可继续编辑）</h3>
+          {(Object.keys(labels) as Array<keyof Proposal>).map((key) => (
+            <ProposalField
+              key={key}
+              label={labels[key]}
+              rows={key === "description" ? 6 : 2}
+              maxLength={limits[key]}
+              disabled={busy}
+              value={result.proposal[key]}
+              onChange={(value) => setResult({ ...result, proposal: { ...result.proposal, [key]: value } })}
+            />
+          ))}
+        </section>
+      ) : null}
+      {error ? <p role="alert" className="form-error">{error}</p> : null}
+      <div className="opportunity-adjustment-actions">
+        <UiButton disabled={busy || !instructions.trim()} onClick={() => void generate()}>
+          {busy ? "处理中…" : result ? "重新生成" : "生成调整建议"}
+        </UiButton>
+        <UiButton disabled={busy} onClick={onClose}>取消</UiButton>
+        <UiButton variant="primary" disabled={busy || !result?.proposal.name.trim()} onClick={() => void save()}>
+          确认保存到原机会
+        </UiButton>
+      </div>
+    </Modal>
+  )
+}
+
+/** 预览区字段：label 与控件用 id 关联，满足表单语义判据。 */
+function ProposalField({
+  label,
+  rows,
+  maxLength,
+  disabled,
+  value,
+  onChange,
+}: {
+  label: string
+  rows: number
+  maxLength: number
+  disabled: boolean
+  value: string
+  onChange(value: string): void
+}) {
+  const id = useId()
+  return (
+    <label className="field" htmlFor={id}>
+      <span>{label}</span>
+      <textarea
+        id={id}
+        rows={rows}
+        maxLength={maxLength}
+        disabled={disabled}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  )
 }

@@ -11,6 +11,7 @@ import type {
 } from "../workbench/types"
 import { TemplateEditor } from "./TemplateEditor"
 import { IndustryTemplateAIAssistant } from "./IndustryTemplateAIAssistant"
+import { errorMessage } from "../common/errorMessages"
 
 type EditorTarget =
   | { kind: "new" }
@@ -397,13 +398,14 @@ function formatPublishedAt(value: string | null): string {
 }
 
 function listErrorMessage(error: unknown): string {
-  if (error instanceof ApiClientError && error.code === "forbidden") return "当前账号无权查看行业模板。"
-  return "无法加载行业模板，请稍后重试。"
+  // S2 / F4：forbidden 走统一表；其余保留本页兜底语义。
+  return errorMessage(error, "无法加载行业模板，请稍后重试。")
 }
 
 function templateActionMessage(error: unknown): string {
+  // S2 / F4：公共码走统一表；template_draft_exists / stale_version 在本页有
+  // 更具体的措辞（要说明「本地状态未改变」），保留本地措辞不丢上下文。
   if (error instanceof ApiClientError && error.code === "template_draft_exists") return "该模板已有可编辑草稿。"
-  if (error instanceof ApiClientError && error.code === "authentication_refreshed_resubmit") return "登录状态已刷新，请重新提交本次操作。"
   if (error instanceof ApiClientError && error.code === "stale_version") return "模板已被其他操作更新；本地状态未改变，请刷新后重试。"
-  return "模板操作失败，请稍后重试。"
+  return errorMessage(error, "模板操作失败，请稍后重试。")
 }

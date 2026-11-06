@@ -1,5 +1,5 @@
 /* 任务中心看板（#task-center）
-   此前该文件使用了一套独立的硬编码配色（#edf1f7 / #64748b / #3077e5 …），
+   此前该文件使用了一套独立的蓝绿系硬编码配色，
    与全局设计令牌脱节，导致看板页与其它页面观感割裂。
    现已全部改走 styles.css 的令牌，视觉体系与全站统一。 */
 
@@ -14,7 +14,7 @@
 }
 .task-board-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--font-section); }
 .task-board-heading h2 > span { color: var(--muted); font-size: var(--font-label); font-weight: var(--weight-medium); }
-.task-board-heading p { margin: 0; color: var(--muted); font-size: var(--font-label); line-height: 1.7; }
+.task-board-heading p { margin: 0; color: var(--muted); font-size: var(--font-label); line-height: var(--lh-relaxed); }
 .task-board-lanes {
   display: grid;
   grid-template-columns: repeat(5, minmax(240px, 1fr));
@@ -67,28 +67,28 @@
 .task-board-card.dragging { opacity: .48; }
 .task-board-card.saving { opacity: .72; }
 .task-board-card-top { display: flex; align-items: center; justify-content: space-between; min-height: 23px; }
-.task-board-drag-handle { color: var(--text-soft); font-size: 23px; line-height: 1; }
-.task-board-card h4 { margin: 10px 0 var(--space-3); font-size: var(--font-label); line-height: 1.6; overflow-wrap: anywhere; }
+.task-board-drag-handle { color: var(--text-soft); font-size: var(--size-icon); line-height: 1; }
+.task-board-card h4 { margin: 10px 0 var(--space-3); font-size: var(--font-label); line-height: var(--lh-body); overflow-wrap: anywhere; }
 .task-board-description {
   display: -webkit-box;
   margin: 0 0 var(--space-3);
   overflow: hidden;
   color: var(--muted);
   font-size: var(--font-caption);
-  line-height: 1.7;
+  line-height: var(--lh-relaxed);
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
-.task-board-meta { display: grid; gap: 7px; margin: 0; font-size: var(--font-caption); line-height: 1.6; }
+.task-board-meta { display: grid; gap: 7px; margin: 0; font-size: var(--font-caption); line-height: var(--lh-body); }
 .task-board-meta > div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-2); }
 .task-board-meta dt { color: var(--muted); }
 .task-board-meta dd { margin: 0; min-width: 0; color: var(--muted-strong); overflow-wrap: anywhere; }
 .task-board-progress { display: flex; align-items: center; gap: 9px; margin-top: var(--space-3); }
 .task-board-progress > span { flex: 1; overflow: hidden; height: 5px; border-radius: var(--radius-pill); background: var(--surface-2); }
 .task-board-progress i { display: block; height: 100%; background: var(--brand-gradient); border-radius: inherit; }
-.task-board-progress small { min-width: 25px; color: var(--muted); font-size: 11px; }
-.task-board-next-run { margin: 10px 0 0; color: var(--muted); font-size: var(--font-caption); line-height: 1.7; }
+.task-board-progress small { min-width: 25px; color: var(--muted); font-size: var(--font-micro); }
+.task-board-next-run { margin: 10px 0 0; color: var(--muted); font-size: var(--font-caption); line-height: var(--lh-relaxed); }
 .task-board-blocked-reason {
   margin: var(--space-3) 0 0;
   padding: var(--space-2) var(--space-3);
@@ -96,7 +96,7 @@
   background: var(--warning-soft);
   border-radius: var(--radius-sm);
   font-size: var(--font-caption);
-  line-height: 1.6;
+  line-height: var(--lh-body);
   overflow-wrap: anywhere;
 }
 .task-board-card-actions {
@@ -146,7 +146,7 @@
   outline: 2px solid var(--brand-blue);
   outline-offset: 2px;
 }
-.task-board-readonly, .task-board-saving { font-size: 11px; color: var(--muted); }
+.task-board-readonly, .task-board-saving { font-size: var(--font-micro); color: var(--muted); }
 .task-board-card-actions .compact-button { padding: 6px 10px; min-height: var(--control-height-sm); font-size: var(--font-caption); }
 .task-board-sr-only {
   position: absolute;
@@ -162,11 +162,11 @@
 .task-board-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-rail);
   display: grid;
   place-items: center;
   padding: var(--space-6);
-  background: rgba(17, 24, 39, 0.5);
+  background: rgba(20, 24, 28, 0.5);
   backdrop-filter: blur(4px);
 }
 .task-board-dialog {
@@ -178,9 +178,13 @@
   background: var(--surface);
   box-shadow: var(--shadow-xl);
 }
-.task-board-dialog h2 { margin-top: 0; font-size: 18px; }
-.task-board-dialog p { color: var(--muted); line-height: 1.7; }
+.task-board-dialog h2 { margin-top: 0; font-size: var(--font-card); }
+.task-board-dialog p { color: var(--muted); line-height: var(--lh-relaxed); }
 .task-board-dialog textarea { resize: vertical; }
 .task-board-dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-6); }
+/* S3 说明：主窗口 minWidth=960px（src/main/index.ts:103），但用户可用 Ctrl +/- 缩放，
+   viewport 随之变窄，因此下列窄屏断点在缩放下仍会生效——保留，不作为「死 @media」删除。
+   若要清理，先确认 Electron 缩放最低倍率下的 viewport 宽度再动。 */
+
 @media (max-width: 900px) { .task-board-heading { align-items: flex-start; flex-direction: column; gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { .task-board-lane { transition: none; } }

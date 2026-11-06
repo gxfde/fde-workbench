@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-labelledby="t d">
+  <title id="t">闭环箭头（辅助图形 ③）</title>
+  <desc id="d">环形回环笔势收口于右上金段起点，表达「一个闭环」；不得改变开口方向或移动金段角度。</desc>
+  <path d="M 180.000,100.000 A 80.000,80.000 0 1 1 129.969,25.825" fill="none" stroke="#14181C" stroke-width="14.0" stroke-linecap="butt"/>
+  <polygon points="146.75,33.80 122.16,34.04 131.80,14.26" fill="#14181C"/>
+  <path d="M 145.886,34.468 A 80.000,80.000 0 0 1 170.636,62.442" fill="none" stroke="#E8A33D" stroke-width="14.0" stroke-linecap="butt"/>
+
+</svg>

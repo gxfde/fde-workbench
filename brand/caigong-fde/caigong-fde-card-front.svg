@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1152 720" width="1152" height="720">
+  <title>caigong-fde-card-front.svg</title>
+  <rect width="1152" height="720" fill="#14181C"/>
+  <g transform="translate(866,320) scale(1.5000) translate(-256.0,-200.0)">
+    <path d="M 341.50,200.00 A 85.50,85.50 0 1 1 298.75,125.95" fill="none" stroke="#FFFFFF" stroke-width="29.0"/>
+    <path d="M 305.04,129.96 A 85.50,85.50 0 0 1 331.49,159.86" fill="none" stroke="#F5B44A" stroke-width="29.0"/>
+    <path d="M 239.0,200.0 L 356.0,200.0" fill="none" stroke="#FFFFFF" stroke-width="29.0"/>
+  </g>
+  <!-- 姓名块：左下安全区 -->
+  <text x="96" y="434" font-family="'Source Han Sans SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="52" font-weight="700" letter-spacing="10" fill="#FFFFFF">蔡 工</text>
+  <text x="96" y="492" font-family="'Source Han Sans SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="26" font-weight="500" letter-spacing="3" fill="#B9C0C9">创始人 ｜ FDE 交付负责人</text>
+  <rect x="96" y="528" width="30" height="6" fill="#E8A33D"/>
+  <text x="96" y="572" font-family="'Montserrat','Inter',Arial,sans-serif" font-size="21" font-weight="600" letter-spacing="6" fill="#8A929E">CAIGONG FDE</text>
+</svg>

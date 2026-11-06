@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>蔡工FDE-品牌全案策划书</title>
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: 'Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;
+  color:#1A2027; font-size:10.2pt; line-height:1.72;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover {
+  min-height:252mm; background:#14181C; color:#FFFFFF;
+  padding:26mm 20mm 16mm; page-break-after:always; position:relative;
+}
+.cover .mark { width:34mm; height:34mm; margin-bottom:22mm; }
+.cover .kicker { color:#F5B44A; font-size:9pt; letter-spacing:.28em; text-transform:uppercase; }
+.cover h1 { font-size:30pt; line-height:1.3; font-weight:700; margin:10mm 0 6mm; border:0; color:#FFFFFF; page-break-before:auto; }
+.cover .gold-rule { width:44mm; height:2.2mm; background:#E8A33D; margin:8mm 0 10mm; }
+.cover .sub { font-size:12.5pt; color:#B9C2CB; line-height:1.8; max-width:130mm; }
+.cover .meta { position:absolute; bottom:18mm; left:20mm; right:20mm;
+  border-top:1px solid #3A4048; padding-top:5mm; font-size:8.6pt; color:#8A929E; }
+.cover .meta b { color:#F5B44A; font-weight:600; }
+.toc { page-break-after:always; min-height:230mm; }
+.toc h2 { border:0; font-size:17pt; color:#14181C; margin:0 0 8mm; }
+.toc ul { list-style:none; padding:0; margin:0; }
+.toc li { border-bottom:1px solid #E4E7EB; padding:2.4mm 0; font-size:10pt; }
+.toc a { color:#1A2027; text-decoration:none; }
+.toc .toc-num { color:#C98F2B; font-weight:700; margin-right:5mm; }
+h1 { font-size:19pt; color:#14181C; border-bottom:2px solid #E8A33D; padding-bottom:3mm;
+     margin:0 0 7mm; page-break-before:always; page-break-after:avoid; }
+h1:first-of-type { page-break-before:auto; }
+h2 { font-size:14pt; color:#14181C; margin:9mm 0 4mm; padding-left:3.5mm;
+     border-left:3px solid #C98F2B; page-break-after:avoid; }
+h3 { font-size:11.6pt; color:#23282E; margin:6mm 0 2.5mm; page-break-after:avoid; }
+p { margin:0 0 3.2mm; }
+strong { font-weight:700; color:#14181C; }
+a { color:#A3721F; }
+ul, ol { margin:0 0 4mm; padding-left:6mm; }
+li { margin-bottom:1.4mm; }
+table { width:100%; border-collapse:collapse; margin:3mm 0 6mm; font-size:9pt;
+        page-break-inside:avoid; }
+thead { display:table-header-group; }
+th { background:#14181C; color:#FFFFFF; text-align:left; padding:2.3mm 2.6mm;
+     font-weight:600; border:1px solid #23282E; }
+td { padding:2.1mm 2.6mm; border:1px solid #E4E7EB; vertical-align:top;
+     overflow-wrap:anywhere; word-break:break-word; }
+td:first-child { min-width:20mm; }
+th { overflow-wrap:anywhere; }
+tbody tr:nth-child(even) td { background:#F8F8F6; }
+blockquote { border-left:3px solid #E8A33D; background:#FBF3E2; margin:3mm 0 5mm;
+             padding:3mm 5mm; color:#3A4048; page-break-inside:avoid; }
+blockquote p { margin:0 0 2mm; }
+code { font-family:Consolas,'Courier New',monospace; font-size:8.8pt;
+       background:#F2F4F5; padding:0 1.2mm; color:#5A4312; }
+pre { background:#14181C; color:#F2F4F5; padding:4mm; font-size:8.4pt;
+      border-radius:2mm; white-space:pre-wrap; page-break-inside:avoid; }
+pre code { background:transparent; color:inherit; padding:0; }
+hr { border:0; border-top:1px solid #E4E7EB; margin:7mm 0; }
+.chip { display:inline-block; width:3.2mm; height:3.2mm; border:1px solid rgba(20,24,28,.18);
+        border-radius:.6mm; margin-right:1.8mm; vertical-align:-.4mm; }
+.swatch-cell code { background:transparent; padding:0; }
+mark, .warn { background:#FBEECC; padding:0 1mm; }
+</style></head><body>
+<section class="cover">
+  <svg class="mark" viewBox="156 100 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+</svg>
+  <div class="kicker">BRAND / MASTER PLAN</div>
+  <h1>蔡工FDE-品牌全案策划书</h1>
+  <div class="gold-rule"></div>
+  <div class="sub">策略与决策文档 · 定位 / 话术 / 视觉总纲 / 触点矩阵 / 落地路线 / 治理与风险<br><br>蔡工FDE智能交付系统　·　交付有据，一步到位</div>
+  <div class="meta"><b>v1.0</b>　｜　2026-11-05　｜　配套：策划书 PPTX、品牌手册 PDF ｜ 说明：本策划书不以清单代替 ｜ 状态：可直接归档，生效待确认</div>
+</section>
+<section class="toc"><h2>目录</h2><ul><li><span class="toc-num">01</span><a href="#_1">一、核查结论与本次策划要解决的问题</a></li><li><span class="toc-num">02</span><a href="#_2">二、品牌定位</a></li><li><span class="toc-num">03</span><a href="#a1a3">三、品牌架构与命名体系（A1–A3 已定稿）</a></li><li><span class="toc-num">04</span><a href="#a4-a5">四、话术体系（A4 / A5 本次补齐）</a></li><li><span class="toc-num">05</span><a href="#_3">五、视觉系统总纲（不复制规范，只给结构）</a></li><li><span class="toc-num">06</span><a href="#36">六、品牌触点矩阵（36 项现状与本次补齐）</a></li><li><span class="toc-num">07</span><a href="#_4">七、落地路线与本次对照</a></li><li><span class="toc-num">08</span><a href="#_5">八、治理体系（防止品牌走样）</a></li><li><span class="toc-num">09</span><a href="#_6">九、风险与待确认台账（汇总）</a></li><li><span class="toc-num">10</span><a href="#_7">十、交付物与文件索引</a></li><li><span class="toc-num">11</span><a href="#_8">十一、版本与生效</a></li></ul></section>
+<section class="body"><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文档名称</td>
+<td>《品牌全案策划书》</td>
+</tr>
+<tr>
+<td>版本</td>
+<td>v1.0</td>
+</tr>
+<tr>
+<td>编制日期</td>
+<td>2026-11-05</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>可直接归档；策略与执行口径已定，标注项待品牌责任人拍板</td>
+</tr>
+<tr>
+<td>文档性质</td>
+<td><strong>策略与决策文档</strong>（为什么这样定、怎么落地、怎么防走样）</td>
+</tr>
+<tr>
+<td>与清单的边界</td>
+<td>本策划书<strong>不是</strong>资产清单；<code>BRAND-ASSET-CHECKLIST.md</code> 仅是 36 项进度跟踪表，不再承担策划书职能</td>
+</tr>
+<tr>
+<td>配套交付</td>
+<td><code>deliverables/蔡工FDE-品牌全案策划书.pdf</code>、<code>deliverables/蔡工FDE-品牌全案策划书.pptx</code></td>
+</tr>
+<tr>
+<td>执行规范</td>
+<td><code>BRAND-GUIDELINES.md</code>《品牌手册（完整版）》</td>
+</tr>
+<tr>
+<td>色值真源</td>
+<td><code>BRAND-COLOR-SPEC.md</code>《配色方案》</td>
+</tr>
+<tr>
+<td>索引</td>
+<td><code>BRAND-COMPLETION-INDEX.md</code>、<code>docs/品牌设计交付物索引.md</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">一、核查结论与本次策划要解决的问题</h2>
+<h3 id="11">1.1 三项前提（本次实测）</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>核查项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>docs/</code> 目录对「配色方案 / 品牌全案 / 品牌手册 / 品牌故事 / 话术口径 / 数据可视化色板 / 辅助图形 / 动效规范」等词检索</td>
+<td><strong>零命中</strong>（<code>docs/</code> 共 54 个条目，全部为研发/审计/交付台账，无品牌策划类文档）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>配色规范的存在形式</td>
+<td><strong>仅嵌于</strong> <code>BRAND-LOGO-GUIDE.md §三</code>，无独立文档；色值另散在 <code>styles.css :root</code>、<code>site/index.html</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>「全案策划」的实际形态</td>
+<td>实为 <code>BRAND-ASSET-CHECKLIST.md</code> — 一张 36 项的<strong>进度清单</strong>，只回答「做了没」，不回答「为什么这么定、怎么统一、怎么防走样」</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12">1.2 由此暴露的四个结构性问题</h3>
+<ol>
+<li><strong>无策略层</strong>：清单直接跳到「要做什么物料」，缺少品牌定位、价值主张、差异化依据，导致新物料出现时无判断标准，只能靠临场发挥。</li>
+<li><strong>无单一真源</strong>：色值、话术、术语散落在 LOGO 规范、CSS、HTML、清单里；三处不一致时不知道该以谁为准。</li>
+<li><strong>无执行规范</strong>：主标有规范（§六），但字体层级、图标、辅助图形、摄影、动效、各载体应用示例均为空白（清单 B4–B8 全 🔲）。</li>
+<li><strong>无治理闭环</strong>：没有版本/变更/巡检机制；已经出现过「<code>build-document-templates.py</code> 重建覆盖品牌化页眉」这类真实风险。</li>
+</ol>
+<h3 id="13">1.3 本次策划的边界</h3>
+<ul>
+<li><strong>补齐</strong>：独立《配色方案》、独立《品牌全案策划书》（PDF + PPT）、清单中所有 🔲 项的规范内容、完整版《品牌手册》PDF、治理规范。</li>
+<li><strong>不改动</strong>：已验收的产品功能与 UI 实现（<code>styles.css</code>、<code>site/index.html</code>、17 个 docx 模板、桌面端组件）<strong>本次一律不改</strong>，仅在文档中登记待确认风险。</li>
+<li><strong>不臆造</strong>：创始人背景、成立年份、客户案例、效果数据、联系方式、公司主体、印章备案、印刷工艺参数——全部标「待确认」。</li>
+<li><strong>顺带修正</strong>：<code>BRAND-LOGO-GUIDE.md §〇</code> 一段话介绍仍写「九步交付法」，与 §八 自述的正确口径冲突；已按 <code>site/index.html</code> 定稿与 <code>server/seeds/gates.json</code> 实证修正为 <strong>13 阶段交付 SOP + G1–G9 门禁</strong>。</li>
+</ul>
+<hr />
+<h2 id="_2">二、品牌定位</h2>
+<h3 id="21">2.1 核心资产判断</h3>
+<table>
+<thead>
+<tr>
+<th>资产</th>
+<th>内容</th>
+<th>为什么难被复制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>个人信用</td>
+<td>主标用 C+G 直接对应「蔡工」；<code>BRAND-LOGO-GUIDE.md §一</code> 明确「个人信用是本品牌最难被复制的资产」</td>
+<td>与具体的人绑定，不随工具/平台迁移</td>
+</tr>
+<tr>
+<td>方法论</td>
+<td>13 阶段交付 SOP + G1–G9 门禁（<code>server/seeds/gates.json</code>）</td>
+<td>有明确节点、出口条件、证据清单，不是口号</td>
+</tr>
+<tr>
+<td>交付凭据</td>
+<td>证据链、可追溯、可验收、验收线达成</td>
+<td>客户能逐项核对，而非听一句「差不多了」</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22">2.2 价值主张</h3>
+<p><strong>「交付有据，一步到位」</strong>（已定稿，§〇）</p>
+<table>
+<thead>
+<tr>
+<th>半句</th>
+<th>对应</th>
+<th>回答客户的哪个问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>交付有据</td>
+<td>门禁 G1–G9、证据链、可追溯</td>
+<td>「凭什么算做完？」</td>
+</tr>
+<tr>
+<td>一步到位</td>
+<td>效率承诺</td>
+<td>「会不会反复返工？」</td>
+</tr>
+</tbody>
+</table>
+<p>主标与 slogan 分工：<strong>标管可靠</strong>（闭环 + 验收刻痕），<strong>话管高效</strong>；二者互补，不重复表达同一件事。</p>
+<h3 id="23">2.3 差异化表述（仅用已确认事实）</h3>
+<blockquote>
+<p>不是把交付写成一份漂亮文档，而是把交付拆成 13 个阶段、设下 G1 到 G9 九道门禁：每一道都留下证据、给出结论，才允许往下走。客户拿到的是一条从需求到验收、可追溯可验收的闭环。</p>
+</blockquote>
+<p><strong>禁用</strong>：「九步交付法」及任何简化为「N 个步骤」的说法；不得编造门禁名称或阶段数量之外的数字。</p>
+<h3 id="24">2.4 目标受众与行业口径（行业口径已裁决，受众仍待确认）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>现状</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>目标受众画像、决策链、采购角色</td>
+<td>未提供书面材料</td>
+<td><strong>待确认</strong></td>
+</tr>
+<tr>
+<td>行业口径</td>
+<td>✅ <strong>已裁决 2026-11-06：全行业企业</strong>。一段话介绍改为「面向全行业企业的智能交付工作台」，与工作台现状一致；原行业限定表述退役</td>
+<td>✅ 已闭环 — 已回写 <code>BRAND-LOGO-GUIDE.md §〇</code> 与 <code>site/index.html</code> meta/hero；A4/A5/C6/C8/E3 均为「逐字引用 §〇」的引用型物料，真源更新后自动跟随，无需另写一套文案</td>
+</tr>
+<tr>
+<td>竞品与对标</td>
+<td>未提供</td>
+<td><strong>待确认</strong></td>
+</tr>
+<tr>
+<td>定价 / 服务分层</td>
+<td>未提供</td>
+<td><strong>待确认</strong></td>
+</tr>
+<tr>
+<td>品牌英文名与英文短句</td>
+<td>候选 "Evidence in every delivery." 未定稿</td>
+<td><strong>待确认</strong>，定稿前不得对外使用</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="a1a3">三、品牌架构与命名体系（A1–A3 已定稿）</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>写法</th>
+<th>规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全称</td>
+<td>蔡工FDE智能交付系统</td>
+<td>正式物料、合同、页脚、签名</td>
+</tr>
+<tr>
+<td>短名 / 标准字</td>
+<td>蔡工FDE</td>
+<td>不拆行、不改大小写；字距与字重见 §四 LOGO-GUIDE</td>
+</tr>
+<tr>
+<td>英文</td>
+<td>CAIGONG FDE</td>
+<td>全大写、字距 +0.2em；<strong>不得</strong>拼作 CAIGOUNG / CG FDE</td>
+</tr>
+<tr>
+<td>Slogan</td>
+<td>交付有据，一步到位</td>
+<td>正式物料带逗号；独立出现时可不加标点</td>
+</tr>
+<tr>
+<td>一段话介绍</td>
+<td>见 <code>BRAND-LOGO-GUIDE.md §〇</code></td>
+<td><strong>100 字内全渠道统一，逐字引用，不得自行改写</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>定稿介绍真值（2026-11-05 修正 SOP 口径；2026-11-06 裁决行业口径）：
+「蔡工FDE智能交付系统，面向全行业企业的智能交付工作台。以 13 阶段交付 SOP 和 G1–G9 门禁把每一次实施变成可追溯、可验收的标准动作——从需求到验收，一个闭环，交付有据，一步到位。」</p>
+</blockquote>
+<hr />
+<h2 id="a4-a5">四、话术体系（A4 / A5 本次补齐）</h2>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>文档</th>
+<th>职能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>叙事层</td>
+<td><code>specs/A-品牌核心补齐.md</code> A4 品牌故事</td>
+<td>官网 About、提案开篇、公众号首篇；只含已确认事实骨架，个人/案例/数字全部待确认</td>
+</tr>
+<tr>
+<td>口径层</td>
+<td>同上 A5 话术口径表</td>
+<td>术语单一真源；门禁名称以 <code>server/seeds/gates.json</code> 为准；明确「九步交付法」等禁用写法</td>
+</tr>
+<tr>
+<td>真值层</td>
+<td><code>server/seeds/gates.json</code></td>
+<td>G1 线索资格门 → G2 真需求门 → G3 诊断开工门 → G4 试点签约门 → G5 建档门 → G6 发现门 → G7 设计门 → G8 试点毕业门 → G9 上线门</td>
+</tr>
+</tbody>
+</table>
+<p><strong>已识别的口径冲突（登记，不擅自改清单原文）</strong>：清单 E4 写「G9 终验」，与真值「G9 上线门」不一致，须拍板统一；见 <code>specs/E-现场物料补齐.md</code> E4。</p>
+<hr />
+<h2 id="_3">五、视觉系统总纲（不复制规范，只给结构）</h2>
+<table>
+<thead>
+<tr>
+<th>子系统</th>
+<th>状态</th>
+<th>单一真源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主标 CG 环形标（几何、留白、最小尺寸、禁用项、深浅适配）</td>
+<td>✅ 已定稿</td>
+<td><code>BRAND-LOGO-GUIDE.md §一/§二/§五–§七</code></td>
+</tr>
+<tr>
+<td>配色</td>
+<td>✅ 独立成文</td>
+<td><code>BRAND-COLOR-SPEC.md</code>（本次新建）</td>
+</tr>
+<tr>
+<td>字体 / 数字等宽 / 字号层级</td>
+<td>✅ 规范已出，选型待确认</td>
+<td><code>specs/B-VI基础系统补齐.md</code> B4</td>
+</tr>
+<tr>
+<td>辅助图形母题</td>
+<td>✅ 三个母题草案 + SVG</td>
+<td>同上 B5 + <code>assets/aux-*.svg</code></td>
+</tr>
+<tr>
+<td>UI 图标</td>
+<td>✅ 规范已出，现有图标库统一待核</td>
+<td>同上 B6</td>
+</tr>
+<tr>
+<td>摄影 / 插图</td>
+<td>✅ 双轨风格已出，<strong>素材为零</strong></td>
+<td>同上 B7</td>
+</tr>
+<tr>
+<td>动效</td>
+<td>✅ 规范已出，<strong>未实施</strong></td>
+<td>同上 B8</td>
+</tr>
+<tr>
+<td>数据可视化色板</td>
+<td>🟡 <strong>条件待补，不发布色值</strong></td>
+<td><code>BRAND-COLOR-SPEC.md §九</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>视觉总则一句话</strong>：结构是黑的，强调是金的，其余全是中性灰；金色全场只出现一处。所有子系统都从主标几何推导，不引入第二套图形语言或第三种彩色。</p>
+<hr />
+<h2 id="36">六、品牌触点矩阵（36 项现状与本次补齐）</h2>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>模块</th>
+<th>清单项数</th>
+<th>原已完成</th>
+<th>本次补齐</th>
+<th>剩余条件项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>品牌核心</td>
+<td>5</td>
+<td>3</td>
+<td>A4、A5</td>
+<td>行业口径、创始人背景待确认</td>
+</tr>
+<tr>
+<td>B</td>
+<td>VI 基础系统</td>
+<td>8</td>
+<td>2</td>
+<td>B3（条件待补说明）、B4–B8</td>
+<td>字体选型、图标库盘点、图表色板</td>
+</tr>
+<tr>
+<td>C</td>
+<td>数字载体</td>
+<td>9</td>
+<td>4</td>
+<td>C6–C9</td>
+<td><strong>C4 macOS <code>icon.icns</code> 需 macOS 环境</strong>；C5 联系方式占位</td>
+</tr>
+<tr>
+<td>D</td>
+<td>商务载体</td>
+<td>6</td>
+<td>4</td>
+<td>D5、D6</td>
+<td>D3 联系方式占位；D6 章样与法务授权</td>
+</tr>
+<tr>
+<td>E</td>
+<td>现场与实体</td>
+<td>5</td>
+<td>0</td>
+<td>E1–E5（工艺规范）</td>
+<td>印版/材质/尺寸/共标授权；E4 文案口径</td>
+</tr>
+<tr>
+<td>F</td>
+<td>治理规范</td>
+<td>3</td>
+<td>0</td>
+<td>F1、F2、F3</td>
+<td>发布审批人、巡检责任人</td>
+</tr>
+<tr>
+<td></td>
+<td><strong>合计</strong></td>
+<td><strong>36</strong></td>
+<td><strong>13</strong></td>
+<td><strong>22 项 + 1 条件说明</strong></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>说明：清单原记「已完成 5」，是按 v1.0 编制时点统计；随后 C2/C3/C5、D1–D4、B3 等陆续落地，本次核对实际为 13 项完成。差异已在 <code>BRAND-ASSET-CHECKLIST.md</code> 更新。</p>
+</blockquote>
+<p><strong>最高杠杆触点</strong>：产品内 17 个 docx 模板（D1）与桌面端 UI（C2/C3）——客户每周都在看；官网（C5）与名片（D3）为对外第一印象。这几处一旦走样，其余物料做得再精致也无效。</p>
+<hr />
+<h2 id="_4">七、落地路线与本次对照</h2>
+<h3 id="71">7.1 原三波路线（清单 §实施路线）</h3>
+<ul>
+<li><strong>第一波 P0（10 项）</strong>：话术 → 色彩 → 桌面端 → 商务模板 → 官网。→ <strong>已完成 9 项</strong>，余 C4 macOS 图标（环境依赖）。</li>
+<li><strong>第二波 P1（11 项）</strong>：故事/话术表 → 字阶/辅助图形/图标 → 公众号/签名/PPT → 工牌 → 工装丝印/铭牌 → 完整手册 → 资产管理。→ <strong>本次以规范内容形式全部补齐</strong>。</li>
+<li><strong>第三波 P2（8 项）</strong>：插图/动效/截图 → 签章/展会/贴纸/礼品 → 巡检。→ <strong>本次以规范内容形式全部补齐</strong>，成品制作待外部条件。</li>
+</ul>
+<h3 id="72">7.2 本次补齐的交付形态（明确区分「规范」与「成品」）</h3>
+<table>
+<thead>
+<tr>
+<th>形态</th>
+<th>内容</th>
+<th>是否可直接归档</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>独立文档</td>
+<td>《配色方案》《品牌全案策划书》《品牌手册（完整版）》</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>规范内容</td>
+<td>A–F 六组 <code>specs/*.md</code>，每项含五字段</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>渲染成品</td>
+<td>3 份 PDF + 2 份 PPTX</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>可用模板</td>
+<td>邮件签名 HTML、PPT 模板 PPTX、3 个辅助图形 SVG</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>印刷/实物成品</td>
+<td>印版、铭牌、工牌、展会印刷稿、贴纸、礼品</td>
+<td>❌ 待工艺参数与授权，<strong>本次未伪造</strong></td>
+</tr>
+<tr>
+<td>合规类</td>
+<td>D6 电子章章样</td>
+<td>❌ 待主体资质与备案，<strong>本次未提供</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="73">7.3 剩余行动清单（按依赖排序）</h3>
+<ol>
+<li>~~拍板行业口径~~ → ✅ <strong>2026-11-06 已裁决「全行业企业」</strong>，§〇 定稿介绍与官网 meta/hero 已回写。</li>
+<li>填真实联系方式 → 官网、名片、签名、PPT 封底、展会物料一次同步。</li>
+<li>~~裁决金系按钮白字对比度~~ → ✅ <strong>2026-11-06 已裁决「石墨黑字」</strong>，9 处金底白字规则已落地；hover 深金残留见 <code>BRAND-COLOR-SPEC.md §十-8</code>。</li>
+<li>统一 E4「G9 上线门」文案。</li>
+<li>macOS 环境补 <code>icon.icns</code>（C4）。</li>
+<li>补齐字体授权凭证、图标库盘点、图表需求触发判断。</li>
+<li>法务确认 D6 签章主体、备案章样与朱红豁免。</li>
+<li>指定手册发布审批人、资产责任人、季度巡检人（F1/F2/F3）。</li>
+</ol>
+<hr />
+<h2 id="_5">八、治理体系（防止品牌走样）</h2>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>文档</th>
+<th>关键约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单一真源</td>
+<td><code>BRAND-COLOR-SPEC.md</code>、<code>BRAND-LOGO-GUIDE.md §〇</code>、<code>server/seeds/gates.json</code>、<code>build_logo_svgs.py</code></td>
+<td>只改真源，生成物重跑；其他文档只引用不复写色值</td>
+</tr>
+<tr>
+<td>生成物标记</td>
+<td><code>specs/F-治理补齐.md</code> F2-2</td>
+<td>8 个 SVG、PNG/ICO、名片、17 个 docx 均为生成物，禁止手改</td>
+</tr>
+<tr>
+<td>覆盖风险</td>
+<td>同上</td>
+<td><code>build-document-templates.py</code> 重建后<strong>必须重跑</strong> <code>brandize-document-templates.py</code></td>
+</tr>
+<tr>
+<td>变更留痕</td>
+<td><code>BRAND-CHANGELOG.md</code></td>
+<td>色值/几何/话术/门禁名变更 = 破坏性变更，触发全量同步与巡检</td>
+</tr>
+<tr>
+<td>季度巡检</td>
+<td>同上 F3（14 项表）</td>
+<td>官网/模板/名片/公众号/图标/成品逐项核对</td>
+</tr>
+<tr>
+<td>文档优先级</td>
+<td>同上 F1-2</td>
+<td>定稿话术 §〇 &gt; 品牌手册 &gt; 本策划书 &gt; 清单</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_6">九、风险与待确认台账（汇总）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>风险 / 待确认</th>
+<th>级别</th>
+<th>影响面</th>
+<th>出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>~~行业口径「制造业现场 vs 全行业企业」不一致~~</td>
+<td>✅ <strong>已关闭 2026-11-06</strong></td>
+<td>全渠道文案</td>
+<td>裁决「全行业企业」；§〇 / 官网已回写</td>
+</tr>
+<tr>
+<td>2</td>
+<td>~~金系按钮白字实测 2.16–2.82:1，不达 WCAG AA~~</td>
+<td>✅ <strong>已关闭 2026-11-06（主态）</strong></td>
+<td>桌面端可访问性</td>
+<td>裁决「石墨黑字」，9 处规则落地；hover 深金 4.23:1 残留见 <code>BRAND-COLOR-SPEC.md §十-8</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>早期「九步交付法」错误口径残留</td>
+<td>高（已修 §〇，仍需全仓核对）</td>
+<td>全部话术物料</td>
+<td>§一 1.3、A5</td>
+</tr>
+<tr>
+<td>4</td>
+<td>联系方式仍为占位符</td>
+<td>中</td>
+<td>官网 / 名片 / 签名 / PPT / 展会</td>
+<td>C5、D3、C7、C8</td>
+</tr>
+<tr>
+<td>5</td>
+<td>macOS <code>icon.icns</code> 沿用旧标</td>
+<td>中</td>
+<td>macOS 打包</td>
+<td>C4 条件待补</td>
+</tr>
+<tr>
+<td>6</td>
+<td>docx 模板重建会覆盖品牌化</td>
+<td>中</td>
+<td>17 个模板</td>
+<td>F2-2、D1</td>
+</tr>
+<tr>
+<td>7</td>
+<td>E4「G9 终验」与真值冲突</td>
+<td>中</td>
+<td>贴纸 / 铭牌</td>
+<td>A5、E4</td>
+</tr>
+<tr>
+<td>8</td>
+<td>电子章涉及资质、备案与朱红豁免</td>
+<td><strong>高（合规）</strong></td>
+<td>合同类文件</td>
+<td>D6</td>
+</tr>
+<tr>
+<td>9</td>
+<td>字体文件未入库、授权凭证未归档</td>
+<td>中</td>
+<td>报表 / 印刷</td>
+<td>B4、F2</td>
+</tr>
+<tr>
+<td>10</td>
+<td>图表色板未发布，图表页只能用单色</td>
+<td>低（条件项）</td>
+<td>C8 图表页</td>
+<td>B3 / §九</td>
+</tr>
+<tr>
+<td>11</td>
+<td>现场照片版权与肖像授权未确认</td>
+<td>中</td>
+<td>官网 / 展会 / 案例</td>
+<td>B7、C9</td>
+</tr>
+<tr>
+<td>12</td>
+<td>品牌责任人 / 巡检人 / 生效日期未指定</td>
+<td>中</td>
+<td>治理闭环</td>
+<td>F1/F2/F3</td>
+</tr>
+<tr>
+<td>13</td>
+<td>印刷 CMYK / Pantone / 材质参数未定</td>
+<td>中</td>
+<td>E 组全部实物</td>
+<td><code>BRAND-COLOR-SPEC.md §八</code></td>
+</tr>
+<tr>
+<td>14</td>
+<td>官网部署目标未定、二维码无指向</td>
+<td>中</td>
+<td>C5 / C6 / E3</td>
+<td>C6 待确认③</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>本台账为<strong>待确认事项清单</strong>，不是承诺已解决；每项闭环后须在 <code>BRAND-CHANGELOG.md</code> 留痕并从本表移入「已闭环」。</p>
+</blockquote>
+<hr />
+<h2 id="_7">十、交付物与文件索引</h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>策略</td>
+<td><code>BRAND-MASTER-PLAN.md</code>（本文）、<code>deliverables/蔡工FDE-品牌全案策划书.pdf</code>、<code>.pptx</code></td>
+</tr>
+<tr>
+<td>配色</td>
+<td><code>BRAND-COLOR-SPEC.md</code>、<code>deliverables/蔡工FDE-配色方案.pdf</code></td>
+</tr>
+<tr>
+<td>执行规范</td>
+<td><code>BRAND-GUIDELINES.md</code>、<code>deliverables/蔡工FDE-品牌手册.pdf</code></td>
+</tr>
+<tr>
+<td>分组规范</td>
+<td><code>specs/A-品牌核心补齐.md</code> / <code>B-VI基础系统补齐.md</code> / <code>C-数字载体补齐.md</code> / <code>D-商务载体补齐.md</code> / <code>E-现场物料补齐.md</code> / <code>F-治理补齐.md</code></td>
+</tr>
+<tr>
+<td>模板与资产</td>
+<td><code>assets/email-signature.html</code>、<code>assets/aux-gold-arc.svg</code> / <code>aux-progress-ring.svg</code> / <code>aux-loop-arrow.svg</code>、<code>deliverables/caigong-fde-ppt-template.pptx</code></td>
+</tr>
+<tr>
+<td>治理</td>
+<td><code>BRAND-CHANGELOG.md</code>、<code>BRAND-COMPLETION-INDEX.md</code>、<code>BRAND-ASSET-CHECKLIST.md</code>（更新）</td>
+</tr>
+<tr>
+<td>入口</td>
+<td><code>docs/品牌设计交付物索引.md</code></td>
+</tr>
+<tr>
+<td>既有真源</td>
+<td><code>BRAND-LOGO-GUIDE.md</code>、<code>build_logo_svgs.py</code>、<code>desktop/src/renderer/src/styles.css</code>、<code>site/index.html</code>、<code>server/seeds/gates.json</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_8">十一、版本与生效</h2>
+<ul>
+<li>v1.0 / 2026-11-05：首次成文，补齐三项结构性缺失（独立配色方案、独立全案策划书、清单 🔲 项规范内容）。</li>
+<li><strong>v1.1 口径修订 / 2026-11-06</strong>：按用户裁决落地①行业口径 = 全行业企业、②金系按钮文字色 = 石墨黑；同步 §二/§三/§七/§九/§十一 与全部关联物料，详见 <code>BRAND-CHANGELOG.md</code>。</li>
+<li><strong>生效待确认</strong>：发布审批人、生效日期、复审周期均未指定；在拍板前本文作为<strong>可直接归档的策划定稿草案</strong>使用，不得据此对外宣称「品牌手册已正式发布」。</li>
+<li>任何策略层变更须同步《品牌手册（完整版）》与 PDF/PPTX 成品，并在 <code>BRAND-CHANGELOG.md</code> 记录。</li>
+</ul></section>
+</body></html>

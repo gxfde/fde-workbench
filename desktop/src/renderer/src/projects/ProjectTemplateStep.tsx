@@ -1,4 +1,5 @@
 import type { TemplateVersionDto, WorkbenchUserDto } from "../workbench/types"
+import { Loading } from "../components/ui"
 
 export function ProjectTemplateStep({
   templates,
@@ -27,7 +28,7 @@ export function ProjectTemplateStep({
     <section className="panel wizard-panel" aria-labelledby="project-template-title">
       <h2 id="project-template-title">2. 模板与负责人</h2>
       <p className="supporting-copy">仅可使用当前有效的已发布版本；版本会随项目快照保留。</p>
-      {loading ? <p role="status">正在加载模板与负责人…</p> : null}
+      {loading ? <Loading label="正在加载模板与负责人…" /> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="template-choice-grid">
         <div className="field">

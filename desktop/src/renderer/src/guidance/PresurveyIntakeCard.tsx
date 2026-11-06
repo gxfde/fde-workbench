@@ -3,6 +3,7 @@ import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { INTERVIEW_MODES, INTERVIEW_MODE_LABELS, emptyIntake, isPresurveyIntake } from "./types"
 import type { InterviewMode, PresurveyIntakeDto } from "./types"
+import { Loading } from "../components/ui"
 
 const TEXT_LIMITS: Record<"industry" | "scale" | "region", number> = { industry: 80, scale: 80, region: 80 }
 const PARAGRAPH_LIMITS = { customer_vision: 2000, phase_objective: 2000, notes: 2000 }
@@ -61,7 +62,7 @@ export function PresurveyIntakeCard({ projectId, onClose }: { projectId: string;
   return <div className="dialog-backdrop"><section className="dialog guidance-review-dialog" role="dialog" aria-modal="true" aria-label="售前录入卡">
     <div className="dialog-heading"><div><h3>售前录入卡</h3><p className="field-hint">轻量结构化信息：售前阶段即可填写，用于行业模板匹配与访谈准备。</p></div><div className="row-actions"><button className="secondary-button compact" type="button" onClick={onClose}>关闭</button></div></div>
     <div className="guidance-review-body">
-      {loading ? <p role="status">读取中…</p> : <div className="guidance-form">
+      {loading ? <Loading label="读取中…" /> : <div className="guidance-form">
         <label className="field"><span>行业（≤{TEXT_LIMITS.industry} 字）</span><input value={intake.industry} maxLength={TEXT_LIMITS.industry} onChange={(event) => update("industry", event.target.value)} placeholder="如：零售连锁" /></label>
         <label className="field"><span>企业规模（≤{TEXT_LIMITS.scale} 字）</span><input value={intake.scale} maxLength={TEXT_LIMITS.scale} onChange={(event) => update("scale", event.target.value)} placeholder="如：门店 150 家，总部 200 人" /></label>
         <label className="field"><span>地域（≤{TEXT_LIMITS.region} 字）</span><input value={intake.region} maxLength={TEXT_LIMITS.region} onChange={(event) => update("region", event.target.value)} placeholder="如：华东（苏州）" /></label>

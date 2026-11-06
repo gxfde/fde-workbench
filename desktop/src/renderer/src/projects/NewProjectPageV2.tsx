@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ApiClientError } from "../api/client"
 import { useAIExecution } from "../ai/AIExecutionProvider"
 import { useAuth } from "../auth/AuthProvider"
+import { confirmAsync } from "../common/ConfirmProvider"
+import { showToast } from "../components/ui"
 import { fetchAllPages } from "../workbench/fetchAllPages"
 import { isModuleCatalogDto, isProjectDto } from "../workbench/runtimeValidation"
 import type { ModuleCatalogDto, TemplateVersionDto, WorkbenchUserDto } from "../workbench/types"
@@ -126,13 +128,13 @@ export function NewProjectPageV2() {
       const created = await apiRequest<unknown>("/api/v1/projects", { method: "POST", body })
       if (startedGeneration !== generation.current) return
       if (!isProjectDto(created)) throw new Error("invalid project")
-      if (mode === "manual" && window.confirm("项目已创建。是否把本次项目配置另存为新的行业模板草稿？")) {
+      if (mode === "manual" && await confirmAsync({ title: "另存为行业模板草稿", description: "项目已创建。是否把本次项目配置另存为新的行业模板草稿？", confirmLabel: "另存草稿" })) {
         const name = window.prompt("请输入新模板名称", `${basics.enterpriseCode || basics.name}项目模板`)?.trim()
         if (name) {
           try {
             await apiRequest("/api/v1/industry-templates", { method: "POST", body: { name, industry_name: configuration.industry_name || "通用", description: configuration.description || basics.background, modules: snapshotPayload(configuration, selectedKeys).modules } })
           } catch {
-            window.alert("项目已创建，但行业模板草稿保存失败。你可以稍后在行业模板中重新创建。")
+            showToast("项目已创建，但行业模板草稿保存失败。你可以稍后在行业模板中重新创建。", "error")
           }
         }
       }
@@ -140,7 +142,7 @@ export function NewProjectPageV2() {
         try {
           await uploadPresurveySource(apiRequest, created.id, sourceFile)
         } catch {
-          window.alert("项目已创建，但原始预调研表上传失败。请进入项目文件库后重新上传。")
+          showToast("项目已创建，但原始预调研表上传失败。请进入项目文件库后重新上传。", "error")
         }
       }
       if (startedGeneration === generation.current) window.location.hash = `#projects/${encodeURIComponent(created.id)}`

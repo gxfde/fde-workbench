@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { useAuth } from '../auth/AuthProvider'
+import { Loading } from "../components/ui"
 
 // 试点报告页（goal-d11，d6 挂账④收尾）：只读渲染 /api/v1/agents/pilot-report
 // ——试点窗口/额度状态 + 六指标。只出数不判阈值（D15：O-8/UM-5 人工评）；
@@ -74,7 +75,7 @@ export function PilotReportPage() {
       </header>
       <div className="page-stack">
         {error ? <p role="alert" className="form-error">{error}</p> : null}
-        {loading ? <p role="status">加载中…</p> : null}
+        {loading ? <Loading label="加载中…" /> : null}
         {report ? <PilotReportView report={report} /> : null}
       </div>
     </section>

@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import { FilePreview } from "./FilePreview"
 import { fileTooLarge, versionCanBePreviewed } from "./fileCapabilities"
 import { isFileUrlDto, isUploadCompleteDto, isUploadedPartDto, isUploadSessionDto } from "./runtimeValidation"
 import type { ProjectFileDto, ProjectFileVersionDto, UploadSessionDto } from "./types"
+import { Loading } from "../components/ui"
 
 interface FileVersionTimelineProps {
   projectId: string
@@ -19,6 +21,7 @@ interface FileVersionTimelineProps {
 /** Version history and per-version actions for one project file. */
 export function FileVersionTimeline({ projectId, file, canManage = false, mode = "dialog", onClose, onChanged }: FileVersionTimelineProps) {
   const { apiRequest } = useAuth()
+  const action = useAsyncAction()
   const dangerConfirm = useDangerConfirm()
   const [entries, setEntries] = useState<ProjectFileVersionDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -137,7 +140,7 @@ export function FileVersionTimeline({ projectId, file, canManage = false, mode =
         </div>
       </div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {loading ? <p role="status">正在加载版本…</p> : entries.length === 0 ? (
+      {loading ? <Loading label="正在加载版本…" /> : entries.length === 0 ? (
         <p className="empty-state">该文件暂无版本。</p>
       ) : (
         <div className="table-scroll version-history-table">
@@ -152,9 +155,9 @@ export function FileVersionTimeline({ projectId, file, canManage = false, mode =
                 <td className="wrap-cell">{version.original_filename ?? ""}</td>
                 <td><div className="row-actions version-history-actions">
                   {versionCanBePreviewed(version, file.display_name) ? <button className="secondary-button compact" type="button" onClick={() => setPreviewVersion(version)}>预览</button> : null}
-                  {downloadableStatus(version.status) ? <button className="secondary-button compact" type="button" onClick={() => void download(version)}>下载</button> : null}
-                  {canManage && version.status === "available" ? <button className="danger-button compact" type="button" onClick={() => void deprecate(version)}>标记为弃用</button> : null}
-                  {canManage && version.status === "deprecated" ? <button className="secondary-button compact" type="button" onClick={() => void restore(version)}>恢复</button> : null}
+                  {downloadableStatus(version.status) ? <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `download:${version.id}`} onClick={() => void action.run(`download:${version.id}`, () => download(version))}>{action.busyKey === `download:${version.id}` ? "处理中…" : "下载"}</button> : null}
+                  {canManage && version.status === "available" ? <button className="danger-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `deprecate:${version.id}`} onClick={() => void action.run(`deprecate:${version.id}`, () => deprecate(version))}>{action.busyKey === `deprecate:${version.id}` ? "处理中…" : "标记为弃用"}</button> : null}
+                  {canManage && version.status === "deprecated" ? <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `restore:${version.id}`} onClick={() => void action.run(`restore:${version.id}`, () => restore(version))}>{action.busyKey === `restore:${version.id}` ? "处理中…" : "恢复"}</button> : null}
                 </div></td>
               </tr>
             ))}</tbody>

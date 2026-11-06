@@ -288,14 +288,32 @@ function ChoiceOptionsEditor({ prefix, type, options, onChange }: {
     const value = ("default_value" in options ? options.default_value : undefined)
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join("\n") : typeof value === "string" ? value : ""
   })
+  const choicesId = useId()
+  const defaultValueId = useId()
   return <div className="research-options-grid">
-    <div className="field"><label>{prefix} 选项（每行一个）</label><textarea rows={3} value={choices.join("\n")} onChange={(event) => onChange({ ...options, choices: event.target.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) })} /></div>
-    <div className="field"><label>{prefix} 默认选项（每行一个）</label><textarea rows={3} value={defaultValue} onChange={(event) => {
-      setDefaultValue(event.target.value)
-      onChange(type === "multi_choice"
-        ? { choices, default_value: event.target.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }
-        : { choices, default_value: event.target.value })
-    }} /></div>
+    <div className="field">
+      <label htmlFor={choicesId}>{prefix} 选项（每行一个）</label>
+      <textarea
+        id={choicesId}
+        rows={3}
+        value={choices.join("\n")}
+        onChange={(event) => onChange({ ...options, choices: event.target.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) })}
+      />
+    </div>
+    <div className="field">
+      <label htmlFor={defaultValueId}>{prefix} 默认选项（每行一个）</label>
+      <textarea
+        id={defaultValueId}
+        rows={3}
+        value={defaultValue}
+        onChange={(event) => {
+          setDefaultValue(event.target.value)
+          onChange(type === "multi_choice"
+            ? { choices, default_value: event.target.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) }
+            : { choices, default_value: event.target.value })
+        }}
+      />
+    </div>
   </div>
 }
 

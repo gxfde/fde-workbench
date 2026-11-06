@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { commonErrorMessage } from "../common/errorMessages"
 
 /** P2 集成桥：真相层（openfde 知识轨 / fdeops 流程轨）→ workbench 的只读投影。
  *  A1 铁律：文件永远赢——vanished 只清投影，绝不动真相文件。 */
@@ -86,7 +87,10 @@ function formatTime(iso: string | null): string {
 }
 
 function errorMessage(caught: unknown): string {
-  if (caught instanceof ApiClientError) return caught.message || "请求失败"
+  // S2 / F4：公共错误码走统一表；未收录时保留服务端原文（已是面向用户的中文）。
+  if (caught instanceof ApiClientError) {
+    return commonErrorMessage(caught, "") || caught.message || "请求失败"
+  }
   return caught instanceof Error ? caught.message : "请求失败"
 }
 

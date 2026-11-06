@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthProvider"
 import type { GanttTaskDto, ProjectGanttDto } from "../workbench/types"
 import { isProjectGanttDto } from "./projectRuntimeValidation"
 import { GanttDependencyLayer } from "./GanttDependencyLayer"
+import { Loading } from "../components/ui"
 
 export function ProjectGantt({ projectId }: { projectId: string }) {
   const { apiRequest, user } = useAuth()
@@ -34,7 +35,7 @@ export function ProjectGantt({ projectId }: { projectId: string }) {
     return () => { active = false; sequenceRef.current += 1 }
   }, [apiRequest, projectId, user?.id])
 
-  if (loading) return <p role="status">正在加载甘特图…</p>
+  if (loading) return <Loading label="正在加载甘特图…" />
   if (error) return <p className="form-error" role="alert">{error}</p>
   return data ? <GanttChart data={data} /> : null
 }

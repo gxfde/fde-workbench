@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type MouseEvent } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { useDialogA11y } from "../common/useDialogA11y"
 import { isDocumentDetail, isDocumentDraft } from "./runtimeValidation"
 import type { DocumentDetailDto } from "./types"
 import { DOCUMENT_TYPE_LABELS } from "./types"
@@ -15,6 +16,7 @@ interface DocumentEditorProps {
 
 export function DocumentEditor({ projectId, documentId, onClose, onUpdated }: DocumentEditorProps) {
   const { apiRequest } = useAuth()
+  const dialogRef = useDialogA11y(onClose)
   const [detail, setDetail] = useState<DocumentDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -106,7 +108,7 @@ export function DocumentEditor({ projectId, documentId, onClose, onUpdated }: Do
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={handleBackdrop}>
-      <div className="dialog document-editor-dialog" role="dialog" aria-modal="true" aria-label={`编辑：${detail?.business_code ?? documentId}`} onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} className="dialog document-editor-dialog" role="dialog" aria-modal="true" aria-label={`编辑：${detail?.business_code ?? documentId}`} onClick={(event) => event.stopPropagation()}>
         <div className="dialog-heading">
           <h3>{detail ? `编辑文档：${detail.business_code}` : "编辑文档"}</h3>
           <button className="secondary-button compact" type="button" onClick={onClose}>关闭</button>
@@ -124,7 +126,7 @@ export function DocumentEditor({ projectId, documentId, onClose, onUpdated }: Do
                     <button className="secondary-button compact" type="button" onClick={() => void handleRefresh()}>刷新草稿</button>
                   </div>
                 ) : null}
-                {saved ? <p className="notice">保存成功，已提交重新生成。</p> : null}
+                {saved ? <p className="notice" role="status">保存成功，已提交重新生成。</p> : null}
                 {saveError ? <p className="form-error banner" role="alert">{saveError}</p> : null}
                 {Object.keys(fieldOverrides).length > 0 ? (
                   <fieldset className="document-editor-fields">

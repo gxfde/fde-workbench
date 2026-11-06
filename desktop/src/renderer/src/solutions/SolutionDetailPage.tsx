@@ -82,7 +82,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
   return <section className="panel solution-panel solution-viewer" role="region" aria-label={`查看方案：${solution.name}`}>
     <header className="solution-page-heading"><div><p className="eyebrow">方案设计 · 版本 {solution.version} · {solution.status === 'archived' ? '弃用' : '正常'}<SolutionProvenanceBadge solution={solution} /><QuotaMeter /><SolutionHealthChip projectId={projectId} solutionId={solution.id} /></p><h2>{solution.name}</h2></div><div className="row-actions">{canManage && solution.status !== 'archived' ? <><a className="secondary-button button-link compact" href={solutionHref(projectId, solution.id, 'edit', opportunityId)}>编辑方案</a><button type="button" className="primary-button compact" disabled={exporting} onClick={() => void exportSow()}>{exporting ? '处理中…' : '导出 SOW'}</button></> : null}{navigation}</div></header>
     {error ? <p className="form-error" role="alert">{error}</p> : null}
-    {mode === 'edit' && solution.status === 'archived' ? <p className="notice">此方案已弃用，仅可查看内容。</p> : null}
+    {mode === 'edit' && solution.status === 'archived' ? <p className="notice warning" role="alert">此方案已弃用，仅可查看内容。</p> : null}
     {solution.source?.kind === 'legacy_opportunity_delivery' ? <p className="solution-legacy-notice">{solution.source.reviewed ? '历史交付说明：已保留来源，内容经过编辑整理，不代表客户审核或验收。' : '历史交付说明 · 待整理：保留了原机会中的交付内容，请核对完善方案后再导出 SOW。'}</p> : null}
     <section className="solution-view-associated">
       <h3>关联 AI 机会 <span>{solution.opportunities.length} 个机会 · {groups.size} 个对象</span></h3>

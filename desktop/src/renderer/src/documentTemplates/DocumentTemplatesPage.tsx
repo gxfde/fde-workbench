@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { Loading } from "../components/ui"
 
 type TemplateType = "research_result" | "project_plan_progress" | "pov_plan" | "sow"
 type VersionStatus = "draft" | "published" | "inactive"
@@ -131,7 +132,7 @@ export function DocumentTemplatesPage() {
       <input ref={inputRef} className="file-input-hidden" type="file" accept=".docx" onChange={(event) => { void upload(event) }} />
       {notice ? <p className="notice" role="status">{notice}</p> : null}
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}
-      {loading ? <p className="empty-state">正在加载文档模板…</p> : <div className="document-template-grid">
+      {loading ? <Loading label="正在加载文档模板…" /> : <div className="document-template-grid">
         {TEMPLATE_TYPES.map((definition) => {
           const template = templates.find((item) => item.document_type === definition.type)
           const versions = template?.versions ?? []

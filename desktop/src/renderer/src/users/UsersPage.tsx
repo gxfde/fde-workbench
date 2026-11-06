@@ -4,7 +4,9 @@ import { PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from "../../../shared/contra
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import { UserAIAccessDialog } from "./UserAIAccessDialog"
+import { errorMessage } from "../common/errorMessages"
 
 interface ApiUser {
   id: string
@@ -26,6 +28,7 @@ interface UserList {
 
 export function UsersPage() {
   const { apiRequest } = useAuth()
+  const action = useAsyncAction()
   const dangerConfirm = useDangerConfirm()
   const [users, setUsers] = useState<ApiUser[]>([])
   const [page, setPage] = useState(1)
@@ -332,7 +335,7 @@ export function UsersPage() {
                   <td><div className="row-actions">
                     <button className="secondary-button compact" type="button" onClick={() => openEditDialog(user)} aria-label={`编辑 ${user.username} 的信息`}>编辑</button>
                     <button className="secondary-button compact" type="button" onClick={() => setAIAccessTarget(user)} aria-label={`管理 ${user.username} 的 AI 权限`}>AI 权限</button>
-                    <button className="secondary-button compact" type="button" onClick={() => void toggleUser(user)} aria-label={`${user.is_active ? "停用" : "启用"} ${user.username}`}>{user.is_active ? "停用" : "启用"}</button>
+                    <button className="secondary-button compact" type="button" disabled={action.isBusy} aria-busy={action.busyKey === `toggle:${user.username}`} onClick={() => void action.run(`toggle:${user.username}`, () => toggleUser(user))} aria-label={`${user.is_active ? "停用" : "启用"} ${user.username}`}>{action.busyKey === `toggle:${user.username}` ? "处理中…" : user.is_active ? "停用" : "启用"}</button>
                     <button className="secondary-button compact" type="button" onClick={(event) => openResetDialog(user, event.currentTarget)} aria-label={`重置 ${user.username} 的密码`}>重置密码</button>
                   </div></td>
                 </tr>
@@ -390,11 +393,10 @@ function formatDate(value: string): string {
 }
 
 function apiErrorMessage(error: unknown): string {
-  if (error instanceof ApiClientError && error.code === "authentication_refreshed_resubmit") return "登录状态已刷新，请重新提交本次操作。"
+  // S2 / F4：公共错误码走统一表；本页专属的业务错误码仍在这里维护。
   if (error instanceof ApiClientError && error.code === "username_already_exists") return "用户名已存在。"
   if (error instanceof ApiClientError && error.code === "self_disable_not_allowed") return "不能停用当前登录账号。"
   if (error instanceof ApiClientError && error.code === "user_leads_active_projects") return "该用户仍负责进行中的项目，请先转移项目负责人。"
   if (error instanceof ApiClientError && error.code === "user_has_active_project_memberships") return "该用户仍参与进行中的项目，请先移除其成员身份。"
-  if (error instanceof ApiClientError && error.code === "password_too_weak") return "临时密码至少需要 6 位。"
-  return "操作失败，请稍后重试。"
+  return errorMessage(error, "操作失败，请稍后重试。")
 }

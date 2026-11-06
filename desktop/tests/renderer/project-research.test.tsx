@@ -23,7 +23,16 @@ import type {
 import { parseHashRoute } from "../../src/renderer/src/routing/useHashRoute"
 import type { ApiResponse, BridgeResult, UserDto } from "../../src/shared/contracts"
 import type { ProjectDto } from "../../src/renderer/src/workbench/types"
-import { adminUser, authResult, bridge, engineerUser, installBridge, ok, renderApp } from "./test-utils"
+import {
+  adminUser,
+  answerConfirmDialog,
+  authResult,
+  bridge,
+  engineerUser,
+  installBridge,
+  ok,
+  renderApp,
+} from "./test-utils"
 
 const projectId = "project-research"
 
@@ -1613,14 +1622,14 @@ describe("project research workspace", () => {
       },
     })
     const apiRequest = renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [answered] })
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
     expect(screen.queryByRole("button", { name: "刷新调研数据" })).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "导出到文件库" }))
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("后台生成 DOCX"))
+    // S2：确认已改为统一 Modal
+    await answerConfirmDialog(user, "导出")
     await waitFor(() => expect(mutationBodies(apiRequest, `/research/forms/${answered.id}/export`, "POST")).toContainEqual({}))
     expect(await screen.findByText(/调研表“部门基础调研”已提交后台生成/)).toBeVisible()
     expect(screen.getByRole("button", { name: "后台生成中…" })).toBeDisabled()
@@ -1678,7 +1687,6 @@ describe("project research workspace", () => {
   it("guards logout with the active dirty checker and restores focus when cancelled", async () => {
     renderProjectResearch({ initialSubjects: [rootSubject, departmentSubject], initialForms: [formFor(departmentSubject.id)] })
     const logout = vi.spyOn(window.fde.auth, "logout")
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole("treeitem", { name: /销售部/ }))
@@ -1687,24 +1695,24 @@ describe("project research workspace", () => {
     await user.type(field, "保留草稿")
     await user.click(await screen.findByRole("button", { name: "退出登录" }))
 
+    // S2：确认已改为统一 Modal；取消后不得登出
+    await answerConfirmDialog(user, "取消")
     expect(logout).not.toHaveBeenCalled()
-    expect(field).toHaveFocus()
-    confirm.mockReturnValueOnce(true).mockReturnValueOnce(true)
     await user.click(screen.getByRole("button", { name: "退出登录" }))
+    await answerConfirmDialog(user, "退出登录")
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1))
   })
 
   it("logs out after one ordinary confirmation without asking for a password", async () => {
     renderProjectResearch({ initialSubjects: [rootSubject] })
     const logout = vi.spyOn(window.fde.auth, "logout")
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole("button", { name: "退出登录" }))
+    // S2：确认已改为统一 Modal，一次普通确认即登出，不要求密码
+    await answerConfirmDialog(user, "退出登录")
 
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1))
-    expect(confirm).toHaveBeenCalledTimes(1)
-    expect(confirm).toHaveBeenCalledWith("确定退出登录吗？")
     expect(screen.queryByLabelText("当前账号密码")).not.toBeInTheDocument()
   })
 

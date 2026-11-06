@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthProvider"
 import "./task-board.css"
 import { TaskEditor } from "../projects/TaskEditor"
 import type { ProjectDto, ProjectTaskDto } from "../workbench/types"
+import { Loading } from "../components/ui"
 
 interface TaskCenterItem {
   id: string
@@ -233,7 +234,7 @@ export function TaskCenterPage() {
       <button className={filter === "project" ? "active" : ""} type="button" onClick={() => setFilter("project")}><span>项目任务</span><strong>{data?.counts.project ?? 0}</strong></button>
       <button className={filter === "automation" ? "active" : ""} type="button" onClick={() => setFilter("automation")}><span>自动与定时任务</span><strong>{data?.counts.automation ?? 0}</strong></button>
     </div>
-    {!data ? <p role="status">{error ? "任务暂未加载，系统会自动重试。" : "正在加载任务…"}</p> : items.length === 0 ? <div className="panel empty-state">当前筛选下暂无任务。</div> : <>{renderBoard("project")}{renderBoard("automation")}</>}
+    {!data ? <Loading label={error ? "任务暂未加载，系统会自动重试。" : "正在加载任务…"} /> : items.length === 0 ? <div className="panel empty-state">当前筛选下暂无任务。</div> : <>{renderBoard("project")}{renderBoard("automation")}</>}
     {editor ? <TaskEditor projectId={editor.project.id} task={editor.task} tasks={editor.project.tasks || []} members={editor.project.members || []} canManage={!!user && (user.role === "admin" || (user.role === "project_lead" && editor.project.leader_user_id === user.id))} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void load(true) }} /> : null}
     {statusConfirmation ? <div className="task-board-dialog-backdrop"><div className="task-board-dialog panel" role="dialog" aria-modal="true" aria-labelledby="task-board-dialog-title" ref={dialogRef}
       onKeyDown={(event) => {

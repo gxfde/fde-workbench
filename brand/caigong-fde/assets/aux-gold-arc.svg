@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 24" role="img" aria-labelledby="t d">
+  <title id="t">金段弧线（辅助图形 ①）</title>
+  <desc id="d">由主标右上金段推导的拉直分隔线，45° 斜切端头，全场唯一暖色，不可拉伸变形。</desc>
+  <!-- 主标金弧 305°→332° 的拉直版：斜切端头 + 单一金，用作标题下分割线 -->
+  <path d="M 8 3 H 232 L 240 12 L 232 21 H 8 L 0 12 Z" fill="#E8A33D"/>
+
+</svg>

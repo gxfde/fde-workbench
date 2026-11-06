@@ -6,6 +6,9 @@ import { DispatchPage } from "./dispatch/DispatchPage"
 import { ChangePasswordPage } from "./auth/ChangePasswordPage"
 import { LoginPage } from "./auth/LoginPage"
 import { DangerConfirmProvider } from "./common/DangerConfirmProvider"
+import { ConfirmProvider } from "./common/ConfirmProvider"
+import { RouteErrorBoundary } from "./common/RouteErrorBoundary"
+import { Loading, ToastProvider } from "./components/ui"
 import { AIExecutionProvider } from "./ai/AIExecutionProvider"
 import { DocumentTemplatesPage } from "./documentTemplates/DocumentTemplatesPage"
 import { AppShell } from "./layout/AppShell"
@@ -36,7 +39,9 @@ export function App() {
   return (
     <AuthProvider>
       <AIExecutionProvider><DangerConfirmProvider>
-        <AuthenticatedApp />
+        <ToastProvider><ConfirmProvider>
+          <AuthenticatedApp />
+        </ConfirmProvider></ToastProvider>
       </DangerConfirmProvider></AIExecutionProvider>
     </AuthProvider>
   )
@@ -54,13 +59,15 @@ function AuthenticatedApp() {
   }, [permittedRoute, route, user])
 
   if (status === "loading") {
-    return <main className="loading-page"><p role="status">正在加载工作台…</p></main>
+    return <main className="loading-page"><Loading label="正在加载工作台…" /></main>
   }
   if (status === "unauthenticated" || !user) return <LoginPage />
   if (user.mustChangePassword) return <ChangePasswordPage />
   return (
     <AppShell route={permittedRoute}>
-      <RoutePage route={permittedRoute} />
+      <RouteErrorBoundary key={routeHash(permittedRoute)}>
+        <RoutePage route={permittedRoute} />
+      </RouteErrorBoundary>
     </AppShell>
   )
 }

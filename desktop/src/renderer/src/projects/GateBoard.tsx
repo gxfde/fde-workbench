@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { Loading } from "../components/ui"
 import {
   FALLBACK_OPTIONS,
   gateStatusLabel,
@@ -260,7 +261,7 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
     return counts
   }, [view])
 
-  if (loading) return <p role="status">正在加载门禁…</p>
+  if (loading) return <Loading label="正在加载门禁…" />
   if (error) return <p className="form-error banner" role="alert">{error}</p>
   if (!view) return null
 

@@ -12,6 +12,7 @@ import { PRODUCT_NAME } from "../../src/shared/brand"
 import type { ApiResponse, BridgeResult } from "../../src/shared/contracts"
 import {
   adminUser,
+  answerConfirmDialog,
   authResult,
   bridge,
   deferred,
@@ -356,7 +357,6 @@ describe("administrator user management", () => {
   })
 
   it("does not let an old in-flight refresh overwrite a logout/login switch", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true)
     const oldRefresh = deferred<BridgeResult<ReturnType<typeof authResult> | null>>()
     const apiRequest = vi.fn().mockResolvedValueOnce(
       ok({
@@ -381,6 +381,8 @@ describe("administrator user management", () => {
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
 
     await user.click(screen.getByRole("button", { name: "退出登录" }))
+    // S2：确认已改为统一 Modal
+    await answerConfirmDialog(user, "退出登录")
     await screen.findByRole("heading", { name: PRODUCT_NAME })
     await user.type(screen.getByLabelText("用户名"), "engineer.li")
     await user.type(screen.getByLabelText("密码"), "EngineerPass!234")

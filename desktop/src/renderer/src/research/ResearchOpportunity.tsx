@@ -164,6 +164,8 @@ function isRecord(value: unknown): value is Record<string, unknown> { return typ
 export function opportunityProfileErrorMessage(error: unknown): string {
   if (!(error instanceof ApiClientError)) return "机会档案保存失败，未知错误。"
   const messages: Record<string, string> = {
+    // S2 / F4：公共码走统一表保证跨页一致；但本页对 stale_version 有更具体的
+    // 措辞（要说明是「AI 机会」而非泛指内容），保留本地措辞不丢上下文。
     stale_version: "AI 机会已被其他人更新，请刷新后重试。",
     forbidden: "当前账号没有编辑该 AI 机会的权限。",
     invalid_opportunity_profile: "服务端判定机会档案字段不合法，请刷新页面后重新选择评分、状态和负责人。",

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { PASSWORD_MAX_LENGTH } from "../../../shared/contracts"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { Modal, UiButton } from "../components/ui"
 
 export interface DangerConfirmDialogProps {
   title: string
@@ -20,6 +21,10 @@ export interface DangerConfirmDialogProps {
  * verified against the backend endpoint; only on a successful match does it
  * invoke `onConfirm`. A wrong password keeps the dialog open with an inline
  * error and never reaches the destructive action.
+ *
+ * S2：呈现层已吸收到统一 Modal 原语（ARIA 契约、Esc、焦点陷阱、焦点归还），
+ * 但**人工确认 + 密码二次校验的强度不变**——密码仍由本组件自行校验，
+ * 确认按钮在验证通过前不会触发 onConfirm。
  */
 export function DangerConfirmDialog({
   title,
@@ -68,69 +73,46 @@ export function DangerConfirmDialog({
     }
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>): void {
-    if (event.key === "Escape") {
-      event.preventDefault()
-      if (!locked) onCancel()
-    }
-  }
-
   return (
-    <div className="dialog-backdrop">
-      <section
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="danger-confirm-title"
-        aria-describedby="danger-confirm-description"
-        onKeyDown={handleKeyDown}
-      >
-        <h2 id="danger-confirm-title">{title}</h2>
-        <p id="danger-confirm-description" className="supporting-copy">
-          {description}
-        </p>
-        <form onSubmit={(event) => void submit(event)} noValidate>
-          <div className="field">
-            <label htmlFor="danger-confirm-password">当前账号密码</label>
-            <input
-              ref={inputRef}
-              id="danger-confirm-password"
-              type="password"
-              autoComplete="current-password"
-              maxLength={PASSWORD_MAX_LENGTH}
-              value={password}
-              disabled={locked}
-              autoFocus
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "danger-confirm-error" : undefined}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </div>
-          {error ? (
-            <p id="danger-confirm-error" className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="dialog-actions">
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={locked}
-              onClick={onCancel}
-            >
-              取消
-            </button>
-            <button
-              className="primary-button"
-              type="submit"
-              disabled={locked}
-            >
-              {verifying ? "正在验证" : confirmLabel}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
+    <Modal
+      title={title}
+      description={description}
+      tone="danger"
+      busy={busy || verifying}
+      onClose={onCancel}
+    >
+      <form onSubmit={(event) => void submit(event)} noValidate>
+        <div className="field">
+          <label htmlFor="danger-confirm-password">当前账号密码</label>
+          <input
+            ref={inputRef}
+            id="danger-confirm-password"
+            type="password"
+            autoComplete="current-password"
+            maxLength={PASSWORD_MAX_LENGTH}
+            value={password}
+            disabled={locked}
+            autoFocus
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "danger-confirm-error" : undefined}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+        {error ? (
+          <p id="danger-confirm-error" className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="dialog-actions">
+          <UiButton disabled={locked} onClick={onCancel}>
+            取消
+          </UiButton>
+          <UiButton variant="danger" type="submit" disabled={locked}>
+            {verifying ? "正在验证" : confirmLabel}
+          </UiButton>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

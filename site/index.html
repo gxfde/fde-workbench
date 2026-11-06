@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>蔡工FDE智能交付系统 — 交付有据，一步到位</title>
+<meta name="description" content="蔡工FDE智能交付系统，面向全行业企业的智能交付工作台。以 13 阶段交付 SOP 和 G1–G9 门禁把每一次实施变成可追溯、可验收的标准动作——从需求到验收，一个闭环，交付有据，一步到位。">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="156 100 200 200"><rect x="156" y="100" width="200" height="200" rx="36" fill="%2314181C"/><path d="M 341.5,200 A 85.5,85.5 0 1 1 298.75,125.955" fill="none" stroke="%23FFFFFF" stroke-width="29"/><path d="M 239,200 L 356,200" fill="none" stroke="%23FFFFFF" stroke-width="29"/><path d="M 305.041,129.963 A 85.5,85.5 0 0 1 331.492,159.860" fill="none" stroke="%23E8A33D" stroke-width="29"/></svg>'>
+<style>
+  :root{
+    /* 品牌令牌 — 与 brand/caigong-fde/BRAND-LOGO-GUIDE.md v1.1 同源 */
+    --ink:#14181C; --ink-2:#23282E; --ink-3:#3A4048; --ink-4:#5A626D; --ink-5:#8A929E;
+    --gold:#E8A33D; --gold-lt:#F5B44A; --gold-ink:#C98F2B; --gold-deep:#A3721F;
+    --paper:#F6F6F4; --paper-2:#F2F4F5; --card:#FFFFFF;
+    --dark-bg:#14181C; --dark-bg-2:#1A1F24;
+    --line:#E4E6E3;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Source Han Sans SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif;
+    color:var(--ink); background:var(--paper);
+    -webkit-font-smoothing:antialiased; line-height:1.7;
+  }
+  .en{font-family:"Montserrat","Inter","Helvetica Neue",Arial,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  a{color:inherit;text-decoration:none}
+
+  /* ---------- 导航 ---------- */
+  .nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(20,24,28,.88);backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(245,180,74,.14);
+  }
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .nav-brand{display:flex;align-items:center;gap:11px;color:#fff}
+  .nav-brand svg{display:block}
+  .nav-brand b{font-size:15.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+  .nav-links{display:flex;gap:30px;font-size:14px;color:#B9C2CB}
+  .nav-links a{transition:color .18s}
+  .nav-links a:hover{color:var(--gold-lt)}
+  @media (max-width:720px){.nav-links{display:none}}
+
+  /* ---------- Hero（深底） ---------- */
+  .hero{
+    background:
+      radial-gradient(720px 420px at 78% 10%, rgba(232,163,61,.10), transparent 62%),
+      radial-gradient(560px 380px at 8% 88%, rgba(232,163,61,.05), transparent 60%),
+      var(--dark-bg);
+    color:#fff; padding:96px 0 108px;
+  }
+  /* 反白主标（BRAND-LOGO-GUIDE §七：深底用 inverse，主色 #FFF / 辅色 #F5B44A） */
+  .hero-mark{display:block;width:172px;height:auto;margin-bottom:34px}
+  .hero-kicker{
+    display:inline-flex;align-items:center;gap:10px;
+    font-size:12.5px;letter-spacing:.32em;color:var(--gold-lt);
+    text-transform:uppercase;margin-bottom:26px;
+  }
+  .hero-kicker::before{content:"";width:34px;height:2px;background:var(--gold-lt);display:inline-block}
+  .hero h1{font-size:clamp(30px,4.6vw,52px);font-weight:700;line-height:1.28;letter-spacing:.01em}
+  .hero h1 .gold{color:var(--gold-lt)}
+  .hero-sub{
+    margin-top:26px;max-width:640px;color:#C4CBD3;font-size:16.5px;line-height:1.9;
+  }
+  .hero-cta{margin-top:42px;display:flex;gap:16px;flex-wrap:wrap}
+  .btn{
+    display:inline-block;padding:13px 30px;border-radius:8px;font-size:15px;font-weight:600;
+    transition:all .18s;border:1px solid transparent;
+  }
+  /* B1 / D4：白底 + 金描边 + 石墨黑文字；hover 保持白底，仅描边加深 */
+  .btn-gold{background:var(--card);border-color:var(--gold-deep);color:var(--ink)}
+  .btn-gold:hover{background:var(--card);border-color:var(--gold-deep);box-shadow:0 0 0 1px var(--gold-deep)}
+  .btn-ghost{border-color:rgba(255,255,255,.28);color:#E9EDEF}
+  .btn-ghost:hover{border-color:var(--gold-lt);color:var(--gold-lt)}
+  .hero-points{margin-top:56px;display:flex;gap:40px;flex-wrap:wrap}
+  .hero-point{color:#8A929E;font-size:13.5px;display:flex;align-items:center;gap:9px}
+  .hero-point::before{content:"";width:6px;height:6px;background:var(--gold-lt);border-radius:1px;transform:rotate(45deg);flex:none}
+
+  /* ---------- 通用段 ---------- */
+  section{padding:86px 0}
+  .sec-head{margin-bottom:52px}
+  .sec-kicker{font-size:12.5px;letter-spacing:.3em;color:var(--gold-ink);text-transform:uppercase;margin-bottom:14px}
+  .sec-head h2{font-size:clamp(24px,3vw,34px);font-weight:700;line-height:1.35}
+  .sec-head p{margin-top:14px;color:var(--ink-4);max-width:640px;font-size:15.5px}
+
+  /* ---------- 三大能力 ---------- */
+  .abilities{background:var(--paper)}
+  .ability-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  @media (max-width:860px){.ability-grid{grid-template-columns:1fr}}
+  .ability{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:34px 30px;transition:transform .2s,box-shadow .2s;
+  }
+  .ability:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(20,24,28,.09)}
+  .ability-icon{width:46px;height:46px;margin-bottom:20px}
+  .ability h3{font-size:19px;font-weight:700;margin-bottom:12px}
+  .ability p{font-size:14.5px;color:var(--ink-4);line-height:1.85}
+  .ability .tagline{margin-top:18px;font-size:13px;color:var(--gold-ink);font-weight:600;letter-spacing:.04em}
+
+  /* ---------- 门禁流程 ---------- */
+  .gates{background:var(--paper-2)}
+  .gate-rail{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:44px 36px 38px;
+  }
+  .rail-track{position:relative;display:grid;grid-template-columns:repeat(9,1fr)}
+  .rail-line{
+    position:absolute;top:23px;left:calc(100%/18);right:calc(100%/18);
+    height:2px;background:var(--line);z-index:0;
+  }
+  .rail-line::after{
+    content:"";position:absolute;right:-1px;top:-1px;width:44%;height:2px;background:var(--gold);
+  }
+  .rail-gate{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .rail-node{
+    width:46px;height:46px;border-radius:50%;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Montserrat","Inter",sans-serif;font-weight:600;font-size:14.5px;
+    border:2px solid var(--card);box-shadow:0 0 0 1px var(--line);
+  }
+  .rail-gate.final .rail-node{background:var(--gold);color:var(--ink);box-shadow:0 0 0 1px var(--gold),0 6px 16px rgba(232,163,61,.35)}
+  .rail-name{font-size:13px;font-weight:600;text-align:center;line-height:1.4}
+  .rail-gate.final .rail-name{color:var(--gold-deep)}
+  .rail-sub{font-size:11.5px;color:var(--ink-5);text-align:center}
+  @media (max-width:860px){
+    .rail-track{grid-template-columns:1fr;gap:0}
+    .rail-line{display:none}
+    .rail-gate{flex-direction:row;justify-content:flex-start;gap:16px;padding:13px 0}
+    .rail-node{flex:none}
+    .rail-name,.rail-sub{text-align:left}
+  }
+  .gate-notes{margin-top:34px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  @media (max-width:860px){.gate-notes{grid-template-columns:1fr}}
+  .gate-note{display:flex;gap:14px;align-items:flex-start}
+  .gate-note .no{
+    flex:none;width:34px;height:34px;border-radius:8px;background:var(--ink);color:var(--gold-lt);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;
+    font-family:"Montserrat","Inter",sans-serif;
+  }
+  .gate-note b{display:block;font-size:15px;margin-bottom:5px}
+  .gate-note span{font-size:13.5px;color:var(--ink-4);line-height:1.8}
+
+  /* ---------- 架构与数据主权 ---------- */
+  .arch{background:var(--paper)}
+  .arch-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:start}
+  @media (max-width:860px){.arch-grid{grid-template-columns:1fr}}
+  .arch h3{font-size:20px;font-weight:700;margin-bottom:14px}
+  .arch p{font-size:15px;color:var(--ink-4);line-height:1.9}
+  .arch .sog {margin-top:22px}
+  .sec-list{list-style:none;display:flex;flex-direction:column;gap:14px}
+  .sec-list li{
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:16px 20px;font-size:14.5px;color:var(--ink-3);display:flex;gap:12px;align-items:baseline;
+  }
+  .sec-list li::before{content:"✓";color:var(--gold-ink);font-weight:700;flex:none}
+  .sec-list b{color:var(--ink)}
+
+  /* ---------- 联系 / 页脚 ---------- */
+  .contact{
+    background:var(--dark-bg);color:#fff;padding:80px 0 0;
+  }
+  .contact-inner{display:grid;grid-template-columns:1.2fr .8fr;gap:56px;align-items:start}
+  @media (max-width:860px){.contact-inner{grid-template-columns:1fr}}
+  .contact h2{font-size:clamp(22px,2.8vw,30px);font-weight:700;line-height:1.4}
+  .contact h2 .gold{color:var(--gold-lt)}
+  .contact .intro{margin-top:18px;color:#B9C2CB;font-size:15px;line-height:1.9;max-width:560px}
+  .contact-cards{display:flex;flex-direction:column;gap:14px}
+  .contact-card{
+    border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:16px 22px;
+    display:flex;align-items:center;gap:14px;font-size:14.5px;color:#D6DBE0;
+  }
+  .contact-card .lb{color:#8A929E;font-size:13px;flex:none}
+  footer{margin-top:64px;border-top:1px solid rgba(255,255,255,.1);padding:26px 0;
+    display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+  footer .copy{color:#6E7883;font-size:13px}
+  footer .slogan{color:var(--gold-lt);font-size:13.5px;letter-spacing:.14em;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ================= 导航 ================= -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="nav-brand" href="#top" aria-label="蔡工FDE 首页">
+      <svg width="34" height="34" viewBox="156 100 200 200" aria-hidden="true">
+        <path d="M 341.5,200 A 85.5,85.5 0 1 1 298.75,125.955" fill="none" stroke="#FFFFFF" stroke-width="29"/>
+        <path d="M 305.041,129.963 A 85.5,85.5 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29"/>
+        <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29"/>
+      </svg>
+      <b>蔡工FDE智能交付系统</b>
+    </a>
+    <nav class="nav-links">
+      <a href="#abilities">核心能力</a>
+      <a href="#gates">交付门禁</a>
+      <a href="#arch">架构与数据</a>
+      <a href="#contact">联系</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ================= Hero ================= -->
+<main id="top">
+<section class="hero" style="padding-top:96px">
+  <div class="wrap">
+    <!-- 主标：深底按 BRAND-LOGO-GUIDE §六/§七 使用 logo-inverse（反白主标），原样内嵌矢量、无附加效果 -->
+    <svg class="hero-mark" viewBox="0 0 512 460" role="img" aria-labelledby="hero-logo-title">
+      <title id="hero-logo-title">蔡工FDE 智能交付系统 — 反白主标</title>
+      <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+      <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+      <path d="M 239.000,200.000 L 356.000,200.000" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+      <text x="256.0" y="392.0" text-anchor="middle"
+            font-family="'Source Han Sans SC','Noto Sans SC','PingFang SC','Microsoft YaHei','Hiragino Sans GB',sans-serif" font-size="66" font-weight="700"
+            letter-spacing="2" fill="#FFFFFF">蔡工FDE</text>
+      <text x="256.0" y="434.0" text-anchor="middle"
+            font-family="'Montserrat','Inter','Helvetica Neue',Arial,sans-serif" font-size="25" font-weight="600"
+            letter-spacing="7" fill="#FFFFFF">CAIGONG FDE</text>
+    </svg>
+    <p class="hero-kicker en">CAIGONG FDE · SMART DELIVERY</p>
+    <h1>交付<span class="gold">有据</span>，一步到位</h1>
+    <p class="hero-sub">
+      蔡工FDE智能交付系统，面向全行业企业的智能交付工作台。以 13 阶段交付 SOP 和 G1–G9 门禁把每一次实施变成可追溯、可验收的标准动作——从需求到验收，一个闭环，交付有据，一步到位。
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-gold" href="#gates">了解 G1–G9 交付门禁</a>
+      <a class="btn btn-ghost" href="#contact">预约演示</a>
+    </div>
+    <div class="hero-points">
+      <span class="hero-point">证据只存指针 + SHA-256 指纹</span>
+      <span class="hero-point">门禁五态状态机 · 人工核验拍板</span>
+      <span class="hero-point">业务数据自主可控</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 三大能力 ================= -->
+<section class="abilities" id="abilities">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="sec-kicker en">Capabilities</p>
+      <h2>一个工作台，覆盖 FDE 交付全流程</h2>
+      <p>项目、调研、方案、交付文档与商务收款在同一个工作台内闭环，交付动作全部留痕。</p>
+    </div>
+    <div class="ability-grid">
+      <article class="ability">
+        <svg class="ability-icon" viewBox="156 100 200 200" aria-hidden="true">
+          <path d="M 341.5,200 A 85.5,85.5 0 1 1 298.75,125.955" fill="none" stroke="#14181C" stroke-width="29"/>
+          <path d="M 305.041,129.963 A 85.5,85.5 0 0 1 331.492,159.860" fill="none" stroke="#E8A33D" stroke-width="29"/>
+          <path d="M 239,200 L 356,200" fill="none" stroke="#14181C" stroke-width="29"/>
+        </svg>
+        <h3>项目工作台</h3>
+        <p>项目、成员、任务、甘特关系与阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档一站组织，项目负责人 / FDE 工程师 / 查看者角色权限分明。</p>
+        <p class="tagline">交付动作，全部留痕</p>
+      </article>
+      <article class="ability">
+        <svg class="ability-icon" viewBox="0 0 46 46" aria-hidden="true">
+          <circle cx="23" cy="23" r="17" fill="none" stroke="#14181C" stroke-width="5"/>
+          <path d="M 23 23 L 23 8" stroke="#14181C" stroke-width="5"/>
+          <path d="M 23 23 L 33 30" stroke="#E8A33D" stroke-width="5"/>
+        </svg>
+        <h3>交付门禁与商务</h3>
+        <p>门禁引擎 G1–G9：待证据 → 待核验 → 已过门 / 有条件通过 / 未过门。报价、收款（里程碑）与合同商务看板，标准 FDE 项目模板一键派生。</p>
+        <p class="tagline">未过门禁，不进下一阶段</p>
+      </article>
+      <article class="ability">
+        <svg class="ability-icon" viewBox="0 0 46 46" aria-hidden="true">
+          <rect x="6" y="6" width="34" height="34" rx="8" fill="none" stroke="#14181C" stroke-width="5"/>
+          <path d="M 15 23 h 8 M 27 15 l 0 16" stroke="#14181C" stroke-width="5"/>
+          <circle cx="30.5" cy="23" r="3.4" fill="#E8A33D"/>
+        </svg>
+        <h3>AI 与平台管理</h3>
+        <p>AI Server 全局对话、Skills 治理与效果统计、工作流控制台、集成桥只读投影；模型、插件、行业模板与文档模板由管理员统一治理。</p>
+        <p class="tagline">AI 提效，人来拍板</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 交付门禁 ================= -->
+<section class="gates" id="gates">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="sec-kicker en">Gate System G1 – G9</p>
+      <h2>九道门禁，锁住交付质量</h2>
+      <p>每一道门禁对应明确的交付物清单；证据不齐、核验不过，项目就停在原地——质量不是靠承诺，是靠门禁。</p>
+    </div>
+
+    <div class="gate-rail">
+      <div class="rail-track">
+        <div class="rail-line" aria-hidden="true"></div>
+        <div class="rail-gate"><div class="rail-node">G1</div><div class="rail-name">立项</div><div class="rail-sub">评分记录</div></div>
+        <div class="rail-gate"><div class="rail-node">G2</div><div class="rail-name">需求确认</div><div class="rail-sub">真需求卡</div></div>
+        <div class="rail-gate"><div class="rail-node">G3</div><div class="rail-name">诊断交付</div><div class="rail-sub">诊断报告·SOW-A</div></div>
+        <div class="rail-gate"><div class="rail-node">G4</div><div class="rail-name">合同签署</div><div class="rail-sub">SOW-B/C·报价</div></div>
+        <div class="rail-gate"><div class="rail-node">G5</div><div class="rail-name">交付启动</div><div class="rail-sub">项目档案全套</div></div>
+        <div class="rail-gate"><div class="rail-node">G6</div><div class="rail-name">方案设计</div><div class="rail-sub">SCQA·基线数字</div></div>
+        <div class="rail-gate"><div class="rail-node">G7</div><div class="rail-name">试点</div><div class="rail-sub">success.md·Eval</div></div>
+        <div class="rail-gate"><div class="rail-node">G8</div><div class="rail-name">上线决策</div><div class="rail-sub">POC 验收·决策</div></div>
+        <div class="rail-gate final"><div class="rail-node">G9</div><div class="rail-name">上线门禁</div><div class="rail-sub">Go-Live·末款绑定</div></div>
+      </div>
+    </div>
+
+    <div class="gate-notes">
+      <div class="gate-note">
+        <span class="no">01</span>
+        <div><b>证据只存指针与指纹</b><span>门禁证据在工作台只保存 source_uri 指针和 SHA-256 指纹，原件始终留在项目工作目录——可追溯，不搬运。</span></div>
+      </div>
+      <div class="gate-note">
+        <span class="no">02</span>
+        <div><b>五态状态机</b><span>待证据 → 待核验 → 已过门 / 有条件通过（仅 G9）/ 未过门。claimed 与 accepted 分离，报上去的不等于核验过的。</span></div>
+      </div>
+      <div class="gate-note">
+        <span class="no">03</span>
+        <div><b>人工核验拍板</b><span>提交证据与核验拍板只能由人在桌面端执行，AI 只读不代执行；G9 有条件通过与 G8 proceed/pivot/stop 三态决策留足弹性。</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 架构与数据主权 ================= -->
+<section class="arch" id="arch">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="sec-kicker en">Architecture &amp; Data</p>
+      <h2>数据主权在你手里</h2>
+    </div>
+    <div class="arch-grid">
+      <div>
+        <h3>部署在你自己的基础设施上</h3>
+        <p>系统由 Electron 桌面端与 Flask API 组成，业务数据保存在部署者自己的 PostgreSQL、Redis 与文件存储中——不上传第三方 SaaS，客户资料与门禁证据原件始终留在本地工作目录。</p>
+        <p class="sog">桌面端（Windows / macOS）通过受限 IPC 调用后端；后台任务为自研 Redis 队列；集成桥对本地 openfde / fdeops 工作目录做只读投影。</p>
+      </div>
+      <ul class="sec-list">
+        <li><span><b>argon2 口令哈希</b>，口令不明文落库</span></li>
+        <li><span><b>双令牌机制</b>：15 分钟 access + 30 天轮换 refresh，改密即失效</span></li>
+        <li><span><b>登录防爆破</b>：连续失败锁定，Redis 计数</span></li>
+        <li><span><b>容器非 root 运行</b>，密钥后端加密保存且不经 API 回显</span></li>
+        <li><span><b>客户资料永不进代码仓库</b>：仓库与数据库只存代号</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 联系 ================= -->
+<section class="contact" id="contact">
+  <div class="wrap contact-inner">
+    <div>
+      <h2>把下一次实施，做成<span class="gold">可验收的闭环</span></h2>
+      <p class="intro">欢迎预约演示：带上你的一个真实项目，我们用 30 分钟走一遍从立项到上线的门禁流程。</p>
+    </div>
+    <div class="contact-cards">
+      <div class="contact-card"><span class="lb">电话</span>138-XXXX-XXXX</div>
+      <div class="contact-card"><span class="lb">邮箱</span>caigong@XXXX.com</div>
+      <div class="contact-card"><span class="lb">微信</span>caigong-fde</div>
+    </div>
+  </div>
+  <div class="wrap">
+    <footer>
+      <span class="copy">© 2026 蔡工FDE智能交付系统 · CAIGONG FDE</span>
+      <span class="slogan">交付有据，一步到位</span>
+    </footer>
+  </div>
+</section>
+</main>
+
+</body>
+</html>

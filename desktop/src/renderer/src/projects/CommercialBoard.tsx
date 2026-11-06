@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useAuth } from "../auth/AuthProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import {
   FALLBACK_OPTIONS,
   mergeOptions,
@@ -755,6 +756,8 @@ function PaymentRow({
   const [dueDate, setDueDate] = useState(payment.due_date ?? "")
   const [received, setReceived] = useState("")
   const [invoiceNo, setInvoiceNo] = useState(payment.invoice_no ?? "")
+  // S1/F1：设到期是本地写操作，护栏挂在实际渲染按钮的子组件作用域内。
+  const action = useAsyncAction()
   const dunningClass =
     payment.dunning_level === "d60" || payment.dunning_level === "d30"
       ? "badge danger"
@@ -802,10 +805,11 @@ function PaymentRow({
               <button
                 type="button"
                 className="secondary-button compact"
-                disabled={!dueDate}
-                onClick={() => void mutate(() => post(`/payments/${encodeURIComponent(payment.milestone_key)}`, { due_date: dueDate }))}
+                disabled={!dueDate || action.isBusy}
+                aria-busy={action.busyKey === `due:${payment.milestone_key}`}
+                onClick={() => void action.run(`due:${payment.milestone_key}`, () => mutate(() => post(`/payments/${encodeURIComponent(payment.milestone_key)}`, { due_date: dueDate })))}
               >
-                设到期
+                {action.busyKey === `due:${payment.milestone_key}` ? "处理中…" : "设到期"}
               </button>
               <input placeholder="实收金额" value={received} onChange={(e) => setReceived(e.target.value)} />
               <input placeholder="发票号" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />

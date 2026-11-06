@@ -34,7 +34,7 @@
   box-shadow: var(--shadow-xs);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.translator-form > label > textarea { min-height: 92px; line-height: 1.65; resize: vertical; }
+.translator-form > label > textarea { min-height: 92px; line-height: var(--lh-body); resize: vertical; }
 .translator-form > label > select { padding-right: 2.6rem; }
 .translator-form > label > input:focus,
 .translator-form > label > select:focus,
@@ -69,7 +69,7 @@
   padding-left: 4px;
   color: var(--text);
   font-size: var(--font-label);
-  line-height: 1.7;
+  line-height: var(--lh-relaxed);
 }
 .translator-problems .translator-severity { margin-left: 8px; }
 .translator-problems .translator-module { margin-left: 6px; }
@@ -184,7 +184,7 @@
   grid-column: 1 / -1;
   margin: 0;
   font-size: var(--font-caption);
-  line-height: 1.6;
+  line-height: var(--lh-body);
 }
 .pilot-metric.metric-insufficient { opacity: 0.75; }
 .pilot-metric .badge { justify-self: start; }
@@ -198,7 +198,7 @@
 .dispatch-tabs {
   position: sticky;
   top: 0;
-  z-index: 15;
+  z-index: var(--z-sticky);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
@@ -224,8 +224,8 @@
 .dispatch-tab:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .dispatch-tab.active {
   background: var(--brand-gradient);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(26, 130, 160, 0.32);
+  color: var(--brand-ink);
+  box-shadow: var(--shadow-tab-brand);
 }
 .dispatch-tab:disabled { cursor: not-allowed; opacity: 0.55; }
 
@@ -328,7 +328,7 @@
 .error-text {
   color: var(--danger);
   font-size: var(--font-label);
-  line-height: 1.6;
+  line-height: var(--lh-body);
 }
 .page-heading + .page-stack { margin-top: 0; }
 
@@ -342,9 +342,9 @@
 }
 .help-section h2 { margin: 0 0 var(--space-3); font-size: var(--font-section); }
 .help-section h3 { margin: var(--space-5) 0 var(--space-2); font-size: var(--font-label); color: var(--muted-strong); }
-.help-section p { color: var(--muted); line-height: 1.75; }
+.help-section p { color: var(--muted); line-height: var(--lh-relaxed); }
 .help-section ol, .help-section ul { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding-left: 22px; }
-.help-section li { margin: 0; color: var(--text); line-height: 1.7; }
+.help-section li { margin: 0; color: var(--text); line-height: var(--lh-relaxed); }
 .help-section code {
   padding: 2px 6px;
   border-radius: var(--radius-xs);
@@ -377,5 +377,5 @@
   background: var(--warning-soft);
   color: var(--warning);
   font-size: var(--font-label);
-  line-height: 1.65;
+  line-height: var(--lh-body);
 }

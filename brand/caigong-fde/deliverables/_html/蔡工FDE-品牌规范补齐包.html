@@ -1,0 +1,2348 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>蔡工FDE-品牌规范补齐包</title>
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: 'Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;
+  color:#1A2027; font-size:10.2pt; line-height:1.72;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover {
+  min-height:252mm; background:#14181C; color:#FFFFFF;
+  padding:26mm 20mm 16mm; page-break-after:always; position:relative;
+}
+.cover .mark { width:34mm; height:34mm; margin-bottom:22mm; }
+.cover .kicker { color:#F5B44A; font-size:9pt; letter-spacing:.28em; text-transform:uppercase; }
+.cover h1 { font-size:30pt; line-height:1.3; font-weight:700; margin:10mm 0 6mm; border:0; color:#FFFFFF; page-break-before:auto; }
+.cover .gold-rule { width:44mm; height:2.2mm; background:#E8A33D; margin:8mm 0 10mm; }
+.cover .sub { font-size:12.5pt; color:#B9C2CB; line-height:1.8; max-width:130mm; }
+.cover .meta { position:absolute; bottom:18mm; left:20mm; right:20mm;
+  border-top:1px solid #3A4048; padding-top:5mm; font-size:8.6pt; color:#8A929E; }
+.cover .meta b { color:#F5B44A; font-weight:600; }
+.toc { page-break-after:always; min-height:230mm; }
+.toc h2 { border:0; font-size:17pt; color:#14181C; margin:0 0 8mm; }
+.toc ul { list-style:none; padding:0; margin:0; }
+.toc li { border-bottom:1px solid #E4E7EB; padding:2.4mm 0; font-size:10pt; }
+.toc a { color:#1A2027; text-decoration:none; }
+.toc .toc-num { color:#C98F2B; font-weight:700; margin-right:5mm; }
+h1 { font-size:19pt; color:#14181C; border-bottom:2px solid #E8A33D; padding-bottom:3mm;
+     margin:0 0 7mm; page-break-before:always; page-break-after:avoid; }
+h1:first-of-type { page-break-before:auto; }
+h2 { font-size:14pt; color:#14181C; margin:9mm 0 4mm; padding-left:3.5mm;
+     border-left:3px solid #C98F2B; page-break-after:avoid; }
+h3 { font-size:11.6pt; color:#23282E; margin:6mm 0 2.5mm; page-break-after:avoid; }
+p { margin:0 0 3.2mm; }
+strong { font-weight:700; color:#14181C; }
+a { color:#A3721F; }
+ul, ol { margin:0 0 4mm; padding-left:6mm; }
+li { margin-bottom:1.4mm; }
+table { width:100%; border-collapse:collapse; margin:3mm 0 6mm; font-size:9pt;
+        page-break-inside:avoid; }
+thead { display:table-header-group; }
+th { background:#14181C; color:#FFFFFF; text-align:left; padding:2.3mm 2.6mm;
+     font-weight:600; border:1px solid #23282E; }
+td { padding:2.1mm 2.6mm; border:1px solid #E4E7EB; vertical-align:top;
+     overflow-wrap:anywhere; word-break:break-word; }
+td:first-child { min-width:20mm; }
+th { overflow-wrap:anywhere; }
+tbody tr:nth-child(even) td { background:#F8F8F6; }
+blockquote { border-left:3px solid #E8A33D; background:#FBF3E2; margin:3mm 0 5mm;
+             padding:3mm 5mm; color:#3A4048; page-break-inside:avoid; }
+blockquote p { margin:0 0 2mm; }
+code { font-family:Consolas,'Courier New',monospace; font-size:8.8pt;
+       background:#F2F4F5; padding:0 1.2mm; color:#5A4312; }
+pre { background:#14181C; color:#F2F4F5; padding:4mm; font-size:8.4pt;
+      border-radius:2mm; white-space:pre-wrap; page-break-inside:avoid; }
+pre code { background:transparent; color:inherit; padding:0; }
+hr { border:0; border-top:1px solid #E4E7EB; margin:7mm 0; }
+.chip { display:inline-block; width:3.2mm; height:3.2mm; border:1px solid rgba(20,24,28,.18);
+        border-radius:.6mm; margin-right:1.8mm; vertical-align:-.4mm; }
+.swatch-cell code { background:transparent; padding:0; }
+mark, .warn { background:#FBEECC; padding:0 1mm; }
+</style></head><body>
+<section class="cover">
+  <svg class="mark" viewBox="156 100 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+</svg>
+  <div class="kicker">BRAND / SPECIFICATION PACK</div>
+  <h1>蔡工FDE 品牌规范补齐包</h1>
+  <div class="gold-rule"></div>
+  <div class="sub">A–F 六组 · 清单 🔲 项逐项规范内容<br>每项含名称 / 适用范围 / 核心内容 / 引用关系 / 待确认项</div>
+  <div class="meta"><b>v1.0</b>　｜　2026-11-05　｜　信息不足处均标「待确认」，不臆造品牌信息</div>
+</section>
+<section class="body"><h1>A 组 · 品牌核心（A4、A5）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> A 层，原状态 🔲 的 A4、A5
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：仅使用已定稿或可从仓库实证的信息；凡属推断、待拍板、需外部输入的内容一律标注「待确认」，不臆造品牌信息。
+<strong>上位文档</strong>：《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code>、《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code></p>
+</blockquote>
+<hr />
+<h2>A4 ｜ 品牌故事</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 品牌故事（长版叙事稿）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>官网 About / 关于我们、提案书开篇、公众号首篇推文、展会背景板文案、招商与合作介绍；不用于名片、页脚、slogan 位（这些用 A2/A3）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>话术源头 = <code>BRAND-LOGO-GUIDE.md §〇</code>（Slogan、一段话介绍，2026-11-05 已修正为 13 阶段 SOP + G1–G9）；事实源 = <code>server/seeds/gates.json</code>（G1–G9 门禁定义、SOP 节点映射）；落地载体 = <code>site/index.html</code> hero 与三大能力区；下游 = A5 话术口径表、C6 公众号简介；方法论背景可参照 <code>deliverables/fde-sop-v1.1/</code>（待确认是否已获准对外引用）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① ~~<strong>行业口径</strong>~~ ✅ <strong>已裁决 2026-11-06：全行业企业</strong>。定稿介绍已改为「面向全行业企业的智能交付工作台」，§〇 与官网 meta/hero 已同步；本规范只引用真源，不另写一套文案；② 创始人「蔡工」的个人背景、从业年限、资质、创立年份——<strong>全部待确认，本文不填写</strong>；③ 客户案例、项目数量、效果数据——<strong>待确认，本文不填写任何数字</strong>；④ 长版叙事稿的语气与长度（800 字 / 300 字 / 短版 120 字）待拍板；⑤ 是否允许在对外文案中点名 <code>FDE-SOP</code> 文档体系；⑥ 英文版故事是否需要（依赖 A2 英文短句定稿）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>A4-1 已确认事实骨架（可逐条核验，不含任何推断）</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事实</th>
+<th>出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>产品全名「蔡工FDE智能交付系统」，短名「蔡工FDE」，英文「CAIGONG FDE」</td>
+<td><code>BRAND-ASSET-CHECKLIST.md</code> A1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Slogan 定稿「交付有据，一步到位」；「有据」对应门禁、证据链、可追溯，「一步到位」对应效率承诺</td>
+<td><code>BRAND-LOGO-GUIDE.md §〇</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>一段话介绍定稿（100 字内，全渠道不得改写）</td>
+<td><code>BRAND-LOGO-GUIDE.md §〇</code>、<code>site/index.html:7,220</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>交付方法论为 <strong>13 阶段交付 SOP + G1–G9 门禁</strong>；「九步交付法」为事实错误，全仓禁用</td>
+<td><code>BRAND-LOGO-GUIDE.md §八</code>、<code>server/seeds/gates.json</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>G1–G9 真实名称与顺序：G1 线索资格门 → G2 真需求门 → G3 诊断开工门 → G4 试点签约门 → G5 建档门 → G6 发现门 → G7 设计门 → G8 试点毕业门 → G9 上线门</td>
+<td><code>server/seeds/gates.json</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>主标为 CG 环形标：单笔连续成环 = 需求到验收的闭环；右上金色独立段为全场唯一暖色</td>
+<td><code>BRAND-LOGO-GUIDE.md §一/§二</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td>品牌承诺语义：可追溯、可验收、标准动作、一个闭环</td>
+<td>§〇 定稿介绍</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A4-2 长版叙事稿（草案 · 仅使用上表事实，待拍板）</strong></p>
+<blockquote>
+<p><strong>交付有据，一步到位</strong></p>
+<p>一次实施最难回答的问题，往往不是「做完了吗」，而是「凭什么算做完」。</p>
+<p>蔡工FDE智能交付系统把这个回答写进了流程：一次交付被拆成 13 个阶段，关键节点上设下 G1 到 G9 九道门禁。从线索资格门、真需求门，一路到试点毕业门、上线门——每一道都要留下证据、给出结论，才允许往下走。诊断、试点、毕业、上线由此串成一条可追溯的闭环，客户拿到的不再是一句「差不多了」，而是一份能逐项核对的交付凭据。</p>
+<p>主标上的那道环，画的就是这条闭环；环右上那一小段金，是唯一被允许出现的暖色——它提醒我们，强调只该留给真正需要被看见的那一处。</p>
+<p>这就是「交付有据，一步到位」：有据，是每一步都留得下证据；一步到位，是不把返工留给客户。</p>
+<p>⚠️ 上稿为<strong>表达草案</strong>，其中「最难回答的问题」等为叙修辞，不是品牌事实陈述；发布前须经品牌责任人拍板。任何关于创始人、团队、年限、客户、案例、数字的补充，均须由业务方提供书面事实后另版增补，不得由设计侧代填。</p>
+</blockquote>
+<p><strong>A4-3 短版（120 字内，用于公众号简介 / 提案扉页 · 草案）</strong></p>
+<blockquote>
+<p>13 个阶段，G1–G9 九道门禁。每一次实施都留下可追溯、可验收的标准动作，从需求到验收，一个闭环。蔡工FDE智能交付系统——交付有据，一步到位。</p>
+</blockquote>
+<p><strong>A4-4 禁用与纪律</strong></p>
+<ul>
+<li>不得写「九步交付法」「九步法」「9 步交付」；不得把 G1–G9 简写成「9 个步骤」。</li>
+<li>不得编造门禁名称（如把 G1 写成「立项门」、G9 写成「终验门」）——以 <code>server/seeds/gates.json</code> 为准。</li>
+<li>不得把一段话介绍自行改写、扩写或删去「闭环」；改版须走品牌文档变更（见 F2）。</li>
+<li>品牌故事不得替代 A2/A3 出现在 slogan 位或页脚。</li>
+</ul>
+<hr />
+<h2>A5 ｜ 话术口径表</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 对外话术与术语统一表</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>官网、提案/方案书、销售与交付沟通、公众号、PPT、名片、产品内文案与帮助文档；目标是「物料与产品两张皮」归零</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>上游 = <code>BRAND-LOGO-GUIDE.md §〇</code>（A2/A3）、A4 品牌故事；术语真值 = <code>server/seeds/gates.json</code>（门禁名 / 节点 / 出口条件 / 证据清单）、<code>deliverables/fde-sop-v1.1/</code>（SOP 阶段名，待确认可引用范围）；产品内术语表功能（清单 A5 原说明中提及）<strong>位置待确认</strong>；下游 = <code>site/index.html</code>、<code>proposal_cover.docx</code>、17 个 docx 模板、C6/C7/C8/C9</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 产品内「术语表」功能的具体文件/接口路径——<strong>待确认</strong>，本表暂不与代码层做字段级绑定；② 13 阶段的逐阶段标准名称（gates.json 只给节点号 S1…S13 与门禁映射，未给完整阶段中文名）——<strong>待确认</strong>，本表不逐条列出；③ ~~「制造业现场 / 全行业企业」行业口径~~ ✅ <strong>已裁决 2026-11-06 为「全行业企业」</strong>（同 A4）；④ 英文术语对照是否对外使用（依赖 A2 英文短句）；⑤ 产品名在句子中是否允许简称「FDE」——<strong>待确认</strong>；⑥ 本表审批人与生效日期——<strong>待确认</strong></td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>A5-1 名称与话术（强制）</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>唯一正确写法</th>
+<th>禁用写法</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>产品全称</td>
+<td>蔡工FDE智能交付系统</td>
+<td>蔡工 FDE 系统 / 蔡工FDE 平台 / FDE工作台（作为产品名时）</td>
+<td>A1、§〇</td>
+</tr>
+<tr>
+<td>短名</td>
+<td>蔡工FDE（不拆行、不改大小写）</td>
+<td>蔡工 fde / 蔡工FDE系统</td>
+<td>§四</td>
+</tr>
+<tr>
+<td>英文</td>
+<td>CAIGONG FDE（全大写、字距 +0.2em）</td>
+<td>Caigong FDE / CAIGOUNG FDE / CG FDE</td>
+<td>§四、概念稿方案五纠错记录</td>
+</tr>
+<tr>
+<td>Slogan</td>
+<td>交付有据，一步到位</td>
+<td>交付有据一步到位（正式物料须带逗号）/ 一步到位，交付有据</td>
+<td>§〇、D3 名片</td>
+</tr>
+<tr>
+<td>一段话介绍</td>
+<td>见 §〇 定稿全句，逐字引用</td>
+<td>任何改写、缩写、扩写</td>
+<td>§〇 使用规则</td>
+</tr>
+<tr>
+<td>英文短句</td>
+<td>候选 "Evidence in every delivery."（<strong>未定稿，暂不得对外使用</strong>）</td>
+<td>当作已定稿英文 slogan 使用</td>
+<td>§〇、A2</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A5-2 方法论术语（强制，真值源 <code>server/seeds/gates.json</code>）</strong></p>
+<table>
+<thead>
+<tr>
+<th>对外统一叫法</th>
+<th>含义</th>
+<th>禁用 / 易错写法</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>13 阶段交付 SOP</td>
+<td>交付全过程的方法论框架</td>
+<td>九步交付法 / 九步法 / 9 步法 / 13 个门禁</td>
+<td>§八、<code>gates.json meta.conventions</code></td>
+</tr>
+<tr>
+<td>G1–G9 门禁（九道门禁）</td>
+<td>关键节点上的通过/不通过判定</td>
+<td>「9 个步骤」「9 个阶段」「G1–G9 阶段」</td>
+<td><code>gates.json gates[]</code></td>
+</tr>
+<tr>
+<td>线索资格门（G1）</td>
+<td>五问 ≥4，出口留评分记录</td>
+<td>立项门 / 线索门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>真需求门（G2）</td>
+<td>真需求+小闭环+真付费三问成立</td>
+<td>需求确认门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>诊断开工门（G3）</td>
+<td>三件套齐全</td>
+<td>开工门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>试点签约门（G4）</td>
+<td>范围/验收线/毕业条款书面确认</td>
+<td>签约门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>建档门（G5）</td>
+<td>绑定核对三步 + 三跑全绿</td>
+<td>建库门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>发现门（G6）</td>
+<td>问题陈述一句话 + 基线是测量的 + 赞助人认可</td>
+<td>调研门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>设计门（G7）</td>
+<td>成功标准可测 + 客户书面确认 + Eval 计划在位（含反指标）</td>
+<td>方案门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>试点毕业门（G8）</td>
+<td>PoC→Pilot 子检查五项 + pass/fail 有结论 + 三态书面拍板</td>
+<td>验收门 / 毕业门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>上线门（G9）</td>
+<td>Pilot→Production 子检查五项 + 验收线达成 + 回滚演练过 + 客户侧独立跑通 + 成本护栏在位</td>
+<td>终验门 / 交付门 / 上线终验门</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>证据链 / 证据清单</td>
+<td>每道门禁要求留存的证据项</td>
+<td>「材料」「附件」（作为术语时）</td>
+<td><code>gates.json evidence_checklist</code></td>
+</tr>
+<tr>
+<td>验收线</td>
+<td>G4 书面确认、G9 达成判据</td>
+<td>验收标准（非禁用，但对外优先用「验收线」）</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>门禁记录</td>
+<td>Gate 表按 project 实例化后的判定记录</td>
+<td>审批记录 / 打卡记录</td>
+<td><code>gates.json meta.conventions</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>E4 口径冲突提示</strong>：清单 E4 原文写「已通过 G9 终验」，与 <code>gates.json</code> 的「G9 上线门」不一致；在 E4 产出前须按本表统一，见 <code>specs/E-现场物料补齐.md</code> E4 待确认项。</p>
+</blockquote>
+<p><strong>A5-3 视觉与物料术语（引用型，不在本表另立定义）</strong></p>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>定义出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主标 / 组合 / 纯图形标 / 反白 / 单色版</td>
+<td><code>BRAND-LOGO-GUIDE.md §五/§六</code></td>
+</tr>
+<tr>
+<td>石墨黑、琥珀金、亮琥珀金、金墨、深金、中性面</td>
+<td><code>BRAND-COLOR-SPEC.md §二/§三</code>（本表不复制色值，避免双源）</td>
+</tr>
+<tr>
+<td>最小尺寸、留白、禁用项</td>
+<td><code>BRAND-LOGO-GUIDE.md §六</code></td>
+</tr>
+<tr>
+<td>设计令牌（token）</td>
+<td><code>desktop/src/renderer/src/styles.css :root</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>A5-4 维护规则</strong></p>
+<ol>
+<li>术语表为<strong>单一真源</strong>：新物料出现新叫法，先入本表再使用；不得在单个物料里自造缩写。</li>
+<li>门禁名称变更以 <code>server/seeds/gates.json</code> 为准，本表同步；不得反向修改数据源以迁就文案。</li>
+<li>每次变更在 F2 的 <code>CHANGELOG</code> 留痕，并按 F3 巡检清单复查官网 / 模板 / 名片 / 公众号。</li>
+<li>本表与产品内术语表对齐后（待确认②），须在表头标注对齐版本与日期。</li>
+</ol><h1 style="page-break-before:always">B 组 · VI 基础系统（B3–B8）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> B 层 — B3 数据可视化色板（原 ✅ 但注明延后）、B4–B8（原 🔲）
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：色值只引用已落地真值；<strong>B3 不虚构任何图表色值</strong>；字号／字体／动效参数凡属新增决策均标「建议值 · 待确认」。
+<strong>上位文档</strong>：《配色方案》<code>BRAND-COLOR-SPEC.md</code>、《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code>、《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code></p>
+</blockquote>
+<hr />
+<h2>B3 ｜ 数据可视化色板（条件待补）</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 数据可视化色板（预留规范，未发布色值）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>未来的报表、报价单、G1–G9 门禁轨道图、仪表盘、PPT 图表页、官网数据图；<strong>当前不生效</strong>，不用于任何现有物料</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>依附 <code>BRAND-COLOR-SPEC.md §三/§六</code>（品牌色阶与「不得引入第三种彩色」纪律）；依附 <code>BRAND-ASSET-CHECKLIST.md</code> B3 原注记；影响 C8 图表页模板、C9 截图规范、<code>site/index.html</code> 门禁轨道图（现有轨道图为文字+线条，未使用数据色板）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>图表需求是否出现</strong>（触发条件，见下）；② 序列数量上限、是否需区分维度／状态／对比组；③ 色觉无障碍（CVD）验收标准；④ 是否允许在图表内引入品牌色之外的中性灰阶；⑤ 图表色板一旦发布，与语义色 success/warning/danger 的优先级关系；⑥ 审批人与发布版本</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<blockquote>
+<p><strong>⚠️ 保留原注记（逐字）</strong>：<strong>「数据可视化色板留待图表需求出现时补」</strong></p>
+<p>本规范因此<strong>不给出、不指定、不示意任何具体图表色值</strong>，也不以品牌色阶临时拼凑一套序列色充数。以下只定义触发条件、推导原则与验收流程，供需求出现时按流程补齐。</p>
+</blockquote>
+<p><strong>B3-1 触发条件（满足任一即启动补色）</strong></p>
+<ol>
+<li>出现需要区分 ≥2 个数据 series 的图表（折线/柱状/堆叠/饼图）。</li>
+<li>出现需要用颜色编码状态的图表（进度、门禁通过率、风险等级）。</li>
+<li>C8 PPT 模板的图表页、或官网/提案中出现真实数据图需求。</li>
+</ol>
+<p><strong>B3-2 补色时必须遵守的既有纪律（引用，不新增色值）</strong></p>
+<ul>
+<li>主色石墨黑、辅色琥珀金的角色与用量占比不变（见 <code>BRAND-COLOR-SPEC.md §二</code>）。</li>
+<li>「不得引入第三种彩色」为品牌级纪律；数据图表若确需多色区分，须<strong>先由品牌责任人裁决是否豁免</strong>，并在本规范中书面记录豁免范围，不得默认放行。</li>
+<li>语义色（success/warning/danger）保持各自色相，不参与品牌表达，也<strong>不得</strong>被借用作数据序列色。</li>
+<li>深色背景下金色提亮至 <code>#F5B44A</code>，规则同 <code>BRAND-COLOR-SPEC.md §四</code>。</li>
+<li>优先级建议（<strong>待确认⑤</strong>）：语义色 &gt; 数据序列色；即图表表达「通过/不通过」时用语义色，不占用序列色。</li>
+</ul>
+<p><strong>B3-3 补色流程（待触发时执行）</strong></p>
+<pre><code>需求出现 → 明确 series 数量/状态维度/输出介质（屏/印刷/投影）
+        → 提出色板候选（须含 hex + 对比度 + CVD 模拟结果）
+        → 与 BRAND-COLOR-SPEC.md 交叉检查「第三种彩色」纪律
+        → 品牌责任人书面拍板（含是否豁免） → 写入本文件并升版
+        → 同步 C8 图表页模板 / C9 截图规范 / F2 CHANGELOG / F3 巡检
+</code></pre>
+<p><strong>B3-4 当前状态</strong>：<strong>条件待补（未发布）</strong>。现有 <code>site/index.html</code> 的 G1–G9 门禁轨道图使用文字与线条表达，不依赖数据色板，因此不受本节阻塞。</p>
+<hr />
+<h2>B4 ｜ 数字等宽字体 ＋ 字号层级表</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 数字字体与字号层级规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>报价单、报表、台账、门禁记录、金额/编号/日期/百分比、桌面端表格与时间戳、PPT 图表页、名片与工牌上的编号位</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>字体基线 = <code>BRAND-LOGO-GUIDE.md §四</code>（中文思源黑体 Bold / 阿里巴巴普惠体 Bold；英文 Montserrat / Inter Semi Bold，全大写 +0.2em）；字号真值 = <code>desktop/src/renderer/src/styles.css :root</code> 第 9 层 <code>--font-*</code>；下游 = C7 邮件签名、C8 PPT 模板、D5 工牌、E2 铭牌、17 个 docx 模板</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 数字等宽字体的<strong>最终选型</strong>（本文件只给候选，不宣布定稿）；② 是否采购/内嵌字体文件、以及在 Web 端的 <code>font-face</code> 托管位置——<strong>待确认，字体文件当前未入资产库</strong>；③ 印刷物料的磅值换算与输出 DPI；④ 中英文混排时数字基线是否需微调；⑤ 大屏/展会场景（E3）的字号放大系数；⑥ 阿里巴巴普惠体的授权凭证归档位置（清单分工建议中提及需记录 OFL 凭证）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>B4-1 数字字体（候选 · 待确认）</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>候选</td>
+<td>JetBrains Mono（SIL OFL 1.1，免费商用）；备选：思源等宽 / Inter 的 <code>tabular-nums</code> 特性（<strong>待确认①</strong>）</td>
+</tr>
+<tr>
+<td>用途边界</td>
+<td><strong>仅用于数字与编号</strong>，不用于正文、标题、品牌标准字；中文标准字仍为「蔡工FDE」，英文仍为「CAIGONG FDE」</td>
+</tr>
+<tr>
+<td>必需字形特性</td>
+<td>等宽数字（tabular）、等高数字（lining）、清晰的 <code>0 / O</code>、<code>1 / l / I</code> 区分、支持千分位与小数点</td>
+</tr>
+<tr>
+<td>CSS 兜底</td>
+<td><code>font-variant-numeric: tabular-nums lining-nums;</code> + <code>font-feature-settings: "tnum" 1, "lnum" 1;</code>；字体未加载时回退到 <code>--font-*</code> 同族，不得回退到衬线体</td>
+</tr>
+<tr>
+<td>排版规则</td>
+<td>金额/数量列<strong>右对齐</strong>；同列小数位统一；单位写在表头不写在单元格；空值统一写「—」，不写 0 或留白</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ 授权状态未在仓库内核验，字体文件未入库；<strong>本条为选型建议，不构成已采购/已授权声明</strong>。正式启用前须补齐 OFL 授权凭证归档（见 F2）。</p>
+</blockquote>
+<p><strong>B4-2 字号层级表（屏内 UI — 已落地真值）</strong></p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>token</th>
+<th>值</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>说明文字</td>
+<td><code>--font-caption</code></td>
+<td>12px</td>
+<td>脚注、时间戳、表尾</td>
+</tr>
+<tr>
+<td>标签</td>
+<td><code>--font-label</code></td>
+<td>13px</td>
+<td>表单标签、标签 chip</td>
+</tr>
+<tr>
+<td>正文</td>
+<td><code>--font-body</code></td>
+<td>14px</td>
+<td>正文、表格单元格、按钮</td>
+</tr>
+<tr>
+<td>区块标题</td>
+<td><code>--font-section</code></td>
+<td>16px</td>
+<td>卡片标题、分组标题</td>
+</tr>
+<tr>
+<td>页面标题</td>
+<td><code>--font-page</code></td>
+<td>24px</td>
+<td>页面主标题</td>
+</tr>
+<tr>
+<td>字重</td>
+<td><code>--weight-regular/medium/semibold/bold</code></td>
+<td>400 / 500 / 600 / 700</td>
+<td>与 §四 的 Bold(700) 标准字区分使用</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>来源：<code>desktop/src/renderer/src/styles.css :root</code> 第 118–127 行；<strong>此表为既有实现，不是新增决策</strong>。</p>
+</blockquote>
+<p><strong>B4-3 字号层级表（跨介质扩展 — 建议值 · 待确认）</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>主标题</th>
+<th>副标题</th>
+<th>正文</th>
+<th>注释</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>官网（桌面 / 移动）</td>
+<td>待实测现有 <code>site/index.html</code> 后填</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td><strong>待确认</strong>（须先做一次现网字号盘点，不凭空写值）</td>
+</tr>
+<tr>
+<td>A4 文档（docx / PDF）</td>
+<td>建议 20–24pt</td>
+<td>建议 14–16pt</td>
+<td>建议 10.5–11pt</td>
+<td>建议 8–9pt</td>
+<td>建议值 · 待确认③④</td>
+</tr>
+<tr>
+<td>PPT（16:9）</td>
+<td>建议 32–40pt</td>
+<td>建议 20–24pt</td>
+<td>建议 16–18pt</td>
+<td>建议 12pt</td>
+<td>建议值 · 待确认；C8 模板按此落位</td>
+</tr>
+<tr>
+<td>名片 / 工牌 / 铭牌</td>
+<td>以实际毫米尺寸与最小可辨字号反推</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td><strong>待确认</strong>（依赖 D3/D5/E2 定稿尺寸）</td>
+</tr>
+<tr>
+<td>展会（E3）</td>
+<td>由观看距离反推，系数待定</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>待确认⑤</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B4-4 与 §四 的冲突消解</strong>：§四 规定标准字（品牌名）固定字重与字距；B4 的字号层级<strong>不改变</strong>标准字的字重、字距与大小写，只规定其在不同介质中的缩放比例。图形与字标间距仍为图形高度的 0.55 倍、字标总宽 ≥ 图形宽的 1.0 倍。</p>
+<hr />
+<h2>B5 ｜ 辅助图形母题</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 辅助图形母题与使用规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>分割线、页眉/页脚装饰、背景底纹、PPT 版面分隔、展会背景板、贴纸边缘；<strong>不得用作主标或替代主标</strong></td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>几何母版 = <code>BRAND-LOGO-GUIDE.md §二</code>（画心 (256,200)、viewBox 512×460、R_OUT 100 / R_IN 71、黑弧 0–300°、金弧 305–332°、G 杠 y=200 / x=239→356、45° 斜切端头）；生成脚本 = <code>build_logo_svgs.py</code>；色值 = <code>BRAND-COLOR-SPEC.md</code>；下游 = C8 PPT 模板、E3 展会物料、E4 贴纸</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 三个母题是否全部正式启用（当前为<strong>延展草案 · 待拍板</strong>）；② 底纹最大不透明度上限；③ 是否允许母题在深色底上反白使用；④ 母题与主标同框时的最小间距；⑤ 是否需输出印刷用轮廓化版本（依赖 E1 丝印工艺复核）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>B5-1 三个母题（均从主标几何直接推导，不引入新图形语言）</strong></p>
+<table>
+<thead>
+<tr>
+<th>母题</th>
+<th>几何来源</th>
+<th>用法</th>
+<th>交付文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 金段弧线</td>
+<td>金弧 305–332°、45° 斜切端头，笔画宽 29（按母版比例）</td>
+<td>短分割线、标题下的强调线、页眉金线；<strong>只出现一处</strong></td>
+<td><code>assets/aux-gold-arc.svg</code></td>
+</tr>
+<tr>
+<td>② 进度刻度环</td>
+<td>黑弧 0–300° 九等分刻度，末端对应金弧 305–332°</td>
+<td>G1–G9 进度示意、加载环、章节序号环</td>
+<td><code>assets/aux-progress-ring.svg</code></td>
+</tr>
+<tr>
+<td>③ 闭环箭头</td>
+<td>环形回环笔势，收口落在右上金段起点</td>
+<td>「闭环/交付完成」语义配图、流程图收尾</td>
+<td><code>assets/aux-loop-arrow.svg</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>三个 SVG 为<strong>可直接使用的延展草案</strong>，均由母版参数生成，无平台水印、无新增彩色；正式对外前须经①拍板。</p>
+</blockquote>
+<p><strong>B5-2 使用纪律</strong></p>
+<ol>
+<li>母题是<strong>背景级/装饰级</strong>元素：同一画面中视觉权重必须低于主标，不得与主标争夺视线。</li>
+<li>金色仍遵守「全场唯一暖色」纪律：母题中的金段与主标金段同时出现时，<strong>只保留一处金色</strong>，另一处降为石墨阶（ink-4/ink-5）或白色。</li>
+<li>不得改变环形开口方向、不得把金段移到其他角度、不得给母题加投影/渐变/描边（同 §六 禁用项精神）。</li>
+<li>底纹使用时不得压在正文下方影响可读性；上限值<strong>待确认②</strong>。</li>
+<li>单色印刷/丝印场景一律用 <code>mono-dark</code> / <code>mono-light</code> 的等效单色处理，母题不得单独带金。</li>
+</ol>
+<p><strong>B5-3 正误对照（摘录）</strong></p>
+<table>
+<thead>
+<tr>
+<th>✅ 正确</th>
+<th>❌ 错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>标题下一条 45° 斜切金段线，其余装饰用石墨阶</td>
+<td>满版金色弧线重复铺陈</td>
+</tr>
+<tr>
+<td>进度环与主标分置版面两侧</td>
+<td>把进度环当作 logo 放在页眉品牌位</td>
+</tr>
+<tr>
+<td>深色底用白色母题 + 单点提亮金</td>
+<td>深色底仍用 <code>#E8A33D</code> 金段（对比不足）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>B6 ｜ UI 图标风格规范</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — UI 图标风格规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>桌面端功能图标、官网图标、PPT/提案图示、空状态图标；不含主标、app icon、favicon（这些由 B1 单独管理）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>网格/线宽建议对应清单 B6 原描述「1.5px 线性+圆角、24px 网格」；色值 = <code>BRAND-COLOR-SPEC.md</code> 与 <code>styles.css :root</code>（语义色、文字色、描边色）；与 B7 插图、B5 母题共用几何语言；下游 = C9 截图规范（截图内不得出现不符合本规范的图标）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>桌面端现有图标库盘点结果</strong>——未盘点，本规范暂不宣布「与现有图标统一」已达成；② 现有图标是线性还是面性、来源库与授权——<strong>待确认</strong>；③ 圆角值最终取值；④ 是否引入品牌自有图标集，或延续第三方库；⑤ 暗色主题下的线宽补偿规则</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>B6-1 建议基线（建议值 · 待确认①③④）</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>建议值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>设计网格</td>
+<td>24 × 24 px</td>
+<td>内容安全区 20 × 20，四周留 2px</td>
+</tr>
+<tr>
+<td>风格</td>
+<td>线性优先，圆角端点/连接</td>
+<td>与环形主标的连续笔势一致</td>
+</tr>
+<tr>
+<td>描边</td>
+<td>1.5px（@1x），按 2x/3x 等比导出</td>
+<td>不得出现 1px 以下的细线</td>
+</tr>
+<tr>
+<td>端点</td>
+<td><code>stroke-linecap: round</code>；<code>stroke-linejoin: round</code></td>
+<td>呼应主标圆润收笔</td>
+</tr>
+<tr>
+<td>圆角</td>
+<td>2px（外框）/ 1px（内角）</td>
+<td>建议值 · 待确认③</td>
+</tr>
+<tr>
+<td>光学对齐</td>
+<td>视觉重心居中，不按 bounding box 机械居中</td>
+<td>圆形图标可略外扩</td>
+</tr>
+<tr>
+<td>尺寸档</td>
+<td>16 / 20 / 24 / 32 px</td>
+<td>16px 时允许简化细节，不得直接缩放 24px 稿</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B6-2 用色</strong></p>
+<ul>
+<li>默认图标色取 <code>styles.css</code> 文字/描边阶（不硬编码新 hex）；激活态用交互主色金墨 <code>#C98F2B</code>，<strong>金底图标的字形/图形一律用石墨黑 <code>#14181C</code>，不得用白</strong>（2026-11-06 裁决，见 <code>BRAND-COLOR-SPEC.md §六</code>）。</li>
+<li><strong>图标不得用金色填充</strong>：金色是主标专属强调位；图标只允许在激活/选中态使用金系。</li>
+<li>状态类图标使用语义色（success / warning / danger），语义色不参与品牌化改写。</li>
+<li>单色场景（打印、丝印、合同页眉）统一石墨黑或反白，不保留多色。</li>
+</ul>
+<p><strong>B6-3 禁止</strong></p>
+<ul>
+<li>不得给图标加投影、渐变、3D、拟物质感。</li>
+<li>不得把主标 CG 环形裁切/变形后当功能图标用。</li>
+<li>不得把不同来源、不同线宽的图标混排在同一组控件内。</li>
+<li>不得用颜色单独承载含义（须配文字或形状），以满足可访问性。</li>
+</ul>
+<p><strong>B6-4 落地前置</strong>：完成待确认①的图标库盘点后，须把本表「建议值」与现状差异列成整改清单，再宣布 B6 完成；<strong>当前状态 = 规范已出，统一待核</strong>。</p>
+<hr />
+<h2>B7 ｜ 摄影 / 插图风格</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 摄影与插图风格规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>官网配图、提案/展会背景、产品空状态插图、公众号封面、PPT 配图；不用于主标、文档页眉、合同类严肃载体</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>色调纪律 = <code>BRAND-COLOR-SPEC.md §六</code>（不得引入第三种彩色、深底提亮金）；几何语言 = <code>BRAND-LOGO-GUIDE.md §二</code> 与 B5 母题；线性语言 = B6；既有可用素材 = <code>caigong-fde-logo-concepts.miora</code>（<strong>位图带平台标识，禁止对外</strong>）；官网现状 = <code>site/index.html</code>（当前为纯 CSS/SVG，无摄影图）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 是否存在可用的真实现场照片及其版权/肖像/客户授权——<strong>待确认，本文不假设有素材</strong>；② 是否允许客户现场/设备/人员出镜，脱敏规则（联动 C9）；③ 插图走「几何矢量」还是「暖工业摄影」为主路线——待拍板；④ 图片后期处理工具与交付格式；⑤ 是否需要生成插画素材（若需要，须走独立生成流程并复核无平台水印）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>B7-1 双轨定义</strong></p>
+<table>
+<thead>
+<tr>
+<th>轨道</th>
+<th>风格</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>轨道 A · 现场摄影</td>
+<td>只拍真实交付现场（设备、工装、文档、手部动作）；低饱和、以石墨中性灰为基调；暖色只允许来自现场光源或金属反光，<strong>不得后期注入第二种彩色</strong>；避免人物正脸（授权未明确前）</td>
+<td>官网 About、展会、案例、品牌故事配图</td>
+</tr>
+<tr>
+<td>轨道 B · 几何矢量插图</td>
+<td>与主标同语言：圆弧、刻度、直线、45° 斜切；线宽按 B6 的 1.5px 体系；只用石墨阶 + 单点金；不加渐变、不加拟物阴影</td>
+<td>空状态、功能说明、PPT 示意、公众号头图</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B7-2 色调处理（引用既有色值，不新增颜色）</strong></p>
+<ul>
+<li>基调：<code>#14181C</code> / <code>#F6F6F4</code> / 石墨阶 ink-1…ink-5。</li>
+<li>唯一暖色：<code>#E8A33D</code>（浅底）/ <code>#F5B44A</code>（深底）；一张图内金色面积不超过画面 10–15%，且只落在一处。</li>
+<li>语义色不进入摄影/插图调色；不得用滤镜把画面染成蓝、绿、青等第三色相。</li>
+<li>黑白/单色印刷场景直接去色，不单独出一套彩色版。</li>
+</ul>
+<p><strong>B7-3 禁用</strong></p>
+<ul>
+<li>禁止使用图库风格的商务握手、地球、齿轮堆叠等泛化素材。</li>
+<li>禁止使用 <code>caigong-fde-logo-concepts.miora</code> 内的任何位图（带平台「AI生成」溯源标识）。</li>
+<li>禁止在图片上叠加主标、 slogan 或变形主标作为水印。</li>
+<li>禁止在无授权情况下出现客户名称、设备铭牌、人员面部、屏幕内真实数据（联动 C9 脱敏）。</li>
+</ul>
+<p><strong>B7-4 当前状态</strong>：规范已出；<strong>素材为零，未拍摄/未生成任何图片</strong>。待确认①③落定后再进入素材制作，避免先产出不可用资产。</p>
+<hr />
+<h2>B8 ｜ 动效规范</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 动效规范（含主标动效版原则）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>桌面端加载/成功态/进度反馈、官网首屏与滚动、PPT 转场、视频片头；不用于打印与静态文档</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>语义来源 = <code>BRAND-LOGO-GUIDE.md §〇</code>（「一步到位」= 推进感）与 §二（金段 305–332°）、§六（不得移动金色段位置/不得改开口方向）；色值 = <code>BRAND-COLOR-SPEC.md</code>；母题 = B5 进度刻度环；现状 = <code>site/index.html</code>（当前无动效，待确认是否引入）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 时长、缓动曲线等参数为<strong>建议值，待拍板</strong>；② 桌面端是否已有动画体系（未盘点）；③ 官网是否允许引入动效（当前为静态单页，引入需评估性能与部署约束）；④ 视频片头是否需要、时长与输出规格；⑤ <code>prefers-reduced-motion</code> 降级策略的验收方式</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>B8-1 核心母题：金段递进</strong></p>
+<p>金弧 305°→332° 是全标唯一暖色，也是「交付推进」的天然载体。动效只允许表现为<strong>这段弧随进度展开</strong>，不得表现为整环旋转、闪烁或颜色跳变。</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>表现</th>
+<th>参数（建议值 · 待确认①）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>加载中</td>
+<td>金段从 305° 起点沿弧长生长至 332°，到端点后回到起点循环</td>
+<td>单周期 1200ms，<code>linear</code></td>
+</tr>
+<tr>
+<td>进度反馈</td>
+<td>金段展开比例 = 已完成门禁数 / 9（G1–G9），不循环</td>
+<td>240ms，<code>cubic-bezier(0.2, 0, 0, 1)</code></td>
+</tr>
+<tr>
+<td>成功 / G9 达成</td>
+<td>金段一次展开到满，随后停住不回落</td>
+<td>320ms，<code>cubic-bezier(0.2, 0, 0, 1)</code></td>
+</tr>
+<tr>
+<td>失败 / 未通过</td>
+<td><strong>不做失败动画</strong>，保持静态并由语义色 + 文字表达（语义色不参与品牌表达）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>UI 微交互</td>
+<td>按钮 hover / 激活态沿用 <code>styles.css</code> 现有过渡，不新增品牌动画</td>
+<td>沿用现有实现</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B8-2 主标动效版原则（视频/PPT 片头）</strong></p>
+<ol>
+<li>环形黑弧先以单笔连续路径绘出（0°→300°），方向固定，不得反向。</li>
+<li>金段最后出现（305°→332°），出现即停，不闪、不脉冲。</li>
+<li>G 横杠随黑弧收笔一次性落位。</li>
+<li>全过程中<strong>不得改变开口方向、不得移动金段角度、不得加投影/发光/渐变</strong>——与 §六 禁用项一致。</li>
+<li>出现字标时，字标静态淡入，不做逐字弹跳。</li>
+</ol>
+<p><strong>B8-3 可访问性与性能</strong></p>
+<ul>
+<li>必须响应 <code>prefers-reduced-motion: reduce</code>：降级为静态满幅金段，不播放任何循环动画。</li>
+<li>循环动画仅用于「加载中」，加载结束立即停止；禁止常驻无限动画。</li>
+<li>不得为动效新增彩色、新增音效或自动播放视频（待确认④）。</li>
+</ul>
+<p><strong>B8-4 当前状态</strong>：规范已出；<strong>未产出动效成品、未改任何线上代码</strong>。待确认②③落定后再实施，避免改动现有稳定功能。</p><h1 style="page-break-before:always">C 组 · 数字载体（C6–C9、C4 条件待补）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> C 层 — C6–C9 原 🔲；C4 原「🔲（半）」在文末单列条件待补说明
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：联系方式、账号主体、真实数据一律以「待确认」占位，不填写任何虚构值。
+<strong>上位文档</strong>：《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code>、《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code></p>
+</blockquote>
+<hr />
+<h2>C6 ｜ 微信公众号形象</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 公众号形象与首触达模板</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>公众号头像、账号简介、关注自动回复图文、首篇推文模板、菜单栏命名；不含小程序/企业微信形象（<strong>未立项，待确认</strong>）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>头像资产 = <code>caigong-fde-app-icon.svg</code>（1024 圆角方形，深底 + 反白 G 形 + 金段）或 <code>caigong-fde-mark.svg</code> 方形版；简介文案 = <code>BRAND-LOGO-GUIDE.md §〇</code> 一段话介绍 + A4 短版；术语 = <code>specs/A-品牌核心补齐.md</code> A5；色值 = <code>BRAND-COLOR-SPEC.md</code>；官网联动 = <code>site/index.html</code></td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 账号主体名称、认证状态、微信号、是否已有账号——<strong>全部待确认</strong>；② 头像最终选 <code>app-icon</code> 还是 <code>mark</code> 方形版——待拍板；③ 二维码目标（官网地址 / 关注引导 / 联系人）——<strong>待确认，官网部署目标亦未定</strong>；④ 菜单栏结构与命名；⑤ 关注回复是否含联系电话（联系方式占位未填）；⑥ 发布节奏与内容栏目；⑦ 是否需英文版简介（依赖 A2 英文短句定稿）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>C6-1 头像</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>规范</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>资产</td>
+<td><code>caigong-fde-app-icon.svg</code> 导出 500×500 PNG；或 <code>caigong-fde-mark.svg</code> 置于石墨黑 <code>#14181C</code> 方形底导出</td>
+</tr>
+<tr>
+<td>构图</td>
+<td>图形居中，四周留白 ≥ 图形高度的 1/4（§六）；圆形裁切后金段仍须完整可见</td>
+</tr>
+<tr>
+<td>用色</td>
+<td>深底 <code>#14181C</code> + 反白 <code>#FFFFFF</code> + 金段 <code>#E8A33D</code>；<strong>不得</strong>用浅底反白版（微信头像多为浅色界面）</td>
+</tr>
+<tr>
+<td>禁止</td>
+<td>不得加文字、不得加 slogan、不得加边框/描边/投影、不得改用带平台标识的概念稿位图</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C6-2 账号简介（待确认①落定后填槽）</strong></p>
+<ul>
+<li>功能介绍栏：逐字引用 §〇 一段话介绍（≤100 字，不得改写）。</li>
+<li>如平台限制字数：使用 A4-3 短版（120 字内草案），<strong>须先经 A4 待确认④拍板</strong>。</li>
+<li>名称栏：「待确认」（须与 A1 命名体系一致，优先「蔡工FDE」）。</li>
+</ul>
+<p><strong>C6-3 关注自动回复 · 图文模板（结构稿，占位不填实值）</strong></p>
+<pre><code>【标题】交付有据，一步到位
+【封面】深底 + 反白纯图形标 + 金段（用 B5 ① 金段弧线作分隔）
+【正文】
+  §〇 一段话介绍（逐字引用；**2026-11-06 行业口径已裁决为「全行业企业」**，真源见 §〇）
+  ── 金段弧线分隔 ──
+  13 阶段交付 SOP ｜ G1–G9 门禁 ｜ 可追溯 · 可验收 · 一个闭环
+  ── 金段弧线分隔 ──
+  查看交付方法 → 〔链接：待确认〕
+  联系咨询     → 〔电话/邮箱：待确认，官网同款占位〕
+【落款】蔡工FDE（不写 slogan 变体）
+</code></pre>
+<p><strong>C6-4 推文版式</strong>：正文用石墨阶文字、标题可用金墨 <code>#C98F2B</code> 作唯一强调；一屏内金色只出现一处；配图遵守 B7；截图遵守 C9。</p>
+<hr />
+<h2>C7 ｜ 邮件签名模板</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 全员统一邮件签名（HTML）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>对外商务邮件、报价/方案发送、交付通知、客户支持回信；不含系统自动邮件（<strong>待确认是否另出精简版</strong>）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>小图标 = <code>caigong-fde-mark.svg</code> / <code>hdr-mark-color.png</code>；文案 = <code>BRAND-LOGO-GUIDE.md §〇</code> slogan、§四 标准字；色值 = <code>BRAND-COLOR-SPEC.md</code>；实际模板文件 = <code>assets/email-signature.html</code>（本次产出，字段全为占位）；与 D3 名片、D1 文档模板保持同一套联系信息</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 姓名、职位、电话、邮箱、公司主体全称、官网域名——<strong>全部待确认，模板中以 <code>[[...]]</code> 占位，不含任何虚构值</strong>；② 图片托管地址（内联 data-URI 还是外链）——待确认；③ 是否加免责声明/保密声明及其法务措辞——<strong>待确认，须法务确认</strong>；④ 移动端签名折行规则；⑤ 是否需要英文签名版；⑥ 全员分发与更新责任人（联动 F2/F3）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>C7-1 模板结构（<code>assets/email-signature.html</code>）</strong></p>
+<table>
+<thead>
+<tr>
+<th>区块</th>
+<th>内容</th>
+<th>规范</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>左列</td>
+<td>纯图形标小图标</td>
+<td>宽 56px，透明底或白底，用 <code>mark</code> 不上字标</td>
+</tr>
+<tr>
+<td>右列 · 第 1 行</td>
+<td>姓名（加粗）+ 职位</td>
+<td>中文思源黑体 Bold / 12–14px（建议值 · 待确认）</td>
+</tr>
+<tr>
+<td>右列 · 第 2 行</td>
+<td>品牌名「蔡工FDE智能交付系统」</td>
+<td>逐字引用 A1 全称，不加粗变形</td>
+</tr>
+<tr>
+<td>右列 · 第 3 行</td>
+<td>电话 ｜ 邮箱 ｜ 官网</td>
+<td>数字与编号用 B4 等宽数字；全部 <code>[[占位]]</code></td>
+</tr>
+<tr>
+<td>分隔</td>
+<td>1px 金段线（<code>--brand-gold</code> / <code>#E8A33D</code>）</td>
+<td>全长不超过 320px，全场唯一金色</td>
+</tr>
+<tr>
+<td>底行</td>
+<td>slogan「交付有据，一步到位」</td>
+<td>§〇 原句，不作变体</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C7-2 技术约束</strong></p>
+<ul>
+<li>单文件 HTML，<code>table</code> 布局 + <strong>全内联 CSS</strong>（邮件客户端不保证 <code>&lt;style&gt;</code> 生效），宽度 ≤ 600px。</li>
+<li>图片优先内联 data-URI 避免被拦截；若用外链，地址<strong>待确认②</strong>，且必须是可公开访问的 HTTPS 地址。</li>
+<li>不使用 web font（邮件客户端不支持），回退字体栈须包含中文黑体。</li>
+<li>不放二维码、不放追踪像素、不放社交图标（未立项）。</li>
+<li>所有文字可选中可复制，不把关键信息做进图片。</li>
+</ul>
+<p><strong>C7-3 分发</strong>：模板更新后由 F2 记录版本，F3 季度巡检抽查全员签名是否为最新版。</p>
+<hr />
+<h2>C8 ｜ 提案 / 演示 PPT 模板</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 提案与演示 PPT 模板（封面 / 内页 / 图表页 / 封底）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>对外提案、方案汇报、门禁/阶段说明、展会演讲、内部评审；<strong>对外提案必用</strong>（清单 C8 原要求）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>主标 = <code>caigong-fde-logo-inverse.svg</code>（深底）/ <code>-master.svg</code>（浅底）；色值 = <code>BRAND-COLOR-SPEC.md</code>；字号 = <code>specs/B-VI基础系统补齐.md</code> B4-3 建议值；术语 = A5；辅助图形 = B5；图表页色板依赖 <strong>B3（未发布，条件待补）</strong>；实际模板文件 = <code>deliverables/caigong-fde-ppt-template.pptx</code>（本次产出）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 16:9 还是 4:3（本次按 16:9 出，<strong>待确认</strong>）；② 是否需要中文/英文双语母版；③ 图表页在 B3 未发布前只能用单色/石墨阶表达，<strong>不得自行造色</strong>；④ 公司主体、页脚保密声明、页码规则——待确认；⑤ 是否允许在提案中出现真实客户名/数据（联动 C9 脱敏）；⑥ 模板与 <code>scripts/build-proposal-cover.py</code> 生成的 <code>proposal_cover.docx</code> 封面风格是否需完全同版——待确认</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>C8-1 母版</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>规范</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>尺寸</td>
+<td>16:9（13.333 × 7.5 in）；待确认①</td>
+</tr>
+<tr>
+<td>底色</td>
+<td>封面/封底 <code>#14181C</code> 深底；内页 <code>#FFFFFF</code> 或 <code>#F6F6F4</code> 浅底</td>
+</tr>
+<tr>
+<td>主标位</td>
+<td>封面左上，反白版；最小宽 ≥120px 等效（§六）</td>
+</tr>
+<tr>
+<td>强调色</td>
+<td>金墨 <code>#C98F2B</code>（浅底可读）/ 亮金 <code>#F5B44A</code>（深底）；每页金色只出现一处</td>
+</tr>
+<tr>
+<td>分隔</td>
+<td>B5 ① 金段弧线，或 1px 金线</td>
+</tr>
+<tr>
+<td>字体</td>
+<td>中文思源黑体 / 英文 Inter 或 Montserrat；标题 32–40pt、正文 16–18pt（建议值 · 见 B4-3）</td>
+</tr>
+<tr>
+<td>安全边距</td>
+<td>四周 ≥ 0.5 in；页脚不压正文</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C8-2 四类版面</strong></p>
+<table>
+<thead>
+<tr>
+<th>版面</th>
+<th>骨架</th>
+<th>必含 / 禁含</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>封面</td>
+<td>深底 + 反白主标 + 提案标题（占位）+ slogan 全句 + 客户名/日期（占位）</td>
+<td>必含 slogan 全句含逗号；禁含二维码、第三方 logo</td>
+</tr>
+<tr>
+<td>内页</td>
+<td>浅底 + 区块标题 + 单栏或双栏正文 + 可选 B5 母题底纹（弱化）</td>
+<td>标题可用金墨；禁满版金</td>
+</tr>
+<tr>
+<td>图表页</td>
+<td>浅底 + 标题 + 图表占位框 + 图注</td>
+<td><strong>B3 未发布</strong>：只用石墨阶/单色 + 文字标注，不填序列色；框内注明「数据色板待 B3 发布」</td>
+</tr>
+<tr>
+<td>封底</td>
+<td>深底 + 反白纯图形标 + 联系方式占位 + slogan</td>
+<td>联系方式全部 <code>[[待确认]]</code>；禁加新文案</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C8-3 内容纪律</strong>：所有 G1–G9 / 13 阶段表述按 A5 术语表；禁用「九步交付法」；不得改写 §〇 一段话介绍。</p>
+<hr />
+<h2>C9 ｜ 产品截图规范</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 产品截图与脱敏规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>官网、案例、提案、公众号、品牌手册、帮助文档、桌面端引导页中的产品界面截图</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>主题色 = <code>desktop/src/renderer/src/styles.css :root</code>（浅色为默认）；术语 = A5；摄影/插图 = B7；图标 = B6；下游 = C6 推文、C8 提案、《品牌手册（完整版）》应用示例页</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 标准窗口尺寸（本文给建议值，须按实际界面复核）；② 是否允许出现真实客户/项目名及其审批人——<strong>待确认，未确认前一律脱敏</strong>；③ 深色主题是否作为对照版纳入；④ 截图是否需带浏览器/系统外框；⑤ 归档目录与命名责任人（联动 F2）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>C9-1 采集基线（建议值 · 待确认①）</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>建议值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>窗口尺寸</td>
+<td>1440 × 900（桌面端）；官网截图 1440 × 首屏高度；移动端 390 × 844</td>
+</tr>
+<tr>
+<td>缩放</td>
+<td>100%，导出 2x PNG；禁用系统缩放与浏览器缩放</td>
+</tr>
+<tr>
+<td>主题</td>
+<td>默认浅色主题（<code>--bg #F6F6F4</code> / <code>--surface #FFFFFF</code>）；深色版需单独标注</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>使用<strong>演示数据</strong>，界面数据完整但不得为空表/报错态；不显示加载动画中间帧</td>
+</tr>
+<tr>
+<td>界面洁净</td>
+<td>隐藏开发者工具、控制台、调试面板、通知气泡；光标不留在画面内</td>
+</tr>
+<tr>
+<td>滚动位置</td>
+<td>顶部对齐，不截取半截卡片/半截表格行</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C9-2 脱敏规则（强制）</strong></p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>客户/项目名</td>
+<td>替换为「示例客户」「示例项目」（待确认②，未批准不得出现真实名称）</td>
+</tr>
+<tr>
+<td>人名 / 手机号 / 邮箱</td>
+<td>替换为占位；不得只打码部分字符</td>
+</tr>
+<tr>
+<td>金额 / 报价 / 合同编号</td>
+<td>替换为示意值，且需注明「示意」</td>
+</tr>
+<tr>
+<td>门禁记录中的真实证据</td>
+<td>不出现在对外截图</td>
+</tr>
+<tr>
+<td>屏幕内可见的 URL / 内网地址 / 端口</td>
+<td>一律裁掉或遮盖</td>
+</tr>
+<tr>
+<td>时间戳</td>
+<td>统一为示意日期</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C9-3 输出与归档</strong></p>
+<ul>
+<li>格式 PNG（无损）、2x；文件命名 <code>caigong-fde-shot-&lt;场景&gt;-&lt;主题&gt;-v&lt;版本&gt;.png</code>（遵循 F2 命名法）。</li>
+<li>每张截图附一行说明：场景、主题、脱敏状态、采集日期；说明存于同目录 <code>README</code>。</li>
+<li>禁止把截图二次压缩成 JPEG 后用于印刷物料。</li>
+<li>主标在截图中须符合 §六 最小尺寸与留白；不符者重截，不得后补放大。</li>
+</ul>
+<hr />
+<h2>附：C4 条件待补说明（未列为本次可完成项）</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>C4 Windows / macOS 打包图标 — macOS <code>icon.icns</code> 补齐</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>Electron macOS 打包产物</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>Windows 侧 <code>desktop/build/icon.png</code> + <code>icon.ico</code> 已替换；<code>BRAND-LOGO-GUIDE.md §八</code> 明确 <code>icon.icns</code> 沿用旧标；生成入口 <code>npm run icon:mac</code>；源资产 <code>caigong-fde-app-icon.svg</code> / <code>app-icon-1024.png</code></td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>需 macOS 环境</strong>执行 <code>npm run icon:mac</code> 重生成（当前为 Windows 环境，无法产出）；② 重生成后须实渲染复核 16/32/128/256/512 各档；③ <code>icon.svg</code> / <code>icon_white.png</code> 两个旧标遗留文件是否清理——待确认</td>
+</tr>
+<tr>
+<td><strong>核心内容</strong></td>
+<td>本项<strong>不伪造为已完成</strong>。补齐条件：在 macOS 环境以 <code>app-icon-1024.png</code> 为源生成 <code>icon.icns</code>，逐档目检金段可辨、反白 G 形不糊，替换后把 §八「未接入」条目改为已接入，并在 F2 <code>CHANGELOG</code> 与 F3 巡检表登记。Windows 侧不受影响。</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>C4 状态</strong>：🟡 条件待补（环境依赖），非规范缺失。</p>
+</blockquote><h1 style="page-break-before:always">D 组 · 商务载体（D5、D6）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> D 层 — D5、D6 原 🔲
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：主体名称、姓名、职位、印章备案信息一律「待确认」；D6 涉法律合规，只定视觉边界，不提供可直接使用的章样。
+<strong>上位文档</strong>：《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code>、《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code></p>
+</blockquote>
+<hr />
+<h2>D5 ｜ 工牌 / 桌牌</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 驻场工牌与桌牌视觉规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>客户现场驻场佩戴工牌、项目会议室桌牌、展会工作人员胸牌；不含访客证（客户方制式为准）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>主标 = <code>caigong-fde-logo-mono-dark.svg</code>（浅底）/ <code>-mono-light.svg</code>（深底）/ 纯图形标 <code>-mark.svg</code>；色值 = <code>BRAND-COLOR-SPEC.md</code>；字号 = <code>specs/B-VI基础系统补齐.md</code> B4；与 D3 名片 <code>caigong-fde-card-front/back.svg</code> 共用同一套纯图形标与联系方式占位规则；与 E1 丝印稿共用单色处理原则</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>公司主体全称</strong>（印在工牌上时须与印章/合同主体一致）——<strong>待确认，本文不填</strong>；② 工牌/桌牌的最终尺寸与卡套规格——待确认；③ 是否印职位、工号、有效期、二维码——待确认；④ 姓名拼音/英文写法规则——待确认；⑤ 客户方是否要求加挂其 LOGO 或访客色带——待确认；⑥ 制作供应商与材质；⑦ 照片是否必需（涉及肖像授权，联动 B7 待确认①）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>D5-1 建议规格（建议值 · 待确认②⑥）</strong></p>
+<table>
+<thead>
+<tr>
+<th>载体</th>
+<th>建议尺寸</th>
+<th>版式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工牌（竖版）</td>
+<td>54 × 86 mm（CR80 等效）+ 3 mm 出血</td>
+<td>上 1/3：纯图形标居中 + 品牌全称；中：姓名（最大字重）+ 职位；下：细金线 + slogan 全句</td>
+</tr>
+<tr>
+<td>桌牌（横版折叠）</td>
+<td>待确认②</td>
+<td>正面：纯图形标 + 姓名；背面可留白或放 G1–G9 轨道线（B5 ②）</td>
+</tr>
+<tr>
+<td>胸牌（展会）</td>
+<td>待确认②</td>
+<td>与工牌同版，缩小字阶</td>
+</tr>
+</tbody>
+</table>
+<p><strong>D5-2 视觉规则</strong></p>
+<ul>
+<li>优先<strong>纯图形标</strong> + 品牌名，不使用完整组合（含字标）——工牌幅面小，组合易低于 §六 的 120px 等效最小宽。</li>
+<li>单色优先：浅底用 <code>mono-dark</code>（石墨黑），深底用 <code>mono-light</code>（纯白）；<strong>工牌不出现金色</strong>，避免小面积烫金工艺失真（若确需金，须待确认⑤后单列工艺稿）。</li>
+<li>图形四周留白 ≥ 图形高度 1/4（§六）；图形不得拉伸、不得改开口方向。</li>
+<li>姓名为视觉第一层级；品牌名为第二层级；slogan 最小，不得放大抢主体。</li>
+<li>数字（工号/日期）用 B4 等宽数字；空字段写「—」。</li>
+<li>所有文字字段在模板中以 <code>[[待确认]]</code> 占位，<strong>不含任何虚构姓名或联系方式</strong>。</li>
+</ul>
+<p><strong>D5-3 与 D3 的一致性</strong>：工牌、名片、邮件签名（C7）、PPT 封底（C8）中的品牌全称与联系方式必须来自同一份待确认信息表；任一处更新，四处同步（F3 巡检项）。</p>
+<hr />
+<h2>D6 ｜ 电子章 / 签章样式</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 电子签章视觉边界规范（<strong>不含章样</strong>）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>通过第三方电子签约通道（清单原注记为「法大大通道」）签署的电子合同、方案书、验收单上的签章位；仅约束签章在文档中的<strong>位置与周围版式</strong></td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>合同类文档版式 = <code>resources/document-templates/contract.docx</code> 及 <code>scripts/brandize-document-templates.py</code> 的纯文字保守版页眉；主标 = <code>caigong-fde-logo-mono-dark.svg</code>；色值 = <code>BRAND-COLOR-SPEC.md</code>；法务口径 = A5 术语表；与 D4 合同页眉页脚配套</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>签约主体全称、统一社会信用代码、法定代表人</strong>——全部待确认；② 公章/合同章是否已在公安备案、备案章样由谁提供——<strong>待确认，本文不提供、不绘制任何印章图样</strong>；③ 电子签约平台账号、CA 证书、用印审批流程与授权人——待确认；④ 章色（法定朱红）与品牌「不得引入第三种彩色」纪律的冲突如何裁决——<strong>待确认，须品牌责任人 + 法务共同书面确认</strong>；⑤ 签章位是否需骑缝、时间戳、验签链接；⑥ 是否允许在方案书/验收单等非合同文件上出现签章样式</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<blockquote>
+<p><strong>⚠️ 合规前置声明（不可删）</strong>
+本节<strong>只定义视觉边界与版式位置</strong>，不构成印章刻制、使用或电子签名的授权，也不提供可直接套用的印章图样。
+电子签章的法律效力来自签约主体资质、CA 证书与平台用印流程，与视觉规范无关；任何印章图样必须以<strong>实际备案章样</strong>为准。
+<strong>禁止</strong>由设计侧自行绘制、临摹、描边或「美化」公章用于对外文件；<strong>禁止</strong>把品牌主标当作印章使用。</p>
+</blockquote>
+<p><strong>D6-1 版式位置（在无章样的前提下可先定）</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>规范</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>位置</td>
+<td>签署页右下方，距右边距 ≥ 20mm、距页脚 ≥ 15mm；不压正文、不压页码</td>
+</tr>
+<tr>
+<td>周围留白</td>
+<td>签章区外扩 ≥ 10mm 不放任何文字/图形/金线</td>
+</tr>
+<tr>
+<td>与品牌元素的关系</td>
+<td>签章区<strong>不得</strong>叠加主标、纯图形标、B5 母题或 slogan；品牌元素只在页眉/页脚出现（D4 已落地）</td>
+</tr>
+<tr>
+<td>签署栏</td>
+<td>甲方/乙方、签署日期、授权代表为独立文字栏，不并入印章图形内</td>
+</tr>
+<tr>
+<td>页面底色</td>
+<td>保持 contract.docx 的纯文字保守版式，不加深底、不加金色块</td>
+</tr>
+</tbody>
+</table>
+<p><strong>D6-2 与品牌用色纪律的冲突（交由待确认④裁决，本节不自行决定）</strong></p>
+<ul>
+<li>品牌纪律：不得引入第三种彩色，金色为唯一暖色。</li>
+<li>电子公章实务：通常为朱红，且与品牌色系不同相。</li>
+<li><strong>处理方式</strong>：二者冲突<strong>未裁决前，本节不指定章色</strong>；裁决后须在 <code>BRAND-COLOR-SPEC.md §六</code> 增列一条书面豁免，并注明豁免仅限签章区、不扩散至其他物料。</li>
+</ul>
+<p><strong>D6-3 落地流程（待触发）</strong></p>
+<pre><code>法务/主体资质确认（待确认①②③）
+  → 取得备案章样 / 平台签章组件
+  → 品牌责任人 + 法务书面裁决章色豁免（待确认④）
+  → 在 contract.docx 签署页验证位置与留白（不改页眉页脚）
+  → 走真实平台用印测试，验签通过
+  → 写入 F2 CHANGELOG，纳入 F3 巡检（只巡检位置，不巡检章样）
+</code></pre>
+<p><strong>D6-4 当前状态</strong>：🟡 <strong>条件待补（合规前置）</strong>。规范边界已出，章样与用印授权<strong>待确认</strong>，不得先行产出成品。</p><h1 style="page-break-before:always">E 组 · 现场与实体（E1–E5）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> E 层 — E1–E5 原全部 🔲
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：印刷尺寸、工艺参数凡属建议值均标注；供应商、材质型号、数量、预算、客户共标授权一律「待确认」；文案口径以 A5 为准。
+<strong>上位文档</strong>：《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code>、《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code>
+<strong>共同前置</strong>：E 组全部为<strong>印刷/实物工艺稿</strong>，本次交付的是可直接下厂的规范与几何口径，<strong>未产出实际印版文件</strong>；出片前须按各节「待确认项」补齐供应商工艺参数。</p>
+</blockquote>
+<hr />
+<h2>E1 ｜ 工作服 / 安全帽丝印稿</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 工装与安全帽单色丝印工艺规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>驻场工作服（左胸 / 后背）、安全帽正面、马甲；不用于反光条、安全标识（客户方制式为准）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>单色源资产 = <code>caigong-fde-logo-mono-dark.svg</code>（浅色衣）/ <code>-mono-light.svg</code>（深色衣）；几何母版 = <code>build_logo_svgs.py</code>（R_OUT 100 / R_IN 71、笔画宽 29）；色值 = <code>BRAND-COLOR-SPEC.md</code>（单色印刷仅石墨黑或纯白）；辅助图形 = B5；清单 E1 原要求「矢量轮廓化 + 最小线宽 ≥2mm + 安全区 + 深浅两版」</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 衣色的实际 Pantone / 供应商色卡——<strong>待确认，深浅两版的分界需据此判定</strong>；② 供应商最小线宽复核（2mm 为清单给定下限，须按实际网目/刺绣工艺确认）；③ 印刷工艺（丝印 / 热转印 / 刺绣 / 激光雕刻）选定；④ 是否为安全帽曲面另做变形补偿；⑤ 是否需反光/耐洗/阻燃材质认证；⑥ 客户现场是否强制佩戴其自有标识或色带</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>E1-1 工艺硬性要求</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>图形处理</td>
+<td><strong>矢量轮廓化</strong>：把描边全部 <code>outline stroke</code>，避免不同 RIP 解释线宽；轮廓化后不改变环形开口方向与金段角度</td>
+</tr>
+<tr>
+<td>最小线宽</td>
+<td>≥ 2 mm（清单 E1 下限）；按母版笔画宽 29 等比换算后须 ≥ 该值，否则放大图形而非减细笔画</td>
+</tr>
+<tr>
+<td>单色</td>
+<td>只用一个色版；<strong>金色不出片</strong>（丝印单色稿不保留金段色相，金段与黑弧同为单色、靠 45° 斜切端头与缺口区分）</td>
+</tr>
+<tr>
+<td>深浅两版</td>
+<td>浅衣 → <code>mono-dark</code>（石墨黑 <code>#14181C</code>）；深衣 → <code>mono-light</code>（纯白 <code>#FFFFFF</code>）</td>
+</tr>
+<tr>
+<td>安全区</td>
+<td>图形四周 ≥ 图形高度 1/4（§六）；距缝线/口袋/帽檐 ≥ 10mm（建议值 · 待确认③）</td>
+</tr>
+<tr>
+<td>禁止</td>
+<td>不加描边、投影、渐变；不拉伸变形；不与文字重排；不使用带平台标识的概念稿位图</td>
+</tr>
+</tbody>
+</table>
+<p><strong>E1-2 建议落位（建议值 · 待确认③④）</strong></p>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>建议图形宽</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工作服左胸</td>
+<td>80 mm</td>
+<td>纯图形标优先；如需品牌名，用完整组合且宽 ≥120px 等效</td>
+</tr>
+<tr>
+<td>工作服后背</td>
+<td>200 mm</td>
+<td>单色，居中；不得加 slogan 大字</td>
+</tr>
+<tr>
+<td>安全帽正面</td>
+<td>60 mm</td>
+<td>曲面需变形补偿，待确认④</td>
+</tr>
+<tr>
+<td>马甲左胸</td>
+<td>80 mm</td>
+<td>同工作服</td>
+</tr>
+</tbody>
+</table>
+<p><strong>E1-3 交付流程</strong>：<code>mono-dark/mono-light</code> SVG → 轮廓化 → 按衣色选版 → 供应商打样 → 目检金段缺口在单色下仍可辨 → 出片。打样未通过不得批量制作。</p>
+<hr />
+<h2>E2 ｜ 设备贴纸 / 铭牌</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 设备交付铭牌与贴纸规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>现场交付设备、机柜、工位上标注「由蔡工FDE交付」的铭牌/贴纸；不含客户方资产编号标签</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>主标 = <code>caigong-fde-logo-mono-dark.svg</code> / <code>-mark.svg</code>；文案口径 = A5 术语表（<strong>G9 名称以 <code>server/seeds/gates.json</code> 为准</strong>）；色值 = <code>BRAND-COLOR-SPEC.md</code>；数字字体 = B4；与 E4 交付完成贴纸、D4 合同页眉同属交付凭据类物料</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 铭牌编号规则与编号生成责任人——<strong>待确认</strong>；② 是否允许与客户 LOGO 共标及其授权——待确认；③ 材质（PET / PVC / 金属蚀刻 / 覆膜）与防水等级、耐温、耐候要求——待确认；④ 尺寸与固定方式（粘贴/铆接/挂牌）；⑤ 「交付日期」取 G9 通过日还是实际到场日——待确认；⑥ 是否需序列号/二维码用于追溯（联动 C6 待确认③）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>E2-1 内容字段（模板，实值待确认）</strong></p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>写法</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>品牌位</td>
+<td>纯图形标 + 「蔡工FDE智能交付系统」全称</td>
+<td>已确认（A1）</td>
+</tr>
+<tr>
+<td>交付声明</td>
+<td>「由蔡工FDE交付」</td>
+<td>已确认（清单 E2 原文）</td>
+</tr>
+<tr>
+<td>项目名</td>
+<td><code>[[待确认]]</code></td>
+<td>待确认②</td>
+</tr>
+<tr>
+<td>交付编号</td>
+<td><code>[[编号规则待确认]]</code></td>
+<td>待确认①</td>
+</tr>
+<tr>
+<td>交付日期</td>
+<td><code>[[YYYY-MM-DD]]</code></td>
+<td>待确认⑤</td>
+</tr>
+<tr>
+<td>门禁结论</td>
+<td>如需写，须用 A5 标准名「已通过 G9 上线门」</td>
+<td>口径见下</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>口径冲突</strong>：清单 E2 原文未写「G9 终验」，但 E4 写了；<code>server/seeds/gates.json</code> 的 G9 名称为<strong>上线门</strong>。E2/E4 若引用门禁结论，一律用「G9 上线门」，不得写「终验门」。E4 原文修订见下节。</p>
+</blockquote>
+<p><strong>E2-2 版式与工艺（建议值 · 待确认③④）</strong></p>
+<ul>
+<li>横向矩形，纯图形标居左，信息栏居右；四周安全区 ≥ 5mm。</li>
+<li>单色优先（石墨黑），金色仅可用于一条 1mm 金段线；贴纸面积内金色只出现一处。</li>
+<li>数字（编号 / 日期）用 B4 等宽数字，保证同一批铭牌对齐。</li>
+<li>文字不得小于工艺可辨下限，须由供应商打样确认。</li>
+<li>覆膜/防水等级由待确认③决定，未确定前不下单。</li>
+</ul>
+<hr />
+<h2>E3 ｜ 展会物料三件套</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 展会物料（易拉宝 / 背景板 / 单页）版式规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>行业展会展位主视觉、演讲背景、随手发放单页；不含展台搭建结构（<strong>未立项</strong>）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>主标 = <code>caigong-fde-logo-inverse.svg</code>（深底）；话术 = §〇 一段话介绍 + A2 slogan + A4 短版；方法论图示 = <code>site/index.html</code> 的 G1–G9 门禁轨道（真实口径）；辅助图形 = B5；色值 = <code>BRAND-COLOR-SPEC.md</code>；字号 = B4-3 大屏系数（<strong>待确认</strong>）；摄影 = B7</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 展会名称、展位尺寸、背景板实际净尺寸——<strong>全部待确认</strong>；② 二维码目标地址（官网部署目标未定，联动 C6 待确认③）；③ 印刷数量、材质、覆膜与运输约束；④ 大屏字号放大系数（B4 待确认⑤）；⑤ 是否出现客户案例/Logo 墙（联动 C9 脱敏与 B7 授权）；⑥ 是否需要英文版（依赖 A2 英文短句）；⑦ 联系方式占位待填</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<blockquote>
+<p><strong>2026-11-06 注</strong>：本组物料的一段话介绍一律逐字引用 <code>BRAND-LOGO-GUIDE.md §〇</code> 真源；行业口径已裁决为「全行业企业」，无需在展会文案中另写一套。</p>
+</blockquote>
+<p><strong>E3-1 三件套版式骨架</strong></p>
+<table>
+<thead>
+<tr>
+<th>物料</th>
+<th>尺寸</th>
+<th>骨架（自上而下）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>易拉宝</td>
+<td>80 × 200 cm（清单 E3 给定）</td>
+<td>反白主标（上部安全区）→  slogan 全句 → 一段话介绍 → G1–G9 门禁轨道条 → 三大能力短句 → 二维码 + 联系方式（占位）</td>
+</tr>
+<tr>
+<td>背景板</td>
+<td>待确认①</td>
+<td>深底满版 + 超大反白纯图形标作底纹（弱化处理，B5 纪律）→ 主标 + slogan；<strong>不放大段正文</strong></td>
+</tr>
+<tr>
+<td>单页（A4 双面）</td>
+<td>A4</td>
+<td>正面：主标 + slogan + 介绍 + 门禁轨道；背面：13 阶段 / G1–G9 说明 + 联系区</td>
+</tr>
+</tbody>
+</table>
+<p><strong>E3-2 视觉纪律</strong></p>
+<ul>
+<li>深底为主：金色用 <code>#F5B44A</code> 提亮（§四 / <code>BRAND-COLOR-SPEC.md</code>）；每版面金色只出现一处。</li>
+<li>背景板底纹用 B5 母题或放大图形时，必须降透明度且不压文字；上限值 B5 待确认②。</li>
+<li>严禁「九步交付法」；门禁名称逐字按 A5。</li>
+<li>所有二维码、电话、邮箱在待确认②③落定前保持占位框，<strong>不得印虚构信息</strong>。</li>
+<li>图片只能用 B7 轨道 A/B 的合规素材；不得用概念稿位图。</li>
+</ul>
+<hr />
+<h2>E4 ｜ 交付完成贴纸</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 「已通过 G9 上线门」交付完成贴纸</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>贴在交付文档封面、设备铭牌旁、验收资料袋上的低成本口碑物料</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>纯图形标 = <code>caigong-fde-mark.svg</code>；术语真值 = <code>server/seeds/gates.json</code>（G9 = 上线门）、A5；色值 = <code>BRAND-COLOR-SPEC.md</code>；与 E2 铭牌、D4 合同页眉同属交付凭据链</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>清单 E4 原文「✓ 本项目已通过 G9 终验」与真值「G9 上线门」冲突，须拍板统一文案</strong>——本文按真值给出建议稿，不擅自改清单；② 贴纸尺寸、形状、材质；③ 是否允许手写项目名称/日期；④ 是否需要流水编号或防伪；⑤ 谁有权发放该贴纸（防止未通过门禁却张贴）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>E4-1 文案（建议稿 · 待确认①）</strong></p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>文案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>建议采用（与真值一致）</td>
+<td><code>✓ 本项目已通过 G9 上线门</code></td>
+</tr>
+<tr>
+<td>清单原文（冲突，待拍板）</td>
+<td><code>✓ 本项目已通过 G9 终验</code></td>
+</tr>
+<tr>
+<td>附加行</td>
+<td><code>交付有据，一步到位</code>（§〇 原句，小字）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>不得写「G9 终验门」「验收完成」「项目结束」等非标准表述；G9 的出口条件以 <code>server/seeds/gates.json</code> 为准，贴纸<strong>不得</strong>代替正式门禁记录或验收单。</p>
+</blockquote>
+<p><strong>E4-2 版式</strong></p>
+<ul>
+<li>圆形或圆角方形（待确认②）；纯图形标居左/上，文案居右/下。</li>
+<li>单色为主（石墨黑）；如用金色，只用于「✓」或一条金段线，且全贴纸仅一处金色。</li>
+<li>勾选符号用统一矢量，不用 emoji 字体；数字用 B4 等宽。</li>
+<li>最小线宽与最小字号须按印刷工艺打样确认（待确认②③）。</li>
+</ul>
+<p><strong>E4-3 发放纪律（建议 · 待确认⑤）</strong>：仅在 G9 门禁记录判定通过后方可张贴；发放权限、登记与回收规则须书面确认，否则本物料只做版式稿、不批量制作。</p>
+<hr />
+<h2>E5 ｜ 礼品</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 礼赠品视觉规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>笔记本、工具笔、便签、文件袋等低成本现场礼赠品；不含定制电子设备（未立项）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>纯图形标 = <code>caigong-fde-logo-mono-dark.svg</code> / <code>-mono-light.svg</code>；工艺原则 = E1 单色轮廓化；色值 = <code>BRAND-COLOR-SPEC.md</code>；文字口径 = A2 slogan</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 品类、数量、预算与发放场景——<strong>全部待确认</strong>；② 供应商与工艺（压印 / 丝印 / 激光雕刻 / 烫印）；③ 是否允许同时印联系方式（占位未填）；④ 是否需与客户方联合礼品；⑤ 环保/合规材质要求</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<ul>
+<li><strong>只印纯图形标</strong>，不印完整组合、不印 slogan 大字、不印联系方式（待确认③落定前）。</li>
+<li>单色：浅色载体用石墨黑，深色载体用纯白；若采用烫金工艺，金色仅用于图形中的金段一处，须单独出工艺稿并打样。</li>
+<li>图形轮廓化、最小线宽参照 E1；小面积（笔身）优先用 <code>caigong-fde-mark.svg</code> 的最简图形，不塞入文字。</li>
+<li>图形四周留白 ≥ 图形高度 1/4（§六）；不得拉伸、不得改开口方向。</li>
+<li>禁止使用带平台标识的概念稿位图；禁止在礼品上叠加客户 LOGO（待确认④）。</li>
+</ul>
+<hr />
+<h2>E 组共同交付状态</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>规范状态</th>
+<th>成品状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td>✅ 已出（工艺规范）</td>
+<td>🔲 印版文件待工艺参数与打样</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>✅ 已出（字段与版式）</td>
+<td>🔲 铭牌稿待编号/材质/共标授权</td>
+</tr>
+<tr>
+<td>E3</td>
+<td>✅ 已出（三件套骨架）</td>
+<td>🔲 印刷稿待展位尺寸与二维码</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>✅ 已出（含口径冲突提示）</td>
+<td>🟡 文案待拍板（G9 上线门 vs 终验）</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>✅ 已出（视觉纪律）</td>
+<td>🔲 待品类与供应商</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>说明：E 组为线下实物，本次按「可直接归档的规范内容」交付；<strong>未伪造任何印刷成品、材质型号或供应商信息</strong>。</p>
+</blockquote><h1 style="page-break-before:always">F 组 · 治理（F1–F3）</h1><blockquote>
+<p><strong>文档属性</strong>：可直接归档 ｜ 版本 v1.0 ｜ 编制 2026-11-05 ｜ 归属 <code>brand/caigong-fde/specs/</code>
+<strong>对应清单</strong>：<code>BRAND-ASSET-CHECKLIST.md</code> F 层 — F1「🔲（v1 已含 logo 部分）」、F2、F3 原 🔲
+<strong>固定五字段</strong>：名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项
+<strong>编写纪律</strong>：治理流程中不虚构责任人、日期、审批权限、系统账号；一律以「待确认」占位。
+<strong>上位文档</strong>：《品牌全案策划书》<code>BRAND-MASTER-PLAN.md</code></p>
+</blockquote>
+<hr />
+<h2>F1 ｜ 品牌手册（完整版）</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>《蔡工FDE智能交付系统 品牌手册（完整版）》v1.0</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>对内全员与对外供应商/合作方的唯一品牌准绳；覆盖 logo、色彩、字体、辅助图形、图标、摄影、动效、全载体应用示例与正误对照；<strong>替代</strong>「只靠 LOGO-GUIDE + 清单」的旧状态</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>内容源 = <code>BRAND-GUIDELINES.md</code>（本次新建，Markdown 单一真源）；PDF 成品 = <code>deliverables/蔡工FDE-品牌手册.pdf</code>；并入的既有文件：<code>BRAND-LOGO-GUIDE.md</code>（§一–§八）、<code>BRAND-COLOR-SPEC.md</code>、<code>specs/A…F-*.md</code>（A4/A5、B3–B8、C6–C9、D5/D6、E1–E5、F2/F3）、<code>BRAND-ASSET-CHECKLIST.md</code>（仅作附录进度表，<strong>不作为策划书</strong>）</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① 手册 v1.0 的<strong>发布审批人与生效日期</strong>——待确认；② 是否对外公开全本，或拆「对外精简版 / 对内完整版」——待确认；③ 英文版手册是否立项（依赖 A2 英文短句）；④ 手册中应用示例页的产品截图需按 C9 脱敏后才可放入（当前 PDF 用版式示意，不含真实截图）；⑤ 每次改版是否需重新导出全部 PDF/PPTX（联动 F2 的生成物重建规则）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>F1-1 手册目录（对应 <code>BRAND-GUIDELINES.md</code>）</strong></p>
+<table>
+<thead>
+<tr>
+<th>章</th>
+<th>内容</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>00</td>
+<td>版本、适用边界、如何引用本手册</td>
+<td>新建</td>
+</tr>
+<tr>
+<td>01</td>
+<td>品牌定位与话术（命名层级、slogan、一段话介绍、故事、术语表）</td>
+<td>§〇 + A4/A5</td>
+</tr>
+<tr>
+<td>02</td>
+<td>主标系统（几何、最小尺寸、留白、深浅适配、禁用项、正误对照）</td>
+<td><code>BRAND-LOGO-GUIDE.md §一/§二/§五–§七</code></td>
+</tr>
+<tr>
+<td>03</td>
+<td>色彩系统（角色、色阶、UI 映射、对比度、纪律、语义色边界）</td>
+<td><code>BRAND-COLOR-SPEC.md</code></td>
+</tr>
+<tr>
+<td>04</td>
+<td>字体与字号层级（含数字等宽、跨介质字阶）</td>
+<td>B4</td>
+</tr>
+<tr>
+<td>05</td>
+<td>辅助图形 / 图标 / 摄影插图 / 动效</td>
+<td>B5–B8</td>
+</tr>
+<tr>
+<td>06</td>
+<td>数字载体应用示例</td>
+<td>C6–C9、C1–C5 现状</td>
+</tr>
+<tr>
+<td>07</td>
+<td>商务与现场载体应用示例</td>
+<td>D1–D6、E1–E5</td>
+</tr>
+<tr>
+<td>08</td>
+<td>正误对照总表</td>
+<td>汇总各 spec</td>
+</tr>
+<tr>
+<td>09</td>
+<td>资产台账、治理与巡检</td>
+<td>F2/F3 + <code>BRAND-ASSET-CHECKLIST.md</code></td>
+</tr>
+<tr>
+<td>附录</td>
+<td>文件索引与待确认项汇总</td>
+<td><code>BRAND-COMPLETION-INDEX.md</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>F1-2 与「清单」的关系（明确边界）</strong></p>
+<ul>
+<li><code>BRAND-ASSET-CHECKLIST.md</code> = <strong>进度跟踪表</strong>（36 项状态），继续保留，但<strong>不再承担策划书职能</strong>。</li>
+<li>《品牌全案策划书》= <strong>策略与决策文档</strong>（为什么这样定、怎么落地），本次新建。</li>
+<li>《品牌手册（完整版）》= <strong>执行规范文档</strong>（怎么用、用错什么样），本次新建。</li>
+<li>三份文档各司其职，不得互相替代；出现口径冲突时，优先级：<strong>定稿话术 §〇 &gt; 本手册 &gt; 策划书 &gt; 清单</strong>。</li>
+</ul>
+<p><strong>F1-3 正误对照总表（摘录，完整表见手册第 08 章）</strong></p>
+<table>
+<thead>
+<tr>
+<th>✅ 正确</th>
+<th>❌ 错误</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>13 阶段交付 SOP + G1–G9 门禁</td>
+<td>九步交付法 / 9 步法</td>
+<td>§八、<code>gates.json</code></td>
+</tr>
+<tr>
+<td>G9 上线门</td>
+<td>G9 终验门 / 立项门（G1）</td>
+<td><code>gates.json</code></td>
+</tr>
+<tr>
+<td>浅底 <code>logo-master</code>；深底 <code>logo-inverse</code></td>
+<td>深底仍用浅底彩色版；反白标放白底</td>
+<td>§七、登录页历史 bug</td>
+</tr>
+<tr>
+<td>金系按钮/激活态配石墨黑字 <code>#14181C</code>（6.33–8.27:1，达 AA；2026-11-06 裁决）</td>
+<td>金系按钮配白字（2.16–2.82:1，不达 AA，已禁）</td>
+<td>§三 对比度、<code>BRAND-COLOR-SPEC.md §六</code></td>
+</tr>
+<tr>
+<td>全场金色只出现一处</td>
+<td>满版金、多处金强调</td>
+<td>§三 用色纪律</td>
+</tr>
+<tr>
+<td>正式对外用无标识 SVG</td>
+<td>用 <code>.miora</code> 概念稿位图（带平台标识）</td>
+<td>§五 警告</td>
+</tr>
+<tr>
+<td>语义色保持原色相</td>
+<td>把 success/danger 改成品牌金色</td>
+<td>§三 / B3</td>
+</tr>
+</tbody>
+</table>
+<p><strong>F1-4 交付状态</strong>：<code>BRAND-GUIDELINES.md</code>（内容源）✅、<code>deliverables/蔡工FDE-品牌手册.pdf</code>（成品）✅；发布审批（待确认①）🟡。</p>
+<hr />
+<h2>F2 ｜ 资产库命名与管理规范</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 品牌资产命名、版本与变更管理规范</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td><code>brand/caigong-fde/</code> 全目录，含矢量/位图 SVG/PNG/ICO、规范 MD、PDF/PPTX 成品、脚本、模板、备份目录；不含产品代码内的品牌引用（代码按各仓 PR 流程）</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>既有命名法 = 清单 F2 原说明「<code>caigong-fde-&lt;用途&gt;.&lt;格式&gt;</code> 已形成」；生成器 = <code>build_logo_svgs.py</code>（改色值/几何后重跑全套同步）、<code>build_business_card.py</code>、<code>render_icons.mjs</code>、<code>make_ico.mjs</code>；既有备份 = <code>resources/document-templates/_backup-pre-brand/</code>；下游 = D1 重建覆盖风险、F3 巡检、C7/C8 模板分发</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>资产库责任人 / 审批人 / 变更权限</strong>——待确认，本文不指定人名；② 是否启用 Git LFS 或独立网盘归档及权限设置——待确认；③ 版本目录策略（<code>v1.0/</code> 子目录 vs 仅 CHANGELOG 标记）——待确认后执行；④ 历史版本保留期限与清理规则；⑤ 字体授权凭证（OFL）归档位置（B4 待确认⑥）；⑥ <code>scripts/build-document-templates.py</code> 重建覆盖品牌化的合并方案是否立项——待确认（当前仍是「重建后须重跑品牌化脚本」）</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>F2-1 命名法（沿用既有约定，不另立一套）</strong></p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>格式</th>
+<th>例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>矢量资产</td>
+<td><code>caigong-fde-&lt;用途&gt;.svg</code></td>
+<td><code>caigong-fde-logo-master.svg</code></td>
+</tr>
+<tr>
+<td>位图/图标</td>
+<td><code>caigong-fde-&lt;用途&gt;-&lt;尺寸&gt;.png</code></td>
+<td><code>app-icon-1024.png</code>（既有命名，保留不强行改名）</td>
+</tr>
+<tr>
+<td>规范文档</td>
+<td><code>BRAND-&lt;主题&gt;.md</code> / <code>specs/&lt;组&gt;-&lt;主题&gt;补齐.md</code></td>
+<td><code>BRAND-COLOR-SPEC.md</code></td>
+</tr>
+<tr>
+<td>成品交付件</td>
+<td><code>蔡工FDE-&lt;文档名&gt;.&lt;pdf/pptx&gt;</code></td>
+<td><code>蔡工FDE-品牌手册.pdf</code></td>
+</tr>
+<tr>
+<td>模板</td>
+<td><code>caigong-fde-&lt;用途&gt;-template.&lt;ext&gt;</code></td>
+<td><code>caigong-fde-ppt-template.pptx</code></td>
+</tr>
+<tr>
+<td>脚本</td>
+<td><code>build_&lt;用途&gt;.py</code> / <code>make_&lt;用途&gt;.mjs</code></td>
+<td><code>build_logo_svgs.py</code></td>
+</tr>
+<tr>
+<td>备份</td>
+<td><code>_backup-&lt;场景&gt;/</code></td>
+<td><code>_backup-pre-brand/</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>命名规则：<strong>小写连字符、不含空格、不含中文路径段（成品交付件除外）；既有文件名不因规范升级而批量重命名</strong>，避免打断 <code>AppShell.tsx</code>、<code>index.html</code>、脚本里的既有引用。</p>
+</blockquote>
+<p><strong>F2-2 源文件 / 生成物标记（关键，防止改错对象）</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>判定</th>
+<th>修改方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>单一真源</strong></td>
+<td><code>build_logo_svgs.py</code> 的几何/色值参数、<code>BRAND-LOGO-GUIDE.md</code> 的定稿话术、<code>BRAND-COLOR-SPEC.md</code> 的色值、<code>server/seeds/gates.json</code> 的门禁名</td>
+<td>只改这里，改后重跑生成器全套同步</td>
+</tr>
+<tr>
+<td><strong>生成物</strong></td>
+<td>8 个 SVG、PNG/ICO、名片 SVG、<code>assets/hdr-mark-*.png</code>、17 个 docx 模板（<code>brandize-document-templates.py</code> 产物）</td>
+<td><strong>禁止手改</strong>；改真源后重跑脚本</td>
+</tr>
+<tr>
+<td><strong>手工文档</strong></td>
+<td>本目录所有 <code>*.md</code>、<code>assets/email-signature.html</code></td>
+<td>直接编辑，须留 CHANGELOG</td>
+</tr>
+<tr>
+<td><strong>成品</strong></td>
+<td><code>deliverables/*.pdf</code> / <code>*.pptx</code></td>
+<td>由内容源重新导出，不直接改成品</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>已知覆盖风险（来自 D1）</strong>：<code>scripts/build-document-templates.py</code> 重建会抹掉 17 个 docx 的品牌化页眉页脚；重建后<strong>必须重跑</strong> <code>scripts/brandize-document-templates.py</code>。合并入 build 的方案待确认⑥，未立项前按此双脚本流程执行。</p>
+</blockquote>
+<p><strong>F2-3 版本与变更记录</strong></p>
+<ul>
+<li>每份规范文档头部必须含：版本、编制/修订日期、状态、上位文档、待确认项。</li>
+<li>新建 <code>BRAND-CHANGELOG.md</code>（本次产出）记录：<code>日期 ｜ 版本 ｜ 变更文件 ｜ 变更内容 ｜ 原因 ｜ 执行人（待确认①） ｜ 影响的下游物料</code>。</li>
+<li>色值、几何、定稿话术、门禁名称任一变更 → 视为<strong>破坏性变更</strong>：须同步 SVG 全套、桌面端 tokens、官网、名片、docx 模板、PDF/PPTX 成品，并在 F3 巡检表中标「本季度需复查」。</li>
+<li>版本子目录策略待确认③；未落定前不新建 <code>v1.0/</code> 目录，仅以 CHANGELOG + 文档头版本标记。</li>
+</ul>
+<p><strong>F2-4 备份规则</strong>：批量改写前先整目录备份到 <code>_backup-&lt;场景&gt;/</code>，确认成功后再执行；备份目录不参与对外分发，也不计入交付件。</p>
+<hr />
+<h2>F3 ｜ 品牌巡检清单</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>蔡工FDE智能交付系统 — 季度品牌巡检清单</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>官网、桌面端、17 个 docx 模板、名片、公众号、PPT/邮件签名模板、打包图标、印刷物料、全部对外 PDF/PPTX</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>判定基准 = <code>BRAND-LOGO-GUIDE.md</code>（主标/话术）、<code>BRAND-COLOR-SPEC.md</code>（色值）、A5（术语）、<code>BRAND-CHANGELOG.md</code>（本季变更）、C9（截图脱敏）、F2（命名与真源）；进度表 = <code>BRAND-ASSET-CHECKLIST.md</code></td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① <strong>巡检责任人与复核人</strong>——待确认；② 季度巡检的具体日期与记录归档位置——待确认；③ 不合格项的整改 SLA——待确认；④ 是否纳入自动化测试（如色值 grep / 话术正则）——待确认，当前为人工清单；⑤ 巡检结果是否需品牌责任人签字——待确认</td>
+</tr>
+</tbody>
+</table>
+<h3>核心内容</h3>
+<p><strong>F3-1 巡检表（每季度一次）</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>巡检对象</th>
+<th>检查点</th>
+<th>判定基准</th>
+<th>结果</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>全仓话术</td>
+<td>无「九步交付法 / 9 步法」；G1–G9 名称正确；一段话介绍逐字一致</td>
+<td>§〇、A5、<code>gates.json</code></td>
+<td>☐ 通过 ☐ 不通过</td>
+<td>可脚本 grep</td>
+</tr>
+<tr>
+<td>2</td>
+<td>官网 <code>site/index.html</code></td>
+<td>主标为 <code>logo-inverse</code> 反白版；her o 介绍为定稿全句；配色 8 个品牌色值齐；联系方式占位是否已替换</td>
+<td>§〇/§七、C5</td>
+<td>☐</td>
+<td>占位替换见 C5 遗留</td>
+</tr>
+<tr>
+<td>3</td>
+<td>桌面端 <code>styles.css :root</code></td>
+<td>与 <code>BRAND-COLOR-SPEC.md</code> 色阶逐值一致；旧蓝绿零残留</td>
+<td>B3、C3</td>
+<td>☐</td>
+<td>可用色值比对脚本</td>
+</tr>
+<tr>
+<td>4</td>
+<td>桌面端登录页 / 侧边栏</td>
+<td>使用正确主标资产；反白标未放浅底</td>
+<td>§七、C1/C2</td>
+<td>☐</td>
+<td>历史 bug 回归项</td>
+</tr>
+<tr>
+<td>5</td>
+<td>打包图标</td>
+<td>Windows <code>icon.png</code> / <code>icon.ico</code> 为新标；<strong>macOS <code>icon.icns</code> 是否已补齐</strong></td>
+<td>§八、C4 条件待补</td>
+<td>☐</td>
+<td>环境依赖</td>
+</tr>
+<tr>
+<td>6</td>
+<td>17 个 docx 模板</td>
+<td>页眉图形版/纯文字保守版正确；页脚 slogan 与生成声明一致；<strong>重建后是否重跑品牌化脚本</strong></td>
+<td>D1/D4、F2-2</td>
+<td>☐</td>
+<td>覆盖高风险项</td>
+</tr>
+<tr>
+<td>7</td>
+<td>名片 / 方案书封面</td>
+<td>联系方式占位是否已替换真实值；slogan 全句含逗号</td>
+<td>D2/D3</td>
+<td>☐</td>
+<td>待确认信息</td>
+</tr>
+<tr>
+<td>8</td>
+<td>公众号</td>
+<td>头像为最新 <code>mark</code>/<code>app-icon</code>；简介为 §〇 定稿全句</td>
+<td>C6</td>
+<td>☐</td>
+<td>账号待确认</td>
+</tr>
+<tr>
+<td>9</td>
+<td>邮件签名 / PPT 模板</td>
+<td>全员/全案使用最新版；占位字段未被填入虚构值</td>
+<td>C7/C8、F1</td>
+<td>☐</td>
+<td></td>
+</tr>
+<tr>
+<td>10</td>
+<td>对外截图</td>
+<td>按 C9 脱敏；无真实客户名/内网地址</td>
+<td>C9</td>
+<td>☐</td>
+<td></td>
+</tr>
+<tr>
+<td>11</td>
+<td>印刷/现场物料</td>
+<td>用 <code>mono-dark</code>/<code>mono-light</code>；金色仅一处；E4 文案口径已统一</td>
+<td>E1–E5、A5</td>
+<td>☐</td>
+<td></td>
+</tr>
+<tr>
+<td>12</td>
+<td>PDF/PPTX 成品</td>
+<td>与内容源版本一致（无旧色值 / 旧话术）</td>
+<td>F2-2、F1-1</td>
+<td>☐</td>
+<td>破坏性变更后必查</td>
+</tr>
+<tr>
+<td>13</td>
+<td>数据可视化色板</td>
+<td>若本季出现图表需求，检查 B3 是否已按流程补色并书面裁决豁免</td>
+<td>B3</td>
+<td>☐</td>
+<td>条件项</td>
+</tr>
+<tr>
+<td>14</td>
+<td>待确认项台账</td>
+<td><code>BRAND-COMPLETION-INDEX.md</code> 中待确认项是否有新增/已闭环</td>
+<td>本索引</td>
+<td>☐</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>F3-2 判定与处置</strong></p>
+<ul>
+<li>任一项不通过 → 登记到整改清单，注明责任（待确认①）、SLA（待确认③）、影响的下游物料；不得只记录不整改。</li>
+<li>触发 F2「破坏性变更」时，本表须<strong>全量重跑一次</strong>，不可只查变更项。</li>
+<li>巡检记录表头须含：季度、执行日期、执行人、复核人、版本号、结论；这些字段当前均为<strong>待确认</strong>。</li>
+</ul>
+<p><strong>F3-3 当前状态</strong>：清单已出；<strong>首次正式巡检未执行</strong>（责任人与日期待确认）。本次交付时已按第 1/2/3/4/12 项做过一次技术性核对，结果见 <code>BRAND-COMPLETION-INDEX.md §验证</code>，但不替代季度巡检记录。</p></section>
+</body></html>

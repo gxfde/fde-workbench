@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>蔡工FDE-品牌补齐索引</title>
+<style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: 'Noto Sans SC','Source Han Sans SC','Microsoft YaHei',sans-serif;
+  color:#1A2027; font-size:10.2pt; line-height:1.72;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover {
+  min-height:252mm; background:#14181C; color:#FFFFFF;
+  padding:26mm 20mm 16mm; page-break-after:always; position:relative;
+}
+.cover .mark { width:34mm; height:34mm; margin-bottom:22mm; }
+.cover .kicker { color:#F5B44A; font-size:9pt; letter-spacing:.28em; text-transform:uppercase; }
+.cover h1 { font-size:30pt; line-height:1.3; font-weight:700; margin:10mm 0 6mm; border:0; color:#FFFFFF; page-break-before:auto; }
+.cover .gold-rule { width:44mm; height:2.2mm; background:#E8A33D; margin:8mm 0 10mm; }
+.cover .sub { font-size:12.5pt; color:#B9C2CB; line-height:1.8; max-width:130mm; }
+.cover .meta { position:absolute; bottom:18mm; left:20mm; right:20mm;
+  border-top:1px solid #3A4048; padding-top:5mm; font-size:8.6pt; color:#8A929E; }
+.cover .meta b { color:#F5B44A; font-weight:600; }
+.toc { page-break-after:always; min-height:230mm; }
+.toc h2 { border:0; font-size:17pt; color:#14181C; margin:0 0 8mm; }
+.toc ul { list-style:none; padding:0; margin:0; }
+.toc li { border-bottom:1px solid #E4E7EB; padding:2.4mm 0; font-size:10pt; }
+.toc a { color:#1A2027; text-decoration:none; }
+.toc .toc-num { color:#C98F2B; font-weight:700; margin-right:5mm; }
+h1 { font-size:19pt; color:#14181C; border-bottom:2px solid #E8A33D; padding-bottom:3mm;
+     margin:0 0 7mm; page-break-before:always; page-break-after:avoid; }
+h1:first-of-type { page-break-before:auto; }
+h2 { font-size:14pt; color:#14181C; margin:9mm 0 4mm; padding-left:3.5mm;
+     border-left:3px solid #C98F2B; page-break-after:avoid; }
+h3 { font-size:11.6pt; color:#23282E; margin:6mm 0 2.5mm; page-break-after:avoid; }
+p { margin:0 0 3.2mm; }
+strong { font-weight:700; color:#14181C; }
+a { color:#A3721F; }
+ul, ol { margin:0 0 4mm; padding-left:6mm; }
+li { margin-bottom:1.4mm; }
+table { width:100%; border-collapse:collapse; margin:3mm 0 6mm; font-size:9pt;
+        page-break-inside:avoid; }
+thead { display:table-header-group; }
+th { background:#14181C; color:#FFFFFF; text-align:left; padding:2.3mm 2.6mm;
+     font-weight:600; border:1px solid #23282E; }
+td { padding:2.1mm 2.6mm; border:1px solid #E4E7EB; vertical-align:top;
+     overflow-wrap:anywhere; word-break:break-word; }
+td:first-child { min-width:20mm; }
+th { overflow-wrap:anywhere; }
+tbody tr:nth-child(even) td { background:#F8F8F6; }
+blockquote { border-left:3px solid #E8A33D; background:#FBF3E2; margin:3mm 0 5mm;
+             padding:3mm 5mm; color:#3A4048; page-break-inside:avoid; }
+blockquote p { margin:0 0 2mm; }
+code { font-family:Consolas,'Courier New',monospace; font-size:8.8pt;
+       background:#F2F4F5; padding:0 1.2mm; color:#5A4312; }
+pre { background:#14181C; color:#F2F4F5; padding:4mm; font-size:8.4pt;
+      border-radius:2mm; white-space:pre-wrap; page-break-inside:avoid; }
+pre code { background:transparent; color:inherit; padding:0; }
+hr { border:0; border-top:1px solid #E4E7EB; margin:7mm 0; }
+.chip { display:inline-block; width:3.2mm; height:3.2mm; border:1px solid rgba(20,24,28,.18);
+        border-radius:.6mm; margin-right:1.8mm; vertical-align:-.4mm; }
+.swatch-cell code { background:transparent; padding:0; }
+mark, .warn { background:#FBEECC; padding:0 1mm; }
+</style></head><body>
+<section class="cover">
+  <svg class="mark" viewBox="156 100 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#F5B44A" stroke-width="29.0" stroke-linecap="butt"/>
+  <path d="M 239,200 L 356,200" fill="none" stroke="#FFFFFF" stroke-width="29.0" stroke-linecap="butt"/>
+</svg>
+  <div class="kicker">BRAND / COMPLETION</div>
+  <h1>蔡工FDE-品牌补齐索引</h1>
+  <div class="gold-rule"></div>
+  <div class="sub">按缺失项分组与清单编号逐项登记 · 五字段 / 引用关系 / 待确认项 / 验证结果<br><br>蔡工FDE智能交付系统　·　交付有据，一步到位</div>
+  <div class="meta"><b>v1.0</b>　｜　2026-11-05　｜　对应清单 A4–F3 全部补齐项 ｜ 状态：可直接归档</div>
+</section>
+<section class="toc"><h2>目录</h2><ul><li><span class="toc-num">01</span><a href="#_1">一、补齐的三类缺失（核查前提）</a></li><li><span class="toc-num">02</span><a href="#_2">二、第一类缺失 ｜ 独立《配色方案》</a></li><li><span class="toc-num">03</span><a href="#pdfppt">三、第二类缺失 ｜ 独立《品牌全案策划书》PDF/PPT</a></li><li><span class="toc-num">04</span><a href="#_3">四、第三类缺失 ｜ 清单 🔲 项逐项补齐（按分组 + 编号）</a></li><li><span class="toc-num">05</span><a href="#_4">五、本次实际产出的文件</a></li><li><span class="toc-num">06</span><a href="#_5">六、条件待补项清单（不伪造完成）</a></li><li><span class="toc-num">07</span><a href="#_6">七、验证结果</a></li><li><span class="toc-num">08</span><a href="#_7">八、待确认项汇总（跨文档）</a></li></ul></section>
+<section class="body"><blockquote>
+<p><strong>版本</strong> v1.0 ｜ <strong>编制</strong> 2026-11-05 ｜ <strong>状态</strong> 可直接归档 ｜ <strong>修订 2026-11-06</strong>：行业口径与金系按钮文字色两项裁决落地
+<strong>作用</strong>：按「缺失项分组 + 清单编号」逐项登记本次补齐的文档与规范内容；每项给出<strong>名称 / 适用范围 / 核心内容 / 与现有文件的引用关系 / 待确认项</strong>五字段，并指明交付文件与状态。
+<strong>不代替</strong>：本索引不是策划书（见 <code>BRAND-MASTER-PLAN.md</code>）、不是执行规范（见 <code>BRAND-GUIDELINES.md</code>）、不是进度清单（见 <code>BRAND-ASSET-CHECKLIST.md</code>）。</p>
+</blockquote>
+<hr />
+<h2 id="_1">一、补齐的三类缺失（核查前提）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>缺失</th>
+<th>核查结论</th>
+<th>本次补齐</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>独立《配色方案》文档</td>
+<td><code>docs/</code> 全目录零命中；配色规范仅嵌 <code>BRAND-LOGO-GUIDE.md §三</code></td>
+<td><code>BRAND-COLOR-SPEC.md</code> + <code>deliverables/蔡工FDE-配色方案.pdf</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>独立《品牌全案策划书》PDF/PPT</td>
+<td>「全案策划」实为 <code>BRAND-ASSET-CHECKLIST.md</code> 清单，只回答「做了没」，不回答「为什么/怎么统一/怎么防走样」</td>
+<td><code>BRAND-MASTER-PLAN.md</code> + PDF + PPTX；另出 <code>BRAND-GUIDELINES.md</code> + 品牌手册 PDF</td>
+</tr>
+<tr>
+<td>3</td>
+<td>清单中仍标 🔲 的条目</td>
+<td>22 项 🔲/半完成 + B3 数据色板条件待补</td>
+<td>六组 <code>specs/*.md</code> 规范内容 + 可用模板/资产</td>
+</tr>
+</tbody>
+</table>
+<p><strong>顺带修正</strong>：<code>BRAND-LOGO-GUIDE.md §〇</code> 一段话介绍由错误的「九步交付法」修正为官网定稿的「13 阶段交付 SOP + G1–G9 门禁」，§八 遗留项同步更新。真值源 <code>server/seeds/gates.json</code>。</p>
+<p><strong>未改动</strong>：<code>styles.css</code>、<code>site/index.html</code>、桌面端组件、17 个 docx 模板的产品功能与 UI 实现一律未动。</p>
+<hr />
+<h2 id="_2">二、第一类缺失 ｜ 独立《配色方案》</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>《蔡工FDE智能交付系统 配色方案》v1.0</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>全部屏幕/UI、官网、印刷、丝印、实物、图表类物料的用色准绳；作为色值单一真源</td>
+</tr>
+<tr>
+<td><strong>核心内容</strong></td>
+<td>独立化说明、角色与用量占比、双阶 10 色 + 中性面/语义色、深浅适配、UI token 映射、WCAG 实测对比度、用色纪律与正误对照、跨介质说明、数据可视化色板条件待补、待确认项</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>上位 <code>BRAND-LOGO-GUIDE.md §三</code>（角色与占比）、<code>styles.css :root</code>（色阶与 tokens）、<code>site/index.html</code>（8 个品牌色值）；下游 B3–B8、C/E 组全部物料、<code>BRAND-GUIDELINES.md §03</code>；其他文档只写「见 <code>BRAND-COLOR-SPEC.md §X</code>」，不复写色值</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① ~~金系按钮白字修正方案~~ ✅ 已关闭（2026-11-06 裁决石墨黑字）；② ~~§三/清单 B3 对比度约数~~ ✅ 已关闭（统一为实测）；③ CMYK/Pantone/纸张/油墨/烫金箔；④ 暗色主题完整 token 集；⑤ 图表色板触发与豁免；⑥ 公章朱红豁免；⑦ 发布审批人与生效日期；⑧ <strong>新增</strong>：hover 深金 4.23:1 的色值/反馈调整（<code>BRAND-COLOR-SPEC.md §十-8</code>）</td>
+</tr>
+<tr>
+<td><strong>交付文件</strong></td>
+<td><code>BRAND-COLOR-SPEC.md</code>、<code>deliverables/蔡工FDE-配色方案.pdf</code></td>
+</tr>
+<tr>
+<td><strong>状态</strong></td>
+<td>✅ 已成文；2026-11-06 两项高优先待确认已关闭，其余维持开放</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="pdfppt">三、第二类缺失 ｜ 独立《品牌全案策划书》PDF/PPT</h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>名称</strong></td>
+<td>《蔡工FDE智能交付系统 品牌全案策划书》v1.0（PDF + PPTX）</td>
+</tr>
+<tr>
+<td><strong>适用范围</strong></td>
+<td>品牌策略决策、对内对齐、对外合作方说明；明确「不再以清单代替」</td>
+</tr>
+<tr>
+<td><strong>核心内容</strong></td>
+<td>核查结论与四个结构性问题、品牌定位（核心资产/价值主张/差异化/受众待确认）、命名与话术体系、视觉系统总纲、36 项触点矩阵、三波落地路线与本次对照、治理体系、14 条风险与待确认台账、交付物索引、版本与生效</td>
+</tr>
+<tr>
+<td><strong>与现有文件的引用关系</strong></td>
+<td>引用 <code>BRAND-LOGO-GUIDE.md §〇/§一</code>、<code>BRAND-COLOR-SPEC.md</code>、<code>BRAND-ASSET-CHECKLIST.md</code>（仅作进度附录）、<code>server/seeds/gates.json</code>、<code>site/index.html</code>；下游 <code>BRAND-GUIDELINES.md</code>、六组 <code>specs/*.md</code>；优先级低于定稿话术与品牌手册</td>
+</tr>
+<tr>
+<td><strong>待确认项</strong></td>
+<td>① ~~行业口径~~ ✅ 已关闭（2026-11-06 裁决「全行业企业」）；② 目标受众/竞品/定价；③ 英文短句定稿；④ 发布审批人、生效日期、复审周期；⑤ 是否拆对外精简版；⑥ 手册应用示例页截图需按 C9 脱敏</td>
+</tr>
+<tr>
+<td><strong>交付文件</strong></td>
+<td><code>BRAND-MASTER-PLAN.md</code>、<code>deliverables/蔡工FDE-品牌全案策划书.pdf</code>、<code>deliverables/蔡工FDE-品牌全案策划书.pptx</code></td>
+</tr>
+<tr>
+<td><strong>状态</strong></td>
+<td>✅ 已成文并渲染；发布生效待确认</td>
+</tr>
+</tbody>
+</table>
+<p><strong>配套（F1）</strong>：《品牌手册（完整版）》<code>BRAND-GUIDELINES.md</code> + <code>deliverables/蔡工FDE-品牌手册.pdf</code> — 执行规范，含 00–09 章与正误对照总表；<strong>发布审批待确认</strong>。</p>
+<hr />
+<h2 id="_3">四、第三类缺失 ｜ 清单 🔲 项逐项补齐（按分组 + 编号）</h2>
+<blockquote>
+<p>五字段中「核心内容」「引用关系」为摘要，完整内容见对应 <code>specs/</code> 文件；<strong>所有「待确认」均保留，不以推测填空</strong>。</p>
+</blockquote>
+<h3 id="a-specsa-md">A 组 · 品牌核心 → <code>specs/A-品牌核心补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A4</strong></td>
+<td>品牌故事</td>
+<td>官网 About、提案开篇、公众号首篇、展会背景板</td>
+<td>7 条已确认事实骨架 + 长版叙事草案 + 120 字短版 + 禁用纪律</td>
+<td>§〇 话术、<code>server/seeds/gates.json</code>、<code>site/index.html</code>；下游 A5/C6/C8</td>
+<td>行业口径、创始人背景/年限/资质、客户案例与数字、语气长度、是否点名 FDE-SOP、英文版</td>
+<td>✅ 规范已出；文案草案待拍板</td>
+</tr>
+<tr>
+<td><strong>A5</strong></td>
+<td>话术口径表</td>
+<td>官网、提案、销售/交付沟通、公众号、PPT、名片、产品内文案</td>
+<td>名称话术表 + 13 阶段/G1–G9 方法论术语表（真值源）+ 视觉术语引用表 + 维护规则</td>
+<td>§〇、<code>gates.json</code>、<code>BRAND-COLOR-SPEC.md</code>、<code>styles.css</code>；下游全部物料</td>
+<td>产品内术语表路径、13 阶段逐阶段中文名、行业口径、英文对照、简称规则、审批人</td>
+<td>✅ 规范已出；产品内对齐待确认</td>
+</tr>
+</tbody>
+</table>
+<h3 id="b-vi-specsb-vimd">B 组 · VI 基础系统 → <code>specs/B-VI基础系统补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>B3</strong></td>
+<td>数据可视化色板</td>
+<td>未来报表/报价单/G1–G9 轨道图/仪表盘/PPT 图表页</td>
+<td><strong>保留「数据可视化色板留待图表需求出现时补」原注记</strong>；只给触发条件、推导约束、补色流程，<strong>不虚构任何色值</strong></td>
+<td><code>BRAND-COLOR-SPEC.md §三/§六/§九</code>；下游 C8 图表页、C9、官网轨道图</td>
+<td>图表需求是否出现、series 上限、CVD 标准、中性灰阶允许范围、与语义色优先级、审批人</td>
+<td>🟡 <strong>条件待补（未发布）</strong></td>
+</tr>
+<tr>
+<td><strong>B4</strong></td>
+<td>数字等宽字体＋字号层级表</td>
+<td>报价单/报表/台账/门禁记录/金额编号/桌面表格/PPT 图表页/工牌编号</td>
+<td>等宽数字候选与字形特性、CSS 兜底、右对齐规则；屏内 UI 字阶真值表；跨介质字阶建议值</td>
+<td><code>BRAND-LOGO-GUIDE.md §四</code>、<code>styles.css :root</code> 第 9 层；下游 C7/C8/D5/E2</td>
+<td>字体最终选型、字体文件与授权、印刷磅值、中英混排基线、大屏放大系数、OFL 凭证归档</td>
+<td>✅ 规范已出；选型待确认</td>
+</tr>
+<tr>
+<td><strong>B5</strong></td>
+<td>辅助图形母题</td>
+<td>分割线、页眉装饰、背景底纹、PPT 版面、展会背景板、贴纸边缘</td>
+<td>三母题（金段弧线/进度刻度环/闭环箭头）+ 使用纪律 + 正误对照；产出 3 个 SVG 草案</td>
+<td>§二 几何、<code>build_logo_svgs.py</code>、<code>BRAND-COLOR-SPEC.md</code>；下游 C8/E3/E4</td>
+<td>母题是否全部启用、底纹不透明度上限、深底反白、与主标最小间距、印刷轮廓化版本</td>
+<td>✅ 规范 + SVG 草案；正式启用待拍板</td>
+</tr>
+<tr>
+<td><strong>B6</strong></td>
+<td>UI 图标规范</td>
+<td>桌面端/官网/PPT/空状态图标（不含主标与 app icon）</td>
+<td>24px 网格、1.5px 线性圆角、尺寸档、用色规则、禁止项</td>
+<td>清单 B6 原建议、<code>BRAND-COLOR-SPEC.md</code>、<code>styles.css</code>；下游 C9</td>
+<td>现有图标库盘点结果、来源与授权、圆角终值、是否建自有图标集、暗色线宽补偿</td>
+<td>✅ 规范已出；统一待核</td>
+</tr>
+<tr>
+<td><strong>B7</strong></td>
+<td>摄影 / 插图风格</td>
+<td>官网配图、提案/展会、空状态、公众号封面、PPT 配图</td>
+<td>双轨（现场摄影 / 几何矢量插图）+ 色调处理 + 禁用；<strong>素材为零</strong></td>
+<td><code>BRAND-COLOR-SPEC.md §六</code>、§二、B5/B6、<code>site/index.html</code>；下游 C6/C9/E3</td>
+<td>现场照片版权/肖像/客户授权、是否可出镜、主路线选择、后期工具与格式、是否生成插画</td>
+<td>✅ 规范已出；素材未制作</td>
+</tr>
+<tr>
+<td><strong>B8</strong></td>
+<td>动效规范</td>
+<td>桌面加载/成功态、官网首屏、PPT 转场、视频片头</td>
+<td>金段递进母题（305°→332°）、状态参数建议值、主标动效版原则、可访问性与性能</td>
+<td>§〇/§二/§六、B5、<code>BRAND-COLOR-SPEC.md</code></td>
+<td>时长缓动拍板、桌面端现有动画体系、官网是否引入、视频片头规格、reduced-motion 验收</td>
+<td>✅ 规范已出；未实施</td>
+</tr>
+</tbody>
+</table>
+<h3 id="c-specsc-md">C 组 · 数字载体 → <code>specs/C-数字载体补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C6</strong></td>
+<td>微信公众号形象</td>
+<td>头像、简介、关注回复、首篇推文、菜单栏</td>
+<td>头像规范 + 简介填槽规则 + 关注回复结构稿（链接/联系方式占位）</td>
+<td><code>app-icon.svg</code>/<code>mark.svg</code>、§〇、A4 短版、<code>BRAND-COLOR-SPEC.md</code>、<code>site/index.html</code></td>
+<td>账号主体/认证/微信号、头像选版、二维码目标、菜单栏、是否放电话、发布节奏、英文简介</td>
+<td>✅ 规范已出；账号信息待确认</td>
+</tr>
+<tr>
+<td><strong>C7</strong></td>
+<td>邮件签名模板</td>
+<td>对外商务/报价/交付通知/支持回信</td>
+<td>6 区块结构 + 全内联 CSS 技术约束 + 占位规则；产出可用 HTML</td>
+<td><code>mark.svg</code>/<code>hdr-mark-color.png</code>、§〇/§四、<code>BRAND-COLOR-SPEC.md</code>；与 D3/D1 同套联系信息</td>
+<td>姓名/职位/电话/邮箱/主体/域名、图片托管、免责声明法务措辞、移动端折行、英文版、分发责任人</td>
+<td>✅ 模板已出（<code>assets/email-signature.html</code>）；实值待确认</td>
+</tr>
+<tr>
+<td><strong>C8</strong></td>
+<td>提案 / 演示 PPT 模板</td>
+<td>对外提案、方案汇报、门禁说明、展会演讲</td>
+<td>16:9 母版 + 封面/内页/图表页/封底四类版面 + 内容纪律；产出可用 PPTX</td>
+<td><code>logo-inverse/master</code>、<code>BRAND-COLOR-SPEC.md</code>、B4/B5、A5、B3；<code>proposal_cover.docx</code></td>
+<td>尺寸比例、双语母版、图表页色板（依赖 B3）、公司主体与保密声明、真实客户数据、与封面 docx 是否同版</td>
+<td>✅ 模板已出（<code>deliverables/caigong-fde-ppt-template.pptx</code>）</td>
+</tr>
+<tr>
+<td><strong>C9</strong></td>
+<td>产品截图规范</td>
+<td>官网、案例、提案、公众号、品牌手册、帮助文档</td>
+<td>采集基线建议值 + 6 类强制脱敏 + 输出归档命名</td>
+<td><code>styles.css :root</code>、A5、B6/B7；下游 C6/C8/手册示例页</td>
+<td>标准窗口尺寸、真实客户名审批人、深色主题对照、是否带外框、归档责任人</td>
+<td>✅ 规范已出；尺寸待复核</td>
+</tr>
+<tr>
+<td><strong>C4</strong></td>
+<td>macOS 打包图标</td>
+<td>Electron macOS 产物</td>
+<td><strong>条件待补说明</strong>：不伪造完成，列明补齐条件与复核步骤</td>
+<td><code>BRAND-LOGO-GUIDE.md §八</code>、<code>app-icon-1024.png</code>、<code>npm run icon:mac</code></td>
+<td>需 macOS 环境、各档实渲染复核、旧标遗留文件是否清理</td>
+<td>🟡 <strong>条件待补（环境依赖）</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="d-specsd-md">D 组 · 商务载体 → <code>specs/D-商务载体补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>D5</strong></td>
+<td>工牌 / 桌牌</td>
+<td>驻场工牌、会议桌牌、展会胸牌</td>
+<td>建议规格与版式、单色优先、纯图形标规则、与 D3 一致性</td>
+<td><code>mono-dark/mono-light/mark</code>、B4、D3 名片、E1 单色原则</td>
+<td>公司主体全称、尺寸卡套、职位/工号/二维码、姓名拼音、客户方共标、供应商材质、照片肖像</td>
+<td>✅ 规范已出；印版待确认</td>
+</tr>
+<tr>
+<td><strong>D6</strong></td>
+<td>电子章 / 签章样式</td>
+<td>第三方电子签约通道的合同/方案书/验收单签署页</td>
+<td><strong>合规前置声明</strong>（不提供章样、不构成授权）+ 版式位置 + 品牌用色冲突 + 落地流程</td>
+<td><code>contract.docx</code>、<code>brandize-document-templates.py</code>、<code>mono-dark</code>、A5、D4</td>
+<td>主体全称/统一社会信用代码/法代、备案章样、平台账号与 CA 与用印审批、朱红与「第三种彩色」冲突裁决、骑缝/时间戳、非合同文件是否可用</td>
+<td>🟡 <strong>条件待补（合规前置）</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="e-specse-md">E 组 · 现场与实体 → <code>specs/E-现场物料补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>E1</strong></td>
+<td>工作服 / 安全帽丝印稿</td>
+<td>驻场工装左胸/后背、安全帽、马甲</td>
+<td>轮廓化、最小线宽 ≥2mm、单色出片、深浅两版、安全区、建议落位、打样流程</td>
+<td><code>mono-dark/mono-light</code>、<code>build_logo_svgs.py</code>、<code>BRAND-COLOR-SPEC.md</code>、B5</td>
+<td>衣色 Pantone、供应商最小线宽复核、工艺选定、曲面变形补偿、材质认证、客户现场标识要求</td>
+<td>✅ 工艺规范已出；印版待打样</td>
+</tr>
+<tr>
+<td><strong>E2</strong></td>
+<td>设备贴纸 / 铭牌</td>
+<td>现场交付设备/机柜/工位</td>
+<td>6 个内容字段模板（实值占位）+ 版式工艺 + G9 名称口径提示</td>
+<td><code>mono-dark/mark</code>、A5、<code>gates.json</code>、B4、<code>BRAND-COLOR-SPEC.md</code></td>
+<td>编号规则、客户 LOGO 共标授权、防水材质与耐候、尺寸固定方式、交付日期取法、追溯二维码</td>
+<td>✅ 规范已出；成品稿待确认</td>
+</tr>
+<tr>
+<td><strong>E3</strong></td>
+<td>展会物料三件套</td>
+<td>易拉宝 80×200cm、背景板、A4 单页</td>
+<td>三件套版式骨架 + 深底视觉纪律 + 占位规则</td>
+<td><code>logo-inverse</code>、§〇/A2/A4、<code>site/index.html</code> 门禁轨道、B5、B7、B4</td>
+<td>展会名称与展位尺寸、二维码目标、印刷数量材质、大屏字号系数、客户案例/Logo 墙、英文版、联系方式</td>
+<td>✅ 版式规范已出；印刷稿待确认</td>
+</tr>
+<tr>
+<td><strong>E4</strong></td>
+<td>交付完成贴纸</td>
+<td>交付文档封面、设备铭牌旁、验收资料袋</td>
+<td>建议文案「✓ 本项目已通过 G9 上线门」+ <strong>清单原文「G9 终验」冲突提示</strong> + 版式 + 发放纪律</td>
+<td><code>mark.svg</code>、<code>gates.json</code>、A5、E2、D4</td>
+<td><strong>文案口径拍板</strong>、尺寸形状材质、是否手写、流水编号/防伪、发放权限</td>
+<td>🟡 规范已出；文案待拍板</td>
+</tr>
+<tr>
+<td><strong>E5</strong></td>
+<td>礼品</td>
+<td>笔记本、工具笔、便签、文件袋</td>
+<td>只印纯图形标、单色、轮廓化、留白与禁止项</td>
+<td><code>mono-dark/mono-light</code>、E1、<code>BRAND-COLOR-SPEC.md</code>、A2</td>
+<td>品类/数量/预算、供应商与工艺、是否印联系方式、客户联合礼品、环保材质</td>
+<td>✅ 规范已出；品类待确认</td>
+</tr>
+</tbody>
+</table>
+<h3 id="f-specsf-md">F 组 · 治理 → <code>specs/F-治理补齐.md</code></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>名称</th>
+<th>适用范围</th>
+<th>核心内容（摘要）</th>
+<th>引用关系</th>
+<th>待确认项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>F1</strong></td>
+<td>完整品牌手册 PDF</td>
+<td>对内全员与对外供应商/合作方的唯一执行准绳</td>
+<td>00–09 章（定位话术/主标/配色/字体/图形图标/摄影/动效/数字与商务应用示例/正误对照/治理）+ 附录</td>
+<td>并入 §一–§八、<code>BRAND-COLOR-SPEC.md</code>、A–F 六组 specs、<code>BRAND-ASSET-CHECKLIST.md</code>（仅附录）</td>
+<td>发布审批人与生效日期、是否拆对外精简版、英文版、示例页截图脱敏、改版是否重导全部成品</td>
+<td>✅ PDF + 内容源已出；发布待确认</td>
+</tr>
+<tr>
+<td><strong>F2</strong></td>
+<td>资产库命名与管理规范</td>
+<td><code>brand/caigong-fde/</code> 全目录</td>
+<td>命名法、源文件/生成物标记、<strong>docx 重建覆盖风险</strong>、版本与 <code>BRAND-CHANGELOG.md</code>、备份规则</td>
+<td><code>build_logo_svgs.py</code>、<code>build_business_card.py</code>、<code>render_icons.mjs</code>、<code>make_ico.mjs</code>、<code>_backup-pre-brand/</code>、D1</td>
+<td>资产/审批责任人、Git LFS 或网盘权限、版本目录策略、历史保留期限、OFL 凭证归档、build 脚本合并方案</td>
+<td>✅ 规范 + CHANGELOG 已出；责任人待确认</td>
+</tr>
+<tr>
+<td><strong>F3</strong></td>
+<td>品牌巡检清单</td>
+<td>官网、桌面端、17 模板、名片、公众号、PPT/签名、打包图标、印刷物料、全部 PDF/PPTX</td>
+<td>14 项季度巡检表 + 判定处置 + 破坏性变更全量重跑规则</td>
+<td>§〇/§七、<code>BRAND-COLOR-SPEC.md</code>、A5、<code>BRAND-CHANGELOG.md</code>、C9、F2</td>
+<td>巡检/复核责任人、日期与归档位置、整改 SLA、是否纳入自动化测试、是否需签字</td>
+<td>✅ 清单已出；首次正式巡检待责任人</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_4">五、本次实际产出的文件</h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>独立文档</td>
+<td><code>BRAND-COLOR-SPEC.md</code>、<code>BRAND-MASTER-PLAN.md</code>、<code>BRAND-GUIDELINES.md</code>、<code>BRAND-COMPLETION-INDEX.md</code>、<code>BRAND-CHANGELOG.md</code></td>
+</tr>
+<tr>
+<td>分组规范</td>
+<td><code>specs/A-品牌核心补齐.md</code>、<code>B-VI基础系统补齐.md</code>、<code>C-数字载体补齐.md</code>、<code>D-商务载体补齐.md</code>、<code>E-现场物料补齐.md</code>、<code>F-治理补齐.md</code></td>
+</tr>
+<tr>
+<td>PDF</td>
+<td><code>deliverables/蔡工FDE-配色方案.pdf</code>、<code>蔡工FDE-品牌全案策划书.pdf</code>、<code>蔡工FDE-品牌手册.pdf</code></td>
+</tr>
+<tr>
+<td>PPTX</td>
+<td><code>deliverables/蔡工FDE-品牌全案策划书.pptx</code>、<code>caigong-fde-ppt-template.pptx</code></td>
+</tr>
+<tr>
+<td>模板/资产</td>
+<td><code>assets/email-signature.html</code>、<code>assets/aux-gold-arc.svg</code>、<code>aux-progress-ring.svg</code>、<code>aux-loop-arrow.svg</code></td>
+</tr>
+<tr>
+<td>入口/更新</td>
+<td><code>docs/品牌设计交付物索引.md</code>、<code>BRAND-ASSET-CHECKLIST.md</code>（状态与总览更新）、<code>BRAND-LOGO-GUIDE.md</code>（§〇/§八 口径修正）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_5">六、条件待补项清单（不伪造完成）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>条件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B3 数据可视化色板</td>
+<td>图表需求出现 + 品牌责任人裁决</td>
+<td>保留原注记，<strong>未发布任何色值</strong></td>
+</tr>
+<tr>
+<td>C4 macOS <code>icon.icns</code></td>
+<td>macOS 环境</td>
+<td>本次为 Windows，无法产出</td>
+</tr>
+<tr>
+<td>D6 电子章章样</td>
+<td>主体资质 + 备案章样 + 法务裁决</td>
+<td>只给视觉边界，不提供章样</td>
+</tr>
+<tr>
+<td>E 组印刷/实物成品</td>
+<td>工艺参数、供应商、授权、预算</td>
+<td>只给可直接下厂的规范，未伪造印版</td>
+</tr>
+<tr>
+<td>E4 贴纸文案</td>
+<td>「G9 上线门」vs「G9 终验」拍板</td>
+<td>清单原文未擅改</td>
+</tr>
+<tr>
+<td>F1 手册正式发布</td>
+<td>审批人 + 生效日期</td>
+<td>v1.0 内容已齐，未宣称已发布</td>
+</tr>
+<tr>
+<td>全渠道联系方式</td>
+<td>真实电话/邮箱/主体</td>
+<td>官网、名片、签名、PPT、展会占位未填</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_6">七、验证结果</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>检查</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>docs/</code> 品牌词检索</td>
+<td>补齐前零命中；补齐后新增索引文件 1 个</td>
+</tr>
+<tr>
+<td>2</td>
+<td>色值一致性</td>
+<td><code>BRAND-COLOR-SPEC.md</code> 双阶 10 色与 <code>styles.css :root</code> 第 31–42 行逐值一致；与 <code>BRAND-LOGO-GUIDE.md §三</code> 一致</td>
+</tr>
+<tr>
+<td>3</td>
+<td>门禁真值</td>
+<td>G1–G9 名称与顺序取自 <code>server/seeds/gates.json</code>，9 条全匹配</td>
+</tr>
+<tr>
+<td>4</td>
+<td>话术一致性</td>
+<td>§〇 已修正为 13 阶段 SOP + G1–G9；与 <code>site/index.html:7,220</code> 定稿全句一致</td>
+</tr>
+<tr>
+<td>5</td>
+<td>对比度</td>
+<td>按 WCAG 公式重算 10 组；金系白字 2.16–2.82:1 不达 AA。<strong>2026-11-06 裁决石墨黑字并落地 9 处规则</strong>（主态 6.33–8.27:1 达 AA）；hover 深金 4.23:1 残留已登记</td>
+</tr>
+<tr>
+<td>6</td>
+<td>未改动验证</td>
+<td>2026-11-05 补齐轮：<code>styles.css</code>、<code>site/index.html</code>、桌面端 TSX、17 个 docx 模板零改动。<strong>2026-11-06 裁决轮仅改 CSS 文字色与官网介绍/meta/按钮色，桌面端 TSX 与 17 个 docx 模板仍零改动</strong></td>
+</tr>
+<tr>
+<td>7</td>
+<td>文档完整性</td>
+<td>五字段在 22 项 + 3 份独立文档中逐项齐备；信息不足处均标「待确认」</td>
+</tr>
+<tr>
+<td>8</td>
+<td>渲染成品</td>
+<td>PDF ×5（配色方案 / 全案策划书 / 品牌手册 / 规范补齐包 / 补齐索引）、PPTX ×2（策划书 15 页 / C8 模板 6 页）全部生成；PDF 页数 10/12/10/39/15，PPTX 回读页数与文本正常</td>
+</tr>
+<tr>
+<td>9</td>
+<td>视觉抽检</td>
+<td>配色方案封面、属性表、色阶表（色块 chip 正常）、策划书正文页、3 个辅助图形、重渲染图形标位图均实渲染目检通过；首列换行问题已修</td>
+</tr>
+<tr>
+<td>10</td>
+<td>既有资产缺陷修正</td>
+<td><code>mark-transparent-1024.png</code> 原只剩残缺黑弧（金段 / G 横杠丢失），已用正确 SVG 母版重渲染并补透明留白，目检通过；<strong>母版 <code>caigong-fde-mark.svg</code> 本身未改</strong>（见 §八）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_7">八、待确认项汇总（跨文档）</h2>
+<p><strong>高优先（2026-11-06 更新）</strong>：① ~~行业口径~~ ✅ 已裁决「全行业企业」；② ~~金系按钮白字~~ ✅ 已裁决「石墨黑字」并落地 9 处规则；③ D6 电子章资质与朱红豁免（仍待确认）；④ E4「G9 上线门」文案统一（仍待确认）；⑤ <strong>新增</strong>：hover 深金 4.23:1 的色值/反馈调整（<code>BRAND-COLOR-SPEC.md §十-8</code>）。</p>
+<p><strong>中优先</strong>：⑤ 真实联系方式与官网部署目标；⑥ C4 macOS 图标；⑦ 字体授权凭证与图标库盘点；⑧ 品牌责任人 / 巡检人 / 生效日期；⑨ 印刷 CMYK / Pantone / 材质；⑩ 现场照片版权与脱敏审批；⑪ <strong><code>caigong-fde-mark.svg</code> 的 viewBox 为几何紧包围盒（零内部留白）</strong>，与 §六「图形四周留白 ≥ 1/4 图形高度」不一致——本次<strong>未改母版</strong>（会影响侧边栏 / favicon / docx 页眉 / app icon 全部下游），仅在本次生成的 PNG 中补了留白；是否调整母版视图框须拍板。</p>
+<p><strong>条件项</strong>：⑪ 图表需求触发 B3；⑫ 产品内术语表路径与 13 阶段逐阶段名称；⑬ 英文短句定稿；⑭ 是否拆对外精简版手册 / 英文版。</p>
+<blockquote>
+<p>全部待确认项以「不臆造品牌信息」为原则保留开放；闭环后在 <code>BRAND-CHANGELOG.md</code> 留痕并更新本索引。</p>
+</blockquote></section>
+</body></html>

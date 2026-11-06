@@ -53,19 +53,43 @@ export function DispatchPage({
   const visibleTabs = TABS.filter((item) => !item.platformOnly || isPlatform)
   return (
     <div className="dispatch-page">
-      <nav className="dispatch-tabs" aria-label="派单子页">
-        {visibleTabs.map((item) => (
+      {/* N2：上级 › 当前 文本面包屑——仅展示，不新增路由 */}
+      <nav className="breadcrumb" aria-label="面包屑">
+        <a href="#projects">项目工作台</a>
+        <span className="breadcrumb-separator" aria-hidden="true">›</span>
+        <span aria-current="page">派单池</span>
+      </nav>
+      {/* N3：tab 归一到 ProjectDetailPage 范式——role=tablist + aria-selected + 方向键 */}
+      <nav className="dispatch-tabs" role="tablist" aria-label="派单子页">
+        {visibleTabs.map((item, index) => (
           <button
             key={item.key}
+            id={`dispatch-tab-${item.key}`}
             type="button"
+            role="tab"
+            aria-selected={tab === item.key}
+            aria-controls="dispatch-tabpanel"
+            tabIndex={tab === item.key ? 0 : -1}
             className={`dispatch-tab${tab === item.key ? " active" : ""}`}
-            aria-current={tab === item.key ? "page" : undefined}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+              event.preventDefault()
+              const next =
+                event.key === "Home" ? 0
+                : event.key === "End" ? visibleTabs.length - 1
+                : event.key === "ArrowLeft" ? (index - 1 + visibleTabs.length) % visibleTabs.length
+                : (index + 1) % visibleTabs.length
+              const target = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]
+              target?.focus()
+              target?.click()
+            }}
             onClick={() => onTabChange(item.key)}
           >
             {item.label}
           </button>
         ))}
       </nav>
+      <div id="dispatch-tabpanel" role="tabpanel" aria-labelledby={`dispatch-tab-${tab}`}>
       {tab === "pool" ? <DispatchPoolPage /> : null}
       {tab === "mine" ? <MyOffersPage /> : null}
       {tab === "settlements" ? <MySettlementsPage /> : null}
@@ -99,6 +123,7 @@ export function DispatchPage({
           <p className="muted">开闸运维仅对平台侧角色（admin/project_lead）开放。</p>
         )
       ) : null}
+      </div>
     </div>
   )
 }

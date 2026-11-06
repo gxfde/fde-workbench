@@ -4,6 +4,7 @@ import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { aiAccessLabels, aiCapabilityLabels } from "../ai/accessLabels"
 import "./account-weixin.css"
+import { Loading } from "../components/ui"
 
 interface AccountSummary {
   user: { id: string; username: string; display_name: string; role: string; is_active: boolean }
@@ -134,7 +135,7 @@ export function AccountPage() {
     } catch (caught) { setError(messageOf(caught)) } finally { setBusy(false) }
   }
 
-  if (!account && !error) return <section className="page account-page"><p role="status">正在加载个人与安全中心…</p></section>
+  if (!account && !error) return <section className="page account-page"><Loading label="正在加载个人与安全中心…" /></section>
 
   return <section className="page account-page">
     <header className="page-heading"><div><p className="eyebrow">账户设置</p><h1>个人与安全中心</h1><p>管理个人资料、密码、AI Server 权限和微信 ClawBot 绑定。</p></div></header>

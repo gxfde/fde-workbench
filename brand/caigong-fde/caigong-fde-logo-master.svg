@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 460" width="512" height="460" role="img" aria-labelledby="t">
+  <title id="t">蔡工FDE 智能交付系统 — 主标</title>
+  <desc>CG 环形主标 + 中文标准字 + 英文字标，透明底，主用彩色版本</desc>
+  <g id="cg-master">
+    <path d="M 341.500,200.000 A 85.500,85.500 0 1 1 298.750,125.955" fill="none" stroke="#14181C" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 305.041,129.963 A 85.500,85.500 0 0 1 331.492,159.860" fill="none" stroke="#E8A33D" stroke-width="29.0" stroke-linecap="butt"/>
+    <path d="M 239.000,200.000 L 356.000,200.000" fill="none" stroke="#14181C" stroke-width="29.0" stroke-linecap="butt"/>
+  </g>
+  <text x="256.0" y="392.0" text-anchor="middle"
+        font-family="'Source Han Sans SC','Noto Sans SC','PingFang SC','Microsoft YaHei','Hiragino Sans GB',sans-serif" font-size="66" font-weight="700"
+        letter-spacing="2" fill="#14181C">蔡工FDE</text>
+  <text x="256.0" y="434.0" text-anchor="middle"
+        font-family="'Montserrat','Inter','Helvetica Neue',Arial,sans-serif" font-size="25" font-weight="600"
+        letter-spacing="7" fill="#14181C">CAIGONG FDE</text>
+</svg>

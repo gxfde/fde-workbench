@@ -151,7 +151,14 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
   return (
     <div id="project-detail" className={`page-stack${tab === 'delivery' && solutionId ? ' project-secondary-page' : ''}`}>
       <header className="page-header">
-        <div><p className="eyebrow">项目管理</p><h1>项目详情</h1>{project ? <p className="supporting-copy">{project.name} · {project.enterprise_code}</p> : null}</div>
+        <div>
+          {/* N2：上级 › 当前 文本面包屑——仅展示，不新增路由 */}
+          <nav className="breadcrumb" aria-label="面包屑">
+            <a href="#projects">项目工作台</a>
+            <span className="breadcrumb-separator" aria-hidden="true">›</span>
+            <span aria-current="page">项目详情</span>
+          </nav>
+          <p className="eyebrow">项目管理</p><h1>项目详情</h1>{project ? <p className="supporting-copy">{project.name} · {project.enterprise_code}</p> : null}</div>
         <div className="page-header-actions">
           {project && canManage ? <button className="secondary-button" type="button" disabled={exportingPlan} onClick={() => { void exportProjectPlan() }}>{exportingPlan ? "正在提交…" : "导出项目计划及进度"}</button> : null}
         </div>

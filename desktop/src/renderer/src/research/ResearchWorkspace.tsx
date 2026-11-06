@@ -4,6 +4,7 @@ import { MemoMarkdown } from "./MemoMarkdown"
 import { ApiClientError } from "../api/client"
 import { useAIExecution } from "../ai/AIExecutionProvider"
 import { useAuth } from "../auth/AuthProvider"
+import { confirmAsync } from "../common/ConfirmProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
 import { isProjectDto } from "../workbench/runtimeValidation"
 import type { ProjectDto } from "../workbench/types"
@@ -948,7 +949,7 @@ export function ResearchWorkspace({ project, canFill, canManage, onDirtyChange, 
 
   async function exportResearchResult(form: ProjectResearchFormDto): Promise<void> {
     if (submittingResearchFormId || researchExports[form.id]) return
-    if (!window.confirm(`确定将调研表“${form.name}”导出到文件库吗？\n\n确认后系统将在后台生成 DOCX，期间可继续使用其他功能。`)) return
+    if (!(await confirmAsync({ title: "导出调研表", description: `确定将调研表“${form.name}”导出到文件库吗？确认后系统将在后台生成 DOCX，期间可继续使用其他功能。`, confirmLabel: "导出" }))) return
     setSubmittingResearchFormId(form.id); setError(""); setNotice("")
     try {
       const value = await apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(project.id)}/research/forms/${encodeURIComponent(form.id)}/export`, { method: "POST", body: {} })

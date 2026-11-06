@@ -10,9 +10,12 @@ import {
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { useDangerConfirm } from "../common/DangerConfirmProvider"
+import { useAsyncAction } from "../common/useAsyncAction"
 import { fetchAllPages } from "../workbench/fetchAllPages"
 import { isModuleCatalogDto } from "../workbench/runtimeValidation"
 import type { ModuleCatalogDto } from "../workbench/types"
+import { Loading } from "../components/ui"
+import { errorMessage } from "../common/errorMessages"
 
 interface ModuleForm {
   name: string
@@ -29,6 +32,7 @@ const emptyCreateForm = {
 
 export function ModulesPage() {
   const { apiRequest } = useAuth()
+  const action = useAsyncAction()
   const dangerConfirm = useDangerConfirm()
   const [modules, setModules] = useState<ModuleCatalogDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -237,7 +241,7 @@ export function ModulesPage() {
 
       <section className="panel table-panel" aria-labelledby="module-list-title">
         <div className="panel-heading"><h2 id="module-list-title">模块目录</h2><span>{modules.length} 个模块</span></div>
-        {loading ? <p role="status">正在加载模块…</p> : loadError ? (
+        {loading ? <Loading label="正在加载模块…" /> : loadError ? (
           <p className="form-error" role="alert">{loadError}</p>
         ) : modules.length === 0 ? <p className="empty-state">暂无模块。</p> : (
           <div className="table-scroll"><table>
@@ -247,7 +251,7 @@ export function ModulesPage() {
               <td><span className={`badge ${module.is_active ? "success" : "muted"}`}>{module.is_active ? "启用" : "停用"}</span></td>
               <td><div className="row-actions">
                 <button className="secondary-button compact" type="button" aria-label={`编辑 ${module.name}`} onClick={() => openEditor(module)}>编辑</button>
-                <button className="secondary-button compact" type="button" aria-label={`${module.is_active ? "停用" : "启用"} ${module.name}`} onClick={() => void toggleModule(module)}>{module.is_active ? "停用" : "启用"}</button>
+                <button className="secondary-button compact" type="button" aria-label={`${module.is_active ? "停用" : "启用"} ${module.name}`} disabled={action.isBusy} aria-busy={action.isBusy} onClick={() => void action.run("toggle-module", () => toggleModule(module))}>{action.isBusy ? "处理中…" : module.is_active ? "停用" : "启用"}</button>
               </div></td>
             </tr>)}</tbody>
           </table></div>
@@ -304,9 +308,10 @@ function stableKey(value: string): boolean {
 }
 
 function moduleErrorMessage(error: unknown): string {
+  // S2 / F4：公共码走统一表；但 stale_version 在本页有更具体的措辞
+  // （要说明「已保留当前表单」），保留本地措辞不丢上下文。
   if (error instanceof ApiClientError && error.code === "module_already_exists") return "模块名称或标识已存在。"
-  if (error instanceof ApiClientError && error.code === "authentication_refreshed_resubmit") return "登录状态已刷新，请重新提交本次操作。"
   if (error instanceof ApiClientError && error.code === "module_not_found") return "该模块已不存在，请刷新后重试。"
   if (error instanceof ApiClientError && error.code === "stale_version") return "模块已被其他人更新；已保留当前表单，请刷新版本后重试。"
-  return "模块操作失败，请稍后重试。"
+  return errorMessage(error, "模块操作失败，请稍后重试。")
 }

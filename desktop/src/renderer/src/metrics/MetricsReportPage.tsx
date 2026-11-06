@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { useAuth } from '../auth/AuthProvider'
+import { Loading } from "../components/ui"
 
 // P0/P1 指标报表页（goal-d8，PRD §10 分期业务指标）：只读渲染
 // /api/v1/metrics/report 聚合结果；样本不足的指标灰态显示「数据未积累」
@@ -102,7 +103,7 @@ export function MetricsReportPage() {
     return (
       <section className="page" aria-label="指标报表">
         <header className="page-heading"><div><p className="eyebrow">指标报表</p><h1>P0 / P1 指标</h1></div></header>
-        <p role="status">正在加载指标报表…</p>
+        <Loading label="正在加载指标报表…" />
       </section>
     )
   }

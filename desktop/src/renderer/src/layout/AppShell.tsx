@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import logo from "../assets/logo-caigong-fde.svg"
 import { BRAND_NAME, BRAND_SUBTITLE } from "../../../shared/brand"
 import { useAuth } from "../auth/AuthProvider"
+import { useConfirm } from "../common/ConfirmProvider"
 import { AIServerChat } from "../ai/AIServerChat"
 import { canLeaveDirtyWorkspace } from "../routing/navigationGuard"
 import { routeHash, type AppRoute } from "../routing/useHashRoute"
@@ -17,6 +18,7 @@ export function AppShell({
   route: AppRoute
 }) {
   const { logout, user } = useAuth()
+  const confirm = useConfirm()
   const isAdmin = user?.role === "admin"
   // 平台侧口径（goal-d8）：指标报表页对 admin/project_lead 开放
   const isPlatform = user?.role === "admin" || user?.role === "project_lead"
@@ -52,26 +54,40 @@ export function AppShell({
           </div>
         </div>
         <nav aria-label="主导航">
-          <NavLink route={route} target={{ kind: "projects" }} label="项目工作台" icon={<GridIcon />} />
-          <NavLink route={route} target={{ kind: "bridge" }} label="集成桥" icon={<BridgeIcon />} />
-          <NavLink route={route} target={{ kind: "task-center" }} label="任务中心" icon={<TaskIcon />} />
-          <NavLink route={route} target={{ kind: "translator" }} label="翻译器" icon={<DocumentIcon />} />
-          <NavLink route={route} target={{ kind: "dispatch" }} label="派单池" icon={<GridIcon />} />
-          {isPlatform ? (
-            <NavLink route={route} target={{ kind: "metrics" }} label="指标报表" icon={<BoxesIcon />} />
-          ) : null}
+          <div className="nav-group">
+            <p className="nav-group-title">工作区</p>
+            <NavLink route={route} target={{ kind: "projects" }} label="项目工作台" icon={<GridIcon />} />
+            <NavLink route={route} target={{ kind: "bridge" }} label="集成桥" icon={<BridgeIcon />} />
+            <NavLink route={route} target={{ kind: "task-center" }} label="任务中心" icon={<TaskIcon />} />
+            <NavLink route={route} target={{ kind: "translator" }} label="翻译器" icon={<DocumentIcon />} />
+          </div>
+          <div className="nav-group">
+            <p className="nav-group-title">交付与商业</p>
+            <NavLink route={route} target={{ kind: "dispatch" }} label="派单池" icon={<GridIcon />} />
+            {isPlatform ? (
+              <NavLink route={route} target={{ kind: "metrics" }} label="指标报表" icon={<BoxesIcon />} />
+            ) : null}
+            {isAdmin ? (
+              <NavLink route={route} target={{ kind: "pilot" }} label="试点报告" icon={<BoxesIcon />} />
+            ) : null}
+          </div>
+          <div className="nav-group">
+            <p className="nav-group-title">资源</p>
+            <NavLink route={route} target={{ kind: "extensions" }} label="AI 与扩展" icon={<ExtensionIcon />} />
+            <NavLink route={route} target={{ kind: "help" }} label="使用帮助" icon={<HelpIcon />} />
+            {isAdmin ? <>
+              <NavLink route={route} target={{ kind: "templates" }} label="行业模板" icon={<LayersIcon />} />
+              <NavLink route={route} target={{ kind: "document-templates" }} label="文档模板" icon={<DocumentIcon />} />
+            </> : null}
+          </div>
           {isAdmin ? (
-            <NavLink route={route} target={{ kind: "pilot" }} label="试点报告" icon={<BoxesIcon />} />
+            <div className="nav-group">
+              <p className="nav-group-title">管理</p>
+              <NavLink route={route} target={{ kind: "modules" }} label="模块管理" icon={<BoxesIcon />} />
+              <NavLink route={route} target={{ kind: "users" }} label="用户管理" icon={<PeopleIcon />} />
+              <NavLink route={route} target={{ kind: "system-configuration" }} label="系统配置" icon={<SettingsIcon />} />
+            </div>
           ) : null}
-          <NavLink route={route} target={{ kind: "extensions" }} label="AI 与扩展" icon={<ExtensionIcon />} />
-          <NavLink route={route} target={{ kind: "help" }} label="使用帮助" icon={<HelpIcon />} />
-          {isAdmin ? <>
-            <NavLink route={route} target={{ kind: "templates" }} label="行业模板" icon={<LayersIcon />} />
-            <NavLink route={route} target={{ kind: "document-templates" }} label="文档模板" icon={<DocumentIcon />} />
-            <NavLink route={route} target={{ kind: "modules" }} label="模块管理" icon={<BoxesIcon />} />
-            <NavLink route={route} target={{ kind: "users" }} label="用户管理" icon={<PeopleIcon />} />
-            <NavLink route={route} target={{ kind: "system-configuration" }} label="系统配置" icon={<SettingsIcon />} />
-          </> : null}
         </nav>
         <div className="sidebar-bottom">
           <button
@@ -90,7 +106,11 @@ export function AppShell({
             {appVersion ? <small className="app-version">v{appVersion}</small> : null}
             <button className="text-button" type="button" onClick={() => {
               if (!canLeaveDirtyWorkspace("logout")) return
-              if (window.confirm("确定退出登录吗？")) void logout()
+              void confirm({
+                title: "退出登录",
+                description: "确定退出当前账号吗？",
+                confirmLabel: "退出登录",
+              }).then((accepted) => { if (accepted) void logout() })
             }}>
               退出登录
             </button>

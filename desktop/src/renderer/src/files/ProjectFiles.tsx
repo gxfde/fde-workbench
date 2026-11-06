@@ -15,6 +15,7 @@ import {
   isUploadedPartDto,
   isUploadSessionDto,
 } from "./runtimeValidation"
+import { Loading } from "../components/ui"
 import type {
   ProjectFileDto,
   UploadItem,
@@ -304,7 +305,7 @@ export function ProjectFiles({ projectId, canManage, uploadOnly = false }: Proje
         <FileUploader canUpload onFilesSelected={addUploads} items={uploads} onCancel={cancelUpload} onRetry={retryUpload} toolbarExtra={categoryFilter} toolbarExtraPosition={uploadOnly ? "before" : "after"} />
       ) : <><div className="project-list-toolbar" role="toolbar" aria-label="文件工具栏">{categoryFilter}</div><p className="field-hint">你可以查看并下载可用的文件，但当前角色无法上传。</p></>}
       {error ? <p className="form-error banner" role="alert">{error}</p> : null}
-      {!uploadOnly && (loading ? <p role="status">正在加载文件…</p> : files.length === 0 ? <p className="empty-state">暂无项目文件。</p> : (
+      {!uploadOnly && (loading ? <Loading label="正在加载文件…" /> : files.length === 0 ? <p className="empty-state">暂无项目文件。</p> : (
         <div className="table-scroll"><table aria-label="项目文件"><thead><tr><th>文件</th><th>状态</th><th>上传者</th><th>操作</th></tr></thead><tbody>
           {files.map((file) => {
             const status = file.current_version?.status

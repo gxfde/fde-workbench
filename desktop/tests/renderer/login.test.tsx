@@ -11,6 +11,7 @@ import { App } from "../../src/renderer/src/App"
 import { PRODUCT_NAME } from "../../src/shared/brand"
 import {
   authResult,
+  answerConfirmDialog,
   bridge,
   deferred,
   engineerUser,
@@ -195,7 +196,6 @@ describe("desktop authentication experience", () => {
       }),
     })
     installBridge(fde)
-    vi.spyOn(window, "confirm").mockReturnValue(true)
     const user = userEvent.setup()
     renderApp(<App />)
 
@@ -204,6 +204,8 @@ describe("desktop authentication experience", () => {
     ).toBeVisible()
     expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "退出登录" }))
+    // S2：确认已改为统一 Modal，需要点「退出登录」按钮完成确认
+    await answerConfirmDialog(user, "退出登录")
     expect(await screen.findByRole("heading", { name: PRODUCT_NAME })).toBeVisible()
   })
 })

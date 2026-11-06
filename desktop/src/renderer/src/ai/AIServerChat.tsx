@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useAuth } from "../auth/AuthProvider"
+import { confirmAsync } from "../common/ConfirmProvider"
 import type { AppRoute } from "../routing/useHashRoute"
 import "./ai-server-chat.css"
 import { AIActionConfirmation } from "./AIActionConfirmation"
@@ -107,7 +108,7 @@ export function AIServerChat({ route }: { route: AppRoute }) {
 
   async function removeConversation(id: string, title: string) {
     if (sending || deleting) return
-    if (!window.confirm(`确定删除对话「${title}」吗？\n\n删除后该对话的全部消息无法恢复。`)) return
+    if (!(await confirmAsync({ title: "删除对话", description: `确定删除对话「${title}」吗？删除后该对话的全部消息无法恢复。`, confirmLabel: "删除", tone: "danger" }))) return
     setDeleting(id); setError("")
     try {
       await apiRequest(`/api/v1/ai/chat/conversations/${id}`, { method: "DELETE" })
