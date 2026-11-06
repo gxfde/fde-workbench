@@ -303,6 +303,7 @@ export function CommercialBoard({ projectId, canManage }: CommercialBoardProps) 
                 key={quote.id}
                 quote={quote}
                 canManage={canManage}
+                projectId={projectId}
                 post={post}
                 mutate={mutate}
                 loadDraft={loadDraft}
@@ -515,6 +516,7 @@ function QuoteCreateForm({
 function QuoteCard({
   quote,
   canManage,
+  projectId,
   post,
   mutate,
   loadDraft,
@@ -523,6 +525,8 @@ function QuoteCard({
 }: {
   quote: QuoteDto
   canManage: boolean
+  /** T-A6：成交后「下一步」引导需要项目 id 拼方案设计页链接 */
+  projectId: string
   post: Post
   mutate: Mutate
   loadDraft: (quoteKey: string) => Promise<string>
@@ -632,6 +636,13 @@ function QuoteCard({
           成交 {fmt(quote.ledger.final_amount)}（较锚点下沿 {((quote.ledger.final_deviation_pct ?? 0) * 100).toFixed(1)}%）·
           可让利 {fmt(quote.ledger.allowance_cap)} · 已让 {fmt(quote.ledger.allowance_paid)}
           {quote.ledger.ticket_deal ? " · 门票单" : ""}
+        </p>
+      ) : null}
+      {quote.status === "finalized" ? (
+        <p className="quote-next-step supporting-copy">
+          已成交回填。下一步：到{" "}
+          <a href={`#projects/${encodeURIComponent(projectId)}?tab=delivery`}>方案设计</a>
+          {" "}选定方案建交付包（发布时报价与方案要素冻结为快照；未回校/未核验的报价会被服务端闸拦下）。
         </p>
       ) : null}
       {canManage ? (

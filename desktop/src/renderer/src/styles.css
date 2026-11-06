@@ -1995,6 +1995,9 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .claim-chip:disabled { cursor: default; opacity: 0.85; }
 .claim-chip.yellow { border-color: var(--warning); color: var(--warning); }
 .claim-chip.accepted { border-color: var(--success); color: var(--success); }
+/* T-A6：成交后「下一步」引导行——弱化文案 + 可点链接跳方案设计 */
+.quote-next-step { margin: 0; font-size: var(--font-label); }
+.quote-next-step a { color: var(--brand-blue); }
 .quote-calibration { font-size: var(--font-label); color: var(--muted); margin: 0; }
 .quote-calibration.pending { color: var(--warning); }
 .quote-ledger { font-size: var(--font-label); color: var(--text); margin: 0; }

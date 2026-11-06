@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
+import { ApiClientError } from '../api/client'
 import { subjectAncestors } from '../documents/ProjectDocuments'
 import { MemoMarkdown } from '../research/MemoMarkdown'
 import type { ResearchSubjectDto } from '../research/types'
@@ -96,6 +97,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
       {SOLUTION_DETAIL_FIELDS.map(field => <section className={`solution-delivery-card${field.key === 'risks_dependencies' ? ' solution-delivery-card-full' : ''}`} key={field.key} aria-labelledby={`solution-delivery-${field.key}`}><h3 id={`solution-delivery-${field.key}`}>{field.label}</h3><div className="solution-markdown"><MemoMarkdown>{solution[field.key] || '待确认'}</MemoMarkdown></div></section>)}
     </div>
     {exported ? <SolutionExport key={exportRevision} projectId={projectId} result={exported} name={solution.name} requestError={error} retrying={exporting} onRetry={() => void exportSow()} onClose={() => setExported(null)} /> : null}
+    {canManage && solution.status !== 'archived' ? <DeliveryPackageLauncher projectId={projectId} solution={solution} /> : null}
     <SignoffConsole projectId={projectId} solutionId={solution.id} canManage={canManage && solution.status !== 'archived'} />
   </section>
 }
@@ -135,4 +137,94 @@ function SolutionHealthChip({ projectId, solutionId }: { projectId: string; solu
   }, [apiRequest, projectId, solutionId])
   if (!health) return null
   return <span className="badge business-category" title={health.issues.length ? health.issues.join('\n') : '各项齐备'}>健康度 {health.score}/{health.max_score}</span>
+}
+
+// T-A6（报价核验 → 冻结 SOW 闭环）：方案详情页的「建交付包」入口。
+// 实测口径（登记三处勘误的落点）：
+// 1. 服务端 export_sow 不查报价（SOW 是谈判材料）——真正的报价闸在交付包：
+//    建包要求 solution_id+quote_id，publish 要求 quote finalized（422
+//    quote_not_finalized）。桌面在「创建入口」前置同口径提示，而不是等 publish 报错。
+// 2. 「冻结」语义 = publish 时的快照哈希（§2.3 逐字段清单一次冻结）。
+// 3. 服务端零改动零新 API——建包走既有 POST /api/v1/dispatch/packages。
+interface QuoteSummary { id: string; quote_key: string; status: string; tier_label: string; claims_summary: { accepted: number; total: number } }
+
+function isQuoteSummary(value: unknown): value is QuoteSummary {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  return typeof item.id === 'string' && typeof item.quote_key === 'string'
+    && typeof item.status === 'string' && typeof item.tier_label === 'string'
+    && !!item.claims_summary && typeof (item.claims_summary as Record<string, unknown>).accepted === 'number'
+    && typeof (item.claims_summary as Record<string, unknown>).total === 'number'
+}
+
+function DeliveryPackageLauncher({ projectId, solution }: { projectId: string; solution: SolutionDto }) {
+  const { apiRequest } = useAuth()
+  const [quotes, setQuotes] = useState<QuoteSummary[] | null>(null)
+  const [selectedQuote, setSelectedQuote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const enc = encodeURIComponent(projectId)
+
+  useEffect(() => {
+    let active = true
+    // 报价拉取失败静默降级（与 SolutionHealthChip 同纪律：辅助入口不得阻断方案详情主内容）
+    void apiRequest<unknown>(`/api/v1/projects/${enc}/quotes`, { method: 'GET' })
+      .then((payload) => {
+        if (!active || !payload || typeof payload !== 'object') return
+        const items = (payload as Record<string, unknown>).quotes
+        if (!Array.isArray(items)) return
+        const rows = items.filter(isQuoteSummary)
+        setQuotes(rows)
+        const finalized = rows.find(row => row.status === 'finalized')
+        if (finalized) setSelectedQuote(finalized.id)
+      })
+      .catch(() => { if (active) setQuotes([]) })
+    return () => { active = false }
+  }, [apiRequest, enc])
+
+  const finalizedQuotes = (quotes ?? []).filter(row => row.status === 'finalized')
+  const draftQuotes = (quotes ?? []).filter(row => row.status !== 'finalized')
+  const canCreate = Boolean(selectedQuote) && !busy
+
+  async function createPackage() {
+    if (!selectedQuote || busy) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await apiRequest('/api/v1/dispatch/packages', {
+        method: 'POST',
+        body: { solution_id: solution.id, quote_id: selectedQuote },
+      })
+      setNotice(`交付包已创建（草稿）。发布后报价与方案要素即冻结为快照——在调度台完成发布。`)
+    } catch (caught) {
+      if (caught instanceof ApiClientError) {
+        if (caught.code === 'package_exists') setError('该方案已有交付包（撤回/拒绝后重发走同一行），请到调度台操作。')
+        else if (caught.code === 'verifier_role_required') setError('只有平台侧（管理员/项目负责人）可建交付包。')
+        else setError(caught.message)
+      } else setError('创建交付包失败，请稍后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="panel solution-panel solution-package-launcher" role="region" aria-label={`建交付包：${solution.name}`}>
+    <h3>建交付包 <span>方案 + 已核验报价 → 调度台</span></h3>
+    {notice ? <p className="notice" role="status">{notice}</p> : null}
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+    {quotes === null ? <p className="field-hint" role="status">正在读取项目报价…</p> : null}
+    {quotes !== null && quotes.length === 0 ? <p className="field-hint">项目尚无报价——先到 <a href={routeHash({ kind: 'project', projectId, tab: 'commercial' })}>报价收款</a> 创建报价并完成数字核验（claims 全 accepted），再回此建交付包。</p> : null}
+    {quotes !== null && quotes.length > 0 ? <>
+      <div className="field"><label htmlFor="package-quote-select"><span>选择报价</span></label>
+        <select id="package-quote-select" value={selectedQuote} onChange={event => setSelectedQuote(event.target.value)}>
+          <option value="">— 选择报价 —</option>
+          {finalizedQuotes.map(row => <option key={row.id} value={row.id}>{row.quote_key} · {row.tier_label} · 已成交回填（claims {row.claims_summary.accepted}/{row.claims_summary.total}）</option>)}
+          {draftQuotes.map(row => <option key={row.id} value={row.id} disabled>{row.quote_key} · {row.tier_label} · 草稿（发布交付包前须成交回填）</option>)}
+        </select>
+      </div>
+      {selectedQuote && !finalizedQuotes.some(row => row.id === selectedQuote) ? <p className="field-hint" role="status">交付包发布前报价必须成交回填（服务端闸 quote_not_finalized）——请先到 <a href={routeHash({ kind: 'project', projectId, tab: 'commercial' })}>报价收款</a> 完成成交回填。</p> : null}
+      {finalizedQuotes.length === 0 && quotes.length > 0 ? <p className="field-hint">全部报价仍是草稿——数字核验（claims 逐项推进到 accepted）与成交回填都在 <a href={routeHash({ kind: 'project', projectId, tab: 'commercial' })}>报价收款</a> 完成。</p> : null}
+      <button type="button" className="primary-button compact" disabled={!canCreate} onClick={() => void createPackage()}>{busy ? '创建中…' : '创建交付包（草稿）'}</button>
+      <p className="field-hint">发布时方案与报价要素将冻结为快照（含哈希）；发布前报价必须已成交回填。</p>
+    </> : null}
+  </section>
 }

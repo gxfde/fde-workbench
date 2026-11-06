@@ -93,6 +93,11 @@
 #project-detail.project-secondary-page .solution-editor { overflow: visible; }
 .solution-view-section { padding-top: 22px; margin-top: 18px; border-top: 1px solid var(--line); }
 .solution-view-section > h3 { margin-top: 0; font-size: var(--font-card); }
+/* T-A6 建交付包入口：标题行样式对齐 solution-view-associated（span 副标题同款弱化） */
+.solution-package-launcher h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0 0 14px; font-size: var(--font-card); }
+.solution-package-launcher h3 > span { font-size: var(--font-caption); font-weight: 400; color: var(--muted); }
+.solution-package-launcher .field { max-width: 480px; }
+.solution-package-launcher .field-hint { margin: 8px 0 0; }
 .solution-delivery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
 .solution-delivery-card { min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-3); }
 .solution-delivery-card > h3 { margin: 0 0 10px; color: var(--muted); font-size: var(--font-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }

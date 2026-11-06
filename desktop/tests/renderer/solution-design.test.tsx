@@ -456,3 +456,128 @@ it('generates a solution skeleton from confirmed guidance and surfaces server 40
   await waitFor(() => expect(screen.getByTitle('零售连锁方案骨架')).toBeInTheDocument())
   expect(view).toBeDefined()
 })
+
+// ---- T-A6：报价核验 → 冻结 SOW 桌面闭环（建交付包入口） ----
+
+function quoteSummary(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'q1',
+    quote_key: 'Q-001',
+    status: 'finalized',
+    tier_label: 'B 试点',
+    claims_summary: { accepted: 9, total: 9 },
+    ...overrides,
+  }
+}
+
+function packageLauncherMock(rows: Record<string, unknown>[], handlers: Record<string, (path: string, options: { method: string; body?: Record<string, unknown> }) => unknown> = {}) {
+  const original = mocks.apiRequest.getMockImplementation()!
+  mocks.apiRequest.mockImplementation(async (path: string, options: { method: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/quotes') && options.method === 'GET') return { quotes: rows }
+    if (path === '/api/v1/dispatch/packages' && options.method === 'POST') {
+      const handler = handlers['create']
+      if (handler) return handler(path, options)
+      return { id: 'pkg-new', package_code: 'PKG-01', dispatch_status: 'draft' }
+    }
+    return original(path, options)
+  })
+}
+
+it('T-A6: offers finalized quotes for package creation and posts solution_id+quote_id to the dispatch API', async () => {
+  packageLauncherMock([
+    quoteSummary({ id: 'q-final', quote_key: 'Q-002', status: 'finalized', claims_summary: { accepted: 9, total: 9 } }),
+    quoteSummary({ id: 'q-draft', quote_key: 'Q-001', status: 'draft', claims_summary: { accepted: 3, total: 9 } }),
+  ])
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  const launcher = await screen.findByRole('region', { name: '建交付包：工程资料智能助手' })
+  const select = await within(launcher).findByRole('combobox', { name: '选择报价' })
+  const user = userEvent.setup()
+  // 默认选中第一笔 finalized 报价；草稿报价选项禁用（发布前必须成交回填）
+  expect(select).toHaveValue('q-final')
+  expect(within(launcher).getByRole('option', { name: /Q-001 · B 试点 · 草稿/ })).toBeDisabled()
+  expect(within(launcher).getByRole('option', { name: /Q-002 .*已成交回填.*claims 9\/9/ })).toBeEnabled()
+  await user.click(within(launcher).getByRole('button', { name: '创建交付包（草稿）' }))
+  await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith('/api/v1/dispatch/packages', { method: 'POST', body: { solution_id: 'solution1', quote_id: 'q-final' } }))
+  expect(await within(launcher).findByRole('status')).toHaveTextContent('交付包已创建（草稿）')
+  expect(within(launcher).getByRole('status')).toHaveTextContent('发布后报价与方案要素即冻结为快照')
+})
+
+it('T-A6: gates the launcher with a readable checklist when no quote is finalized yet', async () => {
+  packageLauncherMock([quoteSummary({ id: 'q-draft', quote_key: 'Q-001', status: 'draft', claims_summary: { accepted: 3, total: 9 } })])
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  const launcher = await screen.findByRole('region', { name: '建交付包：工程资料智能助手' })
+  // 无 finalized 报价 ⇒ 全部报价草稿提示 + 带报价收款页链接
+  expect(await within(launcher).findByText(/全部报价仍是草稿/)).toBeVisible()
+  expect(within(launcher).getByRole('link', { name: '报价收款' })).toHaveAttribute('href', '#projects/p?tab=commercial')
+  // 草稿报价在下拉里禁用（不可选）——前置闸而非等服务端 422；未选中报价 ⇒ 按钮禁用、无建包请求
+  expect(within(launcher).getByRole('option', { name: /Q-001 .*草稿/ })).toBeDisabled()
+  expect(within(launcher).getByRole('button', { name: '创建交付包（草稿）' })).toBeDisabled()
+  expect(mocks.apiRequest.mock.calls.some(([path]) => path === '/api/v1/dispatch/packages')).toBe(false)
+})
+
+it('T-A6: hides the package launcher for read-only users and on archived solutions', async () => {
+  // 只读用户：列表点查看进详情 ⇒ 无建交付包区块
+  render(<SolutionDesign projectId="p" canManage={false} />)
+  await userEvent.click(await screen.findByRole('button', { name: '查看' }))
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  expect(screen.queryByRole('region', { name: /建交付包/ })).not.toBeInTheDocument()
+
+  // 弃用方案：canManage 但 status=archived ⇒ 同样隐藏
+  records = [solution({ status: 'archived' })]
+  cleanup()
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  expect(screen.queryByRole('region', { name: /建交付包/ })).not.toBeInTheDocument()
+})
+
+it('T-A6: surfaces package_exists and verifier_role_required errors in Chinese', async () => {
+  packageLauncherMock([quoteSummary({ id: 'q-final' })], {
+    create: () => { throw new ApiClientError({ code: 'package_exists', message: '该方案已有交付包。' }) },
+  })
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  const launcher = await screen.findByRole('region', { name: '建交付包：工程资料智能助手' })
+  const user = userEvent.setup()
+  await user.click(await within(launcher).findByRole('button', { name: '创建交付包（草稿）' }))
+  expect(await within(launcher).findByRole('alert')).toHaveTextContent('该方案已有交付包（撤回/拒绝后重发走同一行）')
+
+  cleanup()
+  packageLauncherMock([quoteSummary({ id: 'q-final' })], {
+    create: () => { throw new ApiClientError({ code: 'verifier_role_required', message: '只有平台侧可建交付包。' }) },
+  })
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  const launcher2 = await screen.findByRole('region', { name: '建交付包：工程资料智能助手' })
+  await user.click(await within(launcher2).findByRole('button', { name: '创建交付包（草稿）' }))
+  expect(await within(launcher2).findByRole('alert')).toHaveTextContent('只有平台侧（管理员/项目负责人）可建交付包')
+})
+
+it('T-A6: quote card shows next-step guidance to the solution page after finalization', async () => {
+  mocks.apiRequest.mockImplementation(async (path: string) => {
+    if (String(path).endsWith('/quotes')) return { quotes: [quoteSummary({ id: 'q1', quote_key: 'Q-001', status: 'finalized', tier_label: 'B 试点', ledger: { final_amount: 80000, final_deviation_pct: 0.05, allowance_cap: 10000, allowance_paid: 0, ticket_deal: false, ticket_note: '' }, calibration: { actual_hours: 80, deviation_pct: 0.1, deviation_reason: '回校完成', calibrated_buffer_factor: 1.8 }, computed: { realistic_hours: 60, total_cost: 50000, formula_price: 70000, b_layer_factor: 1.05, b_reference_price: null, anchor_low: 70000, anchor_high: 90000, branch: 'A', quote_low: 70000, quote_high: 90000, c_handling: null, c_handling_label: null }, field_claims: {}, claims_summary: { accepted: 9, total: 9 }, inputs: { ideal_hours: 40, integration_factor: 1, data_factor: 1, compliance_factor: 1, buffer_factor: 2, hourly_rate: 150, cash_cost: 5000, b_layer_score: 3, anchor_mode: 'cold_start' }, preset: null })] }
+    if (String(path).endsWith('/payments')) return { payments: [], summary: { receivable: 0, received: 0, outstanding: 0, overdue: 0, dunning_counts: {} } }
+    if (String(path).endsWith('/contracts')) return { contracts: [] }
+    return {}
+  })
+  const { CommercialBoard } = await import('../../src/renderer/src/projects/CommercialBoard')
+  render(<CommercialBoard projectId="comm" canManage />)
+  const guide = await screen.findByText(/已成交回填。下一步：到/)
+  expect(guide).toBeVisible()
+  expect(screen.getByRole('link', { name: '方案设计' })).toHaveAttribute('href', '#projects/comm?tab=delivery')
+  // 草稿报价不出现引导
+  cleanup()
+  const impl = mocks.apiRequest.getMockImplementation()!
+  mocks.apiRequest.mockImplementation(async (path: string) => {
+    if (String(path).endsWith('/quotes')) {
+      const payload = await impl(String(path)) as { quotes: Array<Record<string, unknown>> }
+      return { quotes: payload.quotes.map(row => ({ ...row, status: 'draft' })) }
+    }
+    return impl(String(path))
+  })
+  render(<CommercialBoard projectId="comm" canManage />)
+  await screen.findByText('暂无收款计划。B 试点按 50/50 生成两行（G4 预付 / G8 尾款）。')
+  expect(screen.queryByText(/已成交回填。下一步：到/)).not.toBeInTheDocument()
+})

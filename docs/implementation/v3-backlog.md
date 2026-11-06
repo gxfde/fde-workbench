@@ -552,6 +552,20 @@
 - 验收：售前独立完成「报价核验 → 冻结 SOW」全链；未核验时导出被服务端闸拦住。
 - 回滚：revert 单 commit。风险：低。依赖：T-A5。复杂度：**S**。
 
+#### ✅ T-A6 实施轮（2026-11-07，状态：**已实施，待合并**——PR 待开，CI 待守，服务端零改动）
+
+- **实施轮勘误（与登记原文三处出入，实测 `fork/main@39e6ed0` 后回写）**：
+  1. **「未核验时导出被服务端闸拦住」不成立**——`export_sow`（`solutions/service.py:676`）服务端只有两道闸：AI 协同终审拍板（`solution_signoff_required`）与 design 必填（`solution_design_required`），**不查报价**（有意设计：SOW 是给客户的谈判材料，导出时报价常还在谈）。真正的报价闸在**交付包链路**：建包要求 `solution_id+quote_id`（`dispatch/routes.py:99`），发布要求 quote finalized（`dispatch/packages.py:267`，422 `quote_not_finalized`）+ 首单成交回填前必回校（`quote_service.py` `calibration_required`）。
+  2. **「补齐状态推进与门禁提示」已是既有能力**——QuoteCard 既有 claims 逐字段推进（estimated→claimed→measured→accepted）、回校缓冲、成交回填、数字全核验徽标；本条**不是**补这个。
+  3. **真正的缺口：建交付包桌面零入口**——`POST /api/v1/dispatch/packages` 全桌面零调用（只有 GET/publish/withdraw/offers 等），售前从「报价核验通过」到「交付包创建/发布（冻结快照）」的链在这里断。「冻结」语义 = publish 时快照哈希（`packages.py:66` `_snapshot_payload` §2.3 逐字段清单一次冻结）。
+- **实施轮实际改动（桌面两处，服务端零改动零新 API）**：
+  1. `desktop/src/renderer/src/solutions/SolutionDetailPage.tsx`——新增 `DeliveryPackageLauncher` 区块（方案详情页「建交付包」）：拉项目报价列表（`GET .../quotes`），默认选中 finalized 报价；草稿报价选项禁用；无 finalized 报价时给出可读清单（含跳「报价收款」页链接）并禁用创建按钮——**前置同口径闸提示**，不等服务端 422；提交走既有 `POST /api/v1/dispatch/packages`；错误映射 `package_exists`（已有包引导去调度台）/ `verifier_role_required`（权限说明）。挂载条件 `canManage && status !== 'archived'`。
+  2. `desktop/src/renderer/src/projects/CommercialBoard.tsx`——QuoteCard finalized 后显示「下一步」引导行（跳方案设计页建交付包，说明发布时冻结快照与既有闸），链接 `#projects/{id}?tab=delivery`。
+  3. 样式：`solutions.css` `.solution-package-launcher` 标题行对齐 `.solution-view-associated`；`styles.css` `.quote-next-step`。
+  - **辅助入口不阻断主内容**：报价列表拉取失败静默降级（与 `SolutionHealthChip` 同纪律）；既有 42 例 solution-design 用例零回归。
+- **测试**：`desktop/tests/renderer/solution-design.test.tsx` 新增 **5 例**——finalized 报价默认选中 + 草稿选项禁用 + `POST /dispatch/packages` 带 `solution_id+quote_id`、无 finalized 时可读清单 + 按钮禁用 + 零建包请求、只读用户与弃用方案隐藏区块、`package_exists`/`verifier_role_required` 中文呈现、报价卡 finalized 引导行（草稿报价不出现）。定向回归 **47 passed**（42 既有 + 5 新）；typecheck 全绿。
+- **验收对照**：售前独立完成「报价核验 → 冻结 SOW」全链 = claims 推进（既有）→ 成交回填（既有）→ 方案详情建交付包（本轮新增入口）→ 调度台发布冻结快照（既有）；未核验时**建包入口前置拦截**（服务端 publish 闸 `quote_not_finalized` 兜底，口径同源）。
+
 ### T-A7 客户谈判版本管理（方案版本快照不可变，谈判稿与最终 SOW 分离） — **PROPOSED（登记轮，零代码）**
 - 目标：谈判过程中的多版方案可追溯，**最终 SOW 只认冻结版本**，谈判稿不进 SOW。
 - 现状实测：solution 版本冻结与 `export_sow` 强制传 version **已具备**（`solutions/service.py`）；缺的是**谈判稿与正式方案的分离位**与桌面呈现。
@@ -721,7 +735,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
