@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 import time
 from datetime import UTC, datetime
+from typing import Any
 
 from flask import current_app
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from fde_api.agents.quota import record_action as record_seat_action
 from fde_api.ai.kimi import KimiError, KimiFileClient
@@ -12,9 +15,12 @@ from fde_api.extensions import db, object_storage
 from fde_api.files.models import ProjectFileVersion
 from fde_api.guidance.ai_prompt import build_kimi_presurvey_analysis_messages
 from fde_api.guidance.ai_schema import GuidanceContractError, LIST_FIELDS, validate_guidance_output
+from fde_api.guidance.enterprise_dict import RedactionConfigError, enterprise_names
 from fde_api.guidance.models import ProjectGuidanceAnalysis
+from fde_api.guidance.redaction import redact_text_detailed
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
 from fde_api.storage.base import StorageNotFoundError
+from fde_api.workbench.models import OperationEvent, Project
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,54 @@ UNEXPECTED_FAILURE_CODE = "analysis_unexpected_error"
 
 # worker 进程死亡（OOM/部署）导致的中断：分析没跑完，也没人能再跑。
 WORKER_LOST_CODE = "analysis_worker_lost"
+
+# T-A2 代号化闸①第①层：词典机制性故障（种子缺失/格式坏）不可重试也不可放行——
+# 放行等于把「企业名可能漏替换」的文件直接送进模型与库，违反代号化红线。
+# 文案指引售前联系管理员补词典，而不是「请重试」。
+DICT_FAILURE_CODE = "pseudonym_dict_unavailable"
+DICT_FAILURE_MESSAGE = "企业名词典不可用，为守住「客户名不入库」红线已阻断本次分析，请联系管理员修复词典配置。"
+
+# T-A2 复核事件类型：疑似企业名清单落 operation_events（B#9 事实链三源之一），
+# 方案审核人 confirm 前可从执行事实页看到本次分析替换/疑似了哪些名字。
+REDACTION_EVENT_TYPE = "guidance.redaction_review"
+
+
+def _project_code(session: Session, project_id: str) -> str:
+    """enterprise_code（三段式「客户A·行业·城市」）作为替换目标代号；取不到回退空。"""
+    return session.scalar(select(Project.enterprise_code).where(Project.id == project_id)) or ""
+
+
+def _redact_content(content: str, *, project_code: str) -> tuple[str, list[dict[str, Any]]]:
+    """进模型前的企业名替换：词典命中→代号；疑似（正则命中未收录）→同样替换并复核。
+
+    返回（替换后全文, 复核条目列表）。复核条目只含名字与出现次数——不含上下文
+    原句（上下文可能携带手机号等已脱敏内容，没必要二次复制）。
+    """
+    result = redact_text_detailed(content, project_code=project_code)
+    entries = [
+        {"name": suspect.name, "occurrences": suspect.occurrences, "matched_dict": False}
+        for suspect in result.suspects
+    ]
+    for name in result.replaced:
+        entries.append({"name": name, "occurrences": 1, "matched_dict": True})
+    return result.text, entries
+
+
+def _write_redaction_event(
+    session: Session, analysis: ProjectGuidanceAnalysis, entries: list[dict[str, Any]], actor_id: str
+) -> None:
+    if not entries:
+        return
+    session.add(
+        OperationEvent(
+            actor_user_id=actor_id,
+            project_id=analysis.project_id,
+            target_type="project_guidance_analysis",
+            target_id=analysis.id,
+            event_type=REDACTION_EVENT_TYPE,
+            changes={"entries": entries},
+        )
+    )
 
 
 def handle_presurvey_analysis(job) -> None:
@@ -65,6 +119,8 @@ def handle_presurvey_analysis(job) -> None:
             openai_compatible=settings.kimi_openai_compatible,
         )
         source_ref = f"kimi-file:{analysis.source_file_version_id}"
+        project_code = _project_code(session, analysis.project_id)
+        redaction_entries: list[dict[str, Any]] = []
         attempts = 0
         while True:
             attempts += 1
@@ -77,13 +133,22 @@ def handle_presurvey_analysis(job) -> None:
                         # 每次尝试一个独立请求号：上游若按请求号去重，
                         # 复用同一个 id 会让第二次拿回第一次的坏结果。
                         request_id=f"{job.id}:{attempts}",
-                        build_messages=lambda content: build_kimi_presurvey_analysis_messages(content, source_ref),
+                        # T-A2：全文进模型前先过企业名替换（词典命中→代号；
+                        # 疑似→同样替换）。docx 全文在本地抽取腿里不落任何存储，
+                        # 这里是它接触外界的唯一出口，必须在此完成代号化。
+                        build_messages=lambda content: build_kimi_presurvey_analysis_messages(
+                            _redact_and_build(content, project_code=project_code, sink=redaction_entries),
+                            source_ref,
+                        ),
                     )
                 draft = validate_guidance_output(payload, source_refs={source_ref})
                 break
             except KimiError as error:
                 # 只有可重试错误（限流/超时/偶发畸形输出）才消耗重试额度；
                 # ai_service_not_configured 这类配置问题重试也不会好。
+                # 重试会重新走 build_messages → sink 已累积上一轮条目，先清空
+                # 防复核清单重复计数（输入替换每轮都是全量重做）。
+                redaction_entries.clear()
                 if not error.retryable or attempts > GUIDANCE_ANALYSIS_RETRY_LIMIT:
                     _safe_fail(
                         session, job.target_id, error.code,
@@ -93,6 +158,10 @@ def handle_presurvey_analysis(job) -> None:
                     )
                     return
                 _backoff_before_retry(error)
+            except RedactionConfigError:
+                # T-A2 闸①第①层：词典机制性故障 → fail-closed 硬阻断（不重试）。
+                _safe_fail(session, job.target_id, DICT_FAILURE_CODE, DICT_FAILURE_MESSAGE)
+                return
             except StorageNotFoundError:
                 # 存储对象已被删除：确定性故障，重试无用，但必须单独分类。
                 _safe_fail(
@@ -112,6 +181,11 @@ def handle_presurvey_analysis(job) -> None:
                     )
                     return
                 # 契约失败是概率性问题，立即重试（退避只会白白拉长等待）。
+        # T-A2 兜底层：模型输出可能回显企业名（输入替换拦不住输出端）。
+        # 只对文本与 JSON 字段值做替换；evidence 结构不动（source_ref 校验
+        # 已由 validate_guidance_output 保证）。
+        project_code = project_code or _project_code(session, analysis.project_id)
+        draft = _redact_draft_payload(draft, project_code=project_code, sink=redaction_entries)
         analysis.customer_vision = draft["customer_vision"]
         analysis.current_phase_objective = draft["current_phase_objective"]
         analysis.executive_summary = draft["executive_summary"]
@@ -124,6 +198,8 @@ def handle_presurvey_analysis(job) -> None:
         analysis.failure_code = ""
         analysis.failure_message = ""
         analysis.version += 1
+        # T-A2 复核清单落 operation_events（B#9 事实链可查）；actor=分析创建人
+        _write_redaction_event(session, analysis, redaction_entries, analysis.created_by_user_id)
         # O-3（goal-d7）：一次预调研分析 = 一次 ai_chat 动作，成功就绪时计
         # （失败/重试不计）；seat 归集 = 分析创建人；超额只标注不拦截
         record_seat_action(
@@ -144,6 +220,56 @@ def handle_presurvey_analysis(job) -> None:
         )
     finally:
         session.close()
+
+
+def _redact_and_build(content: str, *, project_code: str, sink: list[dict[str, Any]]) -> str:
+    """build_messages 适配：替换全文并把复核条目累积进 sink。"""
+    redacted, entries = _redact_content(content, project_code=project_code)
+    sink.extend(entries)
+    return redacted
+
+
+def _redact_draft_payload(
+    draft: dict[str, Any], *, project_code: str, sink: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """落库前对模型输出做企业名兜底替换。
+
+    - 文本字段（customer_vision / current_phase_objective / executive_summary）
+      直接替换；
+    - LIST_FIELDS 各项为 list[dict]，对其中每个 str 值递归替换；
+    - evidence_json 只处理其 value 里的 str 值（键是内部 ref 结构不碰）。
+    替换命中继续累积进 sink（matched_dict 按「词典兜底命中」计）。
+    """
+    names = enterprise_names()
+    if not names:
+        return draft
+
+    def replace_str(value: str) -> str:
+        hits: list[str] = []
+        text = value
+        for name in names:
+            if name in text:
+                text = text.replace(name, project_code or "客户代号")
+                hits.append(name)
+        if hits:
+            sink.extend({"name": h, "occurrences": 1, "matched_dict": True} for h in hits)
+        return text
+
+    out = dict(draft)
+    for key in ("customer_vision", "current_phase_objective", "executive_summary"):
+        out[key] = replace_str(out.get(key, "") or "")
+    for field in LIST_FIELDS:
+        items = out.get(field)
+        if isinstance(items, list):
+            out[field] = [
+                {k: replace_str(v) if isinstance(v, str) else v for k, v in item.items()}
+                if isinstance(item, dict) else item
+                for item in items
+            ]
+    evidence = out.get("evidence")
+    if isinstance(evidence, dict):
+        out["evidence"] = {k: replace_str(v) if isinstance(v, str) else v for k, v in evidence.items()}
+    return out
 
 
 def _exhausted_message(public_message: str, attempts: int, *, retryable: bool = True) -> str:

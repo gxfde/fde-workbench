@@ -102,7 +102,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      FDE_LEADS_MD: ${{ github.workspace }}/.github/ci-assets/synthetic-leads-blacklist.txt
+      # T-A2（闸②拍板：仓库内种子文件为单一真源）——黑名单直接指向
+      # server/seeds/enterprise-names.txt，与入库替换词典同源；哨兵测试
+      # （test_enterprise_dict_parity）钉死两边读的是同一个文件。
+      FDE_LEADS_MD: ${{ github.workspace }}/server/seeds/enterprise-names.txt
     steps:
       - uses: actions/checkout@v4
 

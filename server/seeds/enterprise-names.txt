@@ -1,0 +1,21 @@
+# T-A2 企业名词典（闸②已拍板：仓库内种子文件——CI 扫库与入库替换读同一个文件）
+#
+# 用途：
+#   1. presurvey 内容入模型/落库前的企业名→代号自动替换（guidance/redaction.py）
+#   2. check-pseudonymization.sh 的企业名黑名单（FDE_LEADS_MD 指向本文件或本文件
+#      + 现场补充词典拼接后的文件）
+#
+# 格式：每行一条企业名（与 CI 黑名单 fixture 同格式——「公司/集团/厂」结尾的中
+# 文名）。# 开头为注释，空行忽略。解析时做「公司/集团/厂」结尾校验，不合规行
+# 在加载时抛 RedactionConfigError（fail-closed）。
+#
+# 红线：真实企业名永不进 git 历史与远端（AGENTS.md）——本文件只允许放合成示例。
+# 现场真实词典用 FDE_ENTERPRISE_DICT 环境变量指向本地文件（如 D:\test\FDE\leads.md
+# 的提取物），运行时与本文件合并；补充文件里出现非「公司/集团/厂」结尾的行同样
+# fail-closed。
+#
+# —— 以下为合成示例（与 .github/ci-assets/synthetic-leads-blacklist.txt 保持同源，
+#    改动须两处同步并通过哨兵自测）——
+黑名单示例控股公司
+合成测试集团
+虚拟演武厂

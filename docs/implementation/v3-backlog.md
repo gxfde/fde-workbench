@@ -420,6 +420,20 @@
 - 回滚：开关关闭即回退（原文不落库，回滚无数据面残留）。风险：中（正则误替换，靠②钉死）。依赖：无。复杂度：**M**。
 - 闸：✅ **已拍板（2026-11-06，§拍板闸 6①）：分层失败语义**——替换器**异常**（词典加载失败/正则编译失败等机制性故障）→ **fail-closed 硬阻断入库**；**疑似企业名但词典未收录**（正则命中「技术公司」类通用词）→ **放行但记入待复核清单**，方案审核人 confirm 前必须复核。
 
+#### ✅ T-A2 实施轮（2026-11-06，状态：已实施，待 CI 与 PR 收尾）
+
+**实施澄清（与拍板原文的口径差异，须记入台账）**：闸①原文「疑似名**放行**但记入待复核清单」——若「放行」= 原文不改直接入库，则真实名仍进库，「客户真实资料永不进 git 与远端」红线在文件正文面失守。**实施口径取「放行 = 不阻断入库流程，原文不留库」**：疑似名**同样被替换为代号**（替换目标 = `projects.enterprise_code` 首段，如「客户A」），替换后记入复核清单交方案审核人 confirm 前复核。**通用词例外**（「技术公司」「制造公司」等无辨识度表述）→ 零改动、不进清单（哨兵②）。
+
+**落地实现**：
+- 新增 `server/src/fde_api/guidance/enterprise_dict.py`：词典加载器（种子文件 + `FDE_ENTERPRISE_DICT` 环境变量补充）、格式校验（fail-closed）、通用词判定（后缀通用词长度占比 ≥ 1/2）、候选前缀剥离（中文无词边界，正则会把句子前缀吞进候选）。
+- 新增 `server/seeds/enterprise-names.txt`：仓库内种子词典（**只放合成示例**，真实企业名永不进 git）；CI `FDE_LEADS_MD` 已改指此文件（`ci.yml` pseudonymization job）。
+- `guidance/redaction.py` 扩展：`redact_text_detailed`（返回 text + suspects + replaced）、`redact_presurvey`（聚合 suspects/replaced）；既有 `redact_text(value) -> str` 签名与语义保持不变（下游 `ai/project_draft.py` 零改动即受益）。
+- **三道防线接入**（`guidance/jobs.py` worker 链）：① **进模型前**——`build_messages` 前替换全文（本地抽取腿不落存储，此处是全文接触外界的唯一出口）；② **落库前**——模型输出回显的企业名兜底替换（文本字段 + LIST_FIELDS 各项 + evidence 值）；③ **复核清单**——替换/疑似条目落 `operation_events`（`event_type=guidance.redaction_review`，B#9 事实链可查）。
+- **fail-closed 落点**：词典机制性故障 → `RedactionConfigError` → worker 落 `failure_code=pseudonym_dict_unavailable`（**不重试**，分析落 failed 不卡 analyzing）；`ai/project_draft.py` 同路径补 catch → 503。
+- **测试**：`server/tests/test_guidance_enterprise_redaction.py`（13 例：哨兵①②③④ + 分层失败语义 + 通用词 + 前缀剥离 + 词典一致性断言「CI fixture ⊆ 替换器词典」）；`server/tests/test_guidance_redaction_worker.py`（2 例：三道防线端到端 + fail-closed 不重试）。**测试数据全为合成**。
+
+**本轮未做（须后续登记，不得默认扩范围）**：`agents/context.py` 的 `redact_patterns`（执行面上下文脱敏，走盘符/令牌/禁区词口径与 fail-closed `forbidden_terms` 断言）**未接企业名替换**——两条线口径不同，混做会破坏执行面既有断言；接入前须另立条目。
+
 ### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **PROPOSED（登记轮，零代码）**
 - 目标：补齐「调研 → 方案」链路的桌面断点——三态流转目前**桌面零引用**（服务端状态机与端点已完整）。
 - 现状实测：`server/src/fde_api/research/project_routes.py` 三条端点（confirm/reject/revise）齐备；桌面端 `desktop/src/renderer/src/research/` 对其**零引用**（台账 `docs/后续需求台账-F5与D11.md:29` 已记同一缺口）。
@@ -623,7 +637,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化) ── T-A3(三态UI) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI) ── T-A4(三层可视化) ── T-A5(方案骨架) ── T-A6(claims→SOW) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）

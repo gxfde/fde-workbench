@@ -11,6 +11,7 @@ from sqlalchemy import select
 from fde_api.ai.kimi import KimiError, KimiFileClient
 from fde_api.config import Settings
 from fde_api.extensions import db
+from fde_api.guidance.enterprise_dict import RedactionConfigError
 from fde_api.guidance.redaction import SensitiveCredentialDetected, redact_text
 from fde_api.workbench.models import ModuleCatalog
 
@@ -57,6 +58,10 @@ def draft_from_presurvey(*, stream: BinaryIO, filename: str) -> dict[str, Any]:
     except SensitiveCredentialDetected as error:
         # E4：预调研文件里出现疑似密码/密钥/令牌 → 明确拒绝，不把原文送出去。
         raise ProjectDraftError("sensitive_content_detected", str(error), 400) from None
+    except RedactionConfigError as error:
+        # T-A2 闸①第①层：企业名词典机制性故障 → fail-closed 硬阻断（503）。
+        # 放行等于把「企业名可能漏替换」的全文直接送进模型，违反代号化红线。
+        raise ProjectDraftError("pseudonym_dict_unavailable", str(error), 503) from None
     return _normalize(result, allowed)
 
 
