@@ -61,3 +61,12 @@ release-tmp/
 # GUI 回归截图（含本机路径与项目代号，只留本地证据）
 desktop/gui-harness/screenshots/
 desktop/gui-harness/shots/
+# 品牌/官网/桌面的本地产物与备份，永不入库（2026-11-06 补）
+# AI 生成素材与画板（miora 画布及生成图，只留本地或资料库）
+caigong-fde-logo-concepts.miora
+caigong-fde-logo-concepts_assets/
+# 品牌化前的文档模板备份
+resources/document-templates/_backup-pre-brand/
+# 桌面端构建产物（verify 快照）与替换下的旧图标
+desktop/src/renderer/out/
+desktop/build/icon-old-*
