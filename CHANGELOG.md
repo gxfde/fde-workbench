@@ -32,6 +32,22 @@
 - **数据源与降级**：选项来自既有只读路由 `GET /api/v1/projects/{id}/ontology/relation-types`（客户端过滤 active 行，draft/retired 不出现）；注册面拉取失败静默降级为仅内置五类——值域权威始终在服务端创建闸门。
 - **边界（偏差注记）**：调研定义编辑器与行业模板编辑器本轮未接——全局注册类型没有项目内只读路由可消费，随服务端路由补口后再接。
 - 测试：vitest +4（根级创建流不带上级／非 active 行过滤／导入与构建器选项／树按钮两态）。
+## [未发布] — T-A6 报价核验→冻结 SOW 桌面闭环：方案详情页建交付包入口（2026-11-07）
+
+### 桌面（纯桌面零服务端改动零迁移零路由；详见 backlog T-A6 实施轮节）
+
+- NEW `SolutionDetailPage.tsx::DeliveryPackageLauncher`：方案详情页（`canManage` 且非弃用）新增「建交付包」区块——拉项目报价列表（`GET .../quotes`），**默认选中 finalized 报价**；草稿报价选项禁用；无 finalized 报价时给出可读清单（含跳「报价收款」页链接）并禁用创建按钮——**前置同口径闸提示**（发布闸 `quote_not_finalized` 在服务端兜底，桌面提前一步呈现同一要求）；提交走既有 `POST /api/v1/dispatch/packages`（`solution_id+quote_id`）；错误映射 `package_exists`（已有包→引导去调度台）/`verifier_role_required`（权限说明）中文呈现。
+- `CommercialBoard.tsx` QuoteCard：finalized 后显示「下一步」引导行（跳方案设计建包；说明发布即冻结快照与既有闸）。样式 `.solution-package-launcher` / `.quote-next-step`。
+- **辅助入口不阻断主内容**：报价列表拉取失败静默降级（`SolutionHealthChip` 同纪律）；既有 42 例 solution-design 用例零回归。
+
+### 口径勘误（与登记原文三处出入，已回写 backlog）
+
+登记原文「未核验时导出被服务端闸拦住」不成立——`export_sow` 服务端不查报价（只有 AI 协同终审拍板 + design 必填两道闸；SOW 是谈判材料），真正的报价闸在**交付包链路**（建包 `solution_id+quote_id`、发布 422 `quote_not_finalized`、首单回校 `calibration_required`）；登记原文「补齐状态推进与门禁提示」已是既有能力（QuoteCard 既有 claims 推进/回校/成交回填）；真缺口是 `POST /api/v1/dispatch/packages` 全桌面零调用——「核验通过→交付包发布（冻结快照 §2.3 哈希）」链在桌面断在这里，本轮补上。
+
+### 口径
+
+#175 PR-head CI run 42308398276 实测 vitest **870 passed**（70 文件，862→870：T-A6 轮 +5、T-A2 补齐轮 +3 既有增量）／桌面 typecheck 绿／服务端 pytest 与 mypy 零改动不变（纯桌面轮，server-tests job 同跑回归绿）／路由 304 不变（零新增路由）／零迁移零新表零新字段。
+
 ## [未发布] — T-A5 方案骨架模板：三选项 + 取舍 + 明确不做 + 验收标准（2026-11-06）
 
 ### 服务端（纯服务端模板文案，零迁移零路由零新字段；详见 backlog T-A5 实施轮节）

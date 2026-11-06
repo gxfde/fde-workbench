@@ -552,7 +552,7 @@
 - 验收：售前独立完成「报价核验 → 冻结 SOW」全链；未核验时导出被服务端闸拦住。
 - 回滚：revert 单 commit。风险：低。依赖：T-A5。复杂度：**S**。
 
-#### ✅ T-A6 实施轮（2026-11-07，状态：**已实施，待合并**——PR 待开，CI 待守，服务端零改动）
+#### ✅ T-A6 实施轮（2026-11-07，状态：**已实施并合并**——PR #175 → `0a7806b`，CI run 42308398276 4 job 全绿，vitest 870；服务端零改动）
 
 - **实施轮勘误（与登记原文三处出入，实测 `fork/main@39e6ed0` 后回写）**：
   1. **「未核验时导出被服务端闸拦住」不成立**——`export_sow`（`solutions/service.py:676`）服务端只有两道闸：AI 协同终审拍板（`solution_signoff_required`）与 design 必填（`solution_design_required`），**不查报价**（有意设计：SOW 是给客户的谈判材料，导出时报价常还在谈）。真正的报价闸在**交付包链路**：建包要求 `solution_id+quote_id`（`dispatch/routes.py:99`），发布要求 quote finalized（`dispatch/packages.py:267`，422 `quote_not_finalized`）+ 首单成交回填前必回校（`quote_service.py` `calibration_required`）。
@@ -735,7 +735,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
