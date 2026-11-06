@@ -83,6 +83,7 @@ RECOVERABLE_JOB_TYPES = frozenset({
     "ai.execute",
     "file.scan",
     "file.preview",
+    "file.upload.cleanup",
     "document.generate",
     "research.export",
     "translator.translate",

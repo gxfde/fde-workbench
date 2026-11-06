@@ -48,6 +48,7 @@ def ensure_default_handlers() -> None:
     from fde_api.documents.generator import register_document_generation_handler
     from fde_api.files.previews import register_file_preview_handler
     from fde_api.files.processors import register_file_scan_handler
+    from fde_api.files.expiration import register_upload_expiration_handlers
     from fde_api.guidance.jobs import register_presurvey_analysis_handler
     from fde_api.research.export_jobs import register_research_export_handler
     from fde_api.ai.executions import register_ai_execution_handler
@@ -58,6 +59,8 @@ def ensure_default_handlers() -> None:
         register_file_scan_handler()
     if get_handler("file.preview") is None:
         register_file_preview_handler()
+    if get_handler("file.upload.cleanup") is None:
+        register_upload_expiration_handlers()
     if get_handler("document.generate") is None:
         register_document_generation_handler()
     if get_handler("project.presurvey.analyze") is None:

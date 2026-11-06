@@ -60,6 +60,12 @@ pytest **1994 收集 = 1988 passed + 6 skipped**（+8）／vitest **828**（不�
 ### 口径
 
 - 零代码零迁移——pytest 1981 收集（1975 passed + 6 skipped）/ mypy 279 / vitest 791 / 105 表 / `b2e8f4a6c9d3`（36 rev）/ 路由 300 / ENTRIES 94 全部不变。
+## [未发布] — V3 B#13-B UploadSession 主动到期与 multipart 清理（2026-11-06）
+
+- 过期上传会话在 `expires_at <= now` 时由服务端行锁收敛为 `expired`；迟到分片签名/完成返回 `upload_session_expired`，不触碰对象存储、不创建文件版本；分片签名 TTL 不超过会话剩余时间。
+- 新增 `file.upload.cleanup` outbox/worker 清理链：scheduler `skip_locked` claim，worker 在数据库事务外执行 multipart abort，再独立事务落 cleanup 账本；`multipart_upload_not_found` 视为幂等成功，其他错误保留稳定错误码并沿 recoverable job 退避。
+- 复用既有 `UploadSession.expired/expires_at`，零迁移、零新路由、无人工外呼；B#13-C API confirmation 与 B#13-D 跨域只读投影仍 PROPOSED。
+- 测试：新增 B#13-B 专项 8 例，连同上传/worker/reconcile 邻域共 65 passed；PR-head CI 最终全量 1996 passed + 6 skipped（2002 收集）；mypy 279/104、ruff 全绿。
 
 ## [未发布] — V3 门禁判据实施落点设计（借鉴 B#11 消费）（2026-11-06）
 

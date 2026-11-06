@@ -115,34 +115,63 @@ def sign_upload_part(
 ) -> dict[str, Any]:
     """Return a signed PUT URL for one part of an active upload session."""
     session = db.session()
+    expired = False
+    result: dict[str, Any] | None = None
     try:
         with session.begin():
             project = _get_project_for_upload(session, actor, project_id)
             upload_session = _load_upload_session(
-                session, project.id, session_id
+                session, project.id, session_id, for_update=True
             )
-            if upload_session.status != "uploading":
-                raise FileServiceError(
-                    "invalid_upload_state",
-                    "The upload session is not accepting parts.",
-                    409,
+            now = datetime.now(UTC)
+            expired = _expire_upload_if_due(session, upload_session, now=now)
+            if not expired:
+                if upload_session.status == "expired":
+                    raise FileServiceError(
+                        "upload_session_expired",
+                        "The upload session has expired.",
+                        409,
+                    )
+                if upload_session.status != "uploading":
+                    raise FileServiceError(
+                        "invalid_upload_state",
+                        "The upload session is not accepting parts.",
+                        409,
+                    )
+                remaining_seconds = int(
+                    (upload_session.expires_at - now).total_seconds()
                 )
-            url = object_storage.current.sign_part(
-                upload_session.storage_prefix,
-                upload_session.multipart_upload_id,
-                part_number,
-            )
-            return {
-                "url": url,
-                "part_number": part_number,
-                "expires_seconds": PART_URL_EXPIRES_SECONDS,
-            }
+                if remaining_seconds <= 0:
+                    expired = _expire_upload_if_due(
+                        session, upload_session, now=upload_session.expires_at
+                    )
+                else:
+                    expires_seconds = min(PART_URL_EXPIRES_SECONDS, remaining_seconds)
+                    url = object_storage.current.sign_part(
+                        upload_session.storage_prefix,
+                        upload_session.multipart_upload_id,
+                        part_number,
+                        expires_seconds=expires_seconds,
+                    )
+                    result = {
+                        "url": url,
+                        "part_number": part_number,
+                        "expires_seconds": expires_seconds,
+                    }
     except FileServiceError:
         raise
     except StorageError as error:
         raise FileServiceError(error.code, "Object storage error.", 400) from None
     finally:
         session.close()
+    if expired:
+        raise FileServiceError(
+            "upload_session_expired",
+            "The upload session has expired.",
+            409,
+        )
+    assert result is not None
+    return result
 
 
 def complete_upload(
@@ -154,105 +183,107 @@ def complete_upload(
     originally created version without touching storage again.
     """
     session = db.session()
+    expired = False
     try:
         with session.begin():
             project = _get_project_for_upload(session, actor, project_id)
             upload_session = _load_upload_session(
-                session, project.id, session_id
+                session, project.id, session_id, for_update=True
             )
-            category = upload_session.completion_json.get("category", "attachment")
-            business_category = upload_session.completion_json.get("business_category")
+            expired = _expire_upload_if_due(
+                session, upload_session, now=datetime.now(UTC)
+            )
+            if not expired:
+                category = upload_session.completion_json.get("category", "attachment")
+                business_category = upload_session.completion_json.get("business_category")
+                replay = _completed_replay(upload_session)
+                if replay is not None:
+                    return replay
+                if upload_session.status == "expired":
+                    raise FileServiceError(
+                        "upload_session_expired",
+                        "The upload session has expired.",
+                        409,
+                    )
+                if upload_session.status != "uploading":
+                    raise FileServiceError(
+                        "invalid_upload_state",
+                        "The upload session is not accepting completion.",
+                        409,
+                    )
 
-            replay = _completed_replay(upload_session)
-            if replay is not None:
-                return replay
-
-            if upload_session.status != "uploading":
-                raise FileServiceError(
-                    "invalid_upload_state",
-                    "The upload session is not accepting completion.",
-                    409,
+                normalized_parts = _normalize_part_input(parts)
+                stored = object_storage.current.complete_multipart(
+                    upload_session.storage_prefix,
+                    upload_session.multipart_upload_id,
+                    normalized_parts,
                 )
-
-            normalized_parts = _normalize_part_input(parts)
-            stored = object_storage.current.complete_multipart(
-                upload_session.storage_prefix,
-                upload_session.multipart_upload_id,
-                normalized_parts,
-            )
-
-            project_file = _resolve_or_create_file(
-                session, upload_session, project.id, category, business_category, actor
-            )
-            version_number = _next_version_number(session, project_file.id)
-            safe = safe_filename(upload_session.name)
-            version = ProjectFileVersion(
-                file_id=project_file.id,
-                version_number=version_number,
-                source="upload",
-                original_filename=upload_session.name,
-                safe_filename=safe,
-                extension=extension_of(upload_session.name),
-                mime_type=upload_session.expected_mime_type,
-                bucket=upload_session.bucket,
-                storage_key=upload_session.storage_prefix,
-                size_bytes=stored.size or upload_session.expected_size_bytes,
-                etag=stored.etag,
-                scan_status="not_required",
-                preview_status="none",
-                uploaded_by_user_id=actor.id,
-                status="available",
-            )
-            session.add(version)
-            session.flush()
-            if (
-                project_file.display_name == "预调研表"
-                and project_file.business_category == "预调研"
-            ):
-                _deprecate_previous_presurvey_versions(
-                    session,
-                    project_file=project_file,
-                    keep_version_id=version.id,
-                    actor=actor,
+                project_file = _resolve_or_create_file(
+                    session, upload_session, project.id, category, business_category, actor
                 )
-            project_file.current_version_id = version.id
-            session.flush()
-
-            upload_session.status = "completed"
-            upload_session.completion_json = {
-                "version_id": version.id,
-                "file_id": project_file.id,
-                "category": category,
-                "business_category": business_category,
-                "status": "available",
-                "scan_status": version.scan_status,
-            }
-            record_event(
-                session,
-                actor,
-                "project_file_uploaded",
-                project_file,
-                {
-                    "file_id": project_file.id,
+                version_number = _next_version_number(session, project_file.id)
+                version = ProjectFileVersion(
+                    file_id=project_file.id,
+                    version_number=version_number,
+                    source="upload",
+                    original_filename=upload_session.name,
+                    safe_filename=safe_filename(upload_session.name),
+                    extension=extension_of(upload_session.name),
+                    mime_type=upload_session.expected_mime_type,
+                    bucket=upload_session.bucket,
+                    storage_key=upload_session.storage_prefix,
+                    size_bytes=stored.size or upload_session.expected_size_bytes,
+                    etag=stored.etag,
+                    scan_status="not_required",
+                    preview_status="none",
+                    uploaded_by_user_id=actor.id,
+                    status="available",
+                )
+                session.add(version)
+                session.flush()
+                if (
+                    project_file.display_name == "预调研表"
+                    and project_file.business_category == "预调研"
+                ):
+                    _deprecate_previous_presurvey_versions(
+                        session,
+                        project_file=project_file,
+                        keep_version_id=version.id,
+                        actor=actor,
+                    )
+                project_file.current_version_id = version.id
+                upload_session.status = "completed"
+                upload_session.completion_json = {
                     "version_id": version.id,
-                    "version_number": version_number,
-                    "size_bytes": version.size_bytes,
+                    "file_id": project_file.id,
                     "category": category,
                     "business_category": business_category,
-                },
-            )
-            enqueue_outbox(
-                session,
-                "file.preview",
-                version.id,
-                {"version_id": version.id},
-            )
-            return {
-                "version_id": version.id,
-                "file_id": project_file.id,
-                "status": "available",
-                "scan_status": version.scan_status,
-            }
+                    "status": "available",
+                    "scan_status": version.scan_status,
+                }
+                record_event(
+                    session,
+                    actor,
+                    "project_file_uploaded",
+                    project_file,
+                    {
+                        "file_id": project_file.id,
+                        "version_id": version.id,
+                        "version_number": version_number,
+                        "size_bytes": version.size_bytes,
+                        "category": category,
+                        "business_category": business_category,
+                    },
+                )
+                enqueue_outbox(
+                    session, "file.preview", version.id, {"version_id": version.id}
+                )
+                return {
+                    "version_id": version.id,
+                    "file_id": project_file.id,
+                    "status": "available",
+                    "scan_status": version.scan_status,
+                }
     except FileServiceError:
         raise
     except StorageError:
@@ -261,6 +292,13 @@ def complete_upload(
         ) from None
     finally:
         session.close()
+    if expired:
+        raise FileServiceError(
+            "upload_session_expired",
+            "The upload session has expired.",
+            409,
+        )
+    raise AssertionError("upload completion did not produce a result")
 
 
 def abort_upload(
@@ -272,9 +310,13 @@ def abort_upload(
         with session.begin():
             project = _get_project_for_upload(session, actor, project_id)
             upload_session = _load_upload_session(
-                session, project.id, session_id
+                session, project.id, session_id, for_update=True
             )
             if upload_session.status == "uploading":
+                if _expire_upload_if_due(
+                    session, upload_session, now=datetime.now(UTC)
+                ):
+                    return
                 object_storage.current.abort_multipart(
                     upload_session.storage_prefix,
                     upload_session.multipart_upload_id,
@@ -923,15 +965,24 @@ def _load_project_with_members(session, project_id: str) -> Project | None:
     )
 
 
+def _expire_upload_if_due(
+    session: Session, upload_session: UploadSession, *, now: datetime
+) -> bool:
+    from fde_api.files.expiration import expire_upload_session
+
+    return expire_upload_session(session, upload_session, now=now)
+
+
 def _load_upload_session(
-    session, project_id: str, session_id: str
+    session, project_id: str, session_id: str, *, for_update: bool = False
 ) -> UploadSession:
-    upload_session = session.scalar(
-        select(UploadSession).where(
-            UploadSession.id == session_id,
-            UploadSession.project_id == project_id,
-        )
+    query = select(UploadSession).where(
+        UploadSession.id == session_id,
+        UploadSession.project_id == project_id,
     )
+    if for_update:
+        query = query.with_for_update()
+    upload_session = session.scalar(query)
     if upload_session is None:
         raise FileServiceError(
             "upload_session_not_found", "Upload session was not found.", 404

@@ -216,6 +216,7 @@ def register_cli(app: Flask) -> None:
             remind_pending_approvals,
             sweep_expired_approvals,
         )
+        from fde_api.files.expiration import schedule_expired_upload_cleanup
         from fde_api.health.heartbeat import beat
 
         click.echo("scheduler started")
@@ -240,6 +241,9 @@ def register_cli(app: Flask) -> None:
             approval_reminders = remind_pending_approvals()
             if approval_reminders:
                 click.echo(f"approval_reminders={approval_reminders}")
+            expired_uploads = schedule_expired_upload_cleanup()
+            if expired_uploads:
+                click.echo(f"expired_uploads={expired_uploads}")
             # goal-r6（P1-7）：派单维护作业 24h 节流到期即投递（超时释放 /
             # 留存扫描 / T+30 对账；topic 即 job_type=dispatch.maintenance，
             # target=当日 token 由 ensure_background_job 天然去重）。
