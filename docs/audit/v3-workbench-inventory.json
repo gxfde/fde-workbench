@@ -1,10 +1,10 @@
 {
- "route_count": 355,
- "blueprint_count": 44,
- "table_count": 118,
- "revision_count": 44,
+ "route_count": 363,
+ "blueprint_count": 45,
+ "table_count": 122,
+ "revision_count": 45,
  "heads": [
-  "e8b1d5f9a3c7"
+  "c3d5e7f9a1b4"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -149,6 +149,17 @@
     "skill_definitions",
     "skill_versions"
    ]
+  },
+  "c3d5e7f9a1b4": {
+   "file": "c3d5e7f9a1b4_discovery_tables.py",
+   "down_revision": "e8b1d5f9a3c7",
+   "create_tables": [
+    "discovery_extractions",
+    "business_facts",
+    "requirements",
+    "requirement_sources"
+   ],
+   "add_column_tables": []
   },
   "c3e7a9b1d5f4": {
    "file": "c3e7a9b1d5f4_t6_review_project_toggle.py",

@@ -17,6 +17,7 @@ import { WorkflowConsole } from "../workflows/WorkflowConsole"
 import { AgentsConsole } from "../agents/AgentsConsole"
 import { MeetingsConsole } from "../meetings/MeetingsConsole"
 import { TranscriptDraftsPanel } from "../transcripts/TranscriptDraftsPanel"
+import { DiscoveryPanel } from "../discovery/DiscoveryPanel"
 import { HandoverPackagesPanel } from "../handover/HandoverPackagesPanel"
 import { GlossaryPage } from "../ontology/GlossaryPage"
 import { ExecutionFactChain } from "../evidence/ExecutionFactChain"
@@ -188,7 +189,7 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
       </div>
       {loading ? <p role="status">正在加载项目详情…</p> : error ? <p className="form-error banner" role="alert">{error}</p> : project ? (
         <div id="project-detail-tabpanel" role="tabpanel" aria-labelledby={`project-tab-${tab}`}>
-          {tab === "overview" ? <div className="page-stack"><ProjectOverview project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} guidanceSlot={<><ProjectGuidanceCard projectId={project.id} canManage={canManage} /><TranscriptDraftsPanel projectId={project.id} canManage={canManage} /></>} /><ProjectGantt projectId={project.id} /></div> : null}
+          {tab === "overview" ? <div className="page-stack"><ProjectOverview project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} guidanceSlot={<><ProjectGuidanceCard projectId={project.id} canManage={canManage} /><TranscriptDraftsPanel projectId={project.id} canManage={canManage} /><DiscoveryPanel projectId={project.id} canManage={canManage} /></>} /><ProjectGantt projectId={project.id} /></div> : null}
           {tab === "tasks" ? <TaskTable projectId={project.id} initialTasks={project.tasks ?? []} modules={project.modules} members={project.members ?? []} canManage={canManage} onTasksChange={handleTasksChange} /> : null}
           {tab === "gates" ? <GateBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "commercial" ? <CommercialBoard projectId={project.id} canManage={canManage} /> : null}

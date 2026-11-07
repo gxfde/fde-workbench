@@ -71,7 +71,8 @@ from fde_api.expirations import blueprint as expirations_blueprint  # B#13-D 跨
 from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14）
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.transcripts.routes import transcripts_blueprint  # T-A9（goal-tb tb1）
-from fde_api.handover.routes import handover_blueprint  # T-B1（goal-tb tb4）
+from fde_api.handover.routes import handover_blueprint
+from fde_api.discovery.routes import discovery_blueprint  # V3.1 P0-1
 from fde_api.metrics.routes import metrics_blueprint
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
 from fde_api.ontology.routes import global_ontology_blueprint  # V3 T-O2c 全局只读面
@@ -113,6 +114,7 @@ BLUEPRINTS = [
     meetings_blueprint,
     transcripts_blueprint,  # T-A9：app.py 注册序紧随 meetings_blueprint
     handover_blueprint,  # T-B1：app.py 注册序紧随 transcripts_blueprint
+    discovery_blueprint,  # V3.1 P0-1：app.py 注册序紧随 handover_blueprint
     metrics_blueprint,
     translator_blueprint,
     mailing_blueprint,

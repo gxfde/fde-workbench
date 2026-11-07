@@ -94,6 +94,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # T-B1 封包半（goal-tb tb4）：结项交付包 handover_packages，不进 api_catalog
     from fde_api.handover.routes import handover_blueprint
     app.register_blueprint(handover_blueprint)
+    # V3.1 P0-1：访谈事实/需求结构化（审阅治理面，不进 api_catalog）
+    from fde_api.discovery.routes import discovery_blueprint
+    app.register_blueprint(discovery_blueprint)
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)

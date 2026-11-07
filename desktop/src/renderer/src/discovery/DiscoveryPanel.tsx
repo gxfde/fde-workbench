@@ -1,0 +1,419 @@
+import { useCallback, useEffect, useState } from "react"
+
+import { ApiClientError } from "../api/client"
+import { useAuth } from "../auth/AuthProvider"
+
+// V3.1 P0-1 批B：访谈事实与需求审阅面板（discovery 消费面）。
+// AI 抽取只是草稿生成器——逐条接受/拒绝/澄清永远是人工决策（任务书 §12
+// 权限矩阵：Agent 可生成草稿，不得批准正式事实/需求）。来源定位三形态
+// （line/transcript_segment/char_span）只读呈现，跳转锚交由纪要正文对照。
+
+interface RedactionEntryDto {
+  name: string
+  occurrences: number
+  matched_dict: boolean
+}
+
+interface ExtractionDto {
+  id: string
+  source_type: string
+  source_id: string
+  source_sha256: string
+  status: string
+  extractor_version: string
+  prompt_version: string
+  ai_model: string | null
+  completed_at: string | null
+  failure_code: string | null
+  failure_message: string | null
+  redaction_entries: RedactionEntryDto[] | null
+}
+
+interface FactDto {
+  id: string
+  fact_type: string
+  classification: string
+  subject: string
+  predicate: string
+  object_value: unknown
+  confidence: number | null
+  source_ref: string
+  source_locator: { type: string; line?: number; start_ms?: number; end_ms?: number; start?: number; end?: number }
+  review_status: string
+  review_comment: string | null
+  reviewed_at: string | null
+}
+
+interface RequirementDto {
+  id: string
+  requirement_key: string
+  title: string
+  description: string | null
+  requirement_type: string
+  priority: string
+  acceptance_criteria: string[]
+  status: string
+  approved_at: string | null
+  review_comment: string | null
+  source_fact_ids: string[]
+  source_count: number
+}
+
+interface ExtractionListDto {
+  items: ExtractionDto[]
+}
+
+interface FactListDto {
+  items: FactDto[]
+}
+
+interface RequirementListDto {
+  items: RequirementDto[]
+}
+
+interface MinutesRowDto {
+  id: string
+  title: string
+}
+
+const EXTRACTION_STATUS_LABEL: Record<string, string> = {
+  queued: "排队中",
+  running: "抽取中",
+  review_required: "待审阅",
+  failed: "失败",
+}
+
+const FACT_TYPE_LABEL: Record<string, string> = {
+  process: "流程",
+  role: "角色",
+  system: "系统",
+  rule: "规则",
+  data_object: "数据对象",
+  metric: "指标",
+  constraint: "约束",
+  pain_point: "痛点",
+  decision: "决策",
+  open_question: "开放问题",
+}
+
+const REVIEW_STATUS_LABEL: Record<string, string> = {
+  pending: "待审",
+  accepted: "已接受",
+  rejected: "已拒绝",
+  needs_clarification: "待澄清",
+}
+
+const CLASSIFICATION_LABEL: Record<string, string> = {
+  customer_stated: "客户原话",
+  ai_synthesized: "AI 归纳",
+  ai_inferred: "AI 推断",
+  open_question: "开放问题",
+  human_added: "人工补充",
+}
+
+const REQUIREMENT_TYPE_LABEL: Record<string, string> = {
+  functional: "功能",
+  non_functional: "非功能",
+  data: "数据",
+  integration: "集成",
+  security: "安全",
+  operational: "运维",
+}
+
+const PRIORITY_LABEL: Record<string, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+}
+
+function label(map: Record<string, string>, value: string): string {
+  return map[value] ?? value
+}
+
+function errorMessage(caught: unknown): string {
+  if (caught instanceof ApiClientError) return caught.message
+  if (caught instanceof Error) return caught.message
+  return "操作失败，请重试。"
+}
+
+function formatDateTime(value: string | null): string {
+  return value ? value.slice(0, 19).replace("T", " ") : "—"
+}
+
+function locatorText(locator: FactDto["source_locator"]): string {
+  if (locator.type === "line") return `第 ${locator.line ?? "?"} 行`
+  if (locator.type === "transcript_segment") return `${locator.start_ms ?? 0}–${locator.end_ms ?? 0} ms`
+  if (locator.type === "char_span") return `字符 ${locator.start ?? "?"}–${locator.end ?? "?"}`
+  return locator.type
+}
+
+function objectValueText(value: unknown): string {
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+interface DiscoveryPanelProps {
+  projectId: string
+  canManage: boolean
+}
+
+export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
+  const { apiRequest } = useAuth()
+  const [minutes, setMinutes] = useState<MinutesRowDto[]>([])
+  const [selectedMinutesId, setSelectedMinutesId] = useState("")
+  const [extractions, setExtractions] = useState<ExtractionDto[]>([])
+  const [facts, setFacts] = useState<FactDto[]>([])
+  const [requirements, setRequirements] = useState<RequirementDto[]>([])
+  const [factFilter, setFactFilter] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const [notice, setNotice] = useState("")
+  const [loaded, setLoaded] = useState(false)
+
+  const loadAll = useCallback(async () => {
+    setError("")
+    try {
+      const [minutesData, extractionData, factData, requirementData] = await Promise.all([
+        apiRequest<{ items: MinutesRowDto[] }>(`/api/v1/interview-minutes?project_id=${projectId}&limit=50`, { method: "GET" }),
+        apiRequest<ExtractionListDto>(`/api/v1/projects/${projectId}/discovery/extractions?limit=20`, { method: "GET" }),
+        apiRequest<FactListDto>(`/api/v1/projects/${projectId}/business-facts?limit=100${factFilter ? `&review_status=${factFilter}` : ""}`, { method: "GET" }),
+        apiRequest<RequirementListDto>(`/api/v1/projects/${projectId}/requirements?limit=100`, { method: "GET" }),
+      ])
+      setMinutes(minutesData.items)
+      setExtractions(extractionData.items)
+      setFacts(factData.items)
+      setRequirements(requirementData.items)
+      setLoaded(true)
+    } catch (caught) {
+      setError(errorMessage(caught))
+    }
+  }, [apiRequest, projectId, factFilter])
+
+  useEffect(() => { void loadAll() }, [loadAll])
+
+  const createExtraction = async () => {
+    if (!selectedMinutesId) return
+    setBusy(true); setError(""); setNotice("")
+    try {
+      const data = await apiRequest<ExtractionDto & { created: boolean }>(
+        `/api/v1/projects/${projectId}/discovery/extractions`,
+        { method: "POST", body: JSON.stringify({ source_type: "interview_minutes", source_id: selectedMinutesId }) },
+      )
+      setNotice(data.created ? "抽取任务已入队，完成后回到「待审阅」状态。" : "该来源已有抽取记录（同源同版本幂等），未重复创建。")
+      await loadAll()
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rerunExtraction = async (extractionId: string) => {
+    setBusy(true); setError("")
+    try {
+      await apiRequest(`/api/v1/discovery/extractions/${extractionId}/run`, { method: "POST" })
+      setNotice("已重新入队。")
+      await loadAll()
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reviewFact = async (factId: string, reviewStatus: string) => {
+    setBusy(true); setError("")
+    try {
+      await apiRequest(`/api/v1/business-facts/${factId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ review_status: reviewStatus }),
+      })
+      await loadAll()
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reviewRequirement = async (requirementId: string, status: string) => {
+    setBusy(true); setError("")
+    try {
+      await apiRequest(`/api/v1/requirements/${requirementId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      })
+      await loadAll()
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const acceptPendingFacts = async () => {
+    const pending = facts.filter((fact) => fact.review_status === "pending")
+    if (!pending.length) return
+    setBusy(true); setError("")
+    let failed = 0
+    for (const fact of pending) {
+      try {
+        await apiRequest(`/api/v1/business-facts/${fact.id}/review`, {
+          method: "PATCH",
+          body: JSON.stringify({ review_status: "accepted" }),
+        })
+      } catch {
+        failed += 1
+      }
+    }
+    setNotice(failed ? `批量接受完成，${failed} 条失败（已终态或并发变动），列表已刷新。` : `已批量接受 ${pending.length} 条待审事实。`)
+    await loadAll()
+    setBusy(false)
+  }
+
+  return (
+    <section id="discovery-panel" className="panel-stack" aria-label="访谈事实与需求">
+      <h3>访谈事实与需求（AI 抽取草稿 · 人工审阅定案）</h3>
+      {/* aria-live 容器不用 alert/status 角色：project-detail 等既有测试的
+          角色查询以页面唯一 alert 为前提（教训 51：新挂载点请求失败呈现不得
+          挤占既有角色域）。 */}
+      {error ? <p aria-live="assertive" className="error-text">{error}</p> : null}
+      {notice ? <p aria-live="polite" className="notice-text">{notice}</p> : null}
+
+      {canManage ? (
+        <div className="discovery-create-row">
+          <label htmlFor="discovery-source-select">抽取来源（访谈纪要）</label>
+          <select
+            id="discovery-source-select"
+            value={selectedMinutesId}
+            onChange={(event) => { setSelectedMinutesId(event.target.value) }}
+          >
+            <option value="">— 选择纪要 —</option>
+            {minutes.map((minute) => (
+              <option key={minute.id} value={minute.id}>{minute.title}</option>
+            ))}
+          </select>
+          <button type="button" disabled={busy || !selectedMinutesId} onClick={() => { void createExtraction() }}>
+            发起 AI 抽取
+          </button>
+          {!minutes.length ? <span className="hint-text">尚无访谈纪要：先在转写草稿区晋升纪要。</span> : null}
+        </div>
+      ) : null}
+
+      <h4>抽取记录</h4>
+      {!loaded ? <p>正在加载…</p> : extractions.length === 0 ? <p>暂无抽取记录。</p> : (
+        <table className="data-table">
+          <thead>
+            <tr><th>状态</th><th>来源</th><th>指纹</th><th>模型</th><th>完成时间</th><th>复核/失败</th><th>{canManage ? "操作" : ""}</th></tr>
+          </thead>
+          <tbody>
+            {extractions.map((extraction) => (
+              <tr key={extraction.id}>
+                <td>{label(EXTRACTION_STATUS_LABEL, extraction.status)}</td>
+                <td>{extraction.source_type === "interview_minutes" ? "纪要" : "草稿"}</td>
+                <td title={extraction.source_sha256}>{extraction.source_sha256.slice(0, 12)}</td>
+                <td>{extraction.ai_model ?? "—"}</td>
+                <td>{formatDateTime(extraction.completed_at)}</td>
+                <td>
+                  {extraction.failure_code
+                    ? <span title={extraction.failure_message ?? ""}>{extraction.failure_code}</span>
+                    : extraction.redaction_entries && extraction.redaction_entries.length
+                      ? <span title={extraction.redaction_entries.map((entry) => `${entry.name}×${entry.occurrences}`).join("；")}>脱敏复核 {extraction.redaction_entries.length} 项</span>
+                      : "—"}
+                </td>
+                <td>
+                  {canManage && extraction.status === "failed"
+                    ? <button type="button" disabled={busy} onClick={() => { void rerunExtraction(extraction.id) }}>重跑</button>
+                    : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h4>业务事实（{facts.length}）</h4>
+      <div className="discovery-filter-row">
+        <label htmlFor="discovery-fact-filter">审阅状态</label>
+        <select id="discovery-fact-filter" value={factFilter} onChange={(event) => { setFactFilter(event.target.value) }}>
+          <option value="">全部</option>
+          <option value="pending">待审</option>
+          <option value="needs_clarification">待澄清</option>
+          <option value="accepted">已接受</option>
+          <option value="rejected">已拒绝</option>
+        </select>
+        {canManage && facts.some((fact) => fact.review_status === "pending")
+          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>批量接受本页待审</button>
+          : null}
+      </div>
+      {!loaded ? <p>正在加载…</p> : facts.length === 0 ? <p>暂无事实（发起抽取后生成草稿）。</p> : (
+        <table className="data-table">
+          <thead>
+            <tr><th>类型</th><th>事实</th><th>取值</th><th>分类</th><th>来源定位</th><th>置信</th><th>审阅</th><th>{canManage ? "操作" : ""}</th></tr>
+          </thead>
+          <tbody>
+            {facts.map((fact) => (
+              <tr key={fact.id}>
+                <td>{label(FACT_TYPE_LABEL, fact.fact_type)}</td>
+                <td>{fact.subject} · {fact.predicate}</td>
+                <td title={objectValueText(fact.object_value)}>{objectValueText(fact.object_value).slice(0, 60)}</td>
+                <td>{label(CLASSIFICATION_LABEL, fact.classification)}</td>
+                <td title={fact.source_ref}>{locatorText(fact.source_locator)}</td>
+                <td>{fact.confidence ?? "—"}</td>
+                <td>{label(REVIEW_STATUS_LABEL, fact.review_status)}</td>
+                <td>
+                  {canManage && fact.review_status !== "accepted" && fact.review_status !== "rejected"
+                    ? (
+                      <span className="discovery-actions">
+                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "accepted") }}>接受</button>
+                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "rejected") }}>拒绝</button>
+                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "needs_clarification") }}>澄清</button>
+                      </span>
+                    )
+                    : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h4>需求（{requirements.length}）</h4>
+      {!loaded ? <p>正在加载…</p> : requirements.length === 0 ? <p>暂无需求。</p> : (
+        <table className="data-table">
+          <thead>
+            <tr><th>键</th><th>标题</th><th>类型</th><th>优先级</th><th>验收标准</th><th>来源</th><th>状态</th><th>{canManage ? "操作" : ""}</th></tr>
+          </thead>
+          <tbody>
+            {requirements.map((requirement) => (
+              <tr key={requirement.id}>
+                <td>{requirement.requirement_key}</td>
+                <td title={requirement.description ?? ""}>{requirement.title}</td>
+                <td>{label(REQUIREMENT_TYPE_LABEL, requirement.requirement_type)}</td>
+                <td>{label(PRIORITY_LABEL, requirement.priority)}</td>
+                <td title={requirement.acceptance_criteria.join("；")}>{requirement.acceptance_criteria.length} 条</td>
+                <td>{requirement.source_count} 处</td>
+                <td>{label(REVIEW_STATUS_LABEL, requirement.status)}</td>
+                <td>
+                  {canManage && requirement.status !== "accepted" && requirement.status !== "rejected"
+                    ? (
+                      <span className="discovery-actions">
+                        <button type="button" disabled={busy} onClick={() => { void reviewRequirement(requirement.id, "accepted") }}>批准</button>
+                        <button type="button" disabled={busy} onClick={() => { void reviewRequirement(requirement.id, "rejected") }}>否决</button>
+                        <button type="button" disabled={busy} onClick={() => { void reviewRequirement(requirement.id, "needs_clarification") }}>澄清</button>
+                      </span>
+                    )
+                    : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  )
+}

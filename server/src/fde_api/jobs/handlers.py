@@ -82,6 +82,12 @@ def ensure_default_handlers() -> None:
         from fde_api.translator.jobs import register_translator_handler
 
         register_translator_handler()
+    # V3.1 P0-1：访谈事实/需求结构化抽取（outbox → worker，沿预调研分析重试语义）
+    if get_handler("project.discovery.extract") is None:
+        from fde_api.discovery.jobs import register_discovery_extraction_handler
+
+        register_discovery_extraction_handler()
+
     # V3 T-W3：workflow 执行器（call/skill 节点；agent/human_approval 随 T-W4）。
     # handler 内部同时注册 worker-loss 收尾钩子（run/悬挂节点推终态）。
     if get_handler("workflow.run") is None:
@@ -107,6 +113,10 @@ def ensure_default_handlers() -> None:
         from fde_api.translator.jobs import register_translator_failure_handler
 
         register_translator_failure_handler()
+    if get_job_failure_handler("project.discovery.extract") is None:
+        from fde_api.discovery.jobs import register_discovery_extraction_failure_handler
+
+        register_discovery_extraction_failure_handler()
 
 
 from fde_api.jobs.models import BackgroundJob  # noqa: E402  (late import to avoid cycle)

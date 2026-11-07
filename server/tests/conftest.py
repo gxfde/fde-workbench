@@ -358,6 +358,12 @@ def db_session(app) -> Session:
         # minutes.draft_id 为纯指针无 FK，两表同簇先后无约束依赖）
         __import__("fde_api.transcripts.models", fromlist=["InterviewMinutes"]).InterviewMinutes,
         __import__("fde_api.transcripts.models", fromlist=["TranscriptDraft"]).TranscriptDraft,
+        # V3.1 P0-1：discovery 四表（sources→requirements→facts→extractions 子表先清；
+        # 全部引用 projects/users RESTRICT，源行为软指针无 FK）
+        __import__("fde_api.discovery.models", fromlist=["RequirementSource"]).RequirementSource,
+        __import__("fde_api.discovery.models", fromlist=["Requirement"]).Requirement,
+        __import__("fde_api.discovery.models", fromlist=["BusinessFact"]).BusinessFact,
+        __import__("fde_api.discovery.models", fromlist=["DiscoveryExtraction"]).DiscoveryExtraction,
         # goal-d3：审核节点与产物引用 project_solutions（RESTRICT），先于方案；
         # tool_calls/artifacts 引用 runs，同样先清。
         __import__("fde_api.agents.models", fromlist=["SolutionReviewCheckpoint"]).SolutionReviewCheckpoint,

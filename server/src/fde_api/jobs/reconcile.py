@@ -87,6 +87,7 @@ RECOVERABLE_JOB_TYPES = frozenset({
     "document.generate",
     "research.export",
     "translator.translate",
+    "project.discovery.extract",
     "workflow.run",
 })
 

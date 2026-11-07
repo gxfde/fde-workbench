@@ -23,8 +23,9 @@ from fde_api.evidence import models as evidence_models  # noqa: F401  (V3 T-E1)
 from fde_api.workflows import models as workflow_models  # noqa: F401  (V3 T-W1)
 from fde_api.ontology import models as ontology_models  # noqa: F401  (V3 T-O1)
 from fde_api.transcripts import models as transcript_models  # noqa: F401  (T-A9)
-from fde_api.handover import models as handover_models  # noqa: F401
-from fde_api.simulation import models as simulation_models  # noqa: F401  (V3.2 G2)  (T-B1)
+from fde_api.handover import models as handover_models  # noqa: F401  (T-B1)
+from fde_api.simulation import models as simulation_models  # noqa: F401  (V3.2 G2)
+from fde_api.discovery import models as discovery_models  # noqa: F401  (V3.1 P0-1)
 from fde_api.control import model_preferences, weixin_models, chat, lcsc_skills  # noqa: F401
 
 

@@ -36,6 +36,11 @@ _ALLOWED_PARAM_NAMES = {"system_prompt", "instructions"}
 # 允许的组装函数（白名单③：chat 系统提示词 = 常量+config+内置手册目录）。
 _ALLOWED_CALL_NAMES = {"_workbench_system_prompt"}
 
+# 允许的提示词权威常量名（白名单①「内部权威常量」的具名形态）：
+# - DISCOVERY_SYSTEM_PROMPT：V3.1 P0-1 discovery 抽取（discovery/prompt.py
+#   模块级常量，jobs.py 直传——2026-11-08 登记）。
+_ALLOWED_PROMPT_CONSTANTS = {"DISCOVERY_SYSTEM_PROMPT"}
+
 
 def _iter_gated_calls():
     for path in sorted(SRC.rglob("*.py")):
@@ -57,7 +62,7 @@ def _is_allowed(value: ast.expr) -> bool:
     if isinstance(value, ast.Constant):
         return isinstance(value.value, str)
     if isinstance(value, ast.Name):
-        return value.id in _ALLOWED_PARAM_NAMES
+        return value.id in _ALLOWED_PARAM_NAMES or value.id in _ALLOWED_PROMPT_CONSTANTS
     if isinstance(value, ast.Call):
         func = value.func
         callee = func.id if isinstance(func, ast.Name) else (
