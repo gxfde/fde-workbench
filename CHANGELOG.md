@@ -2,6 +2,29 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — T-A7 谈判版本管理：桌面冻结状态徽标 + 导出弹窗版本明示（2026-11-07）
+
+### 行为变更（零代码零迁移零新 API；桌面变更 ⇒ 便携版重打包挂账）
+
+方案详情页头部新增**冻结状态徽标**（拍板 §拍板闸 6③：谈判稿=未冻结版本）：
+- 「已冻结进 SOW」（绿）——当前方案版本的内容已冻结进 SOW 快照
+- 「谈判稿 · 已修改」（黄）——方案在 vN 冻结后又修改过，当前内容未进任何 SOW
+- 「谈判稿 · 未导出」（灰）——当前内容尚未冻结进任何 SOW
+
+反查数据源：`GET /documents` 摘要自带 `opportunity_scope.solution.{id,version}`（export_sow 每次导出更新为导出时刻的方案版本）⇒ **零新 API**；含 archived 快照（历史冻结事实，「历史文件保留」语义），取最大版本号。徽标只在**详情页**呈现——方案列表页钉住「不预取 `/documents`」（SOW 文件懒加载契约，solution-design.test.tsx:184）。
+
+导出 SOW 弹窗明示冻结关联：`SolutionExportResult` 补声明 `solution_version` + `reused`（服务端 `_serialize_export` 本就返回）；文案「本 SOW 快照冻结的是方案 **vN** 的内容」，同版本重复导出附「复用既有快照」。
+
+`/documents` 反查失败静默降级为「谈判稿 · 未导出」——辅助信息不阻断方案详情主内容（SolutionHealthChip 同纪律）。
+
+### 口径勘误（与登记原文三处出入，已回写 backlog）
+
+「谈判稿与正式方案的分离位」不需新实体——solution 单行+乐观锁 version，「冻结」已承载在 `project_solution_exports`（`(solution_id, solution_version)` 唯一键）+ 文档版本 `content_snapshot_json.solution` 逐字快照；「版本列表追溯」数据源已存在（见上）；「谈判稿不进 SOW / 快照只读」服务端既有用例钉住（`test_sow_export_freezes_saved_solution_without_ai_and_reuses_revision`），零重复实施。
+
+### 口径（#178 PR-head CI run 42318566336 实测）
+
+vitest **882 passed**（71 文件 = 基线 870 + 12 新增：NEW solution-frozen-version.test.tsx 7 + solution-design +5）／pytest server-tests pass（服务端零改动不变）／mypy、路由、迁移均不变。
+
 ## [未发布] — T-O2c 全局注册类型只读面：调研定义编辑器接入注册类型（2026-11-07）
 
 ### 行为变更（+1 只读路由；零迁移零新表；桌面变更 ⇒ 便携版重打包挂账）

@@ -579,7 +579,9 @@
 - 验收：SOW 内容与所选冻结版本逐字一致；谈判稿可在版本列表中追溯但不可导出。
 - 回滚：revert 单 commit。风险：低。依赖：T-A6。复杂度：**S**。
 
-#### ✅ T-A7 实施轮（2026-11-07，状态：**已实施，待合并**——PR 待开，CI 待守，服务端零改动）
+#### ✅ T-A7 实施轮（2026-11-07，状态：**已实施并合并**——PR #178 → `9267240`，CI run 42318566336 4 job 全绿，服务端零改动）
+- **合并过程**：首版 sha `39eff6c` 的 desktop job 秒败——CI typecheck 抓到 `DocumentScopeRef.opportunity_scope` 声明过窄（测试 fixture 的 scope 字面量带 `opportunities: []` = 真实 `DocumentSummaryDto` 形态，TS2353 excess property；本地提交前未重跑 tsc 属流程失误）。修复对齐桌面主类型形态后 sha `262bcef` 重推，4 job 全绿。本地 vitest 不跑 tsc，**CI typecheck 是唯一硬闸**——桌面改动提交前必须本地 `npx tsc -p tsconfig.web.json --noEmit`。
+- **CI 实测口径**：#178 PR-head run 42318566336（sha `262bcef`）vitest **882 passed**（71 文件 = 基线 870 + 12 新增）／pytest server-tests pass（服务端零改动不变）。
 - **实施轮勘误（与登记原文三处出入，实测 fork/main@ef1b4d0 后回写）**：
   1. **「谈判稿与正式方案的分离位」不需要新实体**——solution 是单行 + 乐观锁整数 version（无版本历史表）；「冻结」语义已承载在 `project_solution_exports`（`(solution_id, solution_version)` 唯一键，每修订一份不可变 SOW 快照）+ 文档版本 `content_snapshot_json.solution` 逐字快照。登记所缺的「分离位」实为**桌面可见性**问题，不是数据建模问题。
   2. **「谈判稿可在版本列表中追溯」数据源已存在**——`GET /documents` 摘要序列化器（`draft_service._serialize_document_summary`）自带 `opportunity_scope.solution.{id,version}`（export_sow 每次导出都更新为导出时刻的方案版本）⇒ 桌面从既有接口即可反查「最新冻结进 SOW 的方案版本号」，**零新 API 成立**。
@@ -752,7 +754,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施并合并 #178)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）
