@@ -19,6 +19,7 @@ from test_agents_d4_harness import d4_app, d4_client, d4_settings  # noqa: F401 
 from test_document_drafts_api import _persist_project
 
 from fde_api.agents.models import AgentArtifact, AgentRun, AgentToolCall
+from fde_api.agents.pilot import pilot_status
 from fde_api.app import create_app
 from fde_api.meetings.models import ReviewMeeting
 from fde_api.solutions.models import ProjectSolution
@@ -177,3 +178,70 @@ def test_pilot_report_metrics(db_session, d4_client, d4_app, d4_settings) -> Non
     assert metrics["median_run_cost_units"] == 4.0  # [2,4,4,4,8]
     assert metrics["total_runs"] == 6 and metrics["total_meetings"] == 2 and metrics["blocked_runs"] == 1
     assert data["stuck_inflight_runs"] == 1
+
+
+# ---------- 架构评估 2026-11-07 D4：契约未验证警示（只读呈现，不拦 run） ----------
+
+def _contract_world(db_session, settings):
+    """窗口显式起点的试点世界：app + leader + project + agent（零 run）。"""
+    started = settings.model_copy(update={
+        "agent_pilot_enabled": True,
+        "agent_pilot_started_at": "2026-01-01T00:00:00+00:00",
+    })
+    app = create_app(started)
+    app.config.update(TESTING=True)
+    client = app.test_client()
+    leader = _api(client, db_session, started, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"PL{uuid4().hex[:4]}")
+    agent = seed_agent(db_session, started)
+    return started, leader.user, project, agent
+
+
+def _seed_run(db_session, *, user, project, agent, status, key, created_at=None):
+    run = AgentRun(
+        project_id=project.id, agent_id=agent.id, initiated_by_user_id=user.id,
+        capability_used=agent.capability_tier, status=status, token_cost=1,
+        context_ref="agent-workspaces/m/context.md", idempotency_key=key,
+        created_at=created_at,
+    )
+    db_session.add(run)
+    db_session.commit()
+    return run
+
+
+_NOW = datetime(2026, 1, 5, tzinfo=timezone.utc)
+
+
+def test_pilot_contract_unverified_warns_with_zero_runs(db_session, d4_settings) -> None:
+    """架构评估 2026-11-07 D4：窗口激活但零真实完成 run → contract_unverified 警示。
+
+    ZcodeAdapter spawn 契约未经真机验证（售前方案 Q5/T-Z1）——spawn 失败全落
+    L2 会污染试点指标；警示只读呈现，不拦 run（pilot_capacity_error 不变）。
+    """
+    settings, user, project, agent = _contract_world(db_session, d4_settings)
+    status = pilot_status(db_session, settings, now=_NOW)
+    assert status["active"] is True and status["runs_used"] == 0
+    assert status["contract_unverified"] is True
+    assert status["warnings"] and "T-Z1" in status["warnings"][0]
+
+
+def test_pilot_contract_warning_clears_after_real_completed_run(db_session, d4_settings) -> None:
+    settings, user, project, agent = _contract_world(db_session, d4_settings)
+    _seed_run(db_session, user=user, project=project, agent=agent,
+              status="completed", key=f"m:{uuid4().hex}",
+              created_at=datetime(2026, 1, 2, tzinfo=timezone.utc))
+    status = pilot_status(db_session, settings, now=_NOW)
+    assert status["contract_unverified"] is False
+    assert status["warnings"] == []
+
+
+def test_pilot_rehearsal_run_does_not_verify_contract(db_session, d4_settings) -> None:
+    """演练 run（rehearsal: 前缀）不算契约证据——与试点计数同一排除口径。"""
+    settings, user, project, agent = _contract_world(db_session, d4_settings)
+    _seed_run(db_session, user=user, project=project, agent=agent,
+              status="completed", key=f"rehearsal:{uuid4().hex}",
+              created_at=datetime(2026, 1, 2, tzinfo=timezone.utc))
+    status = pilot_status(db_session, settings, now=_NOW)
+    assert status["runs_used"] == 0  # 排除口径一致
+    assert status["contract_unverified"] is True
+    assert status["warnings"]

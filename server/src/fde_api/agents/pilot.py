@@ -78,6 +78,30 @@ def pilot_status(session: Any, settings: Any, *, now: datetime | None = None) ->
         )
     )
     active = now < expires
+    # 架构评估 2026-11-07 D4：试点开启 ≠ 执行通道可用——ZcodeAdapter spawn
+    # 契约未经任何真实完成的 run 验证前（售前方案 v1.2 Q5 拍板「须重写」，
+    # T-Z1 落地前），每个 run 的 spawn 段预期失败并全部落入 L2 降级，试点
+    # 指标（降级率/一次通过率）会被污染。派生警示只读呈现，不拦 run。
+    proven = (
+        session.scalar(
+            select(AgentRun.id)
+            .where(
+                AgentRun.status == "completed",
+                AgentRun.created_at >= started,
+                AgentRun.created_at < expires,
+                AgentRun.idempotency_key.notlike(REHEARSAL_KEY_PREFIX + "%"),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    contract_unverified = active and not proven
+    warnings: list[str] = []
+    if contract_unverified:
+        warnings.append(
+            "ZcodeAdapter 契约尚未经任何真实完成的 run 验证（售前方案 Q5：spawn 段契约须重写，见 T-Z1）；"
+            "spawn 失败将全部落入 L2 降级并污染试点指标，建议先完成执行通道裁定（T-Z1）再解读试点数据。"
+        )
     return {
         "enabled": True,
         "active": active,
@@ -89,6 +113,8 @@ def pilot_status(session: Any, settings: Any, *, now: datetime | None = None) ->
         "runs_remaining": max(0, max_runs - runs_used),
         "days_remaining": max(0, int((expires - now).days)),
         "exhausted": active and runs_used >= max_runs,
+        "contract_unverified": contract_unverified,
+        "warnings": warnings,
     }
 
 

@@ -15,10 +15,13 @@ from fde_api.extensions import db, object_storage
 from fde_api.files.models import ProjectFileVersion
 from fde_api.guidance.ai_prompt import build_kimi_presurvey_analysis_messages
 from fde_api.guidance.ai_schema import GuidanceContractError, LIST_FIELDS, validate_guidance_output
-from fde_api.guidance.enterprise_dict import RedactionConfigError, enterprise_names
+from fde_api.guidance.enterprise_dict import (
+    DICT_FAILURE_CODE,
+    RedactionConfigError,
+)
 from fde_api.guidance.models import REDACTION_EVENT_TYPE
 from fde_api.guidance.models import ProjectGuidanceAnalysis
-from fde_api.guidance.redaction import redact_text_detailed
+from fde_api.guidance.redaction import redact_draft_payload, redact_text_detailed
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
 from fde_api.storage.base import StorageNotFoundError
 from fde_api.workbench.models import OperationEvent, Project
@@ -48,8 +51,8 @@ WORKER_LOST_CODE = "analysis_worker_lost"
 
 # T-A2 代号化闸①第①层：词典机制性故障（种子缺失/格式坏）不可重试也不可放行——
 # 放行等于把「企业名可能漏替换」的文件直接送进模型与库，违反代号化红线。
-# 文案指引售前联系管理员补词典，而不是「请重试」。
-DICT_FAILURE_CODE = "pseudonym_dict_unavailable"
+# 文案指引售前联系管理员补词典，而不是「请重试」。失败码单点在
+# enterprise_dict.DICT_FAILURE_CODE（translator 创建面同码消费）。
 DICT_FAILURE_MESSAGE = "企业名词典不可用，为守住「客户名不入库」红线已阻断本次分析，请联系管理员修复词典配置。"
 
 # T-A2 复核事件类型：疑似企业名清单落 operation_events（B#9 事实链三源之一），
@@ -183,7 +186,7 @@ def handle_presurvey_analysis(job) -> None:
         # 只对文本与 JSON 字段值做替换；evidence 结构不动（source_ref 校验
         # 已由 validate_guidance_output 保证）。
         project_code = project_code or _project_code(session, analysis.project_id)
-        draft = _redact_draft_payload(draft, project_code=project_code, sink=redaction_entries)
+        draft = redact_draft_payload(draft, project_code=project_code, sink=redaction_entries)
         analysis.customer_vision = draft["customer_vision"]
         analysis.current_phase_objective = draft["current_phase_objective"]
         analysis.executive_summary = draft["executive_summary"]
@@ -225,49 +228,6 @@ def _redact_and_build(content: str, *, project_code: str, sink: list[dict[str, A
     redacted, entries = _redact_content(content, project_code=project_code)
     sink.extend(entries)
     return redacted
-
-
-def _redact_draft_payload(
-    draft: dict[str, Any], *, project_code: str, sink: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """落库前对模型输出做企业名兜底替换。
-
-    - 文本字段（customer_vision / current_phase_objective / executive_summary）
-      直接替换；
-    - LIST_FIELDS 各项为 list[dict]，对其中每个 str 值递归替换；
-    - evidence_json 只处理其 value 里的 str 值（键是内部 ref 结构不碰）。
-    替换命中继续累积进 sink（matched_dict 按「词典兜底命中」计）。
-    """
-    names = enterprise_names()
-    if not names:
-        return draft
-
-    def replace_str(value: str) -> str:
-        hits: list[str] = []
-        text = value
-        for name in names:
-            if name in text:
-                text = text.replace(name, project_code or "客户代号")
-                hits.append(name)
-        if hits:
-            sink.extend({"name": h, "occurrences": 1, "matched_dict": True} for h in hits)
-        return text
-
-    out = dict(draft)
-    for key in ("customer_vision", "current_phase_objective", "executive_summary"):
-        out[key] = replace_str(out.get(key, "") or "")
-    for field in LIST_FIELDS:
-        items = out.get(field)
-        if isinstance(items, list):
-            out[field] = [
-                {k: replace_str(v) if isinstance(v, str) else v for k, v in item.items()}
-                if isinstance(item, dict) else item
-                for item in items
-            ]
-    evidence = out.get("evidence")
-    if isinstance(evidence, dict):
-        out["evidence"] = {k: replace_str(v) if isinstance(v, str) else v for k, v in evidence.items()}
-    return out
 
 
 def _exhausted_message(public_message: str, attempts: int, *, retryable: bool = True) -> str:

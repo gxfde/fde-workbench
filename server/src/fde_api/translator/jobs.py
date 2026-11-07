@@ -13,15 +13,20 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from flask import current_app
 
 from fde_api.ai.deepseek import DeepSeekClient, DeepSeekError
 from fde_api.extensions import db
 from fde_api.guidance.ai_schema import GuidanceContractError, validate_guidance_output
+from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
+from fde_api.guidance.models import REDACTION_EVENT_TYPE
+from fde_api.guidance.redaction import redact_draft_payload
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
 from fde_api.translator.ai_prompt import build_translator_messages
 from fde_api.translator.models import TranslatorTranslation
+from fde_api.workbench.models import OperationEvent
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,11 @@ RETRY_BACKOFF_SECONDS = 1.0
 
 UNEXPECTED_FAILURE_CODE = "translation_unexpected_error"
 WORKER_LOST_CODE = "translation_worker_lost"
+
+# T-A2 同源红线：模型输出可能回显企业名（输入替换拦不住输出端）。词典机制性
+# 故障与预调研同码 fail-closed（码单点在 enterprise_dict.DICT_FAILURE_CODE），
+# 文案按翻译器语境改写。
+TRANSLATOR_DICT_FAILURE_MESSAGE = "企业名词典不可用，为守住「客户名不入库」红线已阻断本次翻译，请联系管理员修复词典配置。"
 
 TRANSLATOR_JOB_TYPE = "translator.translate"
 
@@ -100,6 +110,27 @@ def handle_translator_translate(job) -> None:
                     )
                     return
                 # 契约失败是概率性问题，立即重试。
+        # T-A2 同源红线兜底层：草稿落库前企业名替换（guidance 同一权威
+        # redact_draft_payload；翻译无项目维度，别名落「客户代号」）。命中
+        # 条目随事件留痕，采纳时交接给 confirm 复核闸。
+        output_entries: list[dict[str, Any]] = []
+        try:
+            draft = redact_draft_payload(draft, project_code="", sink=output_entries)
+        except RedactionConfigError:
+            # 闸①第①层：词典机制性故障 → fail-closed（不重试）。
+            _safe_fail(session, job.target_id, DICT_FAILURE_CODE, TRANSLATOR_DICT_FAILURE_MESSAGE)
+            return
+        if output_entries:
+            session.add(
+                OperationEvent(
+                    actor_user_id=row.created_by_user_id,
+                    project_id=None,
+                    target_type="translator_translation",
+                    target_id=row.id,
+                    event_type=REDACTION_EVENT_TYPE,
+                    changes={"stage": "output", "entries": output_entries},
+                )
+            )
         row.result_json = draft
         row.ai_model = target.model
         row.ai_generated_at = datetime.now(UTC)

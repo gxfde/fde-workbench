@@ -4,6 +4,13 @@
 admin 可读。创建即投递 translator.translate 任务（outbox → worker），AI 只
 出草稿（result_json 的 confirmed 一律 False，由 validate_guidance_output+
 system prompt 双重钉住），人工确认/采纳流挂账。
+
+T-A2 同源红线（架构评估 2026-11-07 D2）：翻译输入是表单自由文本——与
+presurvey DOCX 同属「外部文字」，**原文不落库**（仓库/数据库只存代号）。
+创建面先过企业名替换（闸①分层语义同源：词典机制性异常 fail-closed 422、
+疑似名替换+复核清单、通用词零改动），替换命中落 guidance.redaction_review
+事件（target_type=translator_translation），采纳时交接给项目指引分析（见
+guidance/service.adopt_translator_draft），confirm 复核闸自动覆盖翻译链。
 """
 from __future__ import annotations
 
@@ -13,15 +20,24 @@ from sqlalchemy import select
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
-from fde_api.guidance.models import INTERVIEW_MODES, ProjectGuidanceAnalysis
+from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
+from fde_api.guidance.models import INTERVIEW_MODES, ProjectGuidanceAnalysis, REDACTION_EVENT_TYPE
+from fde_api.guidance.redaction import (
+    RedactionResult,
+    SensitiveCredentialDetected,
+    redact_text_detailed,
+)
 from fde_api.jobs.outbox import enqueue_outbox
 from fde_api.translator.jobs import TRANSLATOR_JOB_TYPE
 from fde_api.translator.models import TranslatorTranslation
+from fde_api.workbench.models import OperationEvent
 
 _PROFILE_TEXT_LIMIT = 120
 _VISION_LIMIT = 10_000
 _OBJECTIVE_LIMIT = 2_000
 _LIST_LIMIT = 20
+
+_DICT_FAILURE_MESSAGE = "企业名词典不可用，为守住「客户名不入库」红线已阻断本次翻译，请联系管理员修复词典配置。"
 
 
 class TranslatorServiceError(Exception):
@@ -30,20 +46,82 @@ class TranslatorServiceError(Exception):
         self.code, self.message, self.status = code, message, status
 
 
+def _merge_redaction_entries(results: list[RedactionResult]) -> list[dict[str, Any]]:
+    """逐字段 RedactionResult 合并成复核条目（同名 occurrences 累加、matched_dict
+    求并），按名称排序——与 confirm 复核闸的聚合口径同构。"""
+    merged: dict[str, dict[str, Any]] = {}
+    for result in results:
+        for suspect in result.suspects:
+            slot = merged.setdefault(
+                suspect.name, {"name": suspect.name, "occurrences": 0, "matched_dict": False}
+            )
+            slot["occurrences"] += suspect.occurrences
+        for name in result.replaced:
+            slot = merged.setdefault(name, {"name": name, "occurrences": 0, "matched_dict": True})
+            slot["matched_dict"] = True
+            slot["occurrences"] += 1
+    return [merged[key] for key in sorted(merged)]
+
+
+def _redact_translation_input(data: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """创建面企业名替换：原文不落库（T-A2 同源红线）。
+
+    翻译器无项目维度，替换目标统一落「客户代号」占位（redact_text_detailed
+    的 project_code 缺省别名）。分层失败语义（闸①拍板）与 presurvey 一致：
+    - RedactionConfigError（词典机制性故障）→ 422 pseudonym_dict_unavailable，
+      行不落库（fail-closed，与 _render_context 422 先例同构）；
+    - SensitiveCredentialDetected → 422 sensitive_credential_detected；
+    - 疑似名 → 替换 + 记入复核清单（放行=不留库口径）；
+    - 通用词 → 零改动、不进清单。
+    """
+    results: list[RedactionResult] = []
+    try:
+        vision = redact_text_detailed(data["customer_vision"])
+        objective = redact_text_detailed(data["phase_objective"])
+        profile: dict[str, str] = {}
+        for key, value in data["profile"].items():
+            field = redact_text_detailed(value)
+            profile[key] = field.text
+            results.append(field)
+    except RedactionConfigError as error:
+        raise TranslatorServiceError(DICT_FAILURE_CODE, _DICT_FAILURE_MESSAGE, 422) from error
+    except SensitiveCredentialDetected as error:
+        raise TranslatorServiceError("sensitive_credential_detected", str(error), 422) from error
+    results.extend([vision, objective])
+    return (
+        {"profile": profile, "customer_vision": vision.text, "phase_objective": objective.text},
+        _merge_redaction_entries(results),
+    )
+
+
 def create_translation(*, actor: User, payload: Mapping[str, Any]) -> dict[str, Any]:
     session = db.session()
     try:
         with session.begin():
             data = _validate_payload(payload)
+            redacted, entries = _redact_translation_input(data)
             row = TranslatorTranslation(
                 created_by_user_id=actor.id,
-                profile_json=data["profile"],
-                customer_vision=data["customer_vision"],
-                phase_objective=data["phase_objective"],
+                profile_json=redacted["profile"],
+                customer_vision=redacted["customer_vision"],
+                phase_objective=redacted["phase_objective"],
                 status="pending",
             )
             session.add(row)
             session.flush()
+            if entries:
+                # 疑似/替换清单随事件留痕（append-only）；采纳流把条目交接给
+                # 项目指引分析，confirm 复核闸按分析聚合后强制人工复核。
+                session.add(
+                    OperationEvent(
+                        actor_user_id=actor.id,
+                        project_id=None,
+                        target_type="translator_translation",
+                        target_id=row.id,
+                        event_type=REDACTION_EVENT_TYPE,
+                        changes={"stage": "input", "entries": entries},
+                    )
+                )
             enqueue_outbox(session, TRANSLATOR_JOB_TYPE, row.id, {"translation_id": row.id})
         # 提交后再序列化：created_at 是 server_default，flush 后行内尚未回填。
         return serialize_translation(row)

@@ -110,20 +110,10 @@ def get_analysis(*, actor: User, project_id: str, analysis_id: str) -> dict[str,
         session.close()
 
 
-def _redaction_review_entries(session: Any, analysis_id: str) -> list[dict[str, Any]]:
-    """按分析聚合复核清单（消费 #160 落的 guidance.redaction_review 事件）。
-
-    同名跨事件合并（occurrences 累加、matched_dict 求并），按名称排序输出——
-    事件 append-only，聚合口径与写入条目形状（name/occurrences/matched_dict）
-    保持单一权威，不在此二次推导文本。
-    """
-    events = session.scalars(
-        select(OperationEvent).where(
-            OperationEvent.target_type == "project_guidance_analysis",
-            OperationEvent.target_id == analysis_id,
-            OperationEvent.event_type == REDACTION_EVENT_TYPE,
-        )
-    ).all()
+def _merge_review_entries(events: Any) -> list[dict[str, Any]]:
+    """复核条目聚合（单一口径）：同名跨事件 occurrences 累加、matched_dict 求并，
+    按名称排序输出——写入条目形状（name/occurrences/matched_dict）不在此二次
+    推导文本。分析面（_redaction_review_entries）与翻译采纳交接（D2）共用。"""
     merged: dict[str, dict[str, Any]] = {}
     for event in events:
         for item in (event.changes or {}).get("entries", []):
@@ -136,6 +126,31 @@ def _redaction_review_entries(session: Any, analysis_id: str) -> list[dict[str, 
             slot["occurrences"] += int(item.get("occurrences", 1) or 0)
             slot["matched_dict"] = slot["matched_dict"] or bool(item.get("matched_dict"))
     return [merged[key] for key in sorted(merged)]
+
+
+def _redaction_review_entries(session: Any, analysis_id: str) -> list[dict[str, Any]]:
+    """按分析聚合复核清单（消费 #160 落的 guidance.redaction_review 事件）。"""
+    events = session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "project_guidance_analysis",
+            OperationEvent.target_id == analysis_id,
+            OperationEvent.event_type == REDACTION_EVENT_TYPE,
+        )
+    ).all()
+    return _merge_review_entries(events)
+
+
+def _translation_redaction_entries(session: Any, translation_id: str) -> list[dict[str, Any]]:
+    """翻译链复核条目：translator 创建/落库两阶段落在 translator_translation
+    目标上的 guidance.redaction_review 事件（架构评估 2026-11-07 D2 交接源）。"""
+    events = session.scalars(
+        select(OperationEvent).where(
+            OperationEvent.target_type == "translator_translation",
+            OperationEvent.target_id == translation_id,
+            OperationEvent.event_type == REDACTION_EVENT_TYPE,
+        )
+    ).all()
+    return _merge_review_entries(events)
 
 
 def update_analysis(*, actor: User, project_id: str, analysis_id: str, expected_version: int, changes: Mapping[str, Any]) -> dict[str, Any]:
@@ -373,8 +388,25 @@ def adopt_translator_draft(*, actor: User, project_id: str, translation_id: str)
                 "translation_id": translation.id, "analysis_id": row.id,
                 "version_number": row.version_number,
             })
-            session.flush()
-            return serialize_analysis(row, session.get(ProjectPresurveySource, project.id))
+            # T-A2 复核闸交接（架构评估 2026-11-07 D2）：翻译创建/落库两阶段
+            # 落在 translator_translation 上的复核条目，采纳时搬到本分析——
+            # confirm 闸按分析聚合，无需知道翻译链的存在即自动覆盖。
+            carried = _translation_redaction_entries(session, translation.id)
+            if carried:
+                session.add(
+                    OperationEvent(
+                        actor_user_id=actor.id,
+                        project_id=project.id,
+                        target_type="project_guidance_analysis",
+                        target_id=row.id,
+                        event_type=REDACTION_EVENT_TYPE,
+                        changes={"stage": "adopted", "entries": carried},
+                    )
+                )
+                session.flush()
+            data = serialize_analysis(row, session.get(ProjectPresurveySource, project.id))
+            data["redaction_review"] = _redaction_review_entries(session, row.id)
+            return data
     except IntegrityError:
         # 并发双击走到唯一约束：与预检查同语义（409，不泄露约束名）。
         raise GuidanceServiceError(

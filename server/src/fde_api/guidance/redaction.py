@@ -156,3 +156,52 @@ def redact_presurvey(extracted: ExtractedPresurvey, *, project_code: str = "") -
         tuple(SuspectName(name=k, occurrences=v) for k, v in sorted(all_suspects.items(), key=lambda kv: (-kv[1], kv[0]))),
         tuple(dict.fromkeys(all_replaced)),
     )
+
+
+def redact_draft_payload(
+    draft: dict, *, project_code: str = "", sink: list[dict]
+) -> dict:
+    """guidance 契约草稿的落库前企业名兜底替换（AI 只产草稿，草稿也不带真名入库）。
+
+    - 文本字段（customer_vision / current_phase_objective / executive_summary）
+      直接替换；
+    - ai_schema.LIST_FIELDS 各项为 list[dict]，对其中每个 str 值替换；
+    - evidence 只处理其 value 里的 str 值（键是内部 ref 结构不碰）。
+    替换命中以 {"name", "occurrences": 1, "matched_dict": True} 追加进 sink。
+    词典机制性异常（RedactionConfigError）原样上抛——调用方 fail-closed。
+
+    预调研（guidance/jobs.py）与翻译器（translator/jobs.py）共用：两条 AI 入
+    口产出的都是同一形状的 guidance 草稿，兜底层语义必须单一权威。
+    """
+    from fde_api.guidance.ai_schema import LIST_FIELDS  # 函数内导入防 ai_schema↔redaction 装载序耦合
+
+    names = enterprise_names()
+    if not names:
+        return draft
+
+    def replace_str(value: str) -> str:
+        hits: list[str] = []
+        text = value
+        for name in names:
+            if name in text:
+                text = text.replace(name, project_code or "客户代号")
+                hits.append(name)
+        if hits:
+            sink.extend({"name": h, "occurrences": 1, "matched_dict": True} for h in hits)
+        return text
+
+    out = dict(draft)
+    for key in ("customer_vision", "current_phase_objective", "executive_summary"):
+        out[key] = replace_str(out.get(key, "") or "")
+    for field in LIST_FIELDS:
+        items = out.get(field)
+        if isinstance(items, list):
+            out[field] = [
+                {k: replace_str(v) if isinstance(v, str) else v for k, v in item.items()}
+                if isinstance(item, dict) else item
+                for item in items
+            ]
+    evidence = out.get("evidence")
+    if isinstance(evidence, dict):
+        out["evidence"] = {k: replace_str(v) if isinstance(v, str) else v for k, v in evidence.items()}
+    return out

@@ -127,6 +127,19 @@ for bp in BLUEPRINTS:
     app.register_blueprint(bp)
 
 # ---------------------------------------------------------------------------
+# 1.5 蓝图对账断言（架构评估 2026-11-07 D1 防复发）：本清单是**硬编码列表**
+# （照抄 app.py 的蓝图注册序，不调 create_app 以避开 DB/Redis 初始化）——
+# AGENTS「新增或移除 Flask 蓝图后必须同步登记，否则重生成会静默漏条」已
+# 复发三次（T-J2/CR-027、#145、#177 前审计）。这里对 app.py 源码正则计数
+# 对账：register_blueprint 调用数 != 清单长度即中止生成（宁红不漏）。
+_APP_SOURCE = (SERVER_SRC / "fde_api" / "app.py").read_text(encoding="utf-8")
+_REGISTERED_COUNT = len(re.findall(r"register_blueprint\(", _APP_SOURCE))
+assert len(BLUEPRINTS) == _REGISTERED_COUNT, (
+    f"BLUEPRINTS 清单({len(BLUEPRINTS)} 项) != app.py register_blueprint({_REGISTERED_COUNT} 处)"
+    "——新增/移除蓝图未同步登记本清单（AGENTS 工作流陷阱，先补清单再重生成）"
+)
+
+# ---------------------------------------------------------------------------
 # 2. 测试文件内容（用于 route → test_file 匹配）
 # ---------------------------------------------------------------------------
 TESTS_DIR = REPO_ROOT / "server" / "tests"

@@ -68,3 +68,78 @@ def test_workflows_have_no_product_name_hardcode():
         if "蔡工" in path.read_text(encoding="utf-8"):
             violations.append(path.name)
     assert violations == []
+
+
+# ---------------------------------------------------------------------------
+# 架构评估 2026-11-07 P-4：包级顶层导入环冻结清单（import-lint）。
+#
+# 仓库的环规避惯例 = 子模块分工（models 层单向）+ 函数内懒导入；顶层包级双
+# 向依赖是「导入序地雷」（events.py 反转 projects↔control 教训）与重构成本
+# 的来源。本清单冻结既有 18 对环：出现**新环**（新增顶层 import 打破分工）
+# 即红；消除既有环同样要求显式更新清单（有意识的清单维护，不允许静默漂移）。
+# 仅 workflows↔control 不在清单——该环被上面的 purity 断言专门禁止。
+KNOWN_PACKAGE_IMPORT_CYCLES = frozenset({
+    ("agents", "guidance"),
+    ("agents", "meetings"),
+    ("agents", "solutions"),
+    ("ai", "guidance"),
+    ("ai", "research"),
+    ("dispatch", "projects"),
+    ("dispatch", "solutions"),
+    ("documents", "research"),
+    ("evidence", "projects"),
+    ("extensions", "storage"),
+    ("files", "projects"),
+    ("guidance", "translator"),
+    ("meetings", "solutions"),
+    ("ontology", "projects"),
+    ("ontology", "research"),
+    ("projects", "research"),
+    ("projects", "workflows"),
+    ("research", "workbench"),
+})
+
+
+def _import_graph_packages() -> set[str]:
+    """节点 = src/fde_api 下的包与顶层模块（__init__ 除外）。"""
+    return {
+        path.name if path.is_dir() else path.stem
+        for path in SRC.iterdir()
+        if not path.name.startswith("__") and (path.is_dir() or path.suffix == ".py")
+    }
+
+
+def _package_import_cycles() -> set[tuple[str, str]]:
+    nodes = _import_graph_packages()
+    edges: dict[str, set[str]] = {}
+    for path in SRC.rglob("*.py"):
+        rel = path.relative_to(SRC)
+        source = rel.parts[0] if len(rel.parts) > 1 else rel.stem
+        if source not in nodes:
+            continue
+        for mod in _top_level_imports(path):
+            if not mod.startswith("fde_api."):
+                continue
+            target = mod.split(".")[1]
+            if target in nodes and target != source:
+                edges.setdefault(source, set()).add(target)
+    return {
+        (a, b) for a in nodes for b in nodes if a < b
+        and b in edges.get(a, ()) and a in edges.get(b, ())
+    }
+
+
+def test_top_level_package_import_cycles_stay_frozen():
+    """包级顶层导入环 = 冻结清单（新增环红、静默解环也红——清单必须显式维护）。"""
+    current = _package_import_cycles()
+    known = {tuple(pair) for pair in KNOWN_PACKAGE_IMPORT_CYCLES}
+    added = current - known
+    removed = known - current
+    assert not added, (
+        f"新增包级顶层导入环 {sorted(added)}——先评审可否经子模块分工/懒导入解环，"
+        "确需保留再登记 KNOWN_PACKAGE_IMPORT_CYCLES（评估报告 P-4）"
+    )
+    assert not removed, (
+        f"清单中的环 {sorted(removed)} 已不存在——环被解除是好事，请同步收缩"
+        "KNOWN_PACKAGE_IMPORT_CYCLES（有意识的清单维护）"
+    )

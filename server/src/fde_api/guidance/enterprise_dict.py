@@ -60,6 +60,11 @@ class RedactionConfigError(RuntimeError):
     """词典机制性故障（fail-closed 硬阻断入库，闸①拍板①层）。"""
 
 
+# 跨域共用的失败码（guidance 预调研与 translator 创建面同码——语义同一：
+# 「客户名不入库」红线的机制性阻断）。文案各域自带。
+DICT_FAILURE_CODE = "pseudonym_dict_unavailable"
+
+
 def _parse_dict_file(path: Path, *, source: str) -> tuple[str, ...]:
     try:
         raw = path.read_text(encoding="utf-8")

@@ -46,6 +46,43 @@
 
 - NEW `desktop/tests/main/close-guard.test.ts` 10 例：决策矩阵 4＋确认文案 2＋**index.ts 接线静态钉 4**（close 处理器消费决策／放行旗标重触发 close／activeMutations++/-- 数据源仍在／确认框悬起期间重复关闭只拦不再弹——防接线再次静默脱落＋防叠框）；变异验证：守卫中性化→红→还原→绿。typecheck 双 tsconfig 绿；全量 vitest 897/897（72 文件）。
 - **口径校正**：#178 T-A7 轮实际 vitest +12（NEW solution-frozen-version 7＋solution-design +5）此前未入 AGENTS 口径行，#179 CHANGELOG 记 882 系基线误取陈旧 870 推算——**实测 887**（#178 PR-head run 42318566336 与 main run 42320178306 desktop job 双实测、本地一致），本轮校正后总量 **897**（+10 本轮）。
+## [未发布] — 架构评估修复轮：需求↔代码对齐评估（2026-11-07）全量修复
+
+评估报告：`docs/audit/架构评估报告-需求与实现对齐-2026-11-07.md`（九差异/六偏离模式/九建议；基线 fork/main `ff4813c`）。本节=§四建议 1–9 全量实施。**红线零违反（无 P0）**；部分对齐主因=文档↔代码一致性滞后，本轮系统性回写。
+
+### 服务端行为变更（零迁移零路由；server 变更 ⇒ 合并后 rebuild 三镜像，alembic 幂等 no-op）
+
+- **D2/P1 翻译器脱敏（本 P1 缺口的唯一代码修复）**：`translator/` 全链接入 T-A2 企业名脱敏——①**创建面原文不落库**（`_redact_translation_input`：种子词典命中→「客户代号」、疑似名→替换+复核、通用词零改动；词典机制故障 fail-closed 422 `pseudonym_dict_unavailable` 行不落库；凭据串 422 `sensitive_credential_detected`）；②**落库前兜底**（AI 输出回显企业名同样替换）；③**复核事件两阶段**落 `translator_translation` 目标（stage=input/output，`guidance.redaction_review` 同型）；④**采纳交接**：`adopt_translator_draft` 把条目搬到分析目标，confirm 复核闸（#171）按分析聚合**自动覆盖翻译链**（采纳响应即携 `redaction_review`；闸逻辑零改动）。**单一权威重构**：`redact_draft_payload` 从 guidance/jobs 私有提升至 `guidance/redaction.py` 公共原语（presurvey/translator 共用）；`DICT_FAILURE_CODE` 归位 `enterprise_dict.py`（jobs 保留同名 re-export 兼容）。翻译器无项目维度⇒替换别名恒「客户代号」（采纳后项目语境由复核清单兜底）。
+- **D4 pilot 契约警示**：`pilot_status` 增派生键 `contract_unverified`/`warnings`——窗口激活但零**非演练 completed** run 即警示（ZcodeAdapter spawn 契约未经真机验证（售前方案 Q5/T-Z1），spawn 失败全落 L2 会污染试点指标）；只读呈现不拦 run（`pilot_capacity_error` 不变）；演练 run 排除口径与 20-run 计数器一致。
+- **D1 防复发**：`scripts/audit/extract_workbench_inventory.py` 加「BLUEPRINTS 项数 == app.py register_blueprint 数」对账断言（宁红不漏；重生成过闸 305/41，三清单零字节漂移）。**初评 D1「现行违例」撤回**——系初评 grep 落在主树（落后 #177 的 c05bb19）旧文件上的取数误差，fork/main 脚本/清单均最新；教训记入评估报告附记。
+
+### 测试补钉（G7 四缺口全部收口 + 架构静态钉）
+
+- NEW `server/tests/test_translator_redaction.py` **9 例**：创建面替换/疑似/通用词三分、词典故障与凭据 fail-closed、输出回显兜底+output 事件、采纳交接+闸 409/ack 放行留痕、干净草稿零误伤（变异验证：摘创建面替换→红、摘采纳交接→红）。
+- NEW `server/tests/test_model_credential_key_derivation.py` **3 例**（G7-①）：缺省派生可解 / 轮换 JWT secret 即 `credential_unavailable` 且密文本体不变（换回旧 secret 即恢复） / 独立密钥隔离（`FDE_MODEL_CREDENTIAL_KEY` 后轮换零影响；反向钉独立键自身失效同样不可解）。
+- NEW `desktop/tests/main/renderer-url.test.ts` **6 例**（G7-④）：`isAllowedRendererUrl` 开发 origin / 打包态 file: 包含性 / query 拒绝 / 目录逃逸拒绝 / 远程协议拒绝 / 异常输入拒绝（判定本体纯函数，零生产代码改动）。
+- `test_architecture_purity.py` +**1**（P-4）：`test_top_level_package_import_cycles_stay_frozen`——AST 全包顶层导入环实测 **18 对**冻结（新增环红、静默解环也红，清单显式维护）。
+- `test_agent_pilot.py` +**3**（D4）：零 run 警示在位 / 真实 completed run 清警 / 演练 run 不算契约证据。
+- G7-②③复核在位零补码：桥重放 `test_bridge_sync_flags.py:179,228`、微信密码指令 `test_ai_api_actions.py:155`（初评漏记，已补记覆盖地图）。
+
+### 文档系统性回写（D3/D5/D6/D7/D8；全部 .md）
+
+- **7 份系统意图文档**（架构/关键流程/权限矩阵/变量与密钥/测试覆盖地图/定时任务/自动化面）：统一「快照更新 2026-11-07」头注；工具计数 14→**17**、写类分面口径（effect≠read 共 3，`lcsc_search` external/2 入册）、降级白名单 12→**13**、scheduler「唯一 1 个」→**5 面**、worker job 8→**12**、约 30 处行号重锚；关键流程补 T-A2 三道防线/复核闸/G3 前置闸/证据一等表/CAS；变量与密钥补 `FDE_ENTERPRISE_DICT`/`FDE_AGENT_*` 族、登录限流落点勘误（auth/limits.py→auth/routes.py:28-68）；自动化面补翻译器管道节（§6）与 file_send_wechat 实构防线（D5：无密码环节，原「事前密码确认」失真）。
+- **G3 验收场景矩阵**：补场景 1.7（代号化三道防线+复核闸全链）/1.8（S3 闸桌面拦截）；更新记录自纠「改行为先改场景表」三轮违例。
+- **测试覆盖地图**：基线改 CI 实测（pytest 2073 收集/ vitest 887）；§三 G7 四缺口全收口表；§二建议项六项现状（Serper 项失效销号）；逐文件计数停止维护（以 CI 为准）。
+- **技术实施方案**勘误三处：dispatch 禁区口径对齐钉子范围（读路径禁 join，D8）、ZcodeAdapter 契约偏差注记（Q5/T-Z1）、meeting 工具落点注记（meetings 侧非网关）+ generated_by 值域勘误（实构 `('human','agent')`）。
+- **backlog T-A1 状态回写**（D6）：PROPOSED→DONE（#156 `ab046f4`）。**冲突解存档：#184 goal-ta3 核销轮已先行落盘同一结论（DONE/零补码，fork/main 权威版），本 PR 冲突解取其版；D6 登记断档的两会话独立发现，以先合并者为准。**
+- **评估报告自订**：D1 撤回注记、D9 补记②③在位、§六实施轮附记（九建议逐一落点）。
+
+### 口径勘误（D7）
+
+- AGENTS vitest 口径 **882→887**：#179 补账取了 #178 PR-head 值（870+12），漏计 #177 已上移基线 875（875+12=887；CI run 42322015325 / 42323992174 desktop job 双证 887 passed）。
+
+### 部署与打包
+
+- server 变更（translator/agents/redaction/jobs）⇒ **合并后 rebuild 三镜像 + `alembic upgrade head`**（零迁移，幂等 no-op）。
+- 桌面仅新增测试文件（零生产代码）⇒ 便携版无需重打包（tests 不进 asar）。
+- 口径（**CI run 42338168736 PR-head 实测**）：pytest **2094 收集 = 2088 passed + 6 skipped**（基线 #184 后 2073+6s ＋ 本轮 +15）；vitest **918/918（76 文件）**（基线 #182 后 912 ＋ 本轮 +6）；mypy 基线 279 不变（官方闸绿）；路由 307 / 蓝图 41 / 105 表 / head `b2e8f4a6c9d3` / ENTRIES 94 不变（307 系 #182 先行 +2，本轮零路由）。
 
 ## [未发布] — goal-ta1 拍板回写 + 录音转写 ASR 通道立项（纯文档，2026-11-07）
 
