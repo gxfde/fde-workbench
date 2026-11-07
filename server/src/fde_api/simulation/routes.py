@@ -14,7 +14,7 @@ from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
-from fde_api.simulation import service
+from fde_api.simulation import run_service, service
 
 simulation_blueprint = Blueprint("simulation", __name__, url_prefix="/api/v1/simulation")
 
@@ -143,5 +143,80 @@ def export_scenarios():
         split=request.args.get("split"),
         variant=request.args.get("variant"),
         include_reference=include_reference,
+    )
+    return _data(data)
+
+
+# ---------------------------------------------------------------------------
+# 模拟运行（G3）
+# ---------------------------------------------------------------------------
+
+
+@simulation_blueprint.get("/runs")
+@require_auth
+def list_runs():
+    """运行列表。"""
+    data = run_service.list_runs(
+        actor=g.current_user,
+        scenario_id=request.args.get("scenario_id"),
+        status=request.args.get("status"),
+        split=request.args.get("split"),
+        limit=_int_arg("limit", run_service.LIST_PAGE_SIZE) or run_service.LIST_PAGE_SIZE,
+    )
+    return _data(data)
+
+
+@simulation_blueprint.post("/runs")
+@require_auth
+def create_run():
+    """创建模拟运行（``execute=true`` 时立即执行一次）。"""
+    data = run_service.create_run(actor=g.current_user, payload=_payload())
+    return _data(data), 201
+
+
+@simulation_blueprint.get("/runs/<run_id>")
+@require_auth
+def get_run(run_id):
+    """运行详情。"""
+    include_context = request.args.get("include_context") == "true"
+    return _data(
+        run_service.get_run(
+            actor=g.current_user, run_id=run_id, include_context=include_context
+        )
+    )
+
+
+@simulation_blueprint.post("/runs/<run_id>/execute")
+@require_auth
+def execute_run(run_id):
+    """执行一次模拟运行（同步）。真实适配面不可用时明确 409，不静默退回 mock。"""
+    return _data(run_service.execute_run(actor=g.current_user, run_id=run_id))
+
+
+@simulation_blueprint.post("/runs/<run_id>/cancel")
+@require_auth
+def cancel_run(run_id):
+    """取消运行（终态不可取消）。"""
+    return _data(run_service.cancel_run(actor=g.current_user, run_id=run_id))
+
+
+@simulation_blueprint.post("/runs/<run_id>/retry")
+@require_auth
+def retry_run(run_id):
+    """重试运行（attempt+1 派生新键；failed_hard 不可重试）。"""
+    data = run_service.retry_run(actor=g.current_user, run_id=run_id)
+    return _data(data), 201
+
+
+@simulation_blueprint.get("/runs/<run_id>/trace")
+@require_auth
+def list_traces(run_id):
+    """读取运行 Trace（seq 游标分页）。"""
+    data = run_service.list_traces(
+        actor=g.current_user,
+        run_id=run_id,
+        phase=request.args.get("phase"),
+        after_seq=_int_arg("after_seq"),
+        limit=_int_arg("limit", run_service.TRACE_PAGE_SIZE) or run_service.TRACE_PAGE_SIZE,
     )
     return _data(data)

@@ -12,7 +12,13 @@ from __future__ import annotations
 from alembic import command
 from sqlalchemy import inspect
 
-from test_migrations import scalar, seed_project, seed_user_and_template, table_names
+from test_migrations import (
+    cleanup_seeded_rows,
+    scalar,
+    seed_project,
+    seed_user_and_template,
+    table_names,
+)
 
 SIMULATION_TABLE = "simulation_scenarios"
 PREVIOUS_HEAD = "e5f1a7c3b9d4"
@@ -81,32 +87,43 @@ def test_simulation_scenarios_constraints_and_indexes(engine):
 
 
 def test_simulation_scenarios_roundtrip_preserves_projects(alembic_config, engine):
-    """downgrade 一步即消失、upgrade 回 head 重建；两向都不碰 projects 行。"""
-    command.downgrade(alembic_config, PREVIOUS_HEAD)
-    assert SIMULATION_TABLE not in table_names(engine)
+    """downgrade 一步即消失、upgrade 回 head 重建；两向都不碰 projects 行。
+
+    **自清理**：本用例会建一行 projects（验证「两向不碰项目行」），必须在退出
+    前删掉——否则残留行会让后续重跑基线迁移的用例撞 NOT NULL 约束
+    （`projects.enterprise_code` 是无默认值的 NOT NULL 列，只在空表时可加）。
+    """
     ids = seed_user_and_template(engine, username="migration.v32-sim-keep")
-    seed_project(engine, ids, project_code="FDE-V32-SIM-KEEP")
+    project_id, sop_node_id = seed_project(engine, ids, project_code="FDE-V32-SIM-KEEP")
+    try:
+        command.downgrade(alembic_config, PREVIOUS_HEAD)
+        assert SIMULATION_TABLE not in table_names(engine)
 
-    command.upgrade(alembic_config, "head")
+        command.upgrade(alembic_config, "head")
 
-    assert (
-        scalar(
-            engine,
-            "SELECT project_code FROM projects WHERE project_code='FDE-V32-SIM-KEEP'",
+        assert (
+            scalar(
+                engine,
+                "SELECT project_code FROM projects WHERE project_code='FDE-V32-SIM-KEEP'",
+            )
+            == "FDE-V32-SIM-KEEP"
         )
-        == "FDE-V32-SIM-KEEP"
-    )
-    assert SIMULATION_TABLE in table_names(engine)
+        assert SIMULATION_TABLE in table_names(engine)
 
-    command.downgrade(alembic_config, PREVIOUS_HEAD)
+        command.downgrade(alembic_config, PREVIOUS_HEAD)
 
-    assert (
-        scalar(
-            engine,
-            "SELECT project_code FROM projects WHERE project_code='FDE-V32-SIM-KEEP'",
+        assert (
+            scalar(
+                engine,
+                "SELECT project_code FROM projects WHERE project_code='FDE-V32-SIM-KEEP'",
+            )
+            == "FDE-V32-SIM-KEEP"
         )
-        == "FDE-V32-SIM-KEEP"
-    )
-    assert SIMULATION_TABLE not in table_names(engine)
+        assert SIMULATION_TABLE not in table_names(engine)
 
-    command.upgrade(alembic_config, "head")
+        command.upgrade(alembic_config, "head")
+    finally:
+        command.upgrade(alembic_config, "head")
+        cleanup_seeded_rows(
+            engine, ids, project_id=project_id, sop_node_id=sop_node_id
+        )
