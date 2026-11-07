@@ -605,6 +605,16 @@
 - 验收：售前能在桌面看到 run 列表→详情→tool-calls→成本，以及会议纪要。
 - 回滚：revert 单 commit（+2 路由零迁移可整撤）。风险：低。依赖：可与 T-A5..T-A7 并行。复杂度：**M**。
 
+#### ✅ T-A8 实施轮（goal-ta2，2026-11-07，#171 复核清单桌面收口同批——**已实施**，状态与 CI 口径以 CHANGELOG 同名节为准）
+- **服务端 +2 只读列表路由（零迁移零新表）**：`GET /api/v1/agents/runs`（`project_id`/`status`/`created_from`/`created_to` 过滤＋`limit`(1..200，默认 50)/`offset` 分页＋`truncated` 取 limit+1 行诚实标记）＋ `GET /api/v1/meetings`（`project_id` 过滤＋同款分页）。**有意不进 api_catalog**（人工控制台面，沿 T-W6 workflow 列表与 B#9 execution-facts 先例；ENTRIES 94 不变）。
+- **可见性单一权威**：NEW `projects/permissions.py::visible_project_ids`（跨项目聚合时逐项目复用 `project_access` 判定，不在 SQL 重写第二套可见性规则）；单项目查询走既有 404（不存在）/403（can_view=False）两段语义。
+- **防 N+1**：runs 列表行 = `_serialize_run(detail=False)`（纯列读，无 `agent`/`artifacts` 键）；meetings 列表行 = `_serialize_meeting(with_turns=False, turns_count=预聚合)`（无 `turns` 键；话轮计数走**单条分组查询**，替代逐行 SELECT——`_serialize_meeting` 加 `turns_count` 可选参，既有端点行为零变化）。详情/工具调用/纪要走既有单实体端点按需取。
+- **桌面双控制台**：NEW `desktop/src/renderer/src/agents/AgentsConsole.tsx`（run 列表＋成本汇总头＋详情展开=run 详情[agent 名/产物指纹/复核态]＋工具调用表[放行/拦截]）＋ NEW `desktop/src/renderer/src/meetings/MeetingsConsole.tsx`（会议列表＋详情展开=话轮流＋**closed 会议才拉纪要**三段式呈现[共识/分歧/待办+sealed 指纹前缀]）；项目 tab 11→13（「智能体」「评审会」挂「工作流」之后）。**拍板 6⑥ 界面分离维持**：本两页=智能体运行态/协作过程，B#9「执行事实」tab 不动。写操作（handoff/retry/召集/收敛）不在控制台，403/409 原样呈现。
+- **#171 复核清单桌面收口（同批）**：`GuidanceReview` 消费 `get_analysis.redaction_review`（**服务端唯一投影，前端不二次推导文本**）——清单非空时呈现条目（名称/次数/词典命中徽标）；confirm 撞 409 `redaction_review_required` 时呈现拦截提示，勾选「已复核」后重发显式 `redaction_reviewed: true`（路由只认字面 true）；干净分析 confirm **不带该键零额外负担**；本地读面缺清单时 409 触发单次回读读面（仍用服务端投影）。types.ts 增 `redaction_review?`（旧载荷无键兼容）+ `isRedactionReviewEntries` 守卫（畸形条目整组丢弃，fail 向保守）。
+- **B#9 断言钉（同批）**：`test_execution_fact_chain.py` 增 `guidance.redaction_review` 事件钉——事件元数据（event_type）在事实链时间线可见，`changes.entries`（疑似企业名正文）**绝不外泄**（该事件 changes 携带未收录疑似名，泄露即破客户资料红线）；与既有「changes 不外泄」钉形成双钉。
+- **测试**：服务端 NEW `test_agents_meetings_lists.py` 5 例（可见项目聚合+形状面/局外人 403+未知项目 404/status·时间过滤+分页校验+truncated/会议 turns_count 预聚合+行形状/未认证 401）＋事实链 +1 钉；桌面 NEW `agents-console` 6 例＋`meetings-console` 5 例＋`guidance-redaction-review` 4 例＋project-detail tab 清单钉同步（11→13 项）。变异四连全红→还原绿：M1 摘 can_view 闸（403 用例红）/ M2 摘 limit 上界（400 用例红）/ M3 serialize_fact_event 外泄 changes（**双钉齐红**）/ M4 桌面摘 ack 携带（409 用例红）。
+- **口径勘误（教训 48：只认 CI 实测）**：#179 bullet 记桌面基线 882 已陈旧——main CI 实测（#179 合并 run 与 #180 PR-head run 双源）= **71 文件 887**；#181 后基线=**72 文件 897**（close-guard +10）。服务端基线 main@677746c 实测 **2067 passed + 6 skipped**。本轮 PR 预期：pytest **2073+6s**（+6）/ vitest **912**（75 文件）/ 路由 305→**307**（审计清单已重生成：route CSV +2 行、blueprint 41、表 105、36 rev、head `b2e8f4a6c9d3` 不变、DB CSV 零变化）。
+
 ### T-A9 录音转写草稿区 + 人工整理晋升机制（ASR 通道另立项） — **PROPOSED（登记轮，零代码）**
 - 目标：录音场景下，**转写结果只落草稿区**，售前人工整理为访谈纪要并经客户确认后才入正式库。
 - **红线依据（逐字）**：`D:/test/FDE/engagements/openfde/engagements/somwyn/raw/2026-10-27-FDE接触调研阶段资料入库SOP设计.md:109`「初诊录音转写（⚠️ **只转写不入正式库**，且必须先获口头同意）」、`:111`「**S2 明令「不录音转写入库」**…**边界是：企业主动发给你的文字可以存；你录的音不能存。** 这条线要守死」⇒ v1.1 原结论「转写文字可入库」**作废**（v1.2 §10 Q2 已改判）。
@@ -758,7 +768,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
  T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施并合并 #178)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
- T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
+ T-A8(agents+meetings 控制台，含 +2 只读列表路由)：✅已实施(goal-ta2，与 #171 收口同批)
  T-A9(转写草稿区)：依赖 T-A2(✅已实施) + ASR 通道立项（✅立项已批 2026-11-07 §拍板闸 6⑨，选型拍板后开工）
  T-B1(artifacts 扩列 + handover_packages 闭环)：依赖 T-A8；新迁移 additive-only
  T-Z1(zcode 真机 + 执行通道裁定)：依赖 T-B1；开工前须实测 zcode 能否进 sandbox-runner 容器

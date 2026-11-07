@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
-import type { GuidanceAnalysisDto, GuidanceClassification, GuidanceItemDto } from "./types"
+import type { GuidanceAnalysisDto, GuidanceClassification, GuidanceItemDto, GuidanceRedactionReviewEntry } from "./types"
+import { isRedactionReviewEntries } from "./types"
 import {
   CLASSIFICATION_LABELS,
   GUIDANCE_LAYERS,
@@ -27,13 +28,20 @@ export function GuidanceReview({ projectId, initial, canManage, initialEditing =
   const [error, setError] = useState("")
   const published = useRef<GuidanceAnalysisDto | null>(null)
   const [editing, setEditing] = useState(initialEditing && initial.status === "draft" && initial.analysis_state === "ready")
+  // T-A2 复核闸桌面面（拍板 6①）：复核清单唯一投影=服务端 get_analysis
+  // .redaction_review（#171 派生），前端不二次推导文本；「已复核」ack 随
+  // confirm 请求显式 redaction_reviewed=true（路由只认字面 true）。
+  const [reviewAcked, setReviewAcked] = useState(false)
+  const [reviewBlocked, setReviewBlocked] = useState(false)
   useEffect(() => {
     // A locally published revision is echoed back by the parent. Do not turn
     // off editing immediately after the user explicitly requested that revision.
     if (initial === published.current) return
     setDraft(initial); setBaseline(initial); setEditing(initialEditing && initial.status === "draft" && initial.analysis_state === "ready")
+    setReviewAcked(false); setReviewBlocked(false)
   }, [initial, initialEditing])
   const canEdit = canManage && draft.analysis_state === "ready"
+  const reviewList: GuidanceRedactionReviewEntry[] = isRedactionReviewEntries(draft.redaction_review) ? draft.redaction_review : []
   // 空文本条目在保存前滤掉——服务端 `invalid_text` 拒收空条目，而「新增条目」
   // 允许先建空行再填。
   const payload = useMemo(() => Object.fromEntries(sections.map(([key]) => [
@@ -50,7 +58,25 @@ export function GuidanceReview({ projectId, initial, canManage, initialEditing =
       // onSaved，这里提前推进不会触发回置。
       setDraft(next); setBaseline(next)
       if (confirm) {
-        next = await apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(projectId)}/guidance-analyses/${encodeURIComponent(next.id)}/confirm`, { method: "POST", body: { version: next.version } })
+        const analysisId = next.id
+        // T-A2 复核闸：清单非空且已勾选「已复核」时显式携带 ack（路由只认
+        // 字面 true）；清单为空不带该键——干净分析零额外负担。
+        const ackBody = reviewList.length && reviewAcked ? { redaction_reviewed: true } : {}
+        try {
+          next = await apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(projectId)}/guidance-analyses/${encodeURIComponent(analysisId)}/confirm`, { method: "POST", body: { version: next.version, ...ackBody } })
+        } catch (confirmCaught) {
+          if (confirmCaught instanceof ApiClientError && confirmCaught.code === "redaction_review_required") {
+            setReviewBlocked(true)
+            if (!reviewList.length) {
+              // 本地无清单（旧载荷或读面缺失）：回读读面取唯一投影，不自行推导。
+              try {
+                const refreshed = await apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(projectId)}/guidance-analyses/${encodeURIComponent(analysisId)}`, { method: "GET" })
+                if (isGuidanceAnalysis(refreshed)) { setDraft(refreshed); setBaseline(refreshed) }
+              } catch { /* 读面拉取失败只保留 409 文案 */ }
+            }
+          }
+          throw confirmCaught
+        }
         if (!isGuidanceAnalysis(next)) throw new Error("invalid guidance")
         setDraft(next); setBaseline(next)
       }
@@ -95,6 +121,27 @@ export function GuidanceReview({ projectId, initial, canManage, initialEditing =
         <GuidanceText title="执行摘要" text={draft.executive_summary} wide />
       </div>}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {reviewList.length && draft.status === "draft" ? (
+        <fieldset className="field guidance-redaction-review" aria-label="企业名替换复核清单">
+          <legend>企业名替换复核清单（{reviewList.length} 项）</legend>
+          {reviewBlocked ? <p className="form-error" role="alert">存在待复核的企业名替换：请逐项核对下方清单后勾选「已复核」，再确认。</p> : null}
+          <ul className="guidance-item-editor-list">
+            {reviewList.map((entry) => <li key={entry.name} className="guidance-item-editor">
+              <div className="guidance-item-editor-head">
+                <span className="guidance-item-text">{entry.name}</span>
+                <span className="guidance-item-meta">
+                  <span className="guidance-item-source">{entry.occurrences} 处</span>
+                  <span className={entry.matched_dict ? "guidance-item-confirmed" : "guidance-item-unconfirmed"}>{entry.matched_dict ? "词典命中" : "疑似（未收录）"}</span>
+                </span>
+              </div>
+            </li>)}
+          </ul>
+          {canEdit ? <label className="guidance-item-confirmed-toggle">
+            <input type="checkbox" checked={reviewAcked} onChange={(event) => setReviewAcked(event.target.checked)} />
+            已复核：以上企业名替换已逐项人工核对（勾选后确认才会放行）
+          </label> : null}
+        </fieldset>
+      ) : null}
       {editing && canEdit ? <div className="row-actions guidance-review-actions"><button className="secondary-button" type="button" disabled={saving} onClick={cancelEditing}>取消</button><button className="secondary-button" disabled={saving} onClick={() => void save(false)}>{saving ? "保存中…" : "保存修改"}</button><button className="primary-button" disabled={saving} onClick={() => void save(true)}>确认并用于项目指引</button></div>
         : !editing && canEdit && draft.status === "draft" ? <div className="row-actions guidance-review-actions"><button className="primary-button" disabled={saving} onClick={() => void save(true)}>{saving ? "确认中…" : "确认并用于项目指引"}</button></div> : null}
     </div>

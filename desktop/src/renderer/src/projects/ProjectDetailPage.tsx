@@ -14,6 +14,8 @@ import { isProjectMemberDto, isProjectTaskDto } from "./projectRuntimeValidation
 import { TaskTable } from "./TaskTable"
 import { ProjectLibrary } from "../library/ProjectLibrary"
 import { WorkflowConsole } from "../workflows/WorkflowConsole"
+import { AgentsConsole } from "../agents/AgentsConsole"
+import { MeetingsConsole } from "../meetings/MeetingsConsole"
 import { GlossaryPage } from "../ontology/GlossaryPage"
 import { ExecutionFactChain } from "../evidence/ExecutionFactChain"
 import { ResearchWorkspace } from "../research/ResearchWorkspace"
@@ -32,6 +34,8 @@ const tabs: Array<{ id: ProjectDetailTab; label: string }> = [
   { id: "research", label: "调研" },
   { id: "delivery", label: "方案设计" },
   { id: "workflow", label: "工作流" },
+  { id: "agents", label: "智能体" },
+  { id: "meetings", label: "评审会" },
   { id: "ontology", label: "术语表" },
   { id: "facts", label: "执行事实" },
   { id: "library", label: "文件库" },
@@ -188,6 +192,8 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
           {tab === "commercial" ? <CommercialBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "management" ? <ProjectManagement project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} /> : null}
           {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} /> : null}
+          {tab === "agents" ? <AgentsConsole projectId={project.id} /> : null}
+          {tab === "meetings" ? <MeetingsConsole projectId={project.id} /> : null}
           {tab === "ontology" ? <GlossaryPage projectId={project.id} canManage={canManage} /> : null}
           {tab === "facts" ? <ExecutionFactChain projectId={project.id} /> : null}
           {tab === "library" ? <ProjectLibrary projectId={project.id} canManage={canManage} /> : null}

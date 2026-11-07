@@ -5,6 +5,8 @@ handoff / retry / rehearse / recover 属人工授权写路径——AI 不得代�
 代接管、代重试（沿门禁三路由不进目录的同一红线）。
 """
 
+from datetime import datetime, timezone
+
 from flask import Blueprint, g, jsonify, request
 
 from fde_api.agents import service
@@ -55,6 +57,68 @@ def start_run(agent_id):
 def get_run(run_id):
     """溯源：run 状态/成本/降级链 + 产物指纹（V9 反查链的 run 段锚点）。"""
     return _data(service.get_run_detail(actor=g.current_user, run_id=run_id))
+
+
+_LIST_LIMIT_DEFAULT = 50
+_LIST_LIMIT_MAX = 200
+
+
+def _int_arg(raw: str, name: str) -> int:
+    try:
+        return int(raw)
+    except ValueError:
+        raise service.AgentsServiceError("invalid_request", f"{name} 必须是整数。", 400) from None
+
+
+def _pagination_args() -> tuple[int, int]:
+    raw_limit = request.args.get("limit")
+    raw_offset = request.args.get("offset")
+    limit = _LIST_LIMIT_DEFAULT if raw_limit is None else _int_arg(raw_limit, "limit")
+    offset = 0 if raw_offset is None else _int_arg(raw_offset, "offset")
+    if not 1 <= limit <= _LIST_LIMIT_MAX:
+        raise service.AgentsServiceError(
+            "invalid_request", f"limit 须在 1..{_LIST_LIMIT_MAX}。", 400
+        )
+    if offset < 0:
+        raise service.AgentsServiceError("invalid_request", "offset 不能为负。", 400)
+    return limit, offset
+
+
+def _time_arg(name: str) -> datetime | None:
+    raw = request.args.get(name)
+    if raw is None:
+        return None
+    try:
+        value = datetime.fromisoformat(raw)
+    except ValueError:
+        raise service.AgentsServiceError(
+            "invalid_request", f"{name} 须为 ISO 8601 时间（如 2026-11-07 或 2026-11-07T08:00:00）。", 400
+        ) from None
+    # 无时区的入参按 UTC 解释（created_at 列一律 UTC 存储）。
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+@agents_blueprint.get("/runs")
+@require_auth
+def list_runs():
+    """Run 列表（T-A8 桌面控制台，只读）：project/status/时间过滤＋有界分页。
+
+    列表行不带详情/产物/工具调用（防 N+1），走既有 /runs/<id> 与
+    /runs/<id>/tool-calls 按需取；人工控制台面，不进 api_catalog
+    （沿 T-W6 workflow 列表与 B#9 execution-facts 同款先例）。
+    """
+    limit, offset = _pagination_args()
+    return _data(
+        service.list_runs(
+            actor=g.current_user,
+            project_id=request.args.get("project_id"),
+            status=request.args.get("status"),
+            created_from=_time_arg("created_from"),
+            created_to=_time_arg("created_to"),
+            limit=limit,
+            offset=offset,
+        )
+    )
 
 
 @agents_blueprint.post("/runs/<run_id>/handoff")

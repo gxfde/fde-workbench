@@ -15,6 +15,24 @@ export interface GuidanceAnalysisDto {
   data_security_redlines: GuidanceItemDto[]; systems_and_deployment_constraints: GuidanceItemDto[]
   assumptions: GuidanceItemDto[]; open_questions: GuidanceItemDto[]; next_actions: GuidanceItemDto[]
   failure_code: string; failure_message: string; source_is_stale: boolean; version: number
+  // T-A2 复核读面（#171 派生投影，服务端唯一权威；旧服务端载荷无此键——可选）。
+  redaction_review?: GuidanceRedactionReviewEntry[]
+}
+// 复核清单条目：形状由服务端 `_redaction_review_entries` 单一投影（#160 写入方
+// 同源），前端不二次推导文本；旧载荷缺键/畸形条目一律整组丢弃（fail 向保守）。
+export interface GuidanceRedactionReviewEntry {
+  name: string
+  occurrences: number
+  matched_dict: boolean
+}
+export function isRedactionReviewEntries(value: unknown): value is GuidanceRedactionReviewEntry[] {
+  return Array.isArray(value) && value.every((item) => {
+    if (!item || typeof item !== "object") return false
+    const entry = item as Record<string, unknown>
+    return typeof entry.name === "string" && entry.name.length > 0
+      && typeof entry.occurrences === "number" && Number.isFinite(entry.occurrences)
+      && typeof entry.matched_dict === "boolean"
+  })
 }
 // goal-d2：售前轻量录入卡（S0-1 API 的桌面入口；S1–S2 阶段即可填写，无门禁要求）。
 export type InterviewMode = "onsite" | "remote" | "hybrid"

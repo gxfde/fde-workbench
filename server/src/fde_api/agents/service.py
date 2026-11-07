@@ -87,7 +87,7 @@ from fde_api.meetings.service import (
 from fde_api.dispatch.agent_assisted import ORDER_DIFFICULTY_RUN_MAP
 from fde_api.dispatch.models import DeliveryPackage
 from fde_api.projects.events import record_event
-from fde_api.projects.permissions import project_access
+from fde_api.projects.permissions import project_access, visible_project_ids
 from fde_api.solutions.models import ProjectSolution
 from fde_api.workbench.models import Project, new_uuid
 
@@ -900,6 +900,57 @@ def get_run_detail(*, actor: User, run_id: str) -> dict[str, Any]:
     with db.session() as session:
         run, _project = _require_run_access(session, actor, run_id)
         return _serialize_run(session, run, detail=True)
+
+
+def list_runs(
+    *,
+    actor: User,
+    project_id: str | None,
+    status: str | None,
+    created_from: datetime | None,
+    created_to: datetime | None,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    """Run 列表（T-A8 桌面控制台数据源，只读）。
+
+    - project_id 给定：can_view 闸（局外人 403）；未给定：跨「actor 可见项目」
+      聚合——可见性单一权威是 `projects.permissions.visible_project_ids`，
+      不在 SQL 里重写第二套规则。
+    - 列表行 = `_serialize_run(detail=False)`（纯列读，零关系查询——列表行
+      不带详情/产物，防 N+1；详情与工具调用走既有单 run 端点按需取）。
+    - 有界分页：取 limit+1 行判定 truncated（诚实标记可能还有更多）。
+    """
+    with db.session() as session:
+        if project_id is not None:
+            project = session.get(Project, project_id)
+            access = project_access(actor, project) if project else None
+            if project is None or access is None:
+                raise _error("project_not_found", "项目不存在或无权访问。", 404)
+            if not access.can_view:
+                raise _error("project_forbidden", "无权访问该项目。", 403)
+            scope = AgentRun.project_id == project.id
+        else:
+            scope = AgentRun.project_id.in_(visible_project_ids(session, actor))
+        query = select(AgentRun).where(scope)
+        if status:
+            query = query.where(AgentRun.status == status)
+        if created_from is not None:
+            query = query.where(AgentRun.created_at >= created_from)
+        if created_to is not None:
+            query = query.where(AgentRun.created_at <= created_to)
+        rows = list(
+            session.scalars(
+                query.order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+            )
+        )
+        truncated = len(rows) > limit
+        return {
+            "items": [_serialize_run(session, row) for row in rows[:limit]],
+            "truncated": truncated,
+        }
 
 
 def list_tool_calls(*, actor: User, run_id: str, decision: str | None) -> dict[str, Any]:

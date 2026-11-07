@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — T-A8 agents/meetings 桌面控制台 + #171 复核清单桌面收口（goal-ta2，2026-11-07）
+
+### 行为变更（+2 只读路由；零迁移零新表；桌面变更 ⇒ 便携版重打包）
+
+- **服务端**：`GET /api/v1/agents/runs`（project/status/时间过滤＋limit 1..200/offset 分页＋truncated）与 `GET /api/v1/meetings`（project 过滤＋同款分页）。可见性单一权威 NEW `projects/permissions.py::visible_project_ids`（跨项目聚合复用 `project_access`，不在 SQL 重写第二套规则）；单项目 404（不存在）/403（can_view=False）。**不进 api_catalog**（人工控制台面，沿 T-W6/B#9 先例）。防 N+1：runs 行无 `agent`/`artifacts` 键（`_serialize_run(detail=False)`）；meetings 行无 `turns` 键、话轮计数单条分组查询预聚合（`_serialize_meeting` 增 `turns_count` 可选参，既有端点零变化）。
+- **桌面**：NEW `agents/AgentsConsole.tsx`（run 列表→详情[agent/产物指纹]→tool-calls[放行/拦截]→成本汇总）＋ NEW `meetings/MeetingsConsole.tsx`（会议列表→话轮流→closed 才拉纪要三段式+sealed 指纹）；项目 tab 11→13（「智能体」「评审会」）。拍板 6⑥ 维持：与 B#9 执行事实面板界面分离。
+- **#171 复核清单桌面收口**：`GuidanceReview` 消费 `get_analysis.redaction_review`（服务端唯一投影）呈现条目（名称/次数/词典命中）；409 `redaction_review_required` 拦截提示＋「已复核」勾选后重发 `redaction_reviewed: true`；干净分析 confirm 不带键；本地缺清单时 409 回读读面补渲染（仍不自行推导）。
+- **B#9 断言钉**：`guidance.redaction_review` 事件在执行事实链**元数据可见、`changes.entries`（疑似企业名）绝不外泄**（与既有 changes 不外泄钉双钉）。
+- 测试：pytest +6（NEW test_agents_meetings_lists 5 ＋ 事实链钉 1）；vitest +15（agents-console 6＋meetings-console 5＋guidance-redaction-review 4；project-detail tab 钉 11→13 项）。变异四连红→还原绿（can_view 闸/limit 上界/changes 外泄双钉/ack 携带）。
+- 口径：路由 305→**307**（审计清单已重生成，route CSV +2 行/blueprint 41/表 105/36 rev/head 不变/DB CSV 零变化）；基线 main@677746c CI 实测 pytest **2067+6s**、vitest **897**（72 文件）；本轮 PR 预期 pytest **2073+6s** / vitest **912**（75 文件）。**勘误**：#179 记桌面基线 882 已陈旧（main CI 双源实测 887）。
+
 ## [未发布] — goal-c 台账收口：CR-033/036 驳斥销号 + CR-034「在途写不退出」保护接线（2026-11-07）
 
 ### 行为变更（纯桌面，零服务端零迁移零路由）

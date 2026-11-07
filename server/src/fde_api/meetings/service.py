@@ -58,7 +58,7 @@ from fde_api.meetings.templates import (
     list_templates,
 )
 from fde_api.projects.events import record_event
-from fde_api.projects.permissions import project_access
+from fde_api.projects.permissions import project_access, visible_project_ids
 from fde_api.solutions.models import ProjectSolution
 from fde_api.workbench.models import Project
 
@@ -358,7 +358,13 @@ def _require_adhoc_reason(template: dict[str, Any], payload: dict[str, Any]) -> 
     return None
 
 
-def _serialize_meeting(session: Any, meeting: ReviewMeeting, *, with_turns: bool = False) -> dict[str, Any]:
+def _serialize_meeting(
+    session: Any,
+    meeting: ReviewMeeting,
+    *,
+    with_turns: bool = False,
+    turns_count: int | None = None,
+) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": meeting.id,
         "project_id": meeting.project_id,
@@ -375,15 +381,29 @@ def _serialize_meeting(session: Any, meeting: ReviewMeeting, *, with_turns: bool
         "degraded": meeting.degraded,
         "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
     }
-    turns = list(
-        session.scalars(
-            select(ReviewMeetingTurn)
-            .where(ReviewMeetingTurn.meeting_id == meeting.id)
-            .order_by(ReviewMeetingTurn.seq)
+    turns: list[ReviewMeetingTurn] | None = None
+    if turns_count is not None:
+        # 列表面传入的预聚合计数（list_meetings 单条分组查询取得）——跳过逐行
+        # SELECT 的 N+1。
+        data["turns_count"] = turns_count
+    else:
+        turns = list(
+            session.scalars(
+                select(ReviewMeetingTurn)
+                .where(ReviewMeetingTurn.meeting_id == meeting.id)
+                .order_by(ReviewMeetingTurn.seq)
+            )
         )
-    )
-    data["turns_count"] = len(turns)
+        data["turns_count"] = len(turns)
     if with_turns:
+        if turns is None:
+            turns = list(
+                session.scalars(
+                    select(ReviewMeetingTurn)
+                    .where(ReviewMeetingTurn.meeting_id == meeting.id)
+                    .order_by(ReviewMeetingTurn.seq)
+                )
+            )
         data["turns"] = [
             {
                 "seq": turn.seq,
@@ -963,6 +983,49 @@ def close_meeting(*, actor: User, meeting_id: str, payload: dict[str, Any]) -> d
         )
         session.flush()
         return _serialize_minutes(minutes)
+
+
+def list_meetings(*, actor: User, project_id: str | None, limit: int, offset: int) -> dict[str, Any]:
+    """会议列表（T-A8 桌面控制台数据源，只读）。
+
+    - project_id 给定：can_view 闸（局外人 403）；未给定：跨「actor 可见项目」
+      聚合——可见性单一权威是 `projects.permissions.visible_project_ids`。
+    - 列表行不带话轮正文（防 N+1）：话轮计数走单条分组查询预聚合，正文走
+      既有会议详情端点按需取；纪要走 /meetings/<id>/minutes。
+    - 有界分页：取 limit+1 行判定 truncated（诚实标记可能还有更多）。
+    """
+    with db.session() as session:
+        if project_id is not None:
+            project = _load_project_for(session, actor, project_id, manage=False)
+            scope = ReviewMeeting.project_id == project.id
+        else:
+            scope = ReviewMeeting.project_id.in_(visible_project_ids(session, actor))
+        rows = list(
+            session.scalars(
+                select(ReviewMeeting)
+                .where(scope)
+                .order_by(ReviewMeeting.created_at.desc(), ReviewMeeting.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+            )
+        )
+        truncated = len(rows) > limit
+        rows = rows[:limit]
+        counts: dict[str, int] = {}
+        if rows:
+            counts = {
+                meeting_id: count
+                for meeting_id, count in session.execute(
+                    select(ReviewMeetingTurn.meeting_id, func.count())
+                    .where(ReviewMeetingTurn.meeting_id.in_([row.id for row in rows]))
+                    .group_by(ReviewMeetingTurn.meeting_id)
+                ).all()
+            }
+        items = [
+            _serialize_meeting(session, row, with_turns=False, turns_count=counts.get(row.id, 0))
+            for row in rows
+        ]
+        return {"items": items, "truncated": truncated}
 
 
 def get_meeting(*, actor: User, meeting_id: str) -> dict[str, Any]:

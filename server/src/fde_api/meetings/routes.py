@@ -46,6 +46,56 @@ def get_meeting(meeting_id):
     return _data(service.get_meeting(actor=g.current_user, meeting_id=meeting_id))
 
 
+_LIST_LIMIT_DEFAULT = 50
+_LIST_LIMIT_MAX = 200
+
+
+def _pagination_args() -> tuple[int, int]:
+    limit_raw = request.args.get("limit")
+    offset_raw = request.args.get("offset")
+    if limit_raw is None:
+        limit = _LIST_LIMIT_DEFAULT
+    else:
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            raise service.MeetingsServiceError("invalid_request", "limit 必须是整数。", 400) from None
+    if offset_raw is None:
+        offset = 0
+    else:
+        try:
+            offset = int(offset_raw)
+        except ValueError:
+            raise service.MeetingsServiceError("invalid_request", "offset 必须是整数。", 400) from None
+    if not 1 <= limit <= _LIST_LIMIT_MAX:
+        raise service.MeetingsServiceError(
+            "invalid_request", f"limit 须在 1..{_LIST_LIMIT_MAX}。", 400
+        )
+    if offset < 0:
+        raise service.MeetingsServiceError("invalid_request", "offset 不能为负。", 400)
+    return limit, offset
+
+
+@meetings_blueprint.get("/meetings")
+@require_auth
+def list_meetings():
+    """会议列表（T-A8 桌面控制台，只读）：project 过滤＋有界分页。
+
+    列表行不带话轮正文（防 N+1，话轮计数预聚合），话轮/纪要走既有详情端点
+    按需取；人工控制台面，不进 api_catalog（沿 T-W6 workflow 列表与 B#9
+    execution-facts 同款先例）。
+    """
+    limit, offset = _pagination_args()
+    return _data(
+        service.list_meetings(
+            actor=g.current_user,
+            project_id=request.args.get("project_id"),
+            limit=limit,
+            offset=offset,
+        )
+    )
+
+
 @meetings_blueprint.post("/meetings/<meeting_id>/turns")
 @require_auth
 def add_turn(meeting_id):

@@ -148,6 +148,39 @@ def test_facts_merge_three_sources_desc_and_hide_changes(admin_client, gate_proj
     assert all("completed" not in i and "outcome" not in i for i in ai_items)
 
 
+def test_facts_redaction_review_event_metadata_visible_names_not_leaked(admin_client, gate_project, db_session) -> None:
+    """T-A8 轮补钉（#171 复核清单事实源）：guidance.redaction_review 事件的
+    changes.entries 携带疑似企业名（复核清单正文）——事实链只呈现事件元数据
+    （时间线可见、可数），名字本体绝不外泄（前端复核清单唯一投影是
+    get_analysis.redaction_review，不是事实链）。"""
+    project, _gates_url, leader_client = gate_project
+    base = f"/api/v1/projects/{project['id']}/execution-facts"
+    suspect_name = "某真实企业有限公司"
+    row = OperationEvent(
+        actor_user_id=leader_client.user.id,
+        project_id=project["id"],
+        target_type="project_guidance_analysis",
+        target_id="analysis-ta2",
+        event_type="guidance.redaction_review",
+        changes={"entries": [{"name": suspect_name, "occurrences": 2, "matched_dict": False}]},
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    resp = admin_client.get(base)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    data = resp.json["data"]
+    mine = [
+        item for item in data["items"]
+        if item["fact_type"] == "operation_event" and item["event_type"] == "guidance.redaction_review"
+    ]
+    assert len(mine) == 1  # 元数据面：事件在时间线可见
+    # 条目正文不漏：疑似企业名与 entries 载荷任何形状都不出现在响应里
+    assert suspect_name not in resp.get_data(as_text=True)
+    assert all("changes" not in item for item in mine)
+    assert all("entries" not in str(item) for item in mine)
+
+
 def test_facts_actor_scope_isolates_ai_audits(admin_client, gate_project, db_session) -> None:
     project, _gates_url, leader_client = gate_project
     base = f"/api/v1/projects/{project['id']}/execution-facts"
