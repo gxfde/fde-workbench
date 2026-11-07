@@ -1,0 +1,178 @@
+{
+  "case_code": "CASE-B-TRADE-LEADS",
+  "name": "中小制造企业外贸获客自动化",
+  "industry": "small_manufacturing",
+  "difficulty": "standard",
+  "split": "train",
+  "tags": ["外贸", "获客", "线索", "邮件", "合规"],
+  "content": {
+    "case_code": "CASE-B-TRADE-LEADS",
+    "customer_profile": {
+      "company_type": "小型精密结构件制造企业，80 人，外贸占营收 60%",
+      "stakeholders": ["外贸经理", "2 名外贸业务员", "总经理", "兼职设计（做产品资料）"],
+      "maturity": "无 CRM，线索记在 Excel；产品资料在 PPT 与微信；用企业邮箱手动开发信",
+      "decision_style": "总经理要快、预算敏感（首期 20 万内）；外贸经理担心发信被封、线索质量差",
+      "real_budget": "首期 20 万以内"
+    },
+    "visible": {
+      "initial_brief": [
+        "我们产品不错但没人知道，想做外贸网站顺便自动开发信",
+        "现在线索都是业务员自己在展会和阿里巴巴上找的，散得很"
+      ],
+      "known_systems": ["Excel 线索表（约 1.2 万行）", "企业邮箱", "阿里国际站店铺", "公司官网（2019 年建，几乎没更新）"],
+      "constraints": {
+        "budget": "首期 20 万以内",
+        "timeline": "2 个月",
+        "tech": ["不换现有邮箱与企业邮箱服务", "产品参数要能继续人工维护", "业务员不接受额外太多操作"],
+        "compliance": [
+          "目标市场含欧盟、美国，需考虑 GDPR 与各平台反垃圾邮件规则",
+          "必须提供退订机制，名单来源需可说明合法性"
+        ]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "B-F1",
+          "text": "产品资料散落在 PPT、微信群和展会名片里，同一个产品在三个地方写三种电压规格（12V/24V/通用），业务员对外报价常出错。",
+          "category": "data",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["资料", "产品", "参数", "规格", "目录", "整理", "标准化"],
+          "condition": "顾问询问产品资料现状与参数口径"
+        },
+        {
+          "fact_id": "B-F2",
+          "text": "Excel 里 1.2 万条线索中约四成邮箱无效或已在退订名单里；业务员复盘时发现至少三次把退订客户又发过信。",
+          "category": "data_quality",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["线索", "邮箱", "质量", "去重", "退订", "有效", "重复"],
+          "condition": "顾问询问线索规模、质量、去重或退订情况"
+        },
+        {
+          "fact_id": "B-F3",
+          "text": "两年前业务员群发过一次，被目标国 ISP 拉黑过发信域名，换了域名才恢复；总经理至今对「自动发信」有心理阴影。",
+          "category": "compliance",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["发信", "群发", "封", "垃圾邮件", "合规", "反垃圾", "退订"],
+          "condition": "顾问涉及开发信发送方式、频率或合规"
+        },
+        {
+          "fact_id": "B-F4",
+          "text": "没有明确的目标客户画像，现有名单基本是展会名录与阿里站抄来的，谁都联系过，没有行业与规模筛选。",
+          "category": "requirement",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["客户", "画像", "目标", "行业", "买家", "谁"],
+          "condition": "顾问询问目标客户是谁、如何筛选线索"
+        },
+        {
+          "fact_id": "B-F5",
+          "text": "询盘回复没有时限约定，历史上平均 6 天才回，询盘转化率因此很低；客户也说不清「多少询盘算好」。",
+          "category": "process",
+          "disclosure_stage": "design",
+          "probe_keywords": ["跟进", "回复", "SLA", "流程", "转化", "指标"],
+          "condition": "顾问涉及跟进流程、响应时效或效果指标"
+        }
+      ]
+    },
+    "misleading_request": "做个外贸网站 + 自动群发开发信",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["总经理说不出目标市场，只说「欧美都做」", "业务员对产品参数自己也讲不全"],
+        "probe_tolerance": 3,
+        "suppress_facts": ["B-F5"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "美国客户占 40%，需考虑美国代理与终端客户识别",
+          "欧盟客户要求供应商提供数据处理说明（DPA）",
+          "总经理要求三个月内看到询盘数上升，但团队只有 2 名业务员，无人专职运营"
+        ],
+        "budget": "压到 12 万以内",
+        "probe_tolerance": 5,
+        "conflicts": [
+          {"between": "总经理", "and": "外贸经理", "about": "是否接受自动化开发信"},
+          {"between": "外贸经理", "and": "2 名业务员", "about": "线索认领与跟进责任归属"}
+        ],
+        "change_events": [
+          {"at_round": 2, "event": "追加要求：所有外发内容需外贸经理逐条审核后才能发出"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.crm.query", "phase": "analysis"},
+        "error": "sim_data_conflict",
+        "note": "线索表出现重复企业多联系人，暴露去重与归并问题"
+      },
+      {
+        "match": {"tool": "sim.mail.send", "phase": "implementation"},
+        "error": "sim_permission_denied",
+        "note": "无人工审核授权时发信被拒，暴露权限边界"
+      }
+    ],
+    "seed_data": {
+      "crm": {
+        "_note": "邮箱占位一律不带 TLD 圆点——仓库的代号化扫描（scripts/check-pseudonymization.sh 的 EMAIL 正则）会把任何 email 形状的串判为个人数据泄漏；仿真地址刻意不匹配该正则。",
+        "leads": [
+          {"company": "Northwind Fabrication", "country": "US", "email": "buyer@northwind-example", "source": "alibaba", "replied": false},
+          {"company": "Rheinwerk Komponenten", "country": "DE", "email": "info@rheinwerk-example", "source": "expo", "replied": true},
+          {"company": "Northwind Fabrication", "country": "US", "email": "purchasing@northwind-example", "source": "expo", "replied": false}
+        ],
+        "suppression_list": ["opt-out@legacy-example"]
+      },
+      "products": [
+        {"sku": "BR-204", "name": "Bracket 204", "voltage": "12V/24V", "material": "AL6061", "moq": 100}
+      ]
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别先决条件是产品资料结构化与目标客户画像，而非先建网站",
+      "识别线索质量与退订/合规风险（历史退订客户被重复发信）",
+      "提出采集去重与信息补全流程，且不把未验证信息当事实",
+      "提出开发信与跟进序列，但保留人工审核与发送权限",
+      "提出 CRM 工作流与效果指标（含回复时效）"
+    ],
+    "acceptance_criteria": [
+      "方案含产品资料结构化方案（单一事实源 + 人工维护入口）",
+      "线索流程含去重规则、企业归并与退订抑制，且退订抑制在发信前生效",
+      "开发信发送路径含人工审核环节与发送授权边界",
+      "效果指标可度量（有效线索率、回复时效、转化率），并说明样本量与观察期"
+    ],
+    "rubric": {
+      "must_identify": [
+        "线索表存在无效与已退订邮箱，须先做去重与退订抑制",
+        "产品参数口径不一致，资料需先结构化",
+        "缺少目标客户画像，采集无从下手"
+      ],
+      "must_avoid": [
+        "把未经核验的邮箱、企业信息当已验证事实",
+        "无人工审核的自动群发",
+        "忽略退订与反垃圾邮件规则",
+        "承诺固定的发信量或询盘增长数字（无历史基线）"
+      ],
+      "must_produce": [
+        "产品资料结构化与单一事实源方案",
+        "目标客户画像与线索采集去重补全流程",
+        "开发信与跟进序列（含人工审核与发送权限）",
+        "CRM 工作流与效果指标定义"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "产品资料结构化 + 目标客户画像（不采集，先定义合格标准）",
+      "phase_2": "线索采集去重与退订抑制 + 信息补全（含人工核验环节）",
+      "phase_3": "开发信与跟进序列 + CRM 工作流 + 审核发送闸"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问线索现状、资料现状与合规历史"},
+        {"key": "lead_probe", "type": "call", "goal": "读取 sim.crm 样本，核对重复与退订"},
+        {"key": "profile", "type": "agent", "goal": "产出目标客户画像与合格线索标准"},
+        {"key": "content", "type": "agent", "goal": "产出资料结构化方案与开发信序列"},
+        {"key": "crm_flow", "type": "agent", "goal": "产出 CRM 工作流与审核闸"},
+        {"key": "review", "type": "human_approval", "goal": "外贸经理确认画像与发信授权边界"}
+      ],
+      "must_not": ["在画像与合格标准定义前开始批量采集", "跳过退订抑制直接发信"]
+    }
+  }
+}

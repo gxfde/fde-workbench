@@ -1,0 +1,173 @@
+{
+  "case_code": "CASE-F-AFTERSALES",
+  "name": "售后服务与投诉自动化",
+  "industry": "after_sales",
+  "difficulty": "standard",
+  "split": "train",
+  "tags": ["售后", "投诉", "工单", "责任分派", "闭环"],
+  "content": {
+    "case_code": "CASE-F-AFTERSALES",
+    "customer_profile": {
+      "company_type": "工业设备制造企业，400 人，产品销往 20 省，售后团队 6 人",
+      "stakeholders": ["售后经理", "3 名售后工程师", "质量经理", "销售经理", "法务（兼职）"],
+      "maturity": "400 热线工单在 Excel，微信群投诉没人统计，无系统",
+      "decision_style": "售后经理想把投诉自动分类；销售经理关心大客户投诉别被分错；法务对对外发文很谨慎",
+      "real_budget": "首期 30 万以内"
+    },
+    "visible": {
+      "initial_brief": [
+        "客户投诉电话打进来不知道该谁处理，经常石沉大海",
+        "能不能让 AI 自动回复客户"
+      ],
+      "known_systems": ["Excel 工单表", "企业微信群（客户投诉常发这里）", "400 热线记录本", "无 CRM"],
+      "constraints": {
+        "budget": "首期 30 万以内",
+        "timeline": "3 个月",
+        "tech": ["热线系统不换，AI 只做录入与分派", "老工程师排查靠现场经验"],
+        "compliance": ["对外正式函件需法务审核", "客户信息含联系人姓名与手机号，属个人数据"]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "F-F1",
+          "text": "投诉入口有四个：400 电话、企业微信、邮件、经销商代报；Excel 只登记了电话来的那部分（约占 45%），其余全在群里。",
+          "category": "channel",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["渠道", "入口", "电话", "微信", "邮件", "经销商", "统计"],
+          "condition": "顾问询问投诉来源与登记完整性"
+        },
+        {
+          "fact_id": "F-F2",
+          "text": "责任归属没有规则，靠售后经理凭感觉派单，经常派给不相关的部门（把设计问题派给现场工程师），来回转手平均 2.3 天。",
+          "category": "process",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["责任", "分派", "派单", "归属", "规则", "谁负责", "转手"],
+          "condition": "顾问询问责任分派机制或处理流程"
+        },
+        {
+          "fact_id": "F-F3",
+          "text": "「已回复」就算闭环：没有复访、没有确认恢复，客户是否满意没人记录；客服经理说至少三成是「关掉了但问题还在」。",
+          "category": "acceptance",
+          "disclosure_stage": "design",
+          "probe_keywords": ["闭环", "验收", "标准", "回复", "满意", "关闭", "怎么算完成"],
+          "condition": "顾问询问闭环定义、验收标准或效果口径"
+        },
+        {
+          "fact_id": "F-F4",
+          "text": "同一批次的批量投诉没有聚合：上季度一批轴承有 17 家客户投诉，被当成 17 个独立问题重复处理，真实根因只查了一次。",
+          "category": "analysis",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["批量", "重复", "聚合", "模式", "根因", "批次", "相似"],
+          "condition": "顾问询问问题模式识别、根因分析或重复工单处理"
+        },
+        {
+          "fact_id": "F-F5",
+          "text": "给重点客户发正式回复函须经法务审核，历史上平均审核 5 天，客户那边已经因为「没及时答复」升级过两次。",
+          "category": "permission",
+          "disclosure_stage": "design",
+          "probe_keywords": ["法务", "审核", "发函", "对外", "授权", "大客户", "升级"],
+          "condition": "顾问涉及对外沟通、审核流程或升级机制"
+        }
+      ]
+    },
+    "misleading_request": "让 AI 自动回复客户投诉",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["售后经理说不清投诉分类应该分几类", "销售与售后互相推诿大客户投诉归属"],
+        "probe_tolerance": 3,
+        "suppress_facts": ["F-F4"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "两家重点客户合同里写明投诉响应时效为 4 小时，超时要罚",
+          "经销商代报的投诉里混有经销商自己的商业纠纷，性质与产品故障不同",
+          "法务资源有限，明确只能人工审核「升级件」与「批量件」两类函件"
+        ],
+        "budget": "压到 18 万以内",
+        "probe_tolerance": 5,
+        "conflicts": [
+          {"between": "售后经理", "and": "销售经理", "about": "大客户投诉的责任归属"},
+          {"between": "售后经理", "and": "法务", "about": "自动回复的授权边界"}
+        ],
+        "change_events": [
+          {"at_round": 3, "event": "追加要求：需说明自动回复与人工回复的分界及升级规则"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.crm.query", "phase": "analysis"},
+        "error": "sim_data_conflict",
+        "note": "投诉记录出现重复与性质混杂，暴露入口分散与去重问题"
+      },
+      {
+        "match": {"tool": "sim.mail.send", "phase": "implementation"},
+        "error": "sim_permission_denied",
+        "note": "无审核授权的对外发函被拒，暴露授权边界"
+      }
+    ],
+    "seed_data": {
+      "crm": {
+        "complaints": [
+          {"id": "CP-1041", "channel": "phone", "company": "华东机电", "issue": "设备异响后停机", "batch": "B-2211", "created_at": "2024-10-18"},
+          {"id": "CP-1042", "channel": "wechat", "company": "恒通设备", "issue": "同批轴承异响", "batch": "B-2211", "created_at": "2024-10-19"},
+          {"id": "CP-1043", "channel": "dealer", "company": "经销商代报", "issue": "回款纠纷", "batch": null, "created_at": "2024-10-20"}
+        ]
+      },
+      "channels": ["phone", "wechat", "email", "dealer"]
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别前置是统一入口与完整登记，而非先做自动回复",
+      "识别责任分派缺规则是处理时延的主因",
+      "识别「已回复≠闭环」，须定义闭环与验收口径",
+      "识别批量投诉需要聚合与根因分析",
+      "给出对外沟通的授权与审核边界"
+    ],
+    "acceptance_criteria": [
+      "方案含多渠道统一登记与去重（含经销商代报的性质区分）",
+      "责任分派有可执行规则（含升级路径与响应时效）",
+      "闭环定义可度量（含复访/恢复确认），不接受「已回复」",
+      "含批量投诉聚合与根因分析机制",
+      "对外发函路径含人工审核闸与授权边界"
+    ],
+    "rubric": {
+      "must_identify": [
+        "投诉入口分散且登记不完整（仅 45% 入表）",
+        "责任分派无规则导致转手时延",
+        "闭环定义缺失（已回复≠问题解决）",
+        "批量投诉未聚合导致重复处理"
+      ],
+      "must_avoid": [
+        "未经人工审核自动对客发函",
+        "用回复率代替闭环率",
+        "编造责任判定或替客户下结论",
+        "把经销商商业纠纷当产品故障分派"
+      ],
+      "must_produce": [
+        "统一登记与分类（含渠道补齐）",
+        "责任分派规则与升级路径",
+        "闭环定义与效果指标",
+        "对外沟通的审核与授权边界"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "多渠道统一登记 + 去重 + 分类（含经销商件分流）",
+      "phase_2": "责任规则 + 工单流转 + 时效与升级",
+      "phase_3": "闭环定义与复访机制 + 批量聚合与根因分析 + 对外发函审核闸"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问渠道、派单、闭环与升级"},
+        {"key": "complaint_probe", "type": "call", "goal": "读取 sim.crm 样本核对重复与性质混杂"},
+        {"key": "taxonomy", "type": "agent", "goal": "产出投诉分类与分派规则"},
+        {"key": "closure", "type": "agent", "goal": "产出闭环定义与效果指标"},
+        {"key": "communication", "type": "agent", "goal": "产出自动/人工回复分界与审核闸"},
+        {"key": "review", "type": "human_approval", "goal": "售后与法务确认分界"}
+      ],
+      "must_not": ["在统一登记前上线自动回复", "无审核直接对客发正式函件"]
+    }
+  }
+}

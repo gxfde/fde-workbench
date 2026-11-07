@@ -1,0 +1,180 @@
+{
+  "case_code": "CASE-E-SCHEDULING",
+  "name": "多品种小批量生产排产",
+  "industry": "multi_variety_mfg",
+  "difficulty": "hard",
+  "split": "train",
+  "tags": ["排产", "APS", "约束", "插单", "优化目标"],
+  "content": {
+    "case_code": "CASE-E-SCHEDULING",
+    "customer_profile": {
+      "company_type": "精密五金件代工厂，300 人，20 个品种、单批 50–500 件、每周换型 5–8 次",
+      "stakeholders": ["生产经理", "计划主管（老王）", "工艺工程师", "销售", "总经理"],
+      "maturity": "ERP 有订单与产能概览但不能排产；实际排产靠 Excel + 白板 + 老王经验",
+      "decision_style": "老王对系统极不信任（「电脑排出来的班老师傅不服」）；销售频繁插单；总经理只问「能不能准时交」",
+      "real_budget": "首期 50 万以内"
+    },
+    "visible": {
+      "initial_brief": [
+        "订单老变，排产老改，能不能自动排",
+        "销售插单插得厉害，产能就那么多"
+      ],
+      "known_systems": ["ERP（订单、库存、工单）", "Excel 排产表", "车间白板", "无 MES 无设备联网"],
+      "constraints": {
+        "budget": "首期 50 万以内",
+        "timeline": "6 个月（客户要求分两期）",
+        "tech": ["设备无联网，产能与换型时间目前靠人工填表", "不换 ERP"],
+        "compliance": ["客户订单有交期违约罚则（按日 0.3%）"]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "E-F1",
+          "text": "真正的瓶颈是热处理（3 台炉，其中 1 台常年故障待修），但设备台账里没有登记炉子的换型时间与可用工时，产能数据是计划员估的。",
+          "category": "constraint",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["瓶颈", "产能", "换型", "设备", "工时", "约束", "热处理"],
+          "condition": "顾问询问产能、瓶颈或换型约束"
+        },
+        {
+          "fact_id": "E-F2",
+          "text": "优化目标没人拍板：销售要交期，生产要少换型，财务要设备利用率；老王的做法是「先满足最急的，再看换型」。三个目标互相冲突。",
+          "category": "requirement",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["目标", "优化", "指标", "交期", "换型", "利用率", "先做哪个"],
+          "condition": "顾问询问优化目标、优先级或评价指标"
+        },
+        {
+          "fact_id": "E-F3",
+          "text": "插单没有审批规则，销售口头或微信一句就插；过去半年插单 320 次，其中 68 次是同一个客户的加急。",
+          "category": "process",
+          "disclosure_stage": "design",
+          "probe_keywords": ["插单", "变更", "审批", "规则", "谁定", "加急"],
+          "condition": "顾问涉及插单、变更控制或审批机制"
+        },
+        {
+          "fact_id": "E-F4",
+          "text": "齐套信息滞后：采购到货不回写工单，系统里物料齐套率长期显示 100%，实际有 30% 工单缺料只能停等。",
+          "category": "data",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["齐套", "物料", "缺料", "到货", "数据", "准确"],
+          "condition": "顾问询问物料齐套、在制状态或数据准确性"
+        },
+        {
+          "fact_id": "E-F5",
+          "text": "关键隐性约束：只有 4 名师傅会调热处理炉，且只有 2 人会某类精密检具；排班还要满足「老师傅不愿连上 6 天夜班」这类软约束，系统里全无记录。",
+          "category": "constraint",
+          "disclosure_stage": "design",
+          "probe_keywords": ["人", "技能", "排班", "师傅", "软约束", "夜班", "人员"],
+          "condition": "顾问询问人员技能、排班或非硬约束"
+        }
+      ]
+    },
+    "misleading_request": "全自动排产",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["客户说不清交期与换型哪个更重要", "计划主管不愿讲自己的排法"],
+        "probe_tolerance": 4,
+        "suppress_facts": ["E-F5"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "两个大客户已明确要求接入他们的排产系统（客户方有指定格式与接口）",
+          "老板想在 6 个月内看到「无人排产」的示范线，但老王团队无 IT 能力",
+          "违约罚则按日 0.3%，上月因 3 天延期被罚 2.1 万"
+        ],
+        "budget": "压到 35 万以内",
+        "timeline": "6 个月，但第一期必须在 3 个月内出可演示成果",
+        "probe_tolerance": 6,
+        "conflicts": [
+          {"between": "销售", "and": "生产", "about": "插单是否需要审批与罚则承担"},
+          {"between": "计划主管老王", "and": "总经理", "about": "是否接受系统给出的排程"}
+        ],
+        "change_events": [
+          {"at_round": 2, "event": "追加要求：需说明系统排程与老师傅排程不一致时以谁为准"},
+          {"at_round": 5, "event": "追加要求：需给出与客户排产系统的接口预留方案"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.erp.query", "phase": "analysis"},
+        "error": "sim_data_conflict",
+        "note": "齐套率与实际缺料冲突，暴露在制数据失真"
+      },
+      {
+        "match": {"tool": "sim.schedule.compute", "phase": "implementation"},
+        "error": "sim_tool_timeout",
+        "note": "全量排产计算超时，暴露约束建模不全（软约束未建模）"
+      }
+    ],
+    "seed_data": {
+      "orders": [
+        {"no": "SO-2411", "product": "P-07", "qty": 120, "due": "2024-11-20", "customer": "客户甲", "priority": "high"},
+        {"no": "SO-2412", "product": "P-12", "qty": 300, "due": "2024-11-28", "customer": "客户乙", "priority": "normal"}
+      ],
+      "capacity": [
+        {"resource": "热处理炉1", "weekly_hours": 120, "setup_minutes": 180},
+        {"resource": "热处理炉2", "weekly_hours": 120, "setup_minutes": 180},
+        {"resource": "热处理炉3", "weekly_hours": 0, "setup_minutes": 180}
+      ],
+      "skills": [
+        {"task": "热处理调机", "qualified": 4},
+        {"task": "精密检具", "qualified": 2}
+      ]
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别全自动化排产不现实，先做辅助决策与冲突呈现",
+      "识别真正的瓶颈与产能数据失真（热处理炉、换型时间未登记）",
+      "识别优化目标冲突未拍板是前置阻塞",
+      "识别插单无审批与人员技能等隐性约束",
+      "给出异常处理与人工确认机制"
+    ],
+    "acceptance_criteria": [
+      "方案含约束清单（硬/软/数据）与数据缺口补齐计划",
+      "方案明确优化目标与目标冲突时的裁决机制",
+      "排产输出为「建议 + 冲突提示 + 人工确认」，不自动下发",
+      "含插单审批规则与齐套数据修正路径",
+      "评价指标含交期达成率、换型次数与设备利用率，并说明取舍"
+    ],
+    "rubric": {
+      "must_identify": [
+        "瓶颈与产能/换型数据缺口",
+        "优化目标冲突未拍板（交期 vs 换型 vs 利用率）",
+        "插单无审批规则",
+        "人员技能与软约束未建模",
+        "齐套数据失真"
+      ],
+      "must_avoid": [
+        "承诺全自动排产与无人排产",
+        "用单一交期指标掩盖换型与成本代价",
+        "在数据缺口未补齐前承诺排产精度"
+      ],
+      "must_produce": [
+        "约束清单与数据补齐计划",
+        "优化目标与冲突裁决机制",
+        "人机协同的排产建议与异常确认流程",
+        "插单审批规则与评价指标体系"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "数据地基：热处理产能与换型时间实测登记 + 齐套数据修正（治失真）",
+      "phase_2": "辅助排产：约束建模（硬约束 + 软约束）+ 建议 + 冲突提示 + 人工确认",
+      "phase_3": "插单影响评估与审批 + 目标冲突裁决 + 指标闭环"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问目标、瓶颈、插单与人员约束"},
+        {"key": "capacity_probe", "type": "call", "goal": "读取 sim.capacity / sim.orders 样本核对产能与齐套"},
+        {"key": "constraint_map", "type": "agent", "goal": "产出约束清单与数据缺口"},
+        {"key": "objective", "type": "human_approval", "goal": "拍板优化目标与冲突裁决"},
+        {"key": "schedule_design", "type": "agent", "goal": "产出人机协同排产方案"},
+        {"key": "exception_flow", "type": "agent", "goal": "产出异常处理与插单审批"}
+      ],
+      "must_not": ["在目标冲突未裁决前给出排产算法方案", "自动下发排程不做人工确认"]
+    }
+  }
+}

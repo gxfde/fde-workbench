@@ -31,6 +31,7 @@ export type AppRoute =
         | "gates"
     }
   | { kind: "help" }
+  | { kind: "simulation" }
   | { kind: "extensions"; tool?: 'lcsc-browser-baseline' | 'lcsc-browser-jev' | 'lcsc-compare'; tab?: 'tools' }
   | { kind: "account" }
 
@@ -76,6 +77,7 @@ export function parseHashRoute(hash: string): AppRoute {
   if (hash === "#dispatch/sim") return { kind: "dispatch", tab: "sim" }
   if (hash === "#dispatch/gates") return { kind: "dispatch", tab: "gates" }
   if (hash === "#help") return { kind: "help" }
+  if (hash === "#simulation") return { kind: "simulation" }
   if (hash === "#extensions") return { kind: "extensions" }
   if (hash === "#extensions?tab=tools") return { kind: "extensions", tab: 'tools' }
   if (hash === "#extensions/tools/lcsc-browser-baseline") return { kind: "extensions", tool: 'lcsc-browser-baseline' }
@@ -150,6 +152,7 @@ export function routeHash(route: AppRoute): string {
     case "dispatch":
       return route.tab && route.tab !== "pool" ? `#dispatch/${route.tab}` : "#dispatch"
     case "help": return "#help"
+    case "simulation": return "#simulation"
     case "extensions": return route.tool ? `#extensions/tools/${route.tool}` : route.tab ? '#extensions?tab=tools' : '#extensions'
     case "account": return "#account"
   }
@@ -177,6 +180,13 @@ export function authorizedRoute(route: AppRoute, role: UserRole): AppRoute {
   // isAdmin 门对齐，直接回落项目列表（服务端仍是最终防线，这里减少暴露面）。
   if (route.kind === "pilot") {
     return role === "admin" ? route : projectsRoute
+  }
+  // V3.2 模拟训练场：交付侧运营口径（fde_engineer 及以上）——viewer 档服务端
+  // 本就会 403，这里先回落项目列表，减少暴露面（服务端仍是最终防线）。
+  if (route.kind === "simulation") {
+    return role === "admin" || role === "project_lead" || role === "fde_engineer"
+      ? route
+      : projectsRoute
   }
   return route
 }

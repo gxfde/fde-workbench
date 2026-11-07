@@ -1,0 +1,170 @@
+{
+  "case_code": "CASE-D-MAINTENANCE-KB",
+  "name": "设备维护知识助手",
+  "industry": "equipment_heavy",
+  "difficulty": "standard",
+  "split": "train",
+  "tags": ["设备", "知识库", "RAG", "引用可信度", "权限边界"],
+  "content": {
+    "case_code": "CASE-D-MAINTENANCE-KB",
+    "customer_profile": {
+      "company_type": "金属加工企业，250 人，120 台设备，其中 20 台为进口关键设备",
+      "stakeholders": ["设备经理", "两名资深维修技师（各带 3 名徒弟）", "生产经理", "安全主管"],
+      "maturity": "设备手册为外购英文 PDF；维修记录在纸质工单本；无故障代码系统",
+      "decision_style": "设备经理要「老师傅的经验能留下来」；安全主管非常在意别让人乱拆带电设备",
+      "real_budget": "首期 35 万以内"
+    },
+    "visible": {
+      "initial_brief": [
+        "老师傅要退休了，他脑子里的东西没人学得会，能不能做成一个问答",
+        "设备出故障了要翻英文手册，翻半天还看不懂"
+      ],
+      "known_systems": ["设备台账（Excel，含型号与位置）", "设备手册（英文 PDF，扫描件）", "纸质维修工单本", "无工单系统"],
+      "constraints": {
+        "budget": "首期 35 万以内",
+        "timeline": "4 个月",
+        "tech": ["不新增硬件改造", "维修工单短期内仍是纸质，先做知识层"],
+        "compliance": ["安全规程要求带电/高空作业须持证并双人确认", "手册为外购资料，不得整本入库对外分发"]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "D-F1",
+          "text": "设备台账里的型号命名混乱：同一台进口加工中心在三个工位分别写作「VMC-850」「立加850」「德国机床8号」，新人根本对不上手册。",
+          "category": "data",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["设备", "台账", "型号", "编号", "资产", "怎么对应", "统一"],
+          "condition": "顾问询问设备资产与手册的对应关系"
+        },
+        {
+          "fact_id": "D-F2",
+          "text": "两年多的纸质维修工单约 1400 张，只有本子在班组之间传，没扫描没入库；真正有价值的处置过程在纸背面。",
+          "category": "knowledge",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["记录", "工单", "维修", "历史", "有没有", "纸", "采集"],
+          "condition": "顾问询问历史维修记录的载体与可用性"
+        },
+        {
+          "fact_id": "D-F3",
+          "text": "两位老师傅对同一故障的判断部分矛盾：一个说换传感器，一个说调参数；谁对取决于当天的负载表现，没有统一判据。",
+          "category": "trust",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["老师傅", "经验", "可信", "矛盾", "判断", "依据", "冲突"],
+          "condition": "顾问涉及经验可信度、冲突处理或引用来源"
+        },
+        {
+          "fact_id": "D-F4",
+          "text": "进口设备手册全是英文，故障代码（如 AL-7730）的含义只能靠老师傅凭记忆翻译，写在设备旁边的便签纸上已经褪色。",
+          "category": "document",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["手册", "英文", "故障码", "翻译", "看不懂", "资料"],
+          "condition": "顾问询问手册语言、故障码或文档处理"
+        },
+        {
+          "fact_id": "D-F5",
+          "text": "部分维修动作涉及带电作业与主轴吊装，必须持证且双人确认；新员工最常出的事故就是没断电就拆。",
+          "category": "permission",
+          "disclosure_stage": "design",
+          "probe_keywords": ["安全", "带电", "权限", "资质", "审批", "边界", "不能做"],
+          "condition": "顾问涉及作业安全边界、权限或职责范围"
+        }
+      ]
+    },
+    "misleading_request": "做个知识库问答机器人",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["设备经理说不清要覆盖哪些设备，先想到哪台做哪台"],
+        "probe_tolerance": 3,
+        "suppress_facts": ["D-F3"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "外购手册版权只允许内部查阅，不得整本入库或对外提供",
+          "两位老师傅工龄与立场不同，一位主张传帮带不写文档，一位已准备退休要求系统留人",
+          "安全事故是最高红线，任何回答都不得替代持证人员的现场判断"
+        ],
+        "budget": "压到 22 万以内",
+        "probe_tolerance": 5,
+        "conflicts": [
+          {"between": "两位资深技师", "and": "设备经理", "about": "经验是否结构化沉淀"},
+          {"between": "安全主管", "and": "设备经理", "about": "助手能回答到什么深度"}
+        ],
+        "change_events": [
+          {"at_round": 3, "event": "追加要求：方案必须给出经验采集的具体方式与工时估算"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.fs.read", "phase": "analysis"},
+        "error": "sim_permission_denied",
+        "note": "外购手册受版权与权限限制，读取被拒，暴露资料边界"
+      }
+    ],
+    "seed_data": {
+      "assets": [
+        {"tag": "设备-007", "name": "VMC-850", "alias": ["立加850", "德国机床8号"], "manual": "VMC-850_Manual_EN.pdf", "tasks": 0},
+        {"tag": "设备-012", "name": "VMC-850", "alias": ["立加850", "德国机床8号"], "manual": "VMC-850_Manual_EN.pdf", "tasks": 1}
+      ],
+      "fault_codes": [
+        {"code": "AL-7730", "meaning_zh": "主轴伺服过载（待核实）", "source": "手写便签"}
+      ],
+      "work_orders": [
+        {"id": "WO-2023-0412", "asset": "设备-007", "symptom": "加工中异响并伴随 AL-7730", "action": "清洁刀库并复测", "result": "未复现"},
+        {"id": "WO-2024-0188", "asset": "设备-012", "symptom": "同 AL-7730 报警", "action": "更换主轴编码器", "result": "解决"}
+      ]
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别前置是知识采集与资产/文档对应，而非直接做 RAG",
+      "识别设备台账命名混乱导致检索必然失效",
+      "给出知识可信度与引用机制（来源、版本、冲突并存时如何呈现）",
+      "明确故障处理权限边界：助手辅助判断，不替代持证人员与安全规程",
+      "给出知识采集的可执行方式与工时估算"
+    ],
+    "acceptance_criteria": [
+      "方案含知识采集路径（工单扫描/结构化/老师傅访谈）与工时估算",
+      "方案含设备资产与文档的对应关系治理",
+      "回答必须带来源引用与可信度标注，冲突来源并存时显式提示",
+      "方案明确划出「不得由助手给出/执行」的作业边界并引用安全规程",
+      "知识库不得整本收录受版权限制的外购手册"
+    ],
+    "rubric": {
+      "must_identify": [
+        "设备命名与手册对应关系缺失",
+        "历史维修记录未数字化，RAG 无语料",
+        "经验来源互相冲突，需可信度与冲突呈现机制"
+      ],
+      "must_avoid": [
+        "让助手直接指导带电或吊装作业",
+        "把手册当唯一事实源而无引用与来源标注",
+        "承诺问答准确率（语料与命名问题未解决）",
+        "整本入库外购受版权限制的手册"
+      ],
+      "must_produce": [
+        "知识采集与结构化方案（含工时估算）",
+        "资产与文档治理方案",
+        "RAG 与 Agent 工作流设计（含引用与可信度）",
+        "权限与安全边界规则"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "设备台账命名统一 + 20 台关键设备建档（资产与手册对应）",
+      "phase_2": "知识采集：1400 张工单扫描结构化 + 老师傅结构化访谈（带工时）",
+      "phase_3": "RAG + 工作流 + 引用可信度 + 安全边界闸（危险动作一律转人工）"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问资产命名、工单载体、经验与安全红线"},
+        {"key": "asset_probe", "type": "call", "goal": "读取 sim.assets / sim.work_orders 样本核对命名与记录"},
+        {"key": "knowledge_plan", "type": "agent", "goal": "产出知识采集路径与工时估算"},
+        {"key": "rag_design", "type": "agent", "goal": "产出检索与工作流设计，含引用与可信度"},
+        {"key": "safety_gate", "type": "agent", "goal": "产出危险动作转人工的边界规则"},
+        {"key": "review", "type": "human_approval", "goal": "安全主管确认边界规则"}
+      ],
+      "must_not": ["在语料与命名未治理前上线 RAG", "让助手输出可执行的带电作业步骤"]
+    }
+  }
+}

@@ -34,6 +34,7 @@ import { SystemConfigurationPage } from "./system/SystemConfigurationPage"
 import { TranslatorPortalPage } from "./translator/TranslatorPortalPage"
 import { MetricsReportPage } from "./metrics/MetricsReportPage"
 import { PilotReportPage } from "./pilot/PilotReportPage"
+import { SimulationLabPage } from "./SimulationLab/SimulationLabPage"
 
 export function App() {
   return (
@@ -85,6 +86,7 @@ function RoutePage({ route }: { route: AppRoute }) {
       />
     )
   if (route.kind === "help") return <HelpPage />
+  if (route.kind === "simulation") return <SimulationLabPage />
   if (route.kind === "translator") return <TranslatorPortalPage />
   if (route.kind === "metrics") return <MetricsReportPage />
   if (route.kind === "pilot") return <PilotReportPage />

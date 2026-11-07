@@ -1,0 +1,167 @@
+{
+  "case_code": "CASE-C-INVENTORY-PURCHASING",
+  "name": "库存与采购协同",
+  "industry": "general_manufacturing",
+  "difficulty": "standard",
+  "split": "train",
+  "tags": ["库存", "采购", "主数据", "审批", "Excel"],
+  "content": {
+    "case_code": "CASE-C-INVENTORY-PURCHASING",
+    "customer_profile": {
+      "company_type": "通用机械零部件制造企业，200 人，3 条产线",
+      "stakeholders": ["生产经理", "采购经理", "仓库主管", "财务", "总经理"],
+      "maturity": "ERP 基础模块在用，但库存不准；计划、采购、仓库三方各用 Excel",
+      "decision_style": "总经理只关心「别再断线」；采购经理担心被系统考核；仓库主管抵触换工具",
+      "real_budget": "首期 40 万以内"
+    },
+    "visible": {
+      "initial_brief": [
+        "经常缺料停线，仓库说还有货，计划说没货，到底谁说了算",
+        "采购全靠老师傅经验，看到快用完就下单"
+      ],
+      "known_systems": ["ERP（库存模块在用，但物料主数据不全）", "计划部 Excel", "采购部 Excel", "仓库 Excel"],
+      "constraints": {
+        "budget": "首期 40 万以内",
+        "timeline": "3 个月",
+        "tech": ["ERP 不换、不做二次开发", "Excel 要保留（现场习惯短期改不了）"],
+        "compliance": ["采购金额分档审批已有纸面制度，但没落到系统"]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "C-F1",
+          "text": "ERP 库存与实物长期不符：呆滞料、已报废但未核销的物料仍挂在账上；仓库年度盘点差异率约 12%，且只盘高值物料。",
+          "category": "data_quality",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["库存", "准", "盘点", "差异", "账实", "为什么不准", "数据质量"],
+          "condition": "顾问询问库存准确性来源或盘点情况"
+        },
+        {
+          "fact_id": "C-F2",
+          "text": "计划、采购、仓库三张 Excel 各有各的物料编码与口径（同名不同码、同码不同名共 300 余项），每天靠人工对表。",
+          "category": "data",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["表格", "Excel", "口径", "编码", "一致", "对表", "部门"],
+          "condition": "顾问询问部门间数据协同方式或主数据一致性"
+        },
+        {
+          "fact_id": "C-F3",
+          "text": "采购下单没有规则依据，依赖两位老采购的判断；供应商报价历史没有沉淀，无法做比价或分析涨价原因。",
+          "category": "rule",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["采购", "规则", "下单", "经验", "比价", "价格", "供应商"],
+          "condition": "顾问询问采购决策依据或供应商价格"
+        },
+        {
+          "fact_id": "C-F4",
+          "text": "安全库存是全公司一刀切（按物料大类统一设），导致低值易耗料备得过多、高值关键件备得不够。",
+          "category": "rule",
+          "disclosure_stage": "design",
+          "probe_keywords": ["安全库存", "预警", "补货", "参数", "阈值", "备货"],
+          "condition": "顾问涉及库存预警或补货参数设计"
+        },
+        {
+          "fact_id": "C-F5",
+          "text": "缺料停线每月 2–3 次，单次损失 2–4 万元，损失由生产部门承担；采购部门不承担后果，因此没有改善动力。",
+          "category": "business",
+          "disclosure_stage": "design",
+          "probe_keywords": ["损失", "停线", "成本", "谁负责", "考核", "影响"],
+          "condition": "顾问询问缺料影响、责任归属或考核机制"
+        }
+      ]
+    },
+    "misleading_request": "上个系统把库存管起来",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["总经理说不清「库存准」的标准是什么", "仓库主管认为问题在采购不在仓库"],
+        "probe_tolerance": 3,
+        "suppress_facts": ["C-F4"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "ERP 是集团统一采购的，本厂改不了，只能在外面包一层",
+          "采购经理要求不能把采购决策规则化，否则承担决策责任",
+          "月末盘点与财务关账冲突，盘点窗口每月只有 2 天"
+        ],
+        "budget": "压到 25 万以内",
+        "probe_tolerance": 5,
+        "conflicts": [
+          {"between": "采购经理", "and": "生产经理", "about": "缺料责任归属"},
+          {"between": "仓库主管", "and": "财务", "about": "盘点范围与账务处理"}
+        ],
+        "change_events": [
+          {"at_round": 4, "event": "追加要求：方案必须支持不替换 ERP 的前提下先出预警"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.erp.query", "phase": "analysis"},
+        "error": "sim_data_conflict",
+        "note": "ERP 库存与仓库台账冲突，暴露账实不符与口径分歧"
+      }
+    ],
+    "seed_data": {
+      "erp": {
+        "materials": [
+          {"code": "M-1001", "name": "法兰盘", "on_hand": 320, "safety_stock": 200, "monthly_usage": 180},
+          {"code": "M-1002", "name": "密封圈", "on_hand": 5400, "safety_stock": 2000, "monthly_usage": 900}
+        ]
+      },
+      "warehouse_sheet": [
+        {"code": "M-1001", "name": "法兰盘", "counted": 410, "counted_at": "2024-10-31"},
+        {"code": "M-1002", "name": "油封", "counted": 3100, "counted_at": "2024-10-31"}
+      ]
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别根因是库存数据不准与主数据口径不一致，而非缺一个系统",
+      "区分「先治数据」与「先上预警」的次序，并给出并行路径",
+      "给出采购规则与补货参数的**校准方式**（而非拍脑袋阈值）",
+      "识别责任归属缺失是协同失败的结构性原因",
+      "建立采购审批流程与数据质量责任闭环"
+    ],
+    "acceptance_criteria": [
+      "方案含数据质量专项（口径统一、呆滞核销、盘点覆盖率）",
+      "安全库存/补货参数有历史消耗数据支撑与校准流程，不是一刀切常量",
+      "采购审批流含金额分档与异常路径",
+      "停线影响与责任归属有明确机制设计，且指标可度量"
+    ],
+    "rubric": {
+      "must_identify": [
+        "账实不符与呆滞料未核销",
+        "三部门口径与编码不一致",
+        "采购决策无规则、无历史价格沉淀",
+        "缺料成本由生产独担，缺改善动力"
+      ],
+      "must_avoid": [
+        "直接用新系统替换 Excel 而不先统一口径",
+        "承诺零缺料或零停线",
+        "给出拍脑袋的安全库存阈值而无校准方法"
+      ],
+      "must_produce": [
+        "数据质量专项与主数据治理路径",
+        "补货/预警参数模型与校准流程",
+        "采购审批流与数据责任机制"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "口径与主数据统一 + 呆滞核销 + 盘点覆盖率提升（治数据）",
+      "phase_2": "在治数据同时，先做只读预警（不依赖全量数据准确）",
+      "phase_3": "补货参数按消耗分布分层 + 采购规则与比价沉淀 + 审批流"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问三方表格口径与缺料影响"},
+        {"key": "data_probe", "type": "call", "goal": "读取 sim.erp / sim.warehouse 样本核对差异"},
+        {"key": "root_cause", "type": "agent", "goal": "产出数据与机制双根因"},
+        {"key": "rule_design", "type": "agent", "goal": "产出补货参数模型与采购规则"},
+        {"key": "approval_flow", "type": "agent", "goal": "产出采购审批流与责任机制"},
+        {"key": "review", "type": "human_approval", "goal": "生产与采购双方确认责任与规则"}
+      ],
+      "must_not": ["在口径统一前设定补货参数", "跳过数据核对直接设计系统"]
+    }
+  }
+}

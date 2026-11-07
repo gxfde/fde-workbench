@@ -119,6 +119,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(desktop_lcsc_blueprint)
     from fde_api.control.api_actions import actions_blueprint
     app.register_blueprint(actions_blueprint)
+    # V3.2 G2：FDE 交付模拟训练场（独立域；不进 api_catalog）
+    from fde_api.simulation.routes import simulation_blueprint
+    app.register_blueprint(simulation_blueprint)
     app.extensions["fde_weixin_message_handler"] = weixin_message_handler
     from fde_api.control.ai_server_client import apply_runtime_plugin
     app.extensions["fde_plugin_executor"] = apply_runtime_plugin

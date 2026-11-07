@@ -76,6 +76,7 @@ from fde_api.metrics.routes import metrics_blueprint
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
 from fde_api.ontology.routes import global_ontology_blueprint  # V3 T-O2c 全局只读面
 from fde_api.translator.routes import translator_blueprint
+from fde_api.simulation.routes import simulation_blueprint  # V3.2 G2 交付模拟训练场
 from fde_api.workbench.routes import workbench_blueprint
 from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
 
@@ -124,6 +125,7 @@ BLUEPRINTS = [
     lcsc_blueprint,
     desktop_lcsc_blueprint,
     actions_blueprint,
+    simulation_blueprint,  # V3.2 G2：app.py 注册序在 actions_blueprint 之后
 ]
 
 app = Flask(__name__)

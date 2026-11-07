@@ -1,0 +1,184 @@
+{
+  "case_code": "CASE-A-QUALITY-TRACE",
+  "name": "汽车零部件质量追溯",
+  "industry": "automotive_parts",
+  "difficulty": "standard",
+  "split": "train",
+  "tags": ["质量", "追溯", "MES集成", "数据治理", "多工厂"],
+  "content": {
+    "case_code": "CASE-A-QUALITY-TRACE",
+    "customer_profile": {
+      "company_type": "汽车零部件集团，下辖 3 个生产厂（华东/华中/西南），约 1200 人",
+      "stakeholders": ["集团生产副总", "质量总监", "IT 经理", "车间班组长", "驻厂供应商质量工程师"],
+      "maturity": "有 ERP（用友）、MES（三家不同厂商）、独立质量数据库（自研 Access）",
+      "decision_style": "老板关注「出了事能不能查清楚」，质量总监关注「指标」，IT 经理关注「不动现有系统」",
+      "real_budget": "首期 60 万以内，要求 3 个月内见到可演示的东西"
+    },
+    "visible": {
+      "initial_brief": [
+        "我们汽车件质量出了问题，客户那边要追溯批次，我们查不出来",
+        "老板听说现在 AI 视觉检测很厉害，能不能装上自动挑出不良品"
+      ],
+      "known_systems": ["ERP（用友，2008 年上线）", "MES（华东厂 A 品牌 / 华中厂 B 品牌 / 西南厂 C 品牌）", "质量数据库（自研 Access 单文件）"],
+      "constraints": {
+        "budget": "首期 60 万以内",
+        "timeline": "3 个月",
+        "tech": ["不换 ERP/MES 现有品牌", "现场不能停线改造", "质量系统由 IT 部门维护，无专职开发"],
+        "compliance": ["客户（主机厂）要求按批次出具追溯报告", "缺陷数据含供应商批号，属商业敏感"]
+      }
+    },
+    "hidden": {
+      "facts": [
+        {
+          "fact_id": "A-F1",
+          "text": "质量库里的缺陷记录只有一段自由文本描述（谁写的写什么），没有结构化的批次号、工位、工序、缺陷代码字段，全靠人读文本判断。",
+          "category": "data",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["字段", "数据", "记录", "结构", "怎么存", "录入", "台账"],
+          "condition": "顾问询问缺陷数据当前如何记录、有哪些字段"
+        },
+        {
+          "fact_id": "A-F2",
+          "text": "MES 与质量库之间没有共同主键：MES 的批次号是「日期+产线」（如 20241103-L2），质量库记的是供应商批号（如 SUP-88213），两边要靠人查 Excel 映射表对应。",
+          "category": "integration",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["追溯", "主键", "批次", "关联", "对应", "怎么连", "映射"],
+          "condition": "顾问追问追溯链路如何串联或提到批次对应关系"
+        },
+        {
+          "fact_id": "A-F3",
+          "text": "三个工厂各自维护物料编码，同一个垫片在三个厂是三套码（华东 HJ-1180 / 华中 HB-1180 / 西南 XN-1180），集团没有统物料主数据。",
+          "category": "data",
+          "disclosure_stage": "interview",
+          "probe_keywords": ["编码", "物料", "工厂", "标准", "主数据", "统一"],
+          "condition": "顾问询问物料/产品编码是否统一或涉及多工厂范围"
+        },
+        {
+          "fact_id": "A-F4",
+          "text": "质量库按厂区做了权限隔离，跨厂追溯需要 IT 逐次审批；2024 年下半年积压了 40 多条未审的跨厂查询申请，实际业务已经绕过系统私下用微信问了。",
+          "category": "permission",
+          "disclosure_stage": "design",
+          "probe_keywords": ["权限", "审批", "跨厂", "数据安全", "谁能看", "授权"],
+          "condition": "顾问涉及权限模型、跨厂数据共享或审批流程"
+        },
+        {
+          "fact_id": "A-F5",
+          "text": "质量库有 3.2 万条历史缺陷记录，但 2023 年 9 月之后录入量骤降八成——车间工人改用微信群报缺陷，质量总监是事后才知道的。",
+          "category": "data_quality",
+          "disclosure_stage": "analysis",
+          "probe_keywords": ["数据质量", "缺失", "录入", "历史", "样本", "多少", "微信"],
+          "condition": "顾问询问历史缺陷数据规模、可用性或录入方式变更"
+        }
+      ]
+    },
+    "misleading_request": "上 AI 视觉质检替代人工挑检",
+    "variant_overrides": {
+      "vague": {
+        "extra_constraints": ["老板自己也说不清到底要解决追溯还是检验", "顾问需要用具体例子引导客户区分「检测」与「追溯」"],
+        "probe_tolerance": 3,
+        "suppress_facts": ["A-F5"]
+      },
+      "complex": {
+        "extra_constraints": [
+          "集团总部要求统一方案，但三个厂各自已有信息化预算与供应商合同，本期不能换",
+          "质量总监与 IT 经理立场冲突：前者要能查历史，后者要零侵入",
+          "主机厂客户要求 6 个月内完成，否则改用第二供应商"
+        ],
+        "budget": "压到 30 万以内",
+        "timeline": "3 个月，但评审窗口只有一次",
+        "probe_tolerance": 5,
+        "conflicts": [
+          {"between": "质量总监", "and": "IT 经理", "about": "是否允许在质量库之外新建系统"},
+          {"between": "集团总部", "and": "三个工厂", "about": "统一物料编码的推行力度"}
+        ],
+        "change_events": [
+          {"at_round": 3, "event": "客户追加要求：追溯报告必须能按供应商批号导出"}
+        ]
+      }
+    },
+    "fault_injection": [
+      {
+        "match": {"tool": "sim.mes.query", "phase": "analysis"},
+        "error": "sim_data_conflict",
+        "note": "模拟 MES 查询返回跨厂批次格式冲突，逼顾问暴露主键问题"
+      },
+      {
+        "match": {"tool": "sim.quality.query", "phase": "implementation"},
+        "error": "sim_permission_denied",
+        "note": "跨厂质量数据被拒，暴露权限边界"
+      }
+    ],
+    "seed_data": {
+      "mes": {
+        "batches": [
+          {"batch_no": "20241103-L2", "plant": "华东", "product_code": "HJ-1180", "qty": 500, "shift": "白班"},
+          {"batch_no": "20241104-L1", "plant": "华东", "product_code": "HJ-1180", "qty": 420, "shift": "夜班"},
+          {"batch_no": "20241105-B7", "plant": "华中", "product_code": "HB-1180", "qty": 380, "shift": "白班"}
+        ],
+        "workstations": ["冲压线1", "冲压线2", "热处理炉A", "机加工3", "装配线1"]
+      },
+      "quality_db": {
+        "defect_records": [
+          {"id": "QD-2023-0001", "desc": "表面划伤", "supplier_batch": "SUP-88213", "recorded_at": "2023-04-11"},
+          {"id": "QD-2024-1187", "desc": "尺寸超差约0.3mm", "supplier_batch": "SUP-90114", "recorded_at": "2024-11-06"},
+          {"id": "QD-2024-1188", "desc": "毛刺", "supplier_batch": "SUP-90115", "recorded_at": "2024-11-06"}
+        ]
+      },
+      "erp": {
+        "materials": [
+          {"code": "HJ-1180", "name": "垫片", "std_batch_scheme": "日期+产线"},
+          {"code": "HB-1180", "name": "垫片", "std_batch_scheme": "日期+产线"}
+        ]
+      }
+    }
+  },
+  "reference": {
+    "expected_outcomes": [
+      "识别真实问题是跨系统数据关联与质量追溯断点，而非视觉检测",
+      "定位到「MES 批次号与质量库供应商批号无共同主键」这一根因",
+      "给出不替换现有系统的数据接入与主键映射方案",
+      "给出跨厂权限模型（含审批替代方案）",
+      "给出可度量、可回溯的验收标准"
+    ],
+    "acceptance_criteria": [
+      "方案中明确列出跨系统关联字段与映射规则（含历史数据回溯策略）",
+      "验收指标可度量：跨系统批次关联成功率、缺陷追溯闭环时长、跨厂查询响应时效",
+      "方案不要求客户先完成数据治理再上线（给出并行路径）",
+      "权限方案含跨厂查询的时效目标与例外通道"
+    ],
+    "rubric": {
+      "must_identify": [
+        "跨系统主键缺失（MES 批次号 ↔ 质量库供应商批号无共同主键）",
+        "物料编码不统一（多厂三套码）",
+        "质量库字段非结构化"
+      ],
+      "must_avoid": [
+        "把 AI 视觉检测作为核心方案",
+        "承诺基于历史样本的准确率（历史数据存在录入断崖）",
+        "要求客户先完成数据治理与统一编码再上线"
+      ],
+      "must_produce": [
+        "数据接入与主键映射方案",
+        "权限模型（含跨厂查询时效与例外通道）",
+        "可度量的验收标准与分阶段上线路径"
+      ]
+    },
+    "reference_solution_outline": {
+      "phase_1": "以「一次真实追溯走通」为目标：先建批次映射表 + 一个厂的质量库结构化字段扩展，不动 MES/ERP",
+      "phase_2": "接入三个厂的 MES 批次（只读），建统一物料主数据映射（保留原编码）",
+      "phase_3": "质量闭环与看板：以追溯闭环时长与关联成功率为指标",
+      "deferred": "视觉检测单独立项，不纳入本期追溯范围"
+    },
+    "reference_workflow": {
+      "nodes": [
+        {"key": "interview", "type": "agent", "goal": "追问缺陷记录结构与批次对应关系"},
+        {"key": "data_probe", "type": "call", "goal": "读取 sim.mes / sim.quality 样本，确认字段与键"},
+        {"key": "root_cause", "type": "agent", "goal": "产出根因说明（主键缺失 + 编码不统一 + 字段非结构化）"},
+        {"key": "solution", "type": "agent", "goal": "产出方案骨架：数据接入 + 主键映射 + 权限 + 验收"},
+        {"key": "acceptance", "type": "agent", "goal": "产出可度量验收标准"},
+        {"key": "review", "type": "human_approval", "goal": "客户确认根因与分期范围"}
+      ],
+      "must_not": ["在根因未确认前直接给出视觉检测方案", "跳过数据样本核验直接下结论"]
+    }
+  }
+}

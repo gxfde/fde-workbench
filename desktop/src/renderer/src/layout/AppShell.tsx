@@ -22,6 +22,9 @@ export function AppShell({
   const isAdmin = user?.role === "admin"
   // 平台侧口径（goal-d8）：指标报表页对 admin/project_lead 开放
   const isPlatform = user?.role === "admin" || user?.role === "project_lead"
+  // V3.2 模拟训练场：交付侧运营口径（fde_engineer 及以上；服务端同尺）
+  const isDeliverySide =
+    user?.role === "admin" || user?.role === "project_lead" || user?.role === "fde_engineer"
   const [collapsed, setCollapsed] = useState(() => readCollapsed())
   const [appVersion, setAppVersion] = useState("")
 
@@ -64,6 +67,9 @@ export function AppShell({
           <div className="nav-group">
             <p className="nav-group-title">交付与商业</p>
             <NavLink route={route} target={{ kind: "dispatch" }} label="派单池" icon={<GridIcon />} />
+            {isDeliverySide ? (
+              <NavLink route={route} target={{ kind: "simulation" }} label="模拟训练场" icon={<BoxesIcon />} />
+            ) : null}
             {isPlatform ? (
               <NavLink route={route} target={{ kind: "metrics" }} label="指标报表" icon={<BoxesIcon />} />
             ) : null}
