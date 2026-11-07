@@ -91,6 +91,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # T-A9 转写草稿区 + 访谈纪要正式库（goal-tb tb1）：文本-only，不进 api_catalog
     from fde_api.transcripts.routes import transcripts_blueprint
     app.register_blueprint(transcripts_blueprint)
+    # T-B1 封包半（goal-tb tb4）：结项交付包 handover_packages，不进 api_catalog
+    from fde_api.handover.routes import handover_blueprint
+    app.register_blueprint(handover_blueprint)
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)

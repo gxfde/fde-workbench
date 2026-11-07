@@ -17,6 +17,7 @@ import { WorkflowConsole } from "../workflows/WorkflowConsole"
 import { AgentsConsole } from "../agents/AgentsConsole"
 import { MeetingsConsole } from "../meetings/MeetingsConsole"
 import { TranscriptDraftsPanel } from "../transcripts/TranscriptDraftsPanel"
+import { HandoverPackagesPanel } from "../handover/HandoverPackagesPanel"
 import { GlossaryPage } from "../ontology/GlossaryPage"
 import { ExecutionFactChain } from "../evidence/ExecutionFactChain"
 import { ResearchWorkspace } from "../research/ResearchWorkspace"
@@ -199,7 +200,7 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
           {tab === "facts" ? <ExecutionFactChain projectId={project.id} /> : null}
           {tab === "library" ? <ProjectLibrary projectId={project.id} canManage={canManage} /> : null}
           {tab === "research" ? <ResearchWorkspace project={project} canFill={canFillResearch} canManage={canManage} onDirtyChange={setResearchDirty} initialOpportunityId={opportunityId} /> : null}
-          {tab === "delivery" ? <SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} /> : null}
+          {tab === "delivery" ? <><SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} /><HandoverPackagesPanel projectId={project.id} canManage={canManage} isAdmin={user?.role === "admin"} /></> : null}
         </div>
       ) : null}
     </div>

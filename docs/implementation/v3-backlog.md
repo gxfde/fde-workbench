@@ -638,7 +638,7 @@
   - **桌面**：NEW `transcripts/TranscriptDraftsPanel.tsx` 挂 overview tab guidanceSlot（presurvey 录入卡旁）——本地文件导入（只读文本进表单，原件永不上传）、草稿列表/详情（正文+复核清单徽标）、弃置、晋升表单（canManage 显隐同构）、纪要正式库列表/详情；加载失败 fail-静默（教训 51：不与页面级 alert 抢道），动作错误 alert 呈现。
   - **测试**：服务端 NEW `test_transcript_drafts.py` 8 例（代号化/fail-closed/权限 403-404-401/列表形状/晋升三要素四连 422+未来时戳 422/墓碑/T+7 清理幂等/零外键隔离钉）；变异三连全红→还原绿（摘三要素校验红/代号化改直通红/清理谓词取反红）；桌面 NEW `transcript-drafts-panel.test.tsx` 7 例。
 
-### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **◐ 扩列半 DONE（goal-tb tb2，2026-11-07）/ 封包半维持挂账（D11 立项拍板 + 首批真实数据两前置未达成，登记声明原样生效）**
+### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **✅ DONE（扩列半 goal-tb tb2 #189 / 封包半 goal-tb tb4，2026-11-07，§拍板闸 6⑪ 委托拍板解封）**
 - 目标：run 产物从「有 sha256 但无结构化内容」变成可封包的结项交付物。
 - 现状实测：`agents/models.py:127` `AgentArtifact` 现有 `storage_ref`（指针）+ `sha256`（指纹）+ `kind` + `reviewed`，**无 diff / test_results 结构化列**；`dispatch/models.py:40-78` 已有 **`delivery_packages`（派单态，8 态机 + package_code + dispatch_round 唯一键 + sow_type）**；结项态交付包为台账 `docs/后续需求台账-F5与D11.md` §十三.4 **已裁决命名 `handover_packages`**（status draft→sealed→delivered + manifest_sha256 + 逐项 sha256 校验）⇒ **两包不可混用，产物闭环指向 `handover_packages`**。
 - **落库形态纪律（借鉴登记 B#6《状态归属与对账-v1》§1 不变量「引用方永不复制真相，只持指针」）**：新列只能是**指针 + 指纹 + 可重建派生**——`storage_ref` 指向 diff/test_results 原件（留项目工作目录）、`sha256` 记指纹、结构化摘要（passed/failed 计数、退出码）为**可从原件重建的派生**；**不得复制原件进库**。
@@ -646,7 +646,14 @@
 - DB：**新迁移（additive-only）**——artifacts 加列 + `handover_packages` 新表；**不得修改已发布迁移**（README 纪律），`test_migrations` HEAD 钉同步，版本号同步（`desktop/package.json` + `server/pyproject.toml`），rebuild 后 `alembic upgrade head`。
 - API：封包/解封/下载走新路由（**不进 api_catalog**——业务对象不走 change_set 双轨，沿用 `dispatch.packages_create` 的既有处理）。
 - 测试：服务端（派生摘要可从原件重建、指纹不一致拒绝、封包逐项 sha256 校验、delivered 不可逆、权限闸）；桌面（封包清单呈现）。
-- **封包前置**：D11 立项拍板 + 首批真实数据到位（**登记即声明：本条在两项前置未达成前只做 artifacts 扩列，封包部分待拍板**）。
+- **封包前置**：✅ **D11 立项拍板已落（2026-11-07，§拍板闸 6⑪，蔡工「第3件需要拍板的按你建议处理」→ 按台账 §二草案+§十三.4 改名裁决执行）；「首批真实数据到位」按建议裁决＝不阻塞代码实现（测试合成 run 覆盖，投产使用自然等待真实 run）**。
+- **封包实施记录（goal-tb tb4）**：
+  - **DB（迁移 `e5f1a7c3b9d4`，38→39 rev，additive）**：`handover_packages`（draft→sealed→delivered + unseal 留痕 unsealed_count；**delivered 终态不可逆**；5 条 CHECK 含封存/交付完整性）+ `handover_package_items`（**指针+sha256 快照**，artifact_id 无 FK——B#6 真相原则，metadata 扫描钉死零外键指向 agent_artifacts；同包同产物唯一）。表名沿 §十三.4 改名裁决（与派单 delivery_packages 不混用）。
+  - **API（+8 路由 315→323，不进 api_catalog）**：POST/GET list/GET detail/PATCH（draft 编辑）/seal/unseal/deliver + GET `handover-packages/artifacts`（挑选面=已复核产物投影）。权限=查看 can_view、创建/编辑/封存/解封 can_manage、**交付登记=admin 专属**（草案「delivered（登记对外交付）=admin」原样）。
+  - **seal 语义**：冻结清单 + 逐项校验（存在/本项目/已人工复核〔与草案 status 闸同构〕/指纹一致 `fingerprint_drift` 409）+ `manifest_sha256`=清单规范化 JSON 哈希（测试复算钉死）。
+  - **审计**：`handover_package_created/sealed/unsealed/delivered` 四事件（target=项目，changes 只带 id+元数据）。
+  - **桌面**：NEW `handover/HandoverPackagesPanel.tsx` 挂 delivery tab（方案设计下方）——草稿组包（勾选已复核产物）/清单详情（指针+指纹）/封存/解封/交付登记（isAdmin 显隐）/manifest 指纹呈现。
+  - **测试**：服务端 NEW `test_handover_packages.py` 6 例（快照+seal 冻结+manifest 复算/解封留痕/封包三闸/指纹漂移/deliver admin 专属+终态不可逆/读面权限+零外键隔离钉）；变异三连红→还原绿（摘 reviewed 闸/摘 admin 门/摘指纹校验）。桌面 NEW `handover-packages-panel.test.tsx` 5 例。**明确不做维持**：自动打包 zip、对外下载链接签名、合同条款联动。
 - **实施记录（goal-tb tb2，2026-11-07，扩列半）**：
   - **DB（迁移 `b8e4d6f2a9c3`，37→38 rev）**：artifacts +`derived_summary` JSON 可空列（**可重建派生**——diff: files_changed/additions/deletions；test_results: passed/failed/errors/skipped+exit_code；解析不可达即零计数不发明数字；原件本体永不进库，B#6「指针+指纹+可重建派生」）+ `reviewed_by_user_id`（FK users SET NULL）+ `reviewed_at`；kind CHECK 置换扩 `'test_results'`（纯枚举扩展，T-J2 先例）。**`handover_packages` 表未建**（封包半挂 D11）。
   - **API（+1 路由 314→315，不进 api_catalog）**：`PATCH /agents/runs/{rid}/artifacts/{aid}` body `{reviewed: bool}`——can_manage（终审动作）；接受留 who/when，撤回清双痕；事件 `agent_artifact_reviewed` target=项目、changes 只带 id+布尔（不复制产物内容）。度量表「智能体产物被人工接受率」数据源自此存在（此前 reviewed 无写路径恒 0）。
@@ -776,6 +783,7 @@ B#15 Lens 正交叠加（触发=多行业模板成本失控实测）｜B#16 交�
    ⑦ **§度量口径与 G9 关系**——✅ **DECIDED（2026-11-07 拍板，原「确认按登记口径」升格）**——并存（§8 过程指标不设阈值 + G9 结果验收线，不得互代）；**「工程师小时数/交付毛利率」接受 simulation 口径**；**埋点显式未立项**（待 T-B1 后评估）；商业主张验证以《商业验证决策单》线下台账为准；
    ⑧ **真实客户验收时点**——✅ **DECIDED（2026-11-07 拍板，原「确认按登记口径」升格）**——**2027-02-05 强制复评，以首个真实项目立项为先到者**；90 天止损线（无真实项目进链路，或人工工时占比 >70% 且无下降趋势）与线下台账 owner=蔡工，见 `docs/audit/商业验证决策单-2026-11-07.md`；
    ⑨ **售前主线收尾分工（goal-ta 循环，2026-11-07 蔡工拍板，三行逐字记录）**——✅ **DECIDED（2026-11-07）**：①「剩余T-A线本会话」——T-A1 / T-A8+B#9 合批 / T-A9 随 ASR 立项 / 工程卫生轮，归执行 goal-ta 循环提示词（`Goal提示词-交付工作台T-A收尾-goal-ta循环-v1.0.md`，文档中心 08_支撑材料/专题文档）的会话；②「T-A7另外一个会话在做，其它本会话可以做」——T-A7 为该会话**绝对禁区**（不认领、不开相关分支、不实现任何 T-A7 语义、遇 T-A7 分支/PR 零触碰零评论，backlog 对 T-A7 条目只加事实注记）；③T-A9 的 ASR 通道「**立项**」——文档轮（零代码零迁移），**立项≠实施**，T-A9 本体维持 PROPOSED，立项文档=`docs/architecture/录音转写ASR通道立项-v1.md`（含显式「待蔡工拍板」通道选型节），选型拍板后 T-A9 另开实施轮。
+   ⑪ **T-B1 封包前置（D11 立项）拍板（goal-tb tb4，2026-11-07 蔡工委托「第3件需要拍板的按你建议处理」）**——✅ **DECIDED（2026-11-07）**：D11 立项按台账 §二草案+§十三.4 改名裁决执行（handover_packages 两表/delivered=admin 终态不可逆/manifest 规范化哈希/seal 逐项 sha256+复核闸）；「首批真实数据到位」**不阻塞代码实现**（合成 run 测试覆盖，投产自然等待真实 run）；document/file item_type 留扩展。封包半随 tb4 实施（T-B1 全条 DONE）。留痕可推翻（#124 先例）。
    ⑩ **ASR 通道选型（goal-tb 循环，2026-11-07 蔡工拍板，逐字）**——✅ **DECIDED（2026-11-07）**：「ASR 通道选型：按你建议实施。」——按 #124 委托先例，立项文档 §3.3 P1–P6 逐项按推荐项落定（§3.3.1）：**P1=opt-L 本地 ASR 先行**（红线同向零外发）/ P2=横评实测裁决 / P3=Windows 宿主裸跑 / P4=首版普通话 / P5=诚实失败 / P6=云默认不开（启用=新的显式拍板）。横评报告=`docs/audit/ASR本地引擎横评-2026-11-07.md`（faster-whisper base 档：CER 8.6%/6.5%，4× 实时；宿主裸跑确认）。T-A9 实施轮随之解封（goal-tb tb1 同日执行）。
 
    **拍板轮结论（2026-11-06）：8 项闸全部收口，无一阻塞 T-A1..T-A7 开工**——①②③⑥ DECIDED 已回写对应条目；④⑤⑦⑧ 本就是声明性约束（登记时已有明确结论），确认后维持原状。

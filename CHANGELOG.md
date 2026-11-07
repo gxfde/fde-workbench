@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-tb tb4：T-B1 封包半——结项交付包 handover_packages（D11 立项拍板落地，2026-11-07）
+
+- **拍板落定（§拍板闸 6⑪，蔡工「第3件需要拍板的按你建议处理」）**：D11 立项按台账 §二草案+§十三.4 改名裁决执行；「首批真实数据到位」**不阻塞代码实现**（合成 run 测试覆盖，投产使用自然等待真实 run）。台账 §二已追加拍板记录节（留痕可推翻，#124 先例）。
+- **DB（迁移 `e5f1a7c3b9d4`，38→39 rev，additive）**：`handover_packages`（draft→sealed→delivered；unseal 仅 sealed→draft 且 unsealed_count 留痕；**delivered 终态不可逆**；5 条 CHECK）+ `handover_package_items`（**指针+sha256 快照**——B#6 真相原则「清单是投影」，artifact_id 无 FK、metadata 扫描钉死零外键指向 agent_artifacts；同包同产物唯一约束）。表名与派单 `delivery_packages` 不混用（§十三.4 裁决）。
+- **API（+8 路由 315→323，蓝图 42→43，全部不进 api_catalog）**：`POST/GET /handover-packages`、`GET/PATCH /handover-packages/{id}`、`POST …/seal|unseal|deliver`、`GET /handover-packages/artifacts`（挑选面=本项目已复核产物投影）。权限=查看 can_view、创建/编辑/封存/解封 can_manage、**交付登记=admin 专属**（草案「delivered（登记对外交付）=admin」原样）。
+- **seal 语义**：冻结清单 + **逐项校验四闸**（产物存在 / 属本项目 / **已人工复核**〔与草案 status∈{confirmed,available} 闸同构〕/ 指纹一致→`fingerprint_drift` 409）+ `manifest_sha256`＝清单规范化 JSON 哈希（测试按同参数复算钉死）。审计四事件 `handover_package_created/sealed/unsealed/delivered`（target=项目，不复制产物内容）。
+- **桌面**：NEW `handover/HandoverPackagesPanel.tsx` 挂 **delivery tab**（方案设计下方）——草稿组包（勾选已复核产物，默认名取 storage_ref 末段）/清单详情（名称/种类/指针/指纹）/封存/解封/交付登记（`isAdmin` 显隐与 admin 闸同构）/manifest 指纹呈现；无障碍闸（游离 label 检测）驱动修正为显式 htmlFor/id。
+- **测试**：服务端 NEW `test_handover_packages.py` 6 例；变异三连红→还原绿（摘 reviewed 封包闸→红 / 摘 deliver admin 门→红 / 摘指纹漂移校验→红）。桌面 NEW `handover-packages-panel.test.tsx` 5 例。pytest **2122 收集 = 2116 passed + 6 skipped**（+6；基线=fork/main@63f12de 实测 **2116 收集（2110+6s）**＝#191 实测 2108+6s ＋ 并行 #190 台账同步钉 +2〔本地全量直测 2116+6s，勘误：预写 2120 少计 #190 增量〕）/ vitest **932/932**（78 文件，+5）/ mypy 279 不变。实施中发现并修正两处（诚实注记）：①序列化初版经 `db.session()` 重开会话读不到事务内未提交行（`sessionmaker` 非 scoped）→ 显式传事务 session；②manifest 摘要先算后落 sealed_at 致哈希与呈现不一致 → 调序（先落封存态再算清单）。server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）；桌面变更 ⇒ 便携版 r21（0.3.0）。
 ## [未发布] — 22:25 交互拍板：人工项方向收口 + PR #193 合并授权（2026-11-07）
 
 - **交互方式**：用户「人工部分你使用交互式选择方式解决」⇒ 两轮 5 张选择卡片（依据/收益/代价/推荐理由写正文、卡片只用 A/B/C 编号）。

@@ -1,10 +1,10 @@
 {
- "route_count": 315,
- "blueprint_count": 42,
- "table_count": 107,
- "revision_count": 38,
+ "route_count": 323,
+ "blueprint_count": 43,
+ "table_count": 109,
+ "revision_count": 39,
  "heads": [
-  "b8e4d6f2a9c3"
+  "e5f1a7c3b9d4"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -286,6 +286,15 @@
    "down_revision": "b8d4f2a6c0e8",
    "create_tables": [
     "ai_call_audits"
+   ],
+   "add_column_tables": []
+  },
+  "e5f1a7c3b9d4": {
+   "file": "e5f1a7c3b9d4_handover_packages.py",
+   "down_revision": "b8e4d6f2a9c3",
+   "create_tables": [
+    "handover_packages",
+    "handover_package_items"
    ],
    "add_column_tables": []
   },

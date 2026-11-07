@@ -350,6 +350,10 @@ def db_session(app) -> Session:
         __import__("fde_api.agents.models", fromlist=["SeatActionLedger"]).SeatActionLedger,
         # goal-d9：翻译器草稿（created_by 挂 users RESTRICT，先于 users 清）
         __import__("fde_api.translator.models", fromlist=["TranslatorTranslation"]).TranslatorTranslation,
+        # T-B1 封包半（goal-tb tb4）：结项交付包两表（包引用 projects/users
+        # RESTRICT；items CASCADE 随包）
+        __import__("fde_api.handover.models", fromlist=["HandoverPackageItem"]).HandoverPackageItem,
+        __import__("fde_api.handover.models", fromlist=["HandoverPackage"]).HandoverPackage,
         # T-A9（goal-tb tb1）：纪要/草稿（均引用 projects/users RESTRICT；
         # minutes.draft_id 为纯指针无 FK，两表同簇先后无约束依赖）
         __import__("fde_api.transcripts.models", fromlist=["InterviewMinutes"]).InterviewMinutes,
