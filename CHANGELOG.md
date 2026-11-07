@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-tb tb3：T-Z1 zcode 真机实测报告 + 执行通道裁定提案（纯文档，2026-11-07）
+
+- NEW `docs/audit/T-Z1-zcode真机实测与通道裁定提案-2026-11-07.md`（T-Z1 登记闸「开工前半天实测」必做项的实测记录与裁定提案；**纯文档零代码零迁移零路由**）。
+- **实测事实**（全部真机直测）：① CLI 真实契约 = `ELECTRON_RUN_AS_NODE=1 ZCode.exe resources/glm/zcode.cjs`（doctor: node v24.21.0）；② **闸①会话续接 ✅**——`--resume <sessionId>` 0.17.1 为取值开关（登记原文「布尔开关」勘误入档）+ `-c/--continue`，真机双跑验证同 sessionId 上下文携带；③ **`--json` 实测为单对象汇总**（sessionId/traceId/response/usage/eventCount/projection，非 ndjson 事件流——粒度事件流在 app-server stdio 协议；登记原文⑤勘误）；④ **容器内直跑四重阻断**——sandbox-runner node v20 缺 `node:sqlite`（node:24-alpine 实测 zcode.cjs 可跑 ⇒ JS 层唯一硬阻断）+ provider 配置缺 + 登录态缺 + `network_mode: none` 零 egress；⑤ **闸①商用条款 ⚠️**——zcode 本体无独立 LICENSE 授予文件（仅第三方 MIT 组件清单），商用集成前须向供应商书面确认（挂账不代决）。
+- **裁定提案（交蔡工拍板，§拍板闸 6⑤ 拍板项不代决）**：A=宿主侧 zcode 代理（推荐：零 sandbox 基座变更、沿 bridge-poll 宿主纪律同构、`--json`/`--resume` 契约齐备）/ B=openfde 加 zcode executor（须补 B#35 许可登记）/ C=容器内直连（不建议：三重安全面变更叠加）；**无论 A/B 均须先办 AGENTS「bridge 只读」红线修订 + 商用条款确认两件拍板**——办结前编码执行通道维持 `adapter_missing` 降级（登记闸③原样生效，不阻塞第一阶段主线）。适配器 CLI 段重写随通道拍板后的实施轮执行（本实测轮零代码）。
+- 口径全不动（pytest 2114 / vitest 927 / 路由 315 / 38 rev 均沿 tb2 基线；无需 rebuild/alembic/重打包）。
+
 ## [未发布] — goal-tb tb2：T-B1 agent_artifacts 扩列 + 产物人工接受写路径（封包半挂 D11，2026-11-07）
 
 - **范围声明（登记原文「封包前置」逐字生效）**：本轮**只做 artifacts 扩列**——`handover_packages` 新表与封包/解封/下载路由**未建**（D11 立项拍板 + 首批真实数据两前置未达成），产物→交付包闭环维持挂账。
