@@ -416,7 +416,7 @@
 - 回滚：revert 单 commit（纯前端）。风险：低（错误体已含清单）。依赖：无。复杂度：**S**。
 - 闸：**无**（可随第一阶段任一轮开工）；须走 PR→4 CI。
 
-### T-A2 代号化自动替换层（入库前企业名→代号） — **PROPOSED（登记轮，零代码）**
+### T-A2 代号化自动替换层（入库前企业名→代号） — **已实施并合并（2026-11-06 PR #160 三道防线 + 2026-11-07 confirm 复核闸补齐，PR 见下）**
 - 目标：售前上传访谈资料时，正文中的**真实企业名在入库前被自动替换为代号**，使「客户真实资料永不进 git 历史与远端」红线在**文件正文面**也成立（当前该红线只由 CI 扫数据库 dump 覆盖）。
 - 现状实测（fork/main@d3adf1c）：① `scripts/check-pseudonymization.sh` 只扫 `pg_dump --data-only --inserts`（`:104`），**不扫上传文件的二进制内容** ⇒ 文件正文含真实企业名时 CI **静默通过**；② `server/src/fde_api/guidance/redaction.py:22` `redact_text` 已脱敏 email/mobile/idcard/landline，**故意不脱企业名**（企业名非 PII 格式）；③ **`redact_presurvey`（`redaction.py:31`）全仓零调用点**（`git grep` 仅命中定义处自身）⇒ presurvey 链（`ai/kimi.py` 抽取 → 落库）**当前零脱敏**；④ `projects.enterprise_code` 已是三段式代号（`client·industry·city`，格式检查 `check-pseudonymization.sh:206`）。
 - 形态：**非-AI 纯函数层**（字典匹配 + 确定性替换，合借鉴登记 B#31「导入零模型调用」）。
@@ -453,7 +453,7 @@
 - **闸与来源种类无关**（translator_draft / presurvey_docx 同闸）；复核清单是「历史上替换了什么」的审计事实，编辑正文不改写清单。
 - **测试**：NEW `server/tests/test_guidance_confirm_review_gate.py` 6 例（无 ack 409+零变更 / ack 放行+事件留痕 / 干净分析免 ack+事件 `redaction_reviewed=False` / 读面清单形状与排序 / 跨事件同名合并 / 编辑不改写审计清单）。零迁移零路由改动（既有端点加可选参数）零桌面改动；服务端变更 ⇒ 合并后 rebuild 三镜像（alembic 幂等 no-op）。
 
-### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **PROPOSED（登记轮，零代码）**
+### T-A3 调研表三态流转（confirm/reject/revise）桌面入口 — **已实施并合并（2026-11-06 PR #163 → `5e27e49`，见下）**
 - 目标：补齐「调研 → 方案」链路的桌面断点——三态流转目前**桌面零引用**（服务端状态机与端点已完整）。
 - 现状实测：`server/src/fde_api/research/project_routes.py` 三条端点（confirm/reject/revise）齐备；桌面端 `desktop/src/renderer/src/research/` 对其**零引用**（台账 `docs/后续需求台账-F5与D11.md:29` 已记同一缺口）。
 - **权限口径（2026-11-06 复审校准，方案 v1.2 §10 Q3；2026-11-06 实施轮再校准，见下）**：实测 `research/form_service.py`——`_require_fill`（`:966`）允许 `can_manage` **或** `can_update_assigned_tasks`（role≥fde_engineer），**revise 走 `_require_fill`（`:568`）⇒ member 可用**；`_require_confirm`（`:972`）强制 `can_manage`，**confirm/reject 调用点 `:347`/`:532` ⇒ member 恒 403**；`projects/permissions.py:35` member 角色 `can_manage=False`。⇒ **四闸校准后**：访谈助理=viewer（填表/提资料）；独立售前=fde_engineer+member（填表/**revise 打回重填**/录 presurvey 资料/生成方案草稿，**不可 confirm/reject 事实**）；方案审核=project_lead 或项目负责人（**confirm/reject 事实**、终审、导出 SOW）；交付专家=可声明 `agent_assisted`。**服务端权限模型零改动。**
@@ -485,7 +485,7 @@
 
 **测试**：`desktop/tests/renderer/project-research.test.tsx` 新增 describe「research form tri-state (T-A3)」**10 例**：权限显隐三态（管理员草稿 / 独立售前草稿 / 独立售前已确认）、创建修订版带版本、confirm 必答缺失本地拦、confirm 必答齐全后发出并转已确认态、reject 理由必填本地拦、reject 填理由后发出并回显意见、409 冲突原样呈现 + 刷新入口、403 可读提示。既有 63 例**零回归**（含被撤回的只读收紧那一条）。
 
-### T-A4 事实/假设/待确认三层桌面可视化 — **PROPOSED（登记轮，零代码）**
+### T-A4 事实/假设/待确认三层桌面可视化 — **已实施并合并（2026-11-06 PR #164 → `5b47c07`，见下）**
 - 目标：客户原话 vs AI 推断 vs 待确认项**在桌面端视觉可分且可编辑**——支撑「售前录入的事实需客户确认」红线与 Q3 四闸的语义基础。
 - 现状实测：`server/src/fde_api/guidance/ai_schema.py:6` `CLASSIFICATIONS = {customer_stated, ai_synthesized, ai_inferred, open_question, human_added}` 五分类**已内建**；`:60` evidence 引用必须命中 `source_refs`，否则 `unknown_source_ref` **拒收**（fail-closed）。⇒ 缺的是**呈现与编辑面**，非模型面。
 - **实施轮勘误（2026-11-06，T-A4 实测，与登记原文三处出入）**：
@@ -516,7 +516,7 @@
 
 **测试**：`desktop/tests/renderer/guidance-classification-layers.test.tsx` **9 例**——三层归属、无锚点降级（不混进客户事实层）、五类标签可读且客户原话与 AI 推断不可混淆、条目粒度呈现、改文本不动其余条目元数据、删条目不使其余条目错位、无锚点条目的分类候选集受限、新增条目默认人工补录且空条目不随保存提交、保存时保留分类与锚点（含 `confirmed`）。既有 guidance 22 例零回归。
 
-### T-A5 方案三选项 + 取舍 + 明确不做 + 验收标准 骨架模板 — **PROPOSED（登记轮，零代码）**
+### T-A5 方案三选项 + 取舍 + 明确不做 + 验收标准 骨架模板 — **已实施并合并（2026-11-06 PR #172 → `880997f`，见下）**
 - 目标：方案骨架模板化，降低售前从零起草成本。
 - **复用优先（登记即约束）**：`server/src/fde_api/solutions/service.py:895-945` **既有六段骨架**，`out_of_scope` 段即「明确不做」⇒ **零新列**，不新建方案结构。
 - 修改文件：既有 solution 骨架的模板文案与 `out_of_scope` 预填（**不新增字段、不新增表**）。
@@ -552,7 +552,7 @@
 **CI 实测口径**（#172 PR-head CI run 42277662998）：pytest **2062 passed + 6 skipped**（2068 收集）／vitest **862**（70 文件，桌面零改动不变）／mypy 279／路由 **304**（零新增路由）／零迁移零新表零新字段。
 
 
-### T-A6 报价 claims 核验 → 冻结 SOW 的桌面闭环 — **PROPOSED（登记轮，零代码）**
+### T-A6 报价 claims 核验 → 冻结 SOW 的桌面闭环 — **已实施并合并（2026-11-07 PR #175 → `0a7806b`，见下）**
 - 目标：售前能自己把报价从「估算」推到「核验通过」，并在核验通过后冻结导出 SOW，**不依赖工程师介入**。
 - 现状实测：`server/src/fde_api/projects/quote_service.py` 链完整——`:137` B 层系数 = 0.9 + 总分×0.03；`:226` `_advance_claims` 逐字段推进 estimated→claimed；`:581` finalize；`:861` `claims_summary`（accepted/total）；`solutions/service.py` `export_sow` 强制传已冻结版本（AI 不二次改写）；`api_catalog.py:79` 建交付包需 `solution_id + quote_id`。
 - 修改文件：`desktop/src/renderer/src/projects/CommercialBoard.tsx`（既有报价/收款/合同面板已含 `calibrate`/`finalize`/`render` ⇒ **本条是补齐状态推进与门禁提示，不是新建面板**）。
@@ -575,7 +575,7 @@
 - **测试**：`desktop/tests/renderer/solution-design.test.tsx` 新增 **5 例**——finalized 报价默认选中 + 草稿选项禁用 + `POST /dispatch/packages` 带 `solution_id+quote_id`、无 finalized 时可读清单 + 按钮禁用 + 零建包请求、只读用户与弃用方案隐藏区块、`package_exists`/`verifier_role_required` 中文呈现、报价卡 finalized 引导行（草稿报价不出现）。定向回归 **47 passed**（42 既有 + 5 新）；typecheck 全绿。
 - **验收对照**：售前独立完成「报价核验 → 冻结 SOW」全链 = claims 推进（既有）→ 成交回填（既有）→ 方案详情建交付包（本轮新增入口）→ 调度台发布冻结快照（既有）；未核验时**建包入口前置拦截**（服务端 publish 闸 `quote_not_finalized` 兜底，口径同源）。
 
-### T-A7 客户谈判版本管理（方案版本快照不可变，谈判稿与最终 SOW 分离） — **PROPOSED（登记轮，零代码）**
+### T-A7 客户谈判版本管理（方案版本快照不可变，谈判稿与最终 SOW 分离） — **已实施并合并（2026-11-07 PR #178 → `9267240`，见下）**
 > 分工注记（2026-11-07，§拍板闸 6⑨ 蔡工拍板逐字「T-A7另外一个会话在做」）：本条目由**并行会话**实施（#178 桌面实施与 #179 补账均已合并）；goal-ta 收尾会话对本条目**零触碰零实现**，仅留本事实注记，不重写其任何段落。
 - 目标：谈判过程中的多版方案可追溯，**最终 SOW 只认冻结版本**，谈判稿不进 SOW。
 - 现状实测：solution 版本冻结与 `export_sow` 强制传 version **已具备**（`solutions/service.py`）；缺的是**谈判稿与正式方案的分离位**与桌面呈现。
@@ -598,7 +598,7 @@
 - **既有产品决策裁决（防预取回归）**：方案**列表页**不加冻结徽标——既有用例 `uses the shared file library behind a collapsed SOW-only entry without creating documents here`（solution-design.test.tsx:184）钉住「列表页不预取 `/documents`」（SOW 文件懒加载契约）；冻结状态只在**详情页**呈现（决策点在详情：用户正要导出/建包时最需要知道冻结状态）。
 - **测试**：NEW `desktop/tests/renderer/solution-frozen-version.test.tsx` **7 例**（反查空/非 SOW/多文档取最大/畸形 scope 忽略；徽标三态+防御性回退）；`solution-design.test.tsx` **+5 例**（详情页三态徽标 + `/documents` 拉取失败静默降级 + 导出弹窗版本明示与 reused 文案 + 弃用方案徽标保留）；桌面全量见 CI 实测。
 
-### T-A8 agents run 列表 + meetings 会议纪要 两个桌面控制台 — **PROPOSED（登记轮，零代码）**
+### T-A8 agents run 列表 + meetings 会议纪要 两个桌面控制台 — **已实施并合并（2026-11-07 PR #182，含 #171 复核清单桌面收口，见下）**
 - 目标：让售前与专家**看得见**智能体干了什么——「人看不见的自动化等于没有自动化」，这是「多养售前、少量专家」组织形态的前提条件。
 - 现状实测（fork/main@d3adf1c）：`server/src/fde_api/agents/routes.py` **11 条**（list agents / run / run 详情 / handoff / retry / tool-calls / cost / fallback-rehearsal / recover / pilot-report / quota）、`server/src/fde_api/meetings/routes.py` **10 条**（创建/详情/插话/关闭/纪要/模板/清单/暂停/恢复/成本）——**两者均无列表端点**（`GET /agents/runs` 与 `GET /meetings` 零命中）⇒ **「服务端零改动」不成立**，列表 UI 无数据源。
 - 修改文件：`server/src/fde_api/agents/routes.py` + `server/src/fde_api/meetings/routes.py`（**各补 1 条只读列表路由**）；`desktop/src/renderer/src/` 新建 agents/meetings 控制台页（样式参照既有 `workflows/WorkflowConsole.tsx`）。
