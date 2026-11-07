@@ -579,6 +579,18 @@
 - 验收：SOW 内容与所选冻结版本逐字一致；谈判稿可在版本列表中追溯但不可导出。
 - 回滚：revert 单 commit。风险：低。依赖：T-A6。复杂度：**S**。
 
+#### ✅ T-A7 实施轮（2026-11-07，状态：**已实施，待合并**——PR 待开，CI 待守，服务端零改动）
+- **实施轮勘误（与登记原文三处出入，实测 fork/main@ef1b4d0 后回写）**：
+  1. **「谈判稿与正式方案的分离位」不需要新实体**——solution 是单行 + 乐观锁整数 version（无版本历史表）；「冻结」语义已承载在 `project_solution_exports`（`(solution_id, solution_version)` 唯一键，每修订一份不可变 SOW 快照）+ 文档版本 `content_snapshot_json.solution` 逐字快照。登记所缺的「分离位」实为**桌面可见性**问题，不是数据建模问题。
+  2. **「谈判稿可在版本列表中追溯」数据源已存在**——`GET /documents` 摘要序列化器（`draft_service._serialize_document_summary`）自带 `opportunity_scope.solution.{id,version}`（export_sow 每次导出都更新为导出时刻的方案版本）⇒ 桌面从既有接口即可反查「最新冻结进 SOW 的方案版本号」，**零新 API 成立**。
+  3. **「谈判稿不出现在 SOW 导出内容中；版本快照只读」服务端已钉住**——`test_sow_export_freezes_saved_solution_without_ai_and_reuses_revision`（test_project_solutions.py:126-177）断言快照取导出时刻内容、后续修改不回流、草稿改写 409 `solution_source_readonly`、revise 伪快照 400 ⇒ 本轮**不重复实施服务端**。
+- **实施轮实际改动**（桌面两文件 + 新增纯函数模块，服务端零改动零新 API 零迁移）：
+  1. **NEW `desktop/src/renderer/src/solutions/frozenVersion.ts`**——`frozenSolutionVersion(documents, solutionId)`（从文档列表反查最新冻结方案版本，含 archived 快照=历史冻结事实，取最大版本号，忽略畸形 scope）+ `solutionVersionBadge(solutionVersion, frozenVersion)`（三态徽标：已冻结进 SOW / 谈判稿·已修改 / 谈判稿·未导出）。
+  2. **`SolutionDetailPage.tsx`**——详情页头部加冻结状态徽标（复用全站 badge success/warning/muted 三档）；数据加载并行拉 `/documents`（**辅助数据源，失败静默降级**——SolutionHealthChip 同纪律）。
+  3. **`SolutionExport.tsx`**——导出弹窗类型补 `solution_version` + `reused`（服务端 `_serialize_export` 本就返回，桌面此前未声明未展示）；弹窗文案明示「本 SOW 快照冻结的是方案 vN 的内容」+ reused 时「复用既有快照」。
+- **既有产品决策裁决（防预取回归）**：方案**列表页**不加冻结徽标——既有用例 `uses the shared file library behind a collapsed SOW-only entry without creating documents here`（solution-design.test.tsx:184）钉住「列表页不预取 `/documents`」（SOW 文件懒加载契约）；冻结状态只在**详情页**呈现（决策点在详情：用户正要导出/建包时最需要知道冻结状态）。
+- **测试**：NEW `desktop/tests/renderer/solution-frozen-version.test.tsx` **7 例**（反查空/非 SOW/多文档取最大/畸形 scope 忽略；徽标三态+防御性回退）；`solution-design.test.tsx` **+5 例**（详情页三态徽标 + `/documents` 拉取失败静默降级 + 导出弹窗版本明示与 reused 文案 + 弃用方案徽标保留）；桌面全量见 CI 实测。
+
 ### T-A8 agents run 列表 + meetings 会议纪要 两个桌面控制台 — **PROPOSED（登记轮，零代码）**
 - 目标：让售前与专家**看得见**智能体干了什么——「人看不见的自动化等于没有自动化」，这是「多养售前、少量专家」组织形态的前提条件。
 - 现状实测（fork/main@d3adf1c）：`server/src/fde_api/agents/routes.py` **11 条**（list agents / run / run 详情 / handoff / retry / tool-calls / cost / fallback-rehearsal / recover / pilot-report / quota）、`server/src/fde_api/meetings/routes.py` **10 条**（创建/详情/插话/关闭/纪要/模板/清单/暂停/恢复/成本）——**两者均无列表端点**（`GET /agents/runs` 与 `GET /meetings` 零命中）⇒ **「服务端零改动」不成立**，列表 UI 无数据源。
@@ -740,7 +752,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-UI1：依赖各 API 落地
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
- T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本)
+ T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施)
  T-A1(S3闸提示)：独立，可与 T-A2 并行
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：可与 T-A5..T-A7 并行
  T-A9(转写草稿区)：依赖 T-A2 + ASR 通道立项（不预支）

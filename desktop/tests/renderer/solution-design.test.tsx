@@ -581,3 +581,98 @@ it('T-A6: quote card shows next-step guidance to the solution page after finaliz
   await screen.findByText('暂无收款计划。B 试点按 50/50 生成两行（G4 预付 / G8 尾款）。')
   expect(screen.queryByText(/已成交回填。下一步：到/)).not.toBeInTheDocument()
 })
+
+// ---- T-A7：谈判版本管理（谈判稿=未冻结版本，冻结状态在详情页可见） ----
+
+function frozenDocsMock(rows: Array<{ id?: string; version?: number; status?: string }> = []): Record<string, unknown> {
+  return { items: rows.map(row => ({ id: `doc-${row.id ?? row.version}`, project_id: 'p', document_type: 'sow', business_code: 'SOW-方案', status: row.status ?? 'draft', version: 1, created_at: '2026-09-09', current_version_id: 'v1', current_version: { id: 'v1', version_number: 1, source: 'generated', status: 'draft', docx_file_version_id: 'f1' }, opportunity_scope: { solution: { id: 'solution1', name: '工程资料智能助手', version: row.version }, opportunities: [] } })) }
+}
+
+function withFrozenDocs(rows: Array<{ version?: number; status?: string }> = []): void {
+  const original = mocks.apiRequest.getMockImplementation()!
+  mocks.apiRequest.mockImplementation(async (path: string, options: { method: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/documents')) return frozenDocsMock(rows)
+    return original(path, options)
+  })
+}
+
+it('T-A7: detail page labels the current version as frozen into SOW when versions match', async () => {
+  // 种子方案 version=3，SOW 快照 scope.solution.version=3 ⇒ 已冻结
+  withFrozenDocs([{ version: 3 }])
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  const badge = screen.getByText('已冻结进 SOW')
+  expect(badge).toBeVisible()
+  expect(badge).toHaveClass('success')
+})
+
+it('T-A7: detail page labels a newer unfrozen revision as edited negotiation draft', async () => {
+  // 方案 version=3，但 SOW 只冻结过 v1 ⇒ 当前内容未进任何 SOW
+  withFrozenDocs([{ version: 1 }])
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  const badge = screen.getByText('谈判稿 · 已修改')
+  expect(badge).toBeVisible()
+  expect(badge).toHaveClass('warning')
+})
+
+it('T-A7: detail page labels a never-exported solution as negotiation draft and degrades silently without documents', async () => {
+  // 默认 beforeEach：/documents 返回空列表 ⇒ 从未导出 ⇒ 谈判稿
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  const badge = screen.getByText('谈判稿 · 未导出')
+  expect(badge).toBeVisible()
+  expect(badge).toHaveClass('muted')
+
+  // /documents 拉取失败 ⇒ 静默降级为「谈判稿 · 未导出」，主内容不受影响
+  cleanup()
+  const original = mocks.apiRequest.getMockImplementation()!
+  mocks.apiRequest.mockImplementation(async (path: string, options: { method: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/documents')) throw new Error('documents unavailable')
+    return original(path, options)
+  })
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  expect(screen.getByText('谈判稿 · 未导出')).toBeVisible()
+})
+
+it('T-A7: export dialog states which solution version the snapshot freezes and reuses', async () => {
+  const original = mocks.apiRequest.getMockImplementation()!
+  mocks.apiRequest.mockImplementation(async (path: string, options: { method: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/export-sow')) return { document_id: 'doc1', document_version_id: 'dv1', solution_version: 3, reused: false, document: { id: 'doc1', current_version: { id: 'dv1', status: 'draft', docx_file_version_id: 'file1' }, generation_status: 'succeeded' } }
+    return original(path, options)
+  })
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  await userEvent.click(await screen.findByRole('button', { name: '导出 SOW' }))
+  const dialog = await screen.findByRole('dialog', { name: '导出 SOW' })
+  expect(await within(dialog).findByText((_, node) => node?.tagName === 'P' && node.textContent === '本 SOW 快照冻结的是方案 v3 的内容。后续修改方案会前进到新版本，不会覆盖这份 SOW；生成的文件也会保存在文件库中。')).toBeVisible()
+  expect(within(dialog).queryByText((_, node) => node?.tagName === 'P' && typeof node.textContent === 'string' && node.textContent.includes('复用既有快照'))).not.toBeInTheDocument()
+
+  // 同版本重复导出 ⇒ reused=true，文案带复用说明
+  cleanup()
+  mocks.apiRequest.mockImplementation(async (path: string, options: { method: string; body?: Record<string, unknown> }) => {
+    if (path.endsWith('/export-sow')) return { document_id: 'doc1', document_version_id: 'dv1', solution_version: 3, reused: true, document: { id: 'doc1', current_version: { id: 'dv1', status: 'draft', docx_file_version_id: 'file1' }, generation_status: 'succeeded' } }
+    return original(path, options)
+  })
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  await userEvent.click(await screen.findByRole('button', { name: '导出 SOW' }))
+  const dialog2 = await screen.findByRole('dialog', { name: '导出 SOW' })
+  const hint = await within(dialog2).findByText((_, node) => node?.tagName === 'P' && typeof node.textContent === 'string' && node.textContent.includes('复用既有快照'))
+  expect(hint).toBeVisible()
+})
+
+it('T-A7: archived solutions keep the frozen badge visible in read-only view', async () => {
+  // 弃用方案：徽标仍然呈现（冻结是历史事实，弃用不改变它）——但区块隐藏的建包入口不变
+  records = [solution({ status: 'archived' })]
+  withFrozenDocs([{ version: 3 }])
+  window.history.replaceState(null, '', '#projects/p?tab=delivery&solution=solution1')
+  render(<SolutionDesign projectId="p" canManage />)
+  expect(await screen.findByRole('region', { name: '查看方案：工程资料智能助手' })).toBeVisible()
+  expect(screen.getByText('已冻结进 SOW')).toBeVisible()
+})

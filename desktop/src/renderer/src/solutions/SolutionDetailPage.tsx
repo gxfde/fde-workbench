@@ -6,6 +6,8 @@ import { MemoMarkdown } from '../research/MemoMarkdown'
 import type { ResearchSubjectDto } from '../research/types'
 import { allowNextHashNavigation } from '../routing/navigationGuard'
 import { routeHash } from '../routing/useHashRoute'
+import { frozenSolutionVersion, solutionVersionBadge } from './frozenVersion'
+import type { DocumentScopeRef } from './frozenVersion'
 import { SignoffConsole } from './SignoffConsole'
 import { SolutionEditor } from './SolutionEditor'
 import { SolutionExport } from './SolutionExport'
@@ -25,6 +27,8 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
   const { apiRequest } = useAuth()
   const [solution, setSolution] = useState<SolutionDto | null>(null)
   const [subjects, setSubjects] = useState<ResearchSubjectDto[]>([])
+  // T-A7：SOW 冻结反查数据源（拉取失败静默降级——辅助信息不阻断主内容）
+  const [frozenDocs, setFrozenDocs] = useState<DocumentScopeRef[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -38,13 +42,15 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
     const request = ++sequence.current
     setLoading(true); setError(''); setSolution(null); setSubjects([])
     try {
-      const [next, research] = await Promise.all([
+      const [next, research, documents] = await Promise.all([
         creating ? Promise.resolve(null) : apiRequest<unknown>(`/api/v1/projects/${encodeURIComponent(projectId)}/solutions/${encodeURIComponent(solutionId)}`, { method: 'GET' }),
         apiRequest<{ items: ResearchSubjectDto[] }>(`/api/v1/projects/${encodeURIComponent(projectId)}/research/subjects`, { method: 'GET' }),
+        // T-A7：冻结反查（辅助数据源，失败静默降级）
+        apiRequest<{ items: DocumentScopeRef[] }>(`/api/v1/projects/${encodeURIComponent(projectId)}/documents`, { method: 'GET' }).catch(() => ({ items: [] as DocumentScopeRef[] })),
       ])
       if (request !== sequence.current) return
       if ((!creating && (!isSolution(next) || next.id !== solutionId || next.project_id !== projectId)) || !Array.isArray(research.items)) throw new Error('invalid solution detail')
-      setSolution(next as SolutionDto | null); setSubjects(research.items)
+      setSolution(next as SolutionDto | null); setSubjects(research.items); setFrozenDocs(Array.isArray(documents.items) ? documents.items : [])
     } catch (caught) { if (request === sequence.current) setError(solutionError(caught)) }
     finally { if (request === sequence.current) setLoading(false) }
   }, [apiRequest, projectId, solutionId, creating])
@@ -81,7 +87,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
   }
 
   return <section className="panel solution-panel solution-viewer" role="region" aria-label={`查看方案：${solution.name}`}>
-    <header className="solution-page-heading"><div><p className="eyebrow">方案设计 · 版本 {solution.version} · {solution.status === 'archived' ? '弃用' : '正常'}<SolutionProvenanceBadge solution={solution} /><QuotaMeter /><SolutionHealthChip projectId={projectId} solutionId={solution.id} /></p><h2>{solution.name}</h2></div><div className="row-actions">{canManage && solution.status !== 'archived' ? <><a className="secondary-button button-link compact" href={solutionHref(projectId, solution.id, 'edit', opportunityId)}>编辑方案</a><button type="button" className="primary-button compact" disabled={exporting} onClick={() => void exportSow()}>{exporting ? '处理中…' : '导出 SOW'}</button></> : null}{navigation}</div></header>
+    <header className="solution-page-heading"><div><p className="eyebrow">方案设计 · 版本 {solution.version} · {solution.status === 'archived' ? '弃用' : '正常'}{(() => { const badge = solutionVersionBadge(solution.version, frozenSolutionVersion(frozenDocs, solution.id)); return <span className={`badge ${badge.className} solution-freeze-badge`} title={badge.title}>{badge.label}</span> })()}<SolutionProvenanceBadge solution={solution} /><QuotaMeter /><SolutionHealthChip projectId={projectId} solutionId={solution.id} /></p><h2>{solution.name}</h2></div><div className="row-actions">{canManage && solution.status !== 'archived' ? <><a className="secondary-button button-link compact" href={solutionHref(projectId, solution.id, 'edit', opportunityId)}>编辑方案</a><button type="button" className="primary-button compact" disabled={exporting} onClick={() => void exportSow()}>{exporting ? '处理中…' : '导出 SOW'}</button></> : null}{navigation}</div></header>
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     {mode === 'edit' && solution.status === 'archived' ? <p className="notice warning" role="alert">此方案已弃用，仅可查看内容。</p> : null}
     {solution.source?.kind === 'legacy_opportunity_delivery' ? <p className="solution-legacy-notice">{solution.source.reviewed ? '历史交付说明：已保留来源，内容经过编辑整理，不代表客户审核或验收。' : '历史交付说明 · 待整理：保留了原机会中的交付内容，请核对完善方案后再导出 SOW。'}</p> : null}
