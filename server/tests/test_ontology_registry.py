@@ -846,6 +846,85 @@ def test_global_type_registration_and_retirement_are_admin_only(
 
 
 # ---------------------------------------------------------------------------
+# V3 T-O2c：全局注册类型只读面（无项目上下文的桌面消费方；CR-032 偏差清偿）
+# ---------------------------------------------------------------------------
+
+
+def test_global_relation_types_readonly_surface(
+    admin_client, published_template, leader_client, client
+) -> None:
+    """全局面只收全局行：项目内行不出现、全状态返回、?kind= 过滤、
+    任一已认证用户可读（无项目可见性闸）、未认证 401、非法 kind 400。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    registry_url = f"/api/v1/projects/{project['id']}/ontology/relation-types"
+    global_url = "/api/v1/ontology/relation-types"
+
+    registered = admin_client.post(
+        registry_url,
+        json={"kind": "subject_type", "code": "supplier_factory", "label": "供应商工厂", "scope": "global"},
+    )
+    assert registered.status_code == 201, registered.get_data(as_text=True)
+    global_row = registered.json["data"]["relation_type"]
+    assert global_row["project_id"] is None
+
+    project_scoped = admin_client.post(
+        registry_url,
+        json={"kind": "subject_type", "code": "site_workshop", "label": "现场车间"},
+    )
+    assert project_scoped.status_code == 201, project_scoped.get_data(as_text=True)
+
+    listing = admin_client.get(global_url)
+    assert listing.status_code == 200, listing.get_data(as_text=True)
+    items = listing.json["data"]["items"]
+    codes = {item["code"] for item in items}
+    assert "supplier_factory" in codes
+    assert "site_workshop" not in codes  # 项目内行绝不进全局面
+    mine = next(item for item in items if item["id"] == global_row["id"])
+    assert mine["scope"] == "global" and mine["kind"] == "subject_type"
+
+    subjects_only = admin_client.get(f"{global_url}?kind=subject_type")
+    assert subjects_only.status_code == 200
+    assert subjects_only.json["data"]["items"], "subject_type 过滤应保留全局对象类型行"
+    assert {item["kind"] for item in subjects_only.json["data"]["items"]} == {"subject_type"}
+    bad_kind = admin_client.get(f"{global_url}?kind=widget")
+    assert bad_kind.status_code == 400
+    assert bad_kind.json["error"]["code"] == "invalid_request"
+
+    # 只读面：无项目可见性闸，任一已认证用户可读；未认证 401
+    assert leader_client.get(global_url).status_code == 200
+    assert client.get(global_url).status_code == 401
+
+
+def test_global_relation_types_route_never_in_catalog() -> None:
+    """红线钉子：全局面同属人工路径，永不进 api_catalog（与 T-O2 钉同构）。"""
+    paths = {str(entry["path"]) for entry in CATALOG.values()}
+    assert not any(path.startswith("/api/v1/ontology") for path in paths)
+
+
+def test_global_surface_serialization_matches_project_surface(
+    admin_client, published_template, leader_client
+) -> None:
+    """全局面与项目面 serialize 形状同构（桌面同一过滤器可无差别消费两面）。"""
+    project = _create_project(admin_client, published_template, leader_client.user)
+    registry_url = f"/api/v1/projects/{project['id']}/ontology/relation-types"
+    global_url = "/api/v1/ontology/relation-types"
+
+    registered = admin_client.post(
+        registry_url,
+        json={"kind": "subject_type", "code": "logistics_park", "label": "物流园", "scope": "global"},
+    )
+    assert registered.status_code == 201, registered.get_data(as_text=True)
+    row_id = registered.json["data"]["relation_type"]["id"]
+
+    project_face = admin_client.get(registry_url).json["data"]["items"]
+    global_face = admin_client.get(global_url).json["data"]["items"]
+    from_project = next(item for item in project_face if item["id"] == row_id)
+    from_global = next(item for item in global_face if item["id"] == row_id)
+    assert set(from_project) == set(from_global)
+    assert from_project == from_global
+
+
+# ---------------------------------------------------------------------------
 # V3 T-O3：变更集（AI 候选唯一入口；验收 §5 用例 1/2/3）
 # ---------------------------------------------------------------------------
 

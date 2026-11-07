@@ -13,6 +13,7 @@ import { ApiClientError } from "../api/client"
 import { useAIExecution } from "../ai/AIExecutionProvider"
 import { useAuth } from "../auth/AuthProvider"
 import { isResearchConditionDto, isResearchDefinitionDto } from "./runtimeValidation"
+import { useRegistrySubjectTypes } from "./useRegistrySubjectTypes"
 import {
   hasConditionalDependencyCycle,
   isCanonicalConditionText,
@@ -22,6 +23,7 @@ import {
 } from "./conditionValueContract"
 import {
   researchSubjectLabel,
+  isResearchSubjectType,
   RESEARCH_FIELD_TYPES,
   RESEARCH_SUBJECT_TYPES,
   type ResearchConditionDto,
@@ -119,6 +121,9 @@ export const ResearchDefinitionEditor = forwardRef<ResearchDefinitionEditorHandl
   }, ref) {
     const { apiRequest, status } = useAuth()
     const { runAI } = useAIExecution()
+    // T-O2c：行业模板/调研定义是无项目上下文的全局面——注册类型选项走全局
+    // 只读路由（projectId=null）；fail-open 静默降级为仅内置五类。
+    const registeredSubjectTypes = useRegistrySubjectTypes(apiRequest, null, status === "authenticated")
     const [forms, setForms] = useState<EditableForm[]>([])
     const [loading, setLoading] = useState(true)
     const [ready, setReady] = useState(false)
@@ -485,7 +490,7 @@ export const ResearchDefinitionEditor = forwardRef<ResearchDefinitionEditorHandl
                   </Field>
                   <Field label={`${formPrefix} 调研主体`} id={`research-form-subject-${form.clientId}`}>
                     <select id={`research-form-subject-${form.clientId}`} value={form.subjectType} onChange={(event) => updateForm(form.clientId, { subjectType: event.target.value as ResearchSubjectType })}>
-                      {RESEARCH_SUBJECT_TYPES.map((subject) => <option value={subject} key={subject}>{subjectLabel(subject)}</option>)}
+                      {subjectTypeOptions(form.subjectType, registeredSubjectTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                     </select>
                   </Field>
                   <Field label={`${formPrefix} 所属模块`} id={`research-form-module-${form.clientId}`}>
@@ -940,18 +945,18 @@ function parseEditableDefinition(value: unknown): EditableForm[] | null {
   if (!rawForms) return null
   const forms: EditableForm[] = []
   for (const raw of rawForms) {
-    const form = importableForm(raw)
+    const form = importableForm(raw, true)
     if (!form) return null
     forms.push(form)
   }
   return forms
 }
 
-function importableForm(value: unknown): EditableForm | null {
+function importableForm(value: unknown, allowRegisteredSubjectType = false): EditableForm | null {
   if (!isRecord(value)) return null
   const { form_key, name, description, subject_type, module_key, sections } = value
   if (typeof form_key !== "string" || typeof name !== "string" || typeof description !== "string") return null
-  if (!importableSubjectType(subject_type)) return null
+  if (!importableSubjectType(subject_type, allowRegisteredSubjectType)) return null
   if (module_key !== null && module_key !== undefined && typeof module_key !== "string") return null
   if (!Array.isArray(sections)) return null
   const importedSections = sections.map(importableSection)
@@ -1006,8 +1011,13 @@ function importableField(value: unknown): EditableField | null {
   }
 }
 
-function importableSubjectType(value: unknown): value is ResearchSubjectType {
-  return typeof value === "string" && RESEARCH_SUBJECT_TYPES.some((subject) => subject === value)
+function importableSubjectType(value: unknown, allowRegisteredCode = false): value is ResearchSubjectType {
+  if (typeof value !== "string") return false
+  if (RESEARCH_SUBJECT_TYPES.some((subject) => subject === value)) return true
+  // T-O2c：JSON 文件导入是人工路径——对象类型码格式放行，值域权威仍在服务端
+  // replace_research_definition（usable_subject_type_codes）。AI 生成路径维持
+  // 内置五类不放开（T-O2b 防幻觉基线）。
+  return allowRegisteredCode && isResearchSubjectType(value)
 }
 
 function importableFieldType(value: unknown): value is ResearchFieldType {
@@ -1295,6 +1305,25 @@ function optionChoices(options: ResearchFieldOptionsDto): string[] {
 
 function subjectLabel(type: ResearchSubjectType): string {
   return researchSubjectLabel(type)
+}
+
+/**
+ * 调研主体下拉选项：内置五类 ∪ 注册类型（全局只读面 active 行）。
+ * CR-032 写路径轮教训：options 必须含当前 value——已加载定义里的注册类型
+ * 在注册面拉取失败（fail-open 降级）或已 retired 时不在列表里，缺兜底会
+ * 显示成空白。
+ */
+function subjectTypeOptions(current: ResearchSubjectType, registered: string[]): Array<{ value: ResearchSubjectType; label: string }> {
+  const rows: Array<{ value: ResearchSubjectType; label: string }> = RESEARCH_SUBJECT_TYPES.map((subject) => ({ value: subject, label: subjectLabel(subject) }))
+  for (const code of registered) {
+    if (!RESEARCH_SUBJECT_TYPES.some((subject) => subject === code)) {
+      rows.push({ value: code, label: `${subjectLabel(code)}（注册类型）` })
+    }
+  }
+  if (!rows.some((row) => row.value === current) && isResearchSubjectType(current)) {
+    rows.push({ value: current, label: `${subjectLabel(current)}（注册类型）` })
+  }
+  return rows
 }
 
 function fieldTypeLabel(type: ResearchFieldType): string {

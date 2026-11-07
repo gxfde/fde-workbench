@@ -67,6 +67,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(fact_chain_blueprint)
     # V3 T-O2：本体注册表路由（关系类型登记；术语面随 T-O3 开；人工路径不进 api_catalog）
     app.register_blueprint(ontology_blueprint)
+    # V3 T-O2c：全局注册类型只读面（无项目上下文的桌面消费方；不进 api_catalog）
+    from fde_api.ontology.routes import global_ontology_blueprint
+    app.register_blueprint(global_ontology_blueprint)
     # B#13-D：跨域到期只读投影（admin-only；服务层 union 零 DDL，不进 api_catalog）
     app.register_blueprint(expirations_blueprint)
     # V3 T-W3：Workflow 定义/运行路由（§5 五条；cancel/resume 随 T-W5 开）

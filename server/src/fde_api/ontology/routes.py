@@ -7,6 +7,9 @@
   （规范名 ∪ 别名 ∪ 并入来源名），变集拍板前的人工影响面评审。
 - ``GET  /api/v1/projects/<id>/ontology/relation-types``（can_view）：列出对项目
   生效的类型（全局 ∪ 项目内，项目内遮蔽同名全局）。
+- ``GET  /api/v1/ontology/relation-types``（require_auth，T-O2c 全局只读面）：
+  全局注册类型行（project_id 为空，不含项目内行）——无项目上下文的消费方
+  （行业模板/调研定义编辑器）拉取注册类型选项；人工路径，不进 api_catalog。
 - ``POST /api/v1/projects/<id>/ontology/relation-types``（can_manage）：登记类型；
   ``scope=global`` 另需管理员。人工路径——**有意不进 api_catalog**（AI 候选
   走 change_set）。
@@ -40,6 +43,29 @@ ontology_blueprint = Blueprint(
 @ontology_blueprint.errorhandler(service.OntologyServiceError)
 def service_error(error):
     return error_response(error.code, error.message, error.status)
+
+
+global_ontology_blueprint = Blueprint(
+    "global_ontology", __name__, url_prefix="/api/v1/ontology"
+)
+
+
+@global_ontology_blueprint.errorhandler(service.OntologyServiceError)
+def global_service_error(error):
+    return error_response(error.code, error.message, error.status)
+
+
+@global_ontology_blueprint.get("/relation-types")
+@require_auth
+def list_global_relation_types():
+    """全局注册类型只读面（T-O2c）：?kind= 按种类过滤，全状态返回。
+
+    无项目上下文的消费方（行业模板/调研定义编辑器）从此面拉取注册类型
+    选项；只收全局行——项目内类型只对本项目生效，进全局模板会在其他项目
+    实例化时落空。人工路径——有意不进 api_catalog（沿 T-O2 纪律）。
+    """
+    data = service.list_global_relation_types(kind=request.args.get("kind"))
+    return jsonify({"data": data, "error": None})
 
 
 @ontology_blueprint.get("/terms")

@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — T-O2c 全局注册类型只读面：调研定义编辑器接入注册类型（2026-11-07）
+
+### 行为变更（+1 只读路由；零迁移零新表；桌面变更 ⇒ 便携版重打包挂账）
+
+- **服务端新面**：`GET /api/v1/ontology/relation-types`（require_auth）——无项目上下文的消费方（行业模板/调研定义编辑器）拉取全局注册类型选项。只收全局行（project_id=NULL）；`?kind=` 按种类过滤；全状态返回（消费方自行过滤 active）。人工路径，有意不进 api_catalog（沿 T-O2 纪律）。
+- **调研定义编辑器接线**：「调研主体」下拉补注册类型选项（内置五类 ∪ 全局注册 active 行，标注「注册类型」）；已加载定义含注册类型时正确回显（含注册面拉取失败 fail-open 降级、类型已 retired 的当前值兜底——不再空白显示）。
+- **JSON 导入放宽**：调研定义 JSON 文件导入接受对象类型码格式的注册类型（值域权威仍在服务端写闸门）；AI 生成路径维持内置五类（T-O2b 防幻觉基线）。
+- 测试：pytest +3（全局面只收全局行/kind 过滤/未认证 401、两面 serialize 同构、目录红线钉）；vitest +5（全局面选项接线、注册类型定义显示与原样保存、fail-open 当前值兜底、JSON 导入注册码、AI 路径内置五类钉）。审计清单三件套再生成（route 305 / blueprint 41）。
+
 ## [未发布] — T-A2 补齐：confirm 复核闸（拍板 6① 机械强制，2026-11-07）
 
 - `guidance/service.py::confirm_analysis` 新增复核闸：确认前按分析聚合 `guidance.redaction_review` 事件（#160 落的复核清单事实源；同名跨事件 occurrences 累加、`matched_dict` 求并、按名称排序）——清单非空且请求未显式 `redaction_reviewed=true`（路由只认字面 true，fail 向安全侧）→ 409 `redaction_review_required`；带 ack 放行并随既有 `guidance_analysis_confirmed` 事件留痕 `redaction_reviewed`/`redaction_review_hits`。零新增状态面，闸与来源种类无关。

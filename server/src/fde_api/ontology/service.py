@@ -1648,6 +1648,33 @@ def list_project_relation_types(
     return {"items": [serialize_relation_type(row) for row in rows]}
 
 
+def list_global_relation_types(*, kind: str | None = None) -> dict[str, Any]:
+    """列出全局注册的类型行（project_id 为空；require_auth 只读）。
+
+    V3 T-O2c（CR-032 偏差清偿）：全局类型此前只能经项目内只读面
+    （GET /projects/<id>/ontology/relation-types，全局 ∪ 项目内合并）消费，
+    无项目上下文的消费方（行业模板/调研定义编辑器）拉不到注册类型选项。
+    本面**只收全局行**——项目内类型只对本项目生效，进全局模板会在
+    其他项目实例化时落空（usable_subject_type_codes 的项目合并面管不着
+    定义作者）；值域权威仍在服务端写闸门，此处只提供选项。全状态返回
+    （draft/active/retired 同项目面口径），消费方自行过滤 active。
+    """
+    kind_filter = _normalize_kind(kind) if kind else None
+    with db.session() as session:
+        rows = session.scalars(
+            select(OntologyRelationType)
+            .where(OntologyRelationType.project_id.is_(None))
+            .order_by(
+                OntologyRelationType.kind.asc(),
+                OntologyRelationType.code.asc(),
+                OntologyRelationType.id.asc(),
+            )
+        ).all()
+    if kind_filter is not None:
+        rows = [row for row in rows if row.kind == kind_filter]
+    return {"items": [serialize_relation_type(row) for row in rows]}
+
+
 def create_relation_type(
     *, actor: User, project_id: str, payload: dict[str, Any]
 ) -> dict[str, Any]:

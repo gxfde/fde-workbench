@@ -111,6 +111,11 @@
   - **契约变化**：subject 创建/导入的「根类型/未知类型」错误码 `invalid_request`→`400 unsupported_subject_type`（旧契约测试同步改写）；零路由零桌面改动（ENTRIES 94、路由 293 不变）。
   - **口径**：105 表不变、迁移头 `c9e3a7d1b5f8`→**`b5d9e3f7a1c6`**（30→**31 rev**）、业务路由 **293** 不变、ENTRIES **94** 不变、pytest **1818 收集 = 1812 passed + 6 skipped**（T-O2b +10：值域域测试 9 + 迁移往返 1）、vitest 730 不变。**改 server + 新迁移 ⇒ rebuild 后必 `alembic upgrade head`**（api/worker/scheduler 三镜像）。
 
+### T-O2c 全局注册类型只读面（CR-032 偏差清偿③：无项目上下文消费方）— **DONE（2026-11-07）**
+- 目标：行业模板/调研定义编辑器（全局面，无 project_id）此前无法拉取注册类型选项——T-O2 只开了项目内 relation-types 面（GET /projects/<id>/ontology/relation-types 是「全局 ∪ 项目内」合并面，且强依赖项目上下文）。
+- 服务端：NEW `GET /api/v1/ontology/relation-types`（require_auth；**只收全局行** project_id=NULL——项目内类型只对本项目生效，进全局模板会在其他项目实例化时落空；`?kind=` 过滤、全状态返回；不进 api_catalog）。新蓝图 `global_ontology`（蓝图 40→41，路由 304→305）；审计三件套再生成。零迁移零新表。
+- 桌面：`useRegistrySubjectTypes` 支持 `projectId=null` 走全局面＋`enabled` 会话门；`ResearchDefinitionEditor` 调研主体下拉补注册类型选项（内置 ∪ 注册 active ∪ 当前值兜底——fail-open/retired 不空白显示）；JSON 文件导入放宽对象类型码格式（值域权威在服务端），AI 生成路径维持内置五类（T-O2b 防幻觉基线）。pytest +3 / vitest +5。
+
 ### T-O3 变更集 ontology_change_sets（候选→人工确认闭环）— **DONE（2026-11-03，分支 feat/v3-t-o3-change-sets，squash 合并至 fork/main）**
 - 目标：批量变更事务单元+diff 评审+base 指纹并发防护；AI 候选唯一入口。
 - 前置：T-O1。修改文件：ontology/service.py（propose/confirm/reject 事务）、routes.py。

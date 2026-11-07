@@ -72,6 +72,7 @@ from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14�
 from fde_api.meetings.routes import meetings_blueprint
 from fde_api.metrics.routes import metrics_blueprint
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
+from fde_api.ontology.routes import global_ontology_blueprint  # V3 T-O2c 全局只读面
 from fde_api.translator.routes import translator_blueprint
 from fde_api.workbench.routes import workbench_blueprint
 from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
@@ -97,6 +98,7 @@ BLUEPRINTS = [
     evidence_blueprint,
     fact_chain_blueprint,  # 借鉴 B#9：app.py 注册序紧随 evidence_blueprint
     ontology_blueprint,  # V3 T-O2
+    global_ontology_blueprint,  # V3 T-O2c：app.py 注册序紧随 ontology_blueprint
     expirations_blueprint,  # B#13-D：app.py 注册序紧随 ontology_blueprint
     workflows_blueprint,
     dispatch_blueprint,

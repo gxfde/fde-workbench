@@ -5,7 +5,7 @@ import "@testing-library/jest-dom/vitest"
 import React from "react"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest"
 
 import { AuthProvider } from "../../src/renderer/src/auth/AuthProvider"
 import { DangerConfirmProvider } from "../../src/renderer/src/common/DangerConfirmProvider"
@@ -54,10 +54,26 @@ function apiError(code: string, status: number, details?: unknown): BridgeResult
   return ok({ status, data: null, error: { code, message: `raw-${code}-server-message`, details } })
 }
 
-function renderEditor(apiRequest: ReturnType<typeof vi.fn>, onVersionChange = vi.fn()) {
+function registryAware(apiRequest: Mock<any>, registryItems?: unknown[] | "reject") {
+  // T-O2c：编辑器挂载即拉取全局注册类型只读面。默认拦截回空集（fail-open 同款
+  // 降级），既有 sequential mock 链与 NthCallWith 序数不受这一次插入调用影响；
+  // 需要真实注册行的用例经 registryItems 注入，"reject" 模拟拉取失败。
+  return (path: string, options?: unknown) => {
+    if (path === "/api/v1/ontology/relation-types") {
+      if (registryItems === "reject") return Promise.reject(new Error("registry unavailable"))
+      return Promise.resolve(apiOk({ items: registryItems ?? [] }))
+    }
+    // vitest 的 Mock 泛型带构造签名不可直接调用（与 test-utils bridge() 同款处理：
+    // 只透传，不在类型层调用），这里经函数视图转发。
+    const forward = apiRequest as unknown as (...args: any[]) => any
+    return forward(path, options)
+  }
+}
+
+function renderEditor(apiRequest: ReturnType<typeof vi.fn>, onVersionChange = vi.fn(), registryItems?: unknown[] | "reject") {
   installBridge(bridge({
     refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))),
-    apiRequest,
+    apiRequest: registryAware(apiRequest, registryItems),
   }))
   render(
     <AuthProvider>
@@ -199,7 +215,7 @@ describe("ResearchDefinitionEditor", () => {
       published_by_user_id: null, published_at: null, modules: [],
     }
     const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(emptyDefinition))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
 
@@ -222,7 +238,7 @@ describe("ResearchDefinitionEditor", () => {
     }
     const apiRequest = vi.fn().mockResolvedValueOnce(apiOk({ ...emptyDefinition, version: 5 }))
     const onSaved = vi.fn()
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={onSaved} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.clear(screen.getByLabelText("模板名称"))
@@ -245,7 +261,7 @@ describe("ResearchDefinitionEditor", () => {
       published_by_user_id: null, published_at: null, modules: [],
     }
     const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(emptyDefinition))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
 
@@ -266,7 +282,7 @@ describe("ResearchDefinitionEditor", () => {
     const apiRequest = vi.fn()
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiError("stale_version", 409))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
 
@@ -299,7 +315,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(remote))
       .mockResolvedValueOnce(apiOk({ ...emptyDefinition, version: 5 }))
       .mockResolvedValueOnce(apiOk(savedBase))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
 
@@ -522,7 +538,7 @@ describe("ResearchDefinitionEditor", () => {
       condition: { field_key: "goal", operator: "equals", value: "1" },
     }
     const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(valid))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -735,7 +751,7 @@ describe("ResearchDefinitionEditor", () => {
     const onPublished = vi.fn()
     installBridge(bridge({
       refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))),
-      apiRequest,
+      apiRequest: registryAware(apiRequest),
     }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor
       draft={draft}
@@ -785,7 +801,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(savedBase))
       .mockResolvedValueOnce(apiOk(savedResearch))
     const onSaved = vi.fn()
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={onSaved} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
 
@@ -823,7 +839,7 @@ describe("ResearchDefinitionEditor", () => {
     const apiRequest = vi.fn()
       .mockResolvedValueOnce(apiOk(loaded))
       .mockResolvedValueOnce(apiOk({ ...draft, version: 5 }))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -846,7 +862,7 @@ describe("ResearchDefinitionEditor", () => {
         published_by_user_id: null, published_at: null, modules: [],
       }
       const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(definitionWithTwoFields))
-      installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+      installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
       render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
       const user = userEvent.setup()
       await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -870,7 +886,7 @@ describe("ResearchDefinitionEditor", () => {
     const apiRequest = vi.fn()
       .mockResolvedValueOnce(apiOk(emptyDefinition))
       .mockResolvedValueOnce(apiOk({ ...draft, version: 5 }))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -897,7 +913,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiOk({ ...draft, version: 5 }))
       .mockResolvedValueOnce(apiOk({ ...definitionWithTwoFields, version: 6 }))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -927,7 +943,7 @@ describe("ResearchDefinitionEditor", () => {
     const apiRequest = vi.fn()
       .mockResolvedValueOnce(apiOk({ ...definitionWithTwoFields, version: 4 }))
       .mockResolvedValueOnce(apiOk(savedBase))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.clear(screen.getByLabelText("模板名称"))
@@ -957,7 +973,7 @@ describe("ResearchDefinitionEditor", () => {
     const apiRequest = vi.fn()
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiOk(savedBase))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -987,7 +1003,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiOk(savedBase))
       .mockResolvedValueOnce(apiOk(savedResearch))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -1024,7 +1040,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiOk(locallySaved))
       .mockResolvedValueOnce(apiOk(savedBase))
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -1068,7 +1084,7 @@ describe("ResearchDefinitionEditor", () => {
       }))
     installBridge(bridge({
       refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))),
-      apiRequest,
+      apiRequest: registryAware(apiRequest),
     }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor
       draft={draft}
@@ -1097,7 +1113,7 @@ describe("ResearchDefinitionEditor", () => {
     }
     const pending = deferred<BridgeResult<ApiResponse<typeof definitionWithTwoFields>>>()
     const apiRequest = vi.fn().mockReturnValueOnce(pending.promise)
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={vi.fn()} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -1121,7 +1137,7 @@ describe("ResearchDefinitionEditor", () => {
       .mockResolvedValueOnce(apiOk(definitionWithTwoFields))
       .mockResolvedValueOnce(apiOk({ ...definitionWithTwoFields, version: 5 }))
     const onSaved = vi.fn()
-    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest }))
+    installBridge(bridge({ refresh: vi.fn().mockResolvedValue(ok(authResult(adminUser))), apiRequest: registryAware(apiRequest) }))
     render(<AuthProvider><DangerConfirmProvider><TemplateEditor draft={draft} catalog={[]} onSaved={onSaved} onPublished={vi.fn()} onDeleted={vi.fn()} onCancel={vi.fn()} /></DangerConfirmProvider></AuthProvider>)
     const user = userEvent.setup()
     await user.click(screen.getByRole("tab", { name: "调研表" }))
@@ -1231,5 +1247,129 @@ describe("ResearchDefinitionEditor", () => {
     await waitFor(() => expect(confirm).toHaveBeenCalled())
     expect(screen.getByLabelText("表单 1 名称")).toHaveValue("岗位访谈")
     expect(screen.queryByText("已导入调研定义，请核对后再保存。")).not.toBeInTheDocument()
+  })
+})
+
+describe("ResearchDefinitionEditor global registry subject types (T-O2c)", () => {
+  function globalRegistryRow(code: string, status = "active", kind = "subject_type") {
+    return {
+      id: `rt-${code}`,
+      scope: "global",
+      kind,
+      code,
+      label: code,
+      description: null,
+      allowed_source_types: [],
+      allowed_target_types: [],
+      status,
+      project_id: null,
+    }
+  }
+
+  it("offers active registered subject types from the global registry surface", async () => {
+    const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(definitionWithTwoFields))
+    renderEditor(apiRequest, vi.fn(), [
+      globalRegistryRow("supplier_factory"),
+      globalRegistryRow("draft_type", "draft"),
+      globalRegistryRow("retired_type", "retired"),
+      globalRegistryRow("global_edge", "active", "link_type"),
+    ])
+    const select = (await screen.findByLabelText("表单 1 调研主体")) as HTMLSelectElement
+    await waitFor(() => {
+      const values = Array.from(select.options).map((option) => option.value)
+      expect(values).toContain("supplier_factory")
+    })
+    const values = Array.from(select.options).map((option) => option.value)
+    const labels = Array.from(select.options).map((option) => option.textContent)
+    // draft 未拍板 / retired 禁新建 / link_type 非对象类型——与服务端同一把尺子
+    expect(values).not.toContain("draft_type")
+    expect(values).not.toContain("retired_type")
+    expect(values).not.toContain("global_edge")
+    expect(labels).toContain("supplier_factory（注册类型）")
+    // 无项目上下文走全局只读面：原始 mock 只应收到调研定义 GET（注册面调用
+    // 被 registryAware 拦截；若 hook 误走项目面路径会多出一次 /ontology/ 调用）
+    expect(apiRequest).toHaveBeenCalledTimes(1)
+    expect(String(apiRequest.mock.calls[0][0])).not.toContain("/ontology/")
+  })
+
+  it("shows a registered subject type loaded in a definition and saves it verbatim", async () => {
+    const definitionWithRegistered: ResearchDefinitionDto = {
+      version: 4,
+      forms: [{ ...definitionWithTwoFields.forms[0], subject_type: "supplier_factory" }],
+    }
+    const saved = { ...definitionWithRegistered, version: 5 }
+    const apiRequest = vi.fn()
+      .mockResolvedValueOnce(apiOk(definitionWithRegistered))
+      .mockResolvedValueOnce(apiOk(saved))
+    renderEditor(apiRequest, vi.fn(), [globalRegistryRow("supplier_factory")])
+    const user = userEvent.setup()
+
+    const select = (await screen.findByLabelText("表单 1 调研主体")) as HTMLSelectElement
+    expect(select).toHaveValue("supplier_factory")
+    expect(select.selectedOptions[0]?.textContent).toBe("supplier_factory（注册类型）")
+
+    // 制造 dirty 触发真实 PUT（未修改保存会走「没有未保存修改」短路）
+    await user.clear(screen.getByLabelText("表单 1 名称"))
+    await user.type(screen.getByLabelText("表单 1 名称"), "供应商访谈")
+    await user.click(screen.getByRole("button", { name: "保存调研模板" }))
+    expect(await screen.findByText("调研模板已保存")).toBeVisible()
+    const body = apiRequest.mock.calls[1][1].body
+    expect(body.forms[0].subject_type).toBe("supplier_factory")
+    expect(body.forms[0].name).toBe("供应商访谈")
+  })
+
+  it("keeps the registered current value visible when the registry surface fails", async () => {
+    const definitionWithRegistered: ResearchDefinitionDto = {
+      version: 4,
+      forms: [{ ...definitionWithTwoFields.forms[0], subject_type: "supplier_factory" }],
+    }
+    const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(definitionWithRegistered))
+    renderEditor(apiRequest, vi.fn(), "reject")
+
+    const select = (await screen.findByLabelText("表单 1 调研主体")) as HTMLSelectElement
+    await waitFor(() => expect(select).toHaveValue("supplier_factory"))
+    const labels = Array.from(select.options).map((option) => option.textContent)
+    expect(labels).toContain("supplier_factory（注册类型）")
+  })
+
+  it("imports a JSON definition whose subject_type is a registered code", async () => {
+    const imported = {
+      forms: [{
+        form_key: "factory_audit", name: "工厂审核表", description: "", subject_type: "supplier_factory", module_key: null,
+        sections: [],
+      }],
+    }
+    const apiRequest = vi.fn().mockResolvedValueOnce(apiOk(emptyDefinition))
+    renderEditor(apiRequest, vi.fn(), [globalRegistryRow("supplier_factory")])
+    await screen.findByText("暂无调研表")
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    const file = new File([JSON.stringify(imported)], "import.json", { type: "application/json" })
+
+    fireEvent.change(screen.getByLabelText("导入调研定义 JSON 文件"), { target: { files: [file] } })
+
+    expect(await screen.findByLabelText("表单 1 名称")).toHaveValue("工厂审核表")
+    const select = screen.getByLabelText("表单 1 调研主体") as HTMLSelectElement
+    expect(select).toHaveValue("supplier_factory")
+    expect(screen.getByText("已导入调研定义，请核对后再保存。")).toBeVisible()
+  })
+
+  it("keeps the AI generation path restricted to the built-in five subject types", async () => {
+    const generatedForm = {
+      form_key: "hallucinated_audit", name: "幻觉审核表", description: "", subject_type: "supplier_factory",
+      module_key: null, sections: [],
+    }
+    const apiRequest = vi.fn()
+      .mockResolvedValueOnce(apiOk(emptyDefinition))
+      .mockResolvedValueOnce(apiOk(generatedForm))
+    renderEditor(apiRequest)
+    const user = userEvent.setup()
+
+    await screen.findByText("暂无调研表")
+    await user.click(screen.getByRole("button", { name: "AI 辅助生成" }))
+    await user.click(screen.getByRole("button", { name: "生成调研表" }))
+
+    expect(await screen.findByRole("alert")).toBeVisible()
+    expect(screen.getByText("暂无调研表")).toBeVisible()
+    expect(screen.queryByLabelText("表单 1 名称")).not.toBeInTheDocument()
   })
 })
