@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c CR-029 服务端小轮：集成桥 captured_at 服务端钟 sanity（2026-11-07）
+
+### 修复
+
+- **集成桥 `captured_at` 单向采信宿主钟（goal-c 台账 CR-029，P3）**：`_parse_captured_at` 此前只校验格式不比对服务端钟——宿主 NTP 前漂 >6h 或带 `FDE_BRIDGE_TOKEN` 方伪造 `captured_at`（未来）会让 `openfde_synced_at`/`fdeops_synced_at` 落在未来 → `now - synced_at` 恒为负 → 4h/360min stale 标永不亮（文件盘上持续腐仍显「新鲜」，采集断连被永久遮蔽）。`apply_snapshot` 落库前单向钳制：未来时戳一律钳到服务端接收时刻（同一时刻兼作 `run.started_at`），与偏移量无关——「不存未来时戳」是不变量本身。**过去方向不钳**：只会更早触发 stale（无害方向），且钳过去会伪造 `manual_reproject` 重放旧快照的新鲜度（重投影 ≠ 采集）。钳制不吞数据：engagement 照常投影，只是时间戳诚实化。
+- **宿主钟偏移观测面**：`|skew| > 90min`（`CAPTURED_AT_SKEW_TOLERANCE_SECONDS`）才把 `captured_at_skew_seconds`（int，负=宿主钟超前）记进 `run.summary`——正常采集不污染 summary 形状；运维定位面（「为什么全场 stale 诡异亮起」→ 看本键即知宿主钟漂了多大）。
+
+### 测试与口径
+
+- NEW `server/tests/test_bridge_captured_at_sanity.py` 6 例：未来 6h 钳制不变量（stored ≤ now ∧ 数据零损失 ∧ 不误报 stale）／小偏移 2min 同样钳（不变量与量无关）／skew 观测键入 summary（负值≈-21600）／正常钟不带键（形状稳定）／过去 3 天直通且 stale 立即亮（无害方向保真）／manual_reproject 重放 30min 前快照不刷新新鲜度（过去不钳的回归钉）。变异 M1（钳制中性化）→ 钳制两例红、余四例绿 → 还原绿；变异 M2（标记门中性化）→ summary 例红 → 还原绿。
+- 口径：服务端 pytest **2085 收集 = 2079 passed + 6 skipped**（本轮 +6，与 goal-ta2 轮 +6〔test_agents_meetings_lists 5＋事实链 B#9 钉 1〕同基线 2073 收集＝2067+6s 叠加；CI 实测为准）；桌面 vitest **912/912**（goal-ta2 轮 +15；本轮桌面零改动）；路由 307（goal-ta2 轮 +2；本轮零路由）；零迁移零新表（迁移头 `b2e8f4a6c9d3` 36 rev 不变）；**server 变更 ⇒ 合并后 rebuild 三镜像（alembic 幂等 no-op）**；本轮桌面零改动 ⇒ 不触发便携版重打包（goal-ta2 轮桌面挂账随其节）。
 ## [未发布] — goal-ta3 T-A1 核销：S3 前置闸桌面提示已由 #156 兑现（纯文档，2026-11-07）
 
 - **零代码零迁移零路由零桌面 diff**：backlog T-A1 状态 PROPOSED→**DONE（核销）**——桌面呈现（`PresurveyGateHint.tsx`：409 `presurvey_s3_gate_open` 拦截态渲染服务端 message＋G3 四项证据清单＋claimed≠accepted 徽标＋「前往门禁页」跳转锚）已由 #156（2026-11-06）先行交付并接线 `PresurveyAnalysisAction`；goal-ta3 按 fork/main@1a1d34e 实测逐项核对登记验收四项全部成立，专项测试 `presurvey-gate-hint.test.tsx` 5 例全绿，**零补码**（T-UI1 同款核销先例）。依赖图同步。

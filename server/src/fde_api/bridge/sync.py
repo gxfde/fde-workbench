@@ -26,6 +26,10 @@ from fde_api.bridge.adapters import normalize_fdeops_dir, normalize_openfde_stat
 # 采集节奏每 4 小时（计划任务，2026-10-25 用户裁决放宽），一个周期加余量 = 断连
 STALE_AFTER_MINUTES = 360
 
+# CR-029：宿主钟偏移观测容差——|captured_at - 服务端钟| 超过该值才把偏移记进
+# run.summary["captured_at_skew_seconds"]（正常钟不污染 summary 形状）。
+CAPTURED_AT_SKEW_TOLERANCE_SECONDS = 90 * 60
+
 
 class BridgeSyncError(Exception):
     """同步失败（对外 500 / 404 / 409 由 routes 翻译）。"""
@@ -165,7 +169,13 @@ def _sync_bridge_evidence(session, *, run: BridgeSyncRun, payload: dict[str, Any
 def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
     """快照落库。注意 db.session() 是 sessionmaker 语义（每次新开），
     摘要必须等投影提交后再取视图——分三段：①upsert+提交 ②标记 run ok+提交
-    ③取视图算 flags 回写 summary。②③失败只缺摘要，不影响投影本身。"""
+    ③取视图算 flags 回写 summary。②③失败只缺摘要，不影响投影本身。
+
+    CR-029：captured_at 只过格式校验，落库前单向钳制——快照不可能比服务端
+    收到它更「新」，未来时戳（宿主 NTP 前漂/带桥令牌伪造）一律钳到接收时刻，
+    否则 now - synced_at 恒为负、4h/360min stale 标永不亮（断连被永久遮蔽）。
+    过去方向不钳（只会更早触发 stale，无害方向，且钳过去会伪造 manual_reproject
+    重放旧快照的新鲜度）。宿主钟偏移超容差记入 summary 供运维定位。"""
     captured = _parse_captured_at(payload)
     session = db.session()
     # 串行化投影：gunicorn 2 workers 下 4h 采集与手动「重新投影」并发时，
@@ -173,7 +183,13 @@ def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
     # 事务级 advisory lock 让同 slug 集的投影完全串行，也顺带关掉
     # 「reproject 读到旧 payload 覆盖新投影」的两段式窗口。
     session.execute(text("SELECT pg_advisory_xact_lock(hashtext('fde_bridge_apply'))"))
-    run = BridgeSyncRun(trigger=trigger, payload=payload, started_at=_utcnow())
+    received_at = _utcnow()
+    # CR-029：原始偏移先记（钳制不改写观测值）——负值=宿主钟超前（未来时戳
+    # 方向，落库前已钳到 received_at），正值=宿主钟滞后（stale 只会更早触发）。
+    captured_at_skew_seconds = (received_at - captured).total_seconds()
+    if captured > received_at:
+        captured = received_at
+    run = BridgeSyncRun(trigger=trigger, payload=payload, started_at=received_at)
     session.add(run)
     try:
         openfde = payload.get("openfde") or {}
@@ -253,6 +269,10 @@ def apply_snapshot(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
         "orphan_projects": sum(1 for p in view["projects"] if p["flags"]),
         "evidence_created": evidence_created,
     }
+    # CR-029：宿主钟偏移观测——|skew| 超容差才带键（正常钟不污染 summary 形状）；
+    # 这是运维定位面：「为什么全场 stale」→ 看本键即知是宿主钟漂了多大。
+    if abs(captured_at_skew_seconds) > CAPTURED_AT_SKEW_TOLERANCE_SECONDS:
+        summary["captured_at_skew_seconds"] = int(captured_at_skew_seconds)
     finish = db.session()
     finish.get(BridgeSyncRun, run_id).summary = summary
     # 采集每 4h 存全量 payload（50 文件名 × 200 目录），只留最近 200 行防膨胀
