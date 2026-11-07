@@ -53,10 +53,10 @@
 | CR-030 | P3 | **fixed（CR-031/030 轮·半 A）** | `_sync_bridge_evidence` 全表 ORM 水合 → 三列投影（id/openfde_engagement/fdeops_workspace）；**半 B 经核实登记失真**：r12 B-④/留注⑤ 重写后 `_city_order_rank` 已是单次 join+Python 计数，「循环 session.get」不存在（现存仅 `package_client_city` 每包一次正当 get；真实重复面=只被 simulator.py:580 工具循环逐包重跑全局 join，非 4h 热路径，P4 级维持观察不发明重构） | bridge/sync.py:108 | c6 |
 | CR-031 | P3 | **fixed（CR-031/030 轮）** | metrics 四个 AgentRun 查询统一加 `_REAL_RUNS`（`idempotency_key.notlike("rehearsal:%")`，复用 `agents/pilot.py::REHEARSAL_KEY_PREFIX` 单点常量）+ 四卡 definition 同步注明「排除演练」+ 模块 docstring 口径纪律补一行；专项测试钉 L1/L2 两形态四指标（变异：过滤中性化→四断言全红） | metrics/service.py | c6 |
 | CR-032 | P2 | **fixed（桌面实施轮②＋2026-11-07 写路径轮＋T-O2c 全局只读面轮，T-O2b 桌面同步面全清）** | 桌面调研 DTO 读路径五类守卫（`isResearchSubjectDto`/`isResearchFormDto`/`isResearchImportPreviewDto`）改走 `isResearchSubjectType`（T-O2b 码格式 `^[a-z][a-z0-9_]{0,59}$`，与 DB CHECK 同尺）；`ResearchSubjectType` 放宽为 string＋`researchSubjectLabel`（内置取中文标签、注册码原样回显）；写路径 2026-11-07 清偿（CR-032 写路径轮）：`useRegistrySubjectTypes` 接 GET `…/ontology/relation-types` 只读面（客户端过滤 kind=subject_type∧active，fail-open 静默降级）——对象树「新增X（根级）」注册类型根级创建流（parent_subject_id=null，T-O2b 无父级规则）＋导入对话框/表单构建器「调研主体」下拉补注册类型选项（含修注册类型主体 select 空白显示）；定义编辑器/行业模板 2026-11-07 T-O2c 清偿（NEW GET /api/v1/ontology/relation-types 全局只读面 require_auth＋`useRegistrySubjectTypes` 支持 projectId=null 走全局面＋enabled 会话门＋编辑器「调研主体」下拉注册类型选项与当前值兜底空白修复＋JSON 导入放宽码格式；AI 路径维持内置五类防幻觉基线） | desktop/…/research/{types.ts:17/22/38,projectRuntimeValidation.ts:17/66,runtimeValidation.ts:48,ResearchDefinitionEditor.tsx:1296}＋5 组件 label 走 researchSubjectLabel＋测试 +2 例 | c7 |
-| CR-033 | P3 | open（登记） | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
-| CR-034 | P3 | open（登记，dead-code） | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
+| CR-033 | P3 | **驳回销号（2026-11-07：登记误读——源码括号配对自引入以来从未畸变，见 CR-033 节核销记录）** | 主进程 lcsc 规格书下载 iframe 检测表达式畸变：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成布尔，外层 `includes(boolean)` 对真实 PDF URL 恒 false → 勾选 datasheet 必 25s 超时缺件（外层 try/catch 兜住仅字段级缺失，不崩）；疑压缩误删一对括号 | desktop/src/main/lcsc-runner.ts:147-148 | c7 |
+| CR-034 | P3 | **fixed（CR-034 接线轮，2026-11-07）** | 主进程 `activeMutations` 计数器只有 ++/--（index.ts:35/161/168）全仓**零读取点**——「在途写不退出」保护从未接线 | desktop/src/main/index.ts:35 | c7 |
 | CR-035 | P3 | **fixed（CR-035 轮）** | GlossaryPage 术语搜索无序列守卫 → 加 `sequence` ref（旧响应丢弃，只最新一次可落表）+ 首屏之外不再整页 loading（**附带修掉「搜索框被卸载」**：改前每次按键后整页换成 loading 文案，搜索框随之卸载、焦点丢失，无法连续输入——比原登记的「闪空」更重） | desktop/…/ontology/GlossaryPage.tsx | c7 |
-| CR-036 | P3 | open（登记） | ResearchWorkspace 导出轮询 effect 无序列守卫（同文件 `loadResearch` 有 `sequence`、`ProjectDocuments` 有 `sequenceRef`，唯此缺）：在途 poll 期间表单新增导出 → 旧闭包 stale `active` 快照回写可让已完成条目「复活」为 pending（下轮自愈） | desktop/…/research/ResearchWorkspace.tsx:248-287 | c7 |
+| CR-036 | P3 | **驳回销号（2026-11-07：守卫已存在——J7b 结构早于登记，stale 回写不可达，见 CR-036 节核销记录）** | ResearchWorkspace 导出轮询 effect 无序列守卫（同文件 `loadResearch` 有 `sequence`、`ProjectDocuments` 有 `sequenceRef`，唯此缺）：在途 poll 期间表单新增导出 → 旧闭包 stale `active` 快照回写可让已完成条目「复活」为 pending（下轮自愈） | desktop/…/research/ResearchWorkspace.tsx:248-287 | c7 |
 | CR-037 | P3 | **fixed（CR-037 轮）** | `ResearchOpportunity.tsx` 零 vitest 覆盖 → NEW `research-opportunity.test.tsx` 13 例：纯函数 8（`validateOpportunityProfile` 全部分支 + `opportunityProfileInput` 裁剪 + `opportunityProfileErrorMessage` 8 码映射与兜底 + `draftErrorMessage` PoV/SOW 双形）+ 组件 5（档案网格中文化/更多菜单删除/PATCH 保存主链/错误码映射提示/脏标记 profileKey 置脏与卸载清脏） | desktop/tests/renderer/research-opportunity.test.tsx（NEW） | c7 |
 | CR-038 | P3 | **fixed（CR-038 轮）** | `new-project.test.tsx:279` 同步读 `location.hash` → `await waitFor(...)`（同 CR-007 修法）；加固型断言，当前同步写 hash 下两种写法均绿，变异无从做起（无生产代码变更） | desktop/tests/renderer/new-project.test.tsx:279 | c7 |
 | CR-039 | P3 | open（登记） | `gui-harness/shots.mjs` 13 页走查未含 T-W6 三面（WorkflowConsole/GlossaryPage 为项目详情子 tab 需真实 fixture、SkillVersionsPage 为 #extensions 内展开子视图，默认截图态不展开）——功能面已有三 vitest 兜住，纯视觉走查缺口 | desktop/gui-harness/shots.mjs:19-34 | c7 |
@@ -451,18 +451,22 @@
 
 ## CR-033 · P3 · lcsc 规格书下载 iframe 检测表达式畸变（恒 false 缺件）
 
-- **状态**：open（登记；疑压缩误删括号，一行修）
+- **状态**：open（登记；疑压缩误删括号，一行修）→ **驳回销号（2026-11-07，登记误读，零代码）**
 - **file:line**：`desktop/src/main/lcsc-runner.ts:147-148`：`f.src.includes('atta.szlcsc.com'&&f.src.toLowerCase().includes('.pdf'))`——内层 `&&` 先算成 boolean，外层 `includes(boolean)` 实查 src 是否含字面 `"true"`/`"false"` → 对真实 PDF URL 恒 false。
 - **触发路径**：查询勾选 `datasheet` → 弹窗开正常（:118-123 独立）→ 下载步 `waitFor` 25s 超时 → `missing.push('规格书下载未完成')`；`savePdf`（:216）到不了。
 - **驳斥记录**：「外层 try/catch 兜住仅字段级缺失不崩」——成立，P3 非 P1；「意图显然缺一个右括号」（`includes('atta.szlcsc.com')&&includes('.pdf')`）——一行修。
 - **建议修法**：补回内层 `includes('atta.szlcsc.com')` 的右括号；补一条 `savePdf`/iframe 检测单测。
+- **核销记录（2026-11-07）**：台账引用文本与源码**不符**——现测 fork/main `9267240` 该文件 :148-149 两处表达式均为 `f.src.includes('atta.szlcsc.com')&&f.src.toLowerCase().includes('.pdf')`，括号配对正确（`&&` 连接两个完整调用），登记所称 `includes('atta.szlcsc.com'&&…)` 畸变**不存在**。结构史钉：`git log -S "includes('atta.szlcsc.com')"`（带右括号形态）唯一命中 `5ded7b3`（2026-09-29）——正确结构自引入以来从未变动，c7 登记时（2026-11-05）代码即现态。语义核验：`waitFor` 条件＝「src 含 atta.szlcsc.com 域 ∧ 小写化后含 .pdf」、`evaluate` 取同谓词 iframe 的 src，与「定位规格书并下载 PDF」意图一致。判定＝登记方括号结构误读；销号零代码。
 
 ## CR-034 · P3 · 主进程 activeMutations 死计数器（保护未接线）
 
-- **状态**：open（登记；dead code）
+- **状态**：open（登记；dead code）→ **fixed（CR-034 接线轮，2026-11-07）**
 - **file:line**：`desktop/src/main/index.ts:35/161/168`——`activeMutations++/--` 全仓零读取点（`window-all-closed`/`app.quit` 均不查它）。
 - **驳斥记录**：「单用户桌面关窗时在途写概率极低」——成立，P3；要么原设计「在途写不退出」未落地要么残留，归主进程整理轮。
 - **建议修法**：接 `app.before-quit` 检查 `activeMutations>0` 时延迟退出，或删计数器。
+- **实施记录（2026-11-07）**：按登记的原设计意图**接线保护**（不删计数器）：NEW `desktop/src/main/close-guard.ts` 纯函数决策内核——`shouldDeferWindowClose(activeMutations, allowCloseOnce)`＝`!allowCloseOnce && activeMutations > 0`＋`buildCloseGuardDialogSpec` 警告框文案（点名在途写入数量；按钮「等待完成/仍然退出」，Enter/Esc 安全默认＝等待）；`index.ts` 接线：主窗口 `close` 事件消费决策——在途写>0 且未放行 → `preventDefault` + 确认框，选「仍然退出」置**一次性放行旗标**（消费式读取，防放行后常开）后重触发 `window.close()`；`app.quit()` 路径同样先经窗口 `close` 事件 ⇒ 保护同时覆盖退出菜单。计数数据源不动（仍由 `registerApiIpc` 非 GET 累计）；选「等待完成」即取消本次关闭，不自动排队退出（文案不承诺自动重试，与实现一致）。
+- **测试**：NEW `desktop/tests/main/close-guard.test.ts` 9 例——决策矩阵 4（零在途不拦/有在途拦/放行不拦/负数防御）＋文案 2（数量点名与按钮序/风险说明不承诺自动重试）＋**index.ts 接线静态钉 3**（close 处理器消费决策＋放行旗标重触发 close＋`activeMutations++/--` 数据源仍存在——静态钉防接线再次静默脱落，即本条 dead-code 的成因形态）；变异验证：`shouldDeferWindowClose` 中性化为恒 false → 决策用例红 → 还原 → 绿。
+- **修复 PR**：本轮 PR。
 
 ## CR-035 · P3 · GlossaryPage 术语搜索无序列守卫（键入闪空+后发先至）
 
@@ -477,10 +481,11 @@
 
 ## CR-036 · P3 · ResearchWorkspace 导出轮询 effect 无序列守卫（stale 快照回写）
 
-- **状态**：open（登记）
+- **状态**：open（登记）→ **驳回销号（2026-11-07，登记误判，零代码）**
 - **file:line**：`desktop/src/renderer/src/research/ResearchWorkspace.tsx:248-287`（旧 effect 闭包 `active` + 在途 poll 期间表单新增导出 → stale 快照把已完成条目写回 pending，下轮自愈）。
 - **驳斥记录**：「下轮 poll 自愈、单用户毫秒窗」——成立，P3；同文件 :212 `loadResearch` 有 `sequence`，此处唯一缺。
 - **建议修法**：导出轮询 effect 加 `sequence` 守卫（与 loadResearch 同范式）。
+- **核销记录（2026-11-07）**：登记前提「唯此缺守卫」失实——现测 fork/main `9267240` 该 effect（:252-290）**已有两道守卫**：①deps 含 `researchExports`，任何新增导出（`setResearchExports`）都重跑 effect，cleanup 先置旧闭包 `cancelled = true`；②poll 唯一 await 边界（`await Promise.all`）之后**紧跟** `if (cancelled) return`，其后全部状态写入（finished 移除/pending 回写/notice/error）都在守卫之后——JS 单线程下 await 恢复与检查之间无交错点，stale 写回不可达。结构史钉：该形态来自 J7b 重构（`697bfb3`，2026-10-28，goal-r2 WP31「轮询失败可见与失败后续轮询」）——**早于 c7 登记（2026-11-05）**。`cancelled` 布尔在此场景与 `sequence` ref 语义等价：poll 是单链自续期（一轮恰一个 `Promise.all`），不存在 sequence 针对的「多请求后发先至乱序落表」问题；新增导出走 deps 重跑＋cleanup，与 cleanup 作废在途请求同构。判定＝守卫已存在（形态非 sequence），stale 回写窗口已被 J7b 结构闭合；销号零代码。
 
 ## CR-037 · P3 · ResearchOpportunity.tsx 零 vitest 覆盖（193 行主链组件）
 

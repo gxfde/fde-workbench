@@ -2,6 +2,24 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-c 台账收口：CR-033/036 驳斥销号 + CR-034「在途写不退出」保护接线（2026-11-07）
+
+### 行为变更（纯桌面，零服务端零迁移零路由）
+
+主进程新增「在途写不退出」保护（goal-c 台账 CR-034 接线，dead-code 修复）：
+- 主窗口关闭时若仍有非 GET 请求在途（`activeMutations > 0`），弹确认框点名在途写入数量——「等待完成」取消本次关闭，「仍然退出」一次性放行（消费式旗标，放行不常开）；确认框悬起期间重复关闭只拦不再弹（防叠框）；`app.quit()` 路径同样先经窗口 close 事件，保护同时覆盖退出菜单。
+- 数据源不动：计数仍由 `registerApiIpc` 对非 GET 累计；此前该计数器全仓零读取点（登记为 dead-code）。NEW `desktop/src/main/close-guard.ts` 纯函数决策内核＋文案（Enter/Esc 安全默认＝等待完成；文案不承诺自动重试）。
+
+### 台账驳斥销号（零代码）
+
+- **CR-033**（lcsc 规格书 iframe 检测表达式畸变）——**登记误读**：fork/main 源码两处均为 `f.src.includes('atta.szlcsc.com')&&f.src.toLowerCase().includes('.pdf')`，括号配对正确；`git log -S "includes('atta.szlcsc.com')"` 唯一命中 `5ded7b3`（2026-09-29），正确结构自引入以来从未变动，c7 登记时即现态。
+- **CR-036**（ResearchWorkspace 导出轮询 stale 快照回写）——**守卫已存在**：deps 含 `researchExports`（新增导出必重跑 effect→cleanup→旧闭包 `cancelled=true`）＋poll 唯一 await 边界后紧跟 `if (cancelled) return`，stale 写回不可达；该结构来自 J7b 重构（`697bfb3`，2026-10-28），早于 c7 登记；`cancelled` 布尔与 `sequence` ref 在此单链自续期场景语义等价。
+
+### 测试与口径
+
+- NEW `desktop/tests/main/close-guard.test.ts` 10 例：决策矩阵 4＋确认文案 2＋**index.ts 接线静态钉 4**（close 处理器消费决策／放行旗标重触发 close／activeMutations++/-- 数据源仍在／确认框悬起期间重复关闭只拦不再弹——防接线再次静默脱落＋防叠框）；变异验证：守卫中性化→红→还原→绿。typecheck 双 tsconfig 绿；全量 vitest 897/897（72 文件）。
+- **口径校正**：#178 T-A7 轮实际 vitest +12（NEW solution-frozen-version 7＋solution-design +5）此前未入 AGENTS 口径行，#179 CHANGELOG 记 882 系基线误取陈旧 870 推算——**实测 887**（#178 PR-head run 42318566336 与 main run 42320178306 desktop job 双实测、本地一致），本轮校正后总量 **897**（+10 本轮）。
+
 ## [未发布] — goal-ta1 拍板回写 + 录音转写 ASR 通道立项（纯文档，2026-11-07）
 
 ### 蔡工拍板回写（§拍板闸 6⑨，三行逐字；零代码零迁移零路由零桌面）
