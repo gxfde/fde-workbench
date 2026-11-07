@@ -145,6 +145,22 @@ def list_tool_calls(run_id):
     )
 
 
+@agents_blueprint.patch("/runs/<run_id>/artifacts/<artifact_id>")
+@require_auth
+def set_artifact_reviewed(run_id, artifact_id):
+    """T-B1 产物人工接受（can_manage；body {"reviewed": bool}）。不进 api_catalog——
+    终审动作沿业务对象纪律；失败/撤回均留 agent_artifact_reviewed 事件。"""
+    payload = request.get_json(silent=True)
+    reviewed = payload.get("reviewed") if isinstance(payload, dict) else None
+    if not isinstance(reviewed, bool):
+        return error_response("invalid_request", "reviewed 必须是布尔值。", 400, None)
+    return _data(
+        service.set_artifact_reviewed(
+            actor=g.current_user, run_id=run_id, artifact_id=artifact_id, reviewed=reviewed
+        )
+    )
+
+
 @agents_blueprint.get("/cost")
 @require_auth
 def get_cost():

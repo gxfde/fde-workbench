@@ -33,6 +33,9 @@ interface AgentRunDetailDto extends AgentRunRowDto {
     sha256: string
     reviewed: boolean
     linked_solution_id: string | null
+    reviewed_by_user_id?: string | null
+    reviewed_at?: string | null
+    derived_summary?: Record<string, number> | null
   }> | null
 }
 
@@ -99,9 +102,10 @@ function formatDuration(ms: number): string {
 
 interface AgentsConsoleProps {
   projectId: string
+  canManage?: boolean
 }
 
-export function AgentsConsole({ projectId }: AgentsConsoleProps) {
+export function AgentsConsole({ projectId, canManage = false }: AgentsConsoleProps) {
   const { apiRequest } = useAuth()
   const [runs, setRuns] = useState<AgentRunRowDto[]>([])
   const [truncated, setTruncated] = useState(false)
@@ -113,6 +117,8 @@ export function AgentsConsole({ projectId }: AgentsConsoleProps) {
   const [detail, setDetail] = useState<AgentRunDetailDto | null>(null)
   const [toolCalls, setToolCalls] = useState<AgentToolCallDto[] | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [artifactBusyId, setArtifactBusyId] = useState<string | null>(null)
+  const [artifactNotice, setArtifactNotice] = useState("")
 
   const load = useCallback(async (): Promise<void> => {
     setError("")
@@ -145,6 +151,30 @@ export function AgentsConsole({ projectId }: AgentsConsoleProps) {
       active = false
     }
   }, [load])
+
+  // T-B1（goal-tb tb2）：产物人工接受/撤回（can_manage 面；服务端 PATCH 同名动作）。
+  // 成功后重拉 run 详情让 reviewed 状态回真（不本地猜写）。
+  async function toggleArtifactReview(runId: string, artifactId: string, reviewed: boolean): Promise<void> {
+    setArtifactBusyId(artifactId)
+    setArtifactNotice("")
+    setError("")
+    try {
+      await apiRequest(
+        `/api/v1/agents/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`,
+        { method: "PATCH", body: JSON.stringify({ reviewed }) },
+      )
+      setArtifactNotice(reviewed ? "已标记复核。" : "已撤回复核。")
+      const refreshed = await apiRequest<AgentRunDetailDto>(
+        `/api/v1/agents/runs/${encodeURIComponent(runId)}`,
+        { method: "GET" },
+      )
+      setDetail(refreshed)
+    } catch (caught) {
+      setError(actionMessage(caught))
+    } finally {
+      setArtifactBusyId(null)
+    }
+  }
 
   async function toggleRunDetail(run: AgentRunRowDto): Promise<void> {
     if (expandedRunId === run.id) {
@@ -253,6 +283,7 @@ export function AgentsConsole({ projectId }: AgentsConsoleProps) {
             </div>
           </div>
           {detailError ? <p role="alert" className="empty-copy">{detailError}</p> : null}
+          {artifactNotice ? <p role="status" className="notice">{artifactNotice}</p> : null}
           {detailLoading ? <p className="empty-copy" role="status">正在加载详情…</p> : null}
           {detail && !detailLoading ? (
             <div className="page-stack">
@@ -263,6 +294,7 @@ export function AgentsConsole({ projectId }: AgentsConsoleProps) {
                     <th scope="col">类型</th>
                     <th scope="col">指纹 (sha256)</th>
                     <th scope="col">复核</th>
+                  {canManage ? <th scope="col">操作</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -272,11 +304,28 @@ export function AgentsConsole({ projectId }: AgentsConsoleProps) {
                         <td><code>{artifact.storage_ref}</code></td>
                         <td>{artifact.kind}</td>
                         <td><code>{artifact.sha256.slice(0, 12)}…</code></td>
-                        <td>{artifact.reviewed ? "已复核" : "未复核"}</td>
+                        <td>
+                          {artifact.reviewed ? "已复核" : "未复核"}
+                          {artifact.reviewed_at ? <small> · {artifact.reviewed_at.slice(0, 19).replace("T", " ")}</small> : null}
+                          {artifact.derived_summary ? (
+                            <small> · {Object.entries(artifact.derived_summary).map(([key, value]) => `${key}=${value}`).join(" / ")}</small>
+                          ) : null}
+                        </td>
+                        {canManage ? (
+                          <td>
+                            <button
+                              className="secondary-button"
+                              disabled={artifactBusyId === artifact.id}
+                              onClick={() => { void toggleArtifactReview(expandedRunId ?? "", artifact.id, !artifact.reviewed) }}
+                            >
+                              {artifactBusyId === artifact.id ? "正在提交…" : artifact.reviewed ? "撤回复核" : "标记复核"}
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={4}>该运行暂无产物。</td></tr>
+                    <tr><td colSpan={canManage ? 5 : 4}>该运行暂无产物。</td></tr>
                   )}
                 </tbody>
               </table>

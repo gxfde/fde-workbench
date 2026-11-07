@@ -638,7 +638,7 @@
   - **桌面**：NEW `transcripts/TranscriptDraftsPanel.tsx` 挂 overview tab guidanceSlot（presurvey 录入卡旁）——本地文件导入（只读文本进表单，原件永不上传）、草稿列表/详情（正文+复核清单徽标）、弃置、晋升表单（canManage 显隐同构）、纪要正式库列表/详情；加载失败 fail-静默（教训 51：不与页面级 alert 抢道），动作错误 alert 呈现。
   - **测试**：服务端 NEW `test_transcript_drafts.py` 8 例（代号化/fail-closed/权限 403-404-401/列表形状/晋升三要素四连 422+未来时戳 422/墓碑/T+7 清理幂等/零外键隔离钉）；变异三连全红→还原绿（摘三要素校验红/代号化改直通红/清理谓词取反红）；桌面 NEW `transcript-drafts-panel.test.tsx` 7 例。
 
-### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **PROPOSED（登记轮，零代码）**
+### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **◐ 扩列半 DONE（goal-tb tb2，2026-11-07）/ 封包半维持挂账（D11 立项拍板 + 首批真实数据两前置未达成，登记声明原样生效）**
 - 目标：run 产物从「有 sha256 但无结构化内容」变成可封包的结项交付物。
 - 现状实测：`agents/models.py:127` `AgentArtifact` 现有 `storage_ref`（指针）+ `sha256`（指纹）+ `kind` + `reviewed`，**无 diff / test_results 结构化列**；`dispatch/models.py:40-78` 已有 **`delivery_packages`（派单态，8 态机 + package_code + dispatch_round 唯一键 + sow_type）**；结项态交付包为台账 `docs/后续需求台账-F5与D11.md` §十三.4 **已裁决命名 `handover_packages`**（status draft→sealed→delivered + manifest_sha256 + 逐项 sha256 校验）⇒ **两包不可混用，产物闭环指向 `handover_packages`**。
 - **落库形态纪律（借鉴登记 B#6《状态归属与对账-v1》§1 不变量「引用方永不复制真相，只持指针」）**：新列只能是**指针 + 指纹 + 可重建派生**——`storage_ref` 指向 diff/test_results 原件（留项目工作目录）、`sha256` 记指纹、结构化摘要（passed/failed 计数、退出码）为**可从原件重建的派生**；**不得复制原件进库**。
@@ -647,6 +647,12 @@
 - API：封包/解封/下载走新路由（**不进 api_catalog**——业务对象不走 change_set 双轨，沿用 `dispatch.packages_create` 的既有处理）。
 - 测试：服务端（派生摘要可从原件重建、指纹不一致拒绝、封包逐项 sha256 校验、delivered 不可逆、权限闸）；桌面（封包清单呈现）。
 - **封包前置**：D11 立项拍板 + 首批真实数据到位（**登记即声明：本条在两项前置未达成前只做 artifacts 扩列，封包部分待拍板**）。
+- **实施记录（goal-tb tb2，2026-11-07，扩列半）**：
+  - **DB（迁移 `b8e4d6f2a9c3`，37→38 rev）**：artifacts +`derived_summary` JSON 可空列（**可重建派生**——diff: files_changed/additions/deletions；test_results: passed/failed/errors/skipped+exit_code；解析不可达即零计数不发明数字；原件本体永不进库，B#6「指针+指纹+可重建派生」）+ `reviewed_by_user_id`（FK users SET NULL）+ `reviewed_at`；kind CHECK 置换扩 `'test_results'`（纯枚举扩展，T-J2 先例）。**`handover_packages` 表未建**（封包半挂 D11）。
+  - **API（+1 路由 314→315，不进 api_catalog）**：`PATCH /agents/runs/{rid}/artifacts/{aid}` body `{reviewed: bool}`——can_manage（终审动作）；接受留 who/when，撤回清双痕；事件 `agent_artifact_reviewed` target=项目、changes 只带 id+布尔（不复制产物内容）。度量表「智能体产物被人工接受率」数据源自此存在（此前 reviewed 无写路径恒 0）。
+  - **派生纯函数**：NEW `agents/artifact_summary.py`（`derive_artifact_summary(kind, content)`，2MB 解析上限；可重建性=同一原件二次派生逐位一致由测试钉住）；finalize 接线在产物入库同事务计算（exit_code 来自 run 结果合入摘要）。
+  - **桌面**：AgentsConsole 产物行 +「标记复核/撤回复核」（canManage 显隐与 PATCH 闸同构；成功后重拉 run 详情回真不本地猜写）+ reviewed_at/derived_summary 呈现；版本号同步 **0.2.0→0.3.0**（desktop/package.json + server/pyproject.toml，登记原文要求的列车同步）。
+  - **测试**：服务端 NEW `test_agent_artifact_acceptance.py` 5 例（diff 统计/测试计数+其余 kind 零派生+可重建一致性/PATCH 权限 403+双痕留清/跨 run 配对 404+非布尔 400+未知 run 404/详情扩列三键）；变异三连红→还原绿（摘 can_manage 闸红/撤回不清双痕红/跨 run 不校验红）。桌面 +2 例（canManage 显按钮+PATCH 形状/缺省无按钮）。
 - 验收：一次 run 的产物可封包为 `handover_packages` 且逐项 sha256 可校验；原件不进库。
 - 回滚：alembic downgrade（新表零外键依赖安全）；**已封包行不可逆**（指纹链已出系统，需人工处置）。风险：中（迁移纪律）。依赖：T-A8。复杂度：**M**。
 

@@ -12,6 +12,7 @@ agent_registry.allowed_tools 声明式白名单）+ 技术文档 §2 决议增�
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -26,6 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from fde_api.auth.models import UTCDateTime
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
 
 
@@ -127,7 +129,8 @@ class AgentArtifact(Base, TimestampMixin):
 
     __tablename__ = "agent_artifacts"
     __table_args__ = (
-        CheckConstraint("kind IN ('code', 'doc', 'diff', 'config')", name="ck_agent_artifacts_kind"),
+        # T-B1（goal-tb tb2）：kind 扩 'test_results'（CHECK 置换，纯枚举扩展零列重建）
+        CheckConstraint("kind IN ('code', 'doc', 'diff', 'config', 'test_results')", name="ck_agent_artifacts_kind"),
         # 红线列完整性：指纹必须是完整 64hex，短指纹/占位符一律拒绝
         CheckConstraint("char_length(sha256) = 64", name="ck_agent_artifacts_sha256_len"),
     )
@@ -142,6 +145,14 @@ class AgentArtifact(Base, TimestampMixin):
     linked_solution_id: Mapped[str | None] = mapped_column(
         ForeignKey("project_solutions.id", ondelete="RESTRICT")
     )
+    # —— T-B1 扩列（goal-tb tb2，additive；落库形态纪律=B#6「指针+指纹+可重建派生」）——
+    # 可重建派生摘要（diff: files_changed/additions/deletions；test_results:
+    # passed/failed/errors/skipped + exit_code）；原件本体永不进库
+    derived_summary: Mapped[dict[str, int] | None] = mapped_column(JSON)
+    # 人工接受写路径（度量表「智能体产物被人工接受率」数据源；reviewed 翻转
+    # 必须留谁/何时——缺省行 reviewed=False 双 NULL）
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class AgentToolCall(Base, TimestampMixin):

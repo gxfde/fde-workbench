@@ -1,5 +1,5 @@
 ﻿repository,table,model,file,primary_key,foreign_keys,indexes,version_fields,project_scope,migration_revision,status
-fde-workbench@0570384,agent_artifacts,AgentArtifact,server/src/fde_api/agents/models.py,id,agent_artifacts.linked_solution_id->project_solutions.id;agent_artifacts.run_id->agent_runs.id,,,no,d9c3e7f1a5b8,VERIFIED(metadata)
+fde-workbench@0570384,agent_artifacts,AgentArtifact,server/src/fde_api/agents/models.py,id,agent_artifacts.linked_solution_id->project_solutions.id;agent_artifacts.reviewed_by_user_id->users.id;agent_artifacts.run_id->agent_runs.id,,,no,d9c3e7f1a5b8,VERIFIED(metadata)
 fde-workbench@0570384,agent_credentials,AgentCredential,server/src/fde_api/agents/models.py,id,agent_credentials.created_by_user_id->users.id,,,no,d9c3e7f1a5b8,VERIFIED(metadata)
 fde-workbench@0570384,agent_registry,AgentRegistry,server/src/fde_api/agents/models.py,id,,,,no,d9c3e7f1a5b8,VERIFIED(metadata)
 fde-workbench@0570384,agent_runs,AgentRun,server/src/fde_api/agents/models.py,id,agent_runs.agent_id->agent_registry.id;agent_runs.handoff_user_id->users.id;agent_runs.initiated_by_user_id->users.id;agent_runs.project_id->projects.id,"ix_agent_runs_idempotency(idempotency_key);ix_agent_runs_project_status(project_id,status)",,yes,d9c3e7f1a5b8,VERIFIED(metadata)

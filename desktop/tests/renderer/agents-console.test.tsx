@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import React from "react"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
@@ -173,4 +173,62 @@ it("空列表呈现空态文案", async () => {
   })
   render(<AgentsConsole projectId={projectId} />)
   expect(await screen.findByText("本项目还没有智能体运行记录。")).toBeInTheDocument()
+})
+
+// —— T-B1（goal-tb tb2）：产物人工接受面 ——
+
+it("canManage 时产物行可标记复核并回拉详情（PATCH reviewed:true）", async () => {
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string; body?: string }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [runRow()], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/agents/runs/run-abcdef1234567890" && options?.method === "GET") {
+      return Promise.resolve(runRow({
+        agent: { name: "ZCode 沙箱智能体", kind: "zcode" },
+        artifacts: [{ id: "art-1", kind: "doc", storage_ref: "output/plan.md", sha256: "a".repeat(64), reviewed: false, linked_solution_id: null }],
+      }))
+    }
+    if (path === "/api/v1/agents/runs/run-abcdef1234567890/artifacts/art-1" && options?.method === "PATCH") {
+      expect(JSON.parse(options.body as string)).toEqual({ reviewed: true })
+      return Promise.resolve({ reviewed: true })
+    }
+    if (path === "/api/v1/agents/runs/run-abcdef1234567890/tool-calls" && options?.method === "GET") {
+      return Promise.resolve({ items: [], denied_count: 0 })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<AgentsConsole projectId={projectId} canManage />)
+  fireEvent.click(await screen.findByText("详情"))
+  const button = await screen.findByText("标记复核")
+  fireEvent.click(button)
+  expect(await screen.findByText("已标记复核。")).toBeInTheDocument()
+  expect(mocks.apiRequest.mock.calls.some((call) => call[0] === "/api/v1/agents/runs/run-abcdef1234567890/artifacts/art-1")).toBe(true)
+})
+
+it("canManage 缺省 false：产物行无复核操作按钮（写闸在服务端，呈现同构显隐）", async () => {
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [runRow()], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/agents/runs/run-abcdef1234567890" && options?.method === "GET") {
+      return Promise.resolve(runRow({
+        agent: { name: "ZCode 沙箱智能体", kind: "zcode" },
+        artifacts: [{ id: "art-1", kind: "doc", storage_ref: "output/plan.md", sha256: "a".repeat(64), reviewed: false, linked_solution_id: null }],
+      }))
+    }
+    if (path === "/api/v1/agents/runs/run-abcdef1234567890/tool-calls" && options?.method === "GET") {
+      return Promise.resolve({ items: [], denied_count: 0 })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<AgentsConsole projectId={projectId} />)
+  fireEvent.click(await screen.findByText("详情"))
+  await screen.findByText("未复核")
+  expect(screen.queryByText("标记复核")).toBeNull()
 })

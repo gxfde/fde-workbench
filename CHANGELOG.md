@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-tb tb2：T-B1 agent_artifacts 扩列 + 产物人工接受写路径（封包半挂 D11，2026-11-07）
+
+- **范围声明（登记原文「封包前置」逐字生效）**：本轮**只做 artifacts 扩列**——`handover_packages` 新表与封包/解封/下载路由**未建**（D11 立项拍板 + 首批真实数据两前置未达成），产物→交付包闭环维持挂账。
+- **DB（迁移 `b8e4d6f2a9c3`，37→38 rev，additive）**：`agent_artifacts` +`derived_summary` JSON 可空列（**可重建派生**——diff: files_changed/additions/deletions；test_results: passed/failed/errors/skipped + exit_code；解析不可达如实零计数不发明数字；**原件本体永不进库**，B#6「引用方永不复制真相，只持指针」）+ `reviewed_by_user_id`（FK users SET NULL）+ `reviewed_at`；kind CHECK 置换扩 `'test_results'`（纯枚举扩展零列重建，T-J2 先例）。度量表「编码智能体一次测试通过率」与「智能体产物被人工接受率」两个「需先补字段/补写路径」缺口自此闭合数据源。
+- **派生纯函数**：NEW `agents/artifact_summary.py`——`derive_artifact_summary(kind, content)`（2MB 解析上限；diff 统计按 unified diff 行首规则；test_results 全文扫「N passed/failed/errors/skipped」token 累加）；finalize 入库同事务派生（exit_code 来自 run 结果合入摘要）；可重建性=同一原件二次派生逐位一致（测试钉）。
+- **API（+1 路由 314→315，不进 api_catalog）**：`PATCH /agents/runs/{rid}/artifacts/{aid}` body `{reviewed: bool}`——**can_manage**（终审动作）；接受留 who/when，撤回清双痕；事件 `agent_artifact_reviewed` target=项目、changes 只带 id+布尔（不复制产物内容）；跨 run 配对 404、非布尔 400。
+- **桌面**：AgentsConsole 产物行 +「标记复核/撤回复核」（`canManage` 显隐与服务端闸同构；成功后**重拉 run 详情回真**，不本地猜写）+ reviewed_at / derived_summary 呈现（摘要以 key=value 尾注展示）。**版本号按发布列车同步 0.2.0→0.3.0**（`desktop/package.json` + `server/pyproject.toml`，登记原文要求的列车同步）。
+- **测试**：服务端 NEW `test_agent_artifact_acceptance.py` 5 例；变异三连红→还原绿（摘 can_manage 闸→红 / 撤回不清双痕→红 / 跨 run 不校验→红）。桌面 +2 例（canManage 显按钮+PATCH reviewed:true 形状+回拉详情 / 缺省无按钮）。pytest **2114 收集 = 2108 passed + 6 skipped**（+5，基线=#188 run 实测 2103+6s）/ vitest **927/927**（77 文件，+2）/ mypy 基线 279 不变。server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）；桌面变更 ⇒ 便携版 r20（0.3.0，与 tb1 桌面增量同窗打包）。
+
 ## [未发布] — goal-tb tb1：T-A9 转写草稿区 + 访谈纪要正式库（ASR 通道 opt-L 落地，2026-11-07）
 
 - **拍板落定（§拍板闸 6⑩，蔡工逐字「ASR 通道选型：按你建议实施」）**：立项文档《录音转写ASR通道立项-v1.md》§3.3 P1–P6 逐项按推荐项落定（§3.3.1 新增拍板结果节）——**P1=opt-L 本地 ASR 先行**（红线同向零外发）、P2=横评实测裁决、P3=Windows 宿主裸跑、P4=首版普通话、P5=诚实失败、P6=云默认不开（启用=新的显式拍板）。T-A9 实施轮随之解封。

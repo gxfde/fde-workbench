@@ -1,10 +1,10 @@
 {
- "route_count": 314,
+ "route_count": 315,
  "blueprint_count": 42,
  "table_count": 107,
- "revision_count": 37,
+ "revision_count": 38,
  "heads": [
-  "d7b2f8a4c1e6"
+  "b8e4d6f2a9c3"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -122,6 +122,14 @@
    "down_revision": "f7a2c9e4b1d3",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "b8e4d6f2a9c3": {
+   "file": "b8e4d6f2a9c3_agent_artifact_acceptance.py",
+   "down_revision": "d7b2f8a4c1e6",
+   "create_tables": [],
+   "add_column_tables": [
+    "agent_artifacts"
+   ]
   },
   "c1e5f9a3d7b2": {
    "file": "c1e5f9a3d7b2_v3_skill_governance_states.py",

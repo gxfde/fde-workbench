@@ -1,7 +1,7 @@
 {
   "name": "@fde-workbench/desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "蔡工FDE智能交付系统桌面客户端",
   "author": "蔡工FDE智能交付系统",
   "license": "MIT",

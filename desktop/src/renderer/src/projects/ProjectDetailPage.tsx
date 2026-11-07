@@ -193,7 +193,7 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
           {tab === "commercial" ? <CommercialBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "management" ? <ProjectManagement project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} /> : null}
           {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} /> : null}
-          {tab === "agents" ? <AgentsConsole projectId={project.id} /> : null}
+          {tab === "agents" ? <AgentsConsole projectId={project.id} canManage={canManage} /> : null}
           {tab === "meetings" ? <MeetingsConsole projectId={project.id} /> : null}
           {tab === "ontology" ? <GlossaryPage projectId={project.id} canManage={canManage} /> : null}
           {tab === "facts" ? <ExecutionFactChain projectId={project.id} /> : null}

@@ -91,7 +91,22 @@ from fde_api.projects.permissions import project_access, visible_project_ids
 from fde_api.solutions.models import ProjectSolution
 from fde_api.workbench.models import Project, new_uuid
 
-ARTIFACT_KINDS = frozenset({"code", "doc", "diff", "config"})
+ARTIFACT_KINDS = frozenset({"code", "doc", "diff", "config", "test_results"})  # T-B1（goal-tb tb2）+test_results
+
+
+def _derive_summary(kind: str, content: bytes, exit_code: int | None) -> dict[str, int] | None:
+    """T-B1：入库时从原件内容派生结构化摘要（可重建，B#6 纪律）。
+
+    计数来自原件解析；exit_code 来自 run 结果（非原件内容）合入同一摘要。
+    非 diff/test_results 种类零派生（None）——不发明数字。
+    """
+    from fde_api.agents.artifact_summary import derive_artifact_summary
+
+    summary = derive_artifact_summary(kind, content)
+    if summary is None:
+        return None
+    return {**summary, "exit_code": exit_code if exit_code is not None else -1}
+
 FAILED_STATUSES = frozenset({"failed", "timeout", "budget_exceeded"})
 IN_FLIGHT_STATUSES = frozenset({"queued", "running"})
 AGENT_MAX_RETRIES = 2  # 循环提示词硬性：重试上限 2 次（家族 = 3 个 run）
@@ -339,6 +354,9 @@ def _serialize_run(session: Any, run: AgentRun, *, detail: bool = False) -> dict
                 "sha256": artifact.sha256,
                 "reviewed": artifact.reviewed,
                 "linked_solution_id": artifact.linked_solution_id,
+                "reviewed_by_user_id": artifact.reviewed_by_user_id,
+                "reviewed_at": artifact.reviewed_at.isoformat() if artifact.reviewed_at else None,
+                "derived_summary": artifact.derived_summary,
             }
             for artifact in session.scalars(
                 select(AgentArtifact).where(AgentArtifact.run_id == run.id).order_by(AgentArtifact.created_at)
@@ -420,7 +438,7 @@ def _finalize(
     适用（终审通道入口本就是人工）；非 completed 终态 = L2。
     """
     validation_failures: list[dict[str, Any]] = []
-    prepared: list[tuple[ArtifactFile, str]] = []
+    prepared: list[tuple[ArtifactFile, str, bytes]] = []
     if result.status == "completed":
         for artifact in result.artifacts:
             problems: list[str] = []
@@ -435,8 +453,9 @@ def _finalize(
                 problems.append("unsafe_path")
             file_path = workspace / _OUTPUT_DIR / relative
             if file_path.exists():
-                digest = sha256(file_path.read_bytes()).hexdigest()
-                prepared.append((artifact, digest))
+                content = file_path.read_bytes()
+                digest = sha256(content).hexdigest()
+                prepared.append((artifact, digest, content))
             else:
                 problems.append("file_missing")
             if problems:
@@ -514,7 +533,7 @@ def _finalize(
         # 留痕但不挂 solution（不进终审通道，review_gate_open 收口后重试）；
         # L1 降级产物恒不挂 solution（强制人工终审，handoff 后人工收口）
         if result.status == "completed":
-            for artifact, digest in prepared:
+            for artifact, digest, content in prepared:
                 session.add(
                     AgentArtifact(
                         run_id=run.id,
@@ -523,6 +542,8 @@ def _finalize(
                         sha256=digest,
                         reviewed=False,
                         linked_solution_id=None if (gate_open or l1_path) else solution_id,
+                        # T-B1：可重建派生摘要（exit_code 来自 run 结果，计数来自原件解析）
+                        derived_summary=_derive_summary(artifact.kind, content, result.exit_code),
                     )
                 )
         # V3 T-P0-1（WB-DEF-1 signoff 死锁）：非降级 completed 且绑定 solution 的
@@ -1293,4 +1314,56 @@ def get_cost(*, actor: User, scope: str | None, project_id: str | None) -> dict[
             "total_runs": len(rows),
             "total_token_cost": sum(row.token_cost for row in rows),
             "monthly": _monthly(rows),
+        }
+
+
+# ---------------------------------------------------------------------------
+# T-B1（goal-tb tb2）：产物人工接受写路径（度量表「智能体产物被人工接受率」数据源）
+
+def set_artifact_reviewed(*, actor: User, run_id: str, artifact_id: str, reviewed: bool) -> dict[str, Any]:
+    """人工复核/接受一个 run 产物（can_manage=终审动作）。
+
+    reviewed=True 留 accepted_by/at；False 撤回并清空双痕（修正通道）。
+    留痕走 operation_events（agent_artifact_reviewed，target=项目），changes
+    只带 id 与布尔值——不复制任何产物内容。
+    """
+    from datetime import UTC, datetime
+
+    session = db.session()
+    with session.begin():
+        run = session.get(AgentRun, run_id)
+        if run is None:
+            raise AgentsServiceError("run_not_found", "智能体 run 不存在。", 404)
+        project = session.get(Project, run.project_id)
+        access = project_access(actor, project) if project else None
+        if project is None or access is None:
+            raise AgentsServiceError("project_not_found", "项目不存在或无权访问。", 404)
+        if not access.can_manage:
+            raise AgentsServiceError("project_forbidden", "产物复核需要项目管理权限。", 403)
+        artifact = session.get(AgentArtifact, artifact_id)
+        if artifact is None or artifact.run_id != run.id:
+            raise AgentsServiceError("artifact_not_found", "产物不存在或不属于该 run。", 404)
+        artifact.reviewed = reviewed
+        if reviewed:
+            artifact.reviewed_by_user_id = actor.id
+            artifact.reviewed_at = datetime.now(UTC)
+        else:
+            artifact.reviewed_by_user_id = None
+            artifact.reviewed_at = None
+        record_event(session, actor, "agent_artifact_reviewed", project, {
+            "run_id": run.id,
+            "artifact_id": artifact.id,
+            "reviewed": reviewed,
+        })
+        return {
+            "id": artifact.id,
+            "run_id": artifact.run_id,
+            "kind": artifact.kind,
+            "storage_ref": artifact.storage_ref,
+            "sha256": artifact.sha256,
+            "reviewed": artifact.reviewed,
+            "reviewed_by_user_id": artifact.reviewed_by_user_id,
+            "reviewed_at": artifact.reviewed_at.isoformat() if artifact.reviewed_at else None,
+            "derived_summary": artifact.derived_summary,
+            "linked_solution_id": artifact.linked_solution_id,
         }
