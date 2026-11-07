@@ -58,7 +58,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3 T-G1：gates +evidence_candidates JSON 可空列（任务产物→门禁证据候选，建议性）
 # V3 T-D1：document_generation_jobs +ai_request_id（WB-DEF-6 文档血缘：job 行反查 ai_call_audits）
 # V3 T-J2：background_jobs 状态值域 +cancelled（admin 取消面，纯 CHECK 置换零列重建）
-HEAD_REVISION = "b2e8f4a6c9d3"
+# T-A9（goal-tb tb1）：transcript_drafts + interview_minutes（草稿区+纪要正式库，additive）
+HEAD_REVISION = "d7b2f8a4c1e6"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1063,9 +1064,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    # 迁移文件全集权威=alembic ScriptDirectory（本轮 b2e8f4a6c9d3 后 = 36）；
+    # 迁移文件全集权威=alembic ScriptDirectory（本轮 d7b2f8a4c1e6 后 = 37）；
     # v3-workbench-inventory.json 的 revision_count=31 为审计滞后快照，重生成归审计轮（挂账）
-    assert len(known) == 36
+    assert len(known) == 37
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

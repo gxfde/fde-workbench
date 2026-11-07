@@ -48,6 +48,7 @@ services:
       - automation_qiflow-net
     volumes:
       - fde_storage:/app/.fde-storage
+      - fde_transcript_drafts:/app/.fde-transcript-drafts  # T-A9 草稿独立根（与 fde_storage 分卷）
       # 把 migrations 目录挂出来：alembic revision 生成的迁移文件在容器内，
       # 挂载后宿主机可直接看到并纳入 git（否则生成物会随容器销毁）
       - ./server/migrations:/app/migrations
@@ -97,6 +98,7 @@ services:
       - automation_qiflow-net
     volumes:
       - fde_storage:/app/.fde-storage
+      - fde_transcript_drafts:/app/.fde-transcript-drafts  # T-A9 草稿独立根（与 fde_storage 分卷）
 
   scheduler:
     # v0.3: 自动化调度器。与 worker 分开：worker 只消费已入队的事件，
@@ -126,6 +128,7 @@ services:
       - automation_qiflow-net
     volumes:
       - fde_storage:/app/.fde-storage
+      - fde_transcript_drafts:/app/.fde-transcript-drafts  # T-A9 草稿独立根（与 fde_storage 分卷）
 
   sandbox-runner:
     # goal-d3（技术实施方案 §4 / 决议 D4）：agent 执行沙箱基座。
@@ -155,3 +158,4 @@ networks:
 volumes:
   fde_redis:
   fde_storage:
+  fde_transcript_drafts:

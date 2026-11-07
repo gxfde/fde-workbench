@@ -1,10 +1,10 @@
 {
- "route_count": 307,
- "blueprint_count": 41,
- "table_count": 105,
- "revision_count": 36,
+ "route_count": 314,
+ "blueprint_count": 42,
+ "table_count": 107,
+ "revision_count": 37,
  "heads": [
-  "b2e8f4a6c9d3"
+  "d7b2f8a4c1e6"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -211,6 +211,15 @@
    "create_tables": [
     "bridge_engagements",
     "bridge_sync_runs"
+   ],
+   "add_column_tables": []
+  },
+  "d7b2f8a4c1e6": {
+   "file": "d7b2f8a4c1e6_transcript_drafts.py",
+   "down_revision": "b2e8f4a6c9d3",
+   "create_tables": [
+    "transcript_drafts",
+    "interview_minutes"
    ],
    "add_column_tables": []
   },

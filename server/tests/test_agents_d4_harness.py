@@ -197,6 +197,7 @@ def d4_settings(test_settings, tmp_path):
             "local_storage_root": tmp_path / "object-storage",
             "agent_retry_backoff_base_seconds": 0,
             "agent_workspace_root": str(tmp_path / "agent-workspaces"),
+            "transcript_draft_root": tmp_path / "transcript-drafts",
         }
     )
 

@@ -164,6 +164,11 @@ class Settings(BaseSettings):
     # goal-d7 M7 中断恢复：live/paused 会议超时自动收场阈值（小时，懒收场——
     # 会议访问点触发 reap）；恢复窗口同此值（≤24h）
     meeting_stale_close_hours: int = Field(default=24, ge=1)
+    # T-A9 转写草稿区（goal-tb tb1）：独立文件根（物理隔离，与 .fde-storage
+    # 上传存储不共根）+ T+7 自动清理保留天数。只收文本——录音原件永不进本根
+    # （SOP :109/:111 红线）；引擎不进平台依赖，engine 字段纯来源标注。
+    transcript_draft_root: Path = Path(".fde-transcript-drafts")
+    transcript_draft_retention_days: int = Field(default=7, ge=1)
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

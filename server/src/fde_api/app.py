@@ -88,6 +88,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
     from fde_api.meetings.routes import meetings_blueprint
     app.register_blueprint(meetings_blueprint)
+    # T-A9 转写草稿区 + 访谈纪要正式库（goal-tb tb1）：文本-only，不进 api_catalog
+    from fde_api.transcripts.routes import transcripts_blueprint
+    app.register_blueprint(transcripts_blueprint)
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)

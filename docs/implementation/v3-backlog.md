@@ -619,7 +619,7 @@
 - **测试**：服务端 NEW `test_agents_meetings_lists.py` 5 例（可见项目聚合+形状面/局外人 403+未知项目 404/status·时间过滤+分页校验+truncated/会议 turns_count 预聚合+行形状/未认证 401）＋事实链 +1 钉；桌面 NEW `agents-console` 6 例＋`meetings-console` 5 例＋`guidance-redaction-review` 4 例＋project-detail tab 清单钉同步（11→13 项）。变异四连全红→还原绿：M1 摘 can_view 闸（403 用例红）/ M2 摘 limit 上界（400 用例红）/ M3 serialize_fact_event 外泄 changes（**双钉齐红**）/ M4 桌面摘 ack 携带（409 用例红）。
 - **口径勘误（教训 48：只认 CI 实测）**：#179 bullet 记桌面基线 882 已陈旧——main CI 实测（#179 合并 run 与 #180 PR-head run 双源）= **71 文件 887**；#181 后基线=**72 文件 897**（close-guard +10）。服务端基线 main@677746c 实测 **2067 passed + 6 skipped**。本轮 PR 预期：pytest **2073+6s**（+6）/ vitest **912**（75 文件）/ 路由 305→**307**（审计清单已重生成：route CSV +2 行、blueprint 41、表 105、36 rev、head `b2e8f4a6c9d3` 不变、DB CSV 零变化）。
 
-### T-A9 录音转写草稿区 + 人工整理晋升机制（ASR 通道另立项） — **PROPOSED（登记轮，零代码）**
+### T-A9 录音转写草稿区 + 人工整理晋升机制（ASR 通道另立项） — **✅ DONE（实施轮 goal-tb tb1，2026-11-07，见文末实施记录）**
 - 目标：录音场景下，**转写结果只落草稿区**，售前人工整理为访谈纪要并经客户确认后才入正式库。
 - **红线依据（逐字）**：`D:/test/FDE/engagements/openfde/engagements/somwyn/raw/2026-10-27-FDE接触调研阶段资料入库SOP设计.md:109`「初诊录音转写（⚠️ **只转写不入正式库**，且必须先获口头同意）」、`:111`「**S2 明令「不录音转写入库」**…**边界是：企业主动发给你的文字可以存；你录的音不能存。** 这条线要守死」⇒ v1.1 原结论「转写文字可入库」**作废**（v1.2 §10 Q2 已改判）。
 - **ASR 通道现状**：`server/src/fde_api/ai/kimi.py:39-43` MiniMax 官方 purpose 枚举共 5 项（`voice_clone` / `prompt_audio` / `video_understanding` / `t2a_async_input` / `video_generation_input`），**无音频转写项** ⇒ **ASR 通道需独立立项**（本条只登记工作台侧承接机制）。
@@ -628,7 +628,15 @@
 - 测试：服务端（草稿不可被正式库引用；清理作业按 T+7 生效；晋升须带客户确认人/时间戳/确认方式）；转写文本**同样过 T-A2 代号化管线**（不因「草稿」豁免）。
 - 验收：草稿与正式库物理隔离；无客户确认的转写文本**无法**进入正式库。
 - 回滚：alembic downgrade。风险：低。依赖：T-A2 + ASR 通道立项。复杂度：**M**。
-- 闸：**ASR 通道立项并跑通**；且须先获**客户口头同意**方可录音。✅ **立项半已批（2026-11-07，§拍板闸 6⑨蔡工拍板「立项」）**：立项文档=`docs/architecture/录音转写ASR通道立项-v1.md`（红线锚点逐字引用 + 现状行级实测 + 通道选型拍板项清单 P1–P6，推荐本地 ASR 先行）；「跑通」半＝通道选型拍板（§3.3 显式「待蔡工拍板」节收口，本文不代决）+ 真机实测后随 T-A9 实施轮闭合。**本条维持 PROPOSED（立项≠实施）**。
+- 闸：**ASR 通道立项并跑通**；且须先获**客户口头同意**方可录音。✅ **立项半已批（2026-11-07，§拍板闸 6⑨蔡工拍板「立项」）**：立项文档=`docs/architecture/录音转写ASR通道立项-v1.md`（红线锚点逐字引用 + 现状行级实测 + 通道选型拍板项清单 P1–P6，推荐本地 ASR 先行）。✅ **选型已拍板（2026-11-07，§拍板闸 6⑩，蔡工「ASR 通道选型：按你建议实施」）**：P1=opt-L 本地 ASR 先行，P1–P6 逐项落定见立项文档 §3.3.1（委托先例：按推荐项执行、留痕可推翻）。✅ **「跑通」半已闭合（横评真机实测随实施轮完成）**——客户口头同意属现场运营前置（录音发生前逐客户取得），平台侧已以 UI 注记钉住（「只收文本，录音原件永不进平台」）。
+- **实施记录（goal-tb tb1，2026-11-07，PR 见 CHANGELOG 同名节）**：
+  - **选型落定**：P1–P6 按推荐项落定（§拍板闸 6⑩）；横评报告=`docs/audit/ASR本地引擎横评-2026-11-07.md`——faster-whisper base 档（int8/CPU）中文 CER 8.6%、中英混说 6.5%、4× 实时（1h 访谈≈15min 出稿），胜出 whisper.cpp 同档（速度 1.5×于其、精度相当）；FunASR 因 torch 依赖过重不实测（如实注记）；测试音频=TTS 本地合成虚构文本（零客户资料），CER 经 OpenCC 繁简归一。
+  - **DB（迁移 `d7b2f8a4c1e6`，36→37 rev，additive）**：`transcript_drafts`（草稿区，状态机 draft→promoted|expired|discarded，墓碑化清空正文/指纹/复核条目，7 条 CHECK 含「晋升必带三要素」「活动草稿必有正文」「墓碑必无正文」）+ `interview_minutes`（正式库，客户确认三要素 NOT NULL + redaction_hits 计数）；**物理隔离机械钉**=全库零外键指向 transcript_drafts（minutes.draft_id 纯字符串指针，metadata 扫描测试钉死）。
+  - **API（7 条新路由，不进 api_catalog）**：草稿 POST/GET list/GET detail/discard/promote + 纪要 GET list/detail；权限=草稿读写 can_view（T-A3 校准「录入 member 已可用」同构）、晋升 can_manage；列表有界分页（50/200+truncated）、行不带正文。
+  - **T-A2 代号化不豁免**：create/promote 两处 title/content/确认人文本先过 `redact_text_detailed`（词典命中→enterprise_code 首段代号、疑似同样替换）；词典不可用 fail-closed 503 `pseudonym_dict_unavailable`（guidance 同码）；复核条目（#160 同形状 name/occurrences/matched_dict）随草稿行存储+详情回显，墓碑时一并抹除；正式库只留命中计数。
+  - **T+7 清理**：`purge_expired_drafts` 接入 cli scheduler 循环（与过期清扫/退避提醒同拍），到期活动草稿墓碑化+独立文件根（`FDE_TRANSCRIPT_DRAFT_ROOT`，默认 `.fde-transcript-drafts`，与 .fde-storage 不共根）子树删除；settings 注入参供调度外调用；skip_locked 防并发互堵。
+  - **桌面**：NEW `transcripts/TranscriptDraftsPanel.tsx` 挂 overview tab guidanceSlot（presurvey 录入卡旁）——本地文件导入（只读文本进表单，原件永不上传）、草稿列表/详情（正文+复核清单徽标）、弃置、晋升表单（canManage 显隐同构）、纪要正式库列表/详情；加载失败 fail-静默（教训 51：不与页面级 alert 抢道），动作错误 alert 呈现。
+  - **测试**：服务端 NEW `test_transcript_drafts.py` 8 例（代号化/fail-closed/权限 403-404-401/列表形状/晋升三要素四连 422+未来时戳 422/墓碑/T+7 清理幂等/零外键隔离钉）；变异三连全红→还原绿（摘三要素校验红/代号化改直通红/清理谓词取反红）；桌面 NEW `transcript-drafts-panel.test.tsx` 7 例。
 
 ### T-B1 agent_artifacts 扩列（diff/test_results）+ 产物→`handover_packages` 闭环 — **PROPOSED（登记轮，零代码）**
 - 目标：run 产物从「有 sha256 但无结构化内容」变成可封包的结项交付物。
@@ -749,6 +757,7 @@ B#15 Lens 正交叠加（触发=多行业模板成本失控实测）｜B#16 交�
    ⑦ **§度量口径与 G9 关系**——✅ **确认（按登记口径）**——并存（过程指标不设阈值 + G9 结果验收线）；**「工程师小时数/交付毛利率」接受 simulation 口径**（埋点另立项）；
    ⑧ **真实客户验收时点**——✅ **确认（按登记口径）**——与总览 §6.5 Q2「暂无已确认客户验收线诉求」对齐，仿真口径先行，真实项目后置替换。
    ⑨ **售前主线收尾分工（goal-ta 循环，2026-11-07 蔡工拍板，三行逐字记录）**——✅ **DECIDED（2026-11-07）**：①「剩余T-A线本会话」——T-A1 / T-A8+B#9 合批 / T-A9 随 ASR 立项 / 工程卫生轮，归执行 goal-ta 循环提示词（`Goal提示词-交付工作台T-A收尾-goal-ta循环-v1.0.md`，文档中心 08_支撑材料/专题文档）的会话；②「T-A7另外一个会话在做，其它本会话可以做」——T-A7 为该会话**绝对禁区**（不认领、不开相关分支、不实现任何 T-A7 语义、遇 T-A7 分支/PR 零触碰零评论，backlog 对 T-A7 条目只加事实注记）；③T-A9 的 ASR 通道「**立项**」——文档轮（零代码零迁移），**立项≠实施**，T-A9 本体维持 PROPOSED，立项文档=`docs/architecture/录音转写ASR通道立项-v1.md`（含显式「待蔡工拍板」通道选型节），选型拍板后 T-A9 另开实施轮。
+   ⑩ **ASR 通道选型（goal-tb 循环，2026-11-07 蔡工拍板，逐字）**——✅ **DECIDED（2026-11-07）**：「ASR 通道选型：按你建议实施。」——按 #124 委托先例，立项文档 §3.3 P1–P6 逐项按推荐项落定（§3.3.1）：**P1=opt-L 本地 ASR 先行**（红线同向零外发）/ P2=横评实测裁决 / P3=Windows 宿主裸跑 / P4=首版普通话 / P5=诚实失败 / P6=云默认不开（启用=新的显式拍板）。横评报告=`docs/audit/ASR本地引擎横评-2026-11-07.md`（faster-whisper base 档：CER 8.6%/6.5%，4× 实时；宿主裸跑确认）。T-A9 实施轮随之解封（goal-tb tb1 同日执行）。
 
    **拍板轮结论（2026-11-06）：8 项闸全部收口，无一阻塞 T-A1..T-A7 开工**——①②③⑥ DECIDED 已回写对应条目；④⑤⑦⑧ 本就是声明性约束（登记时已有明确结论），确认后维持原状。
 
@@ -777,7 +786,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
  T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施并合并 #178)
  T-A1(S3闸提示)：✅已由 #156 兑现（goal-ta3 核销零补码）
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：✅已实施(goal-ta2，与 #171 收口同批)
- T-A9(转写草稿区)：依赖 T-A2(✅已实施) + ASR 通道立项（✅立项已批 2026-11-07 §拍板闸 6⑨，选型拍板后开工）
+ T-A9(转写草稿区)：✅ **DONE（2026-11-07 goal-tb tb1）**——依赖 T-A2(✅) + ASR 通道立项(✅6⑨) + 选型拍板(✅6⑩) 三闸齐清
  T-B1(artifacts 扩列 + handover_packages 闭环)：依赖 T-A8；新迁移 additive-only
  T-Z1(zcode 真机 + 执行通道裁定)：依赖 T-B1；开工前须实测 zcode 能否进 sandbox-runner 容器
 ```

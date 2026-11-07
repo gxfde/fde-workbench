@@ -188,6 +188,7 @@ cd server
 | `FDE_AI_MONTHLY_TOKEN_BUDGET` | AI 调用月度 token 预算（按用户核算），超限拒绝新调用并留审计记录；`0` = 不限额 |
 | `FDE_AGENT_MONTHLY_BUDGET` | 平台月度 agent 预算（token 单位）；`0` = 不限额 |
 | `FDE_ENTERPRISE_DICT` | 可选：售前企业名脱敏的现场真实词典文件路径；缺省用仓库内种子词典（仅合成示例），真实词典文件永不进 git，文件缺失时 fail-closed 阻断入库 |
+| `FDE_TRANSCRIPT_DRAFT_ROOT` / `FDE_TRANSCRIPT_DRAFT_RETENTION_DAYS` | T-A9 转写草稿区：独立文件根（默认 `.fde-transcript-drafts`，与对象存储分卷物理隔离）与 T+7 自动清理保留天数（≥1）。草稿只收文本——录音原件永不进平台 |
 
 不要在提交、issue、日志或截图中暴露 `.env`。生产环境切换 `FDE_JWT_SECRET` 前应先在系统配置中重新录入所有加密密钥，否则已保存的加密配置将无法解密。
 

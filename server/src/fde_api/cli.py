@@ -218,6 +218,7 @@ def register_cli(app: Flask) -> None:
         )
         from fde_api.files.expiration import schedule_expired_upload_cleanup
         from fde_api.health.heartbeat import beat
+        from fde_api.transcripts.service import purge_expired_drafts
 
         click.echo("scheduler started")
         from datetime import datetime as _dt
@@ -244,6 +245,11 @@ def register_cli(app: Flask) -> None:
             expired_uploads = schedule_expired_upload_cleanup()
             if expired_uploads:
                 click.echo(f"expired_uploads={expired_uploads}")
+            # T-A9（goal-tb tb1）：转写草稿 T+7 自动清理——与过期清扫同拍，
+            # 无人触碰的到期草稿也按时墓碑化（正文/指纹/复核条目抹除+文件根清空）。
+            purged_drafts = purge_expired_drafts()
+            if purged_drafts:
+                click.echo(f"purged_transcript_drafts={purged_drafts}")
             # goal-r6（P1-7）：派单维护作业 24h 节流到期即投递（超时释放 /
             # 留存扫描 / T+30 对账；topic 即 job_type=dispatch.maintenance，
             # target=当日 token 由 ensure_background_job 天然去重）。

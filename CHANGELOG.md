@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-tb tb1：T-A9 转写草稿区 + 访谈纪要正式库（ASR 通道 opt-L 落地，2026-11-07）
+
+- **拍板落定（§拍板闸 6⑩，蔡工逐字「ASR 通道选型：按你建议实施」）**：立项文档《录音转写ASR通道立项-v1.md》§3.3 P1–P6 逐项按推荐项落定（§3.3.1 新增拍板结果节）——**P1=opt-L 本地 ASR 先行**（红线同向零外发）、P2=横评实测裁决、P3=Windows 宿主裸跑、P4=首版普通话、P5=诚实失败、P6=云默认不开（启用=新的显式拍板）。T-A9 实施轮随之解封。
+- **NEW `docs/audit/ASR本地引擎横评-2026-11-07.md`**（P2/P3 实测数据，随本 PR 归档）：faster-whisper（int8/CPU）× whisper.cpp b5454 × tiny/base/small，TTS 本地合成虚构文本（零客户资料）双片段（68.7s 普通话 + 20.2s 中英混说），CER 经 OpenCC 繁简归一——**faster-whisper base 档胜出**（中文 CER 8.6% / 混说 6.5% / 4× 实时）；whisper.cpp small 中文精度最高（5.9%）但慢于实时；FunASR 因 torch 依赖过重不实测（如实注记）。横评工具链与模型只留本地 `D:\test\FDE\asr-bench-local\` 永不进仓。
+- **DB（迁移 `d7b2f8a4c1e6`，36→37 rev，additive-only）**：`transcript_drafts`（草稿区：状态机 draft→promoted|expired|discarded；墓碑化清空正文/指纹/复核条目；7 条 CHECK 含晋升必带三要素、活动草稿必有正文、墓碑必无正文）+ `interview_minutes`（正式库：客户确认三要素 NOT NULL + `redaction_hits` 计数）。**物理隔离机械钉**：全库零外键指向 `transcript_drafts`（minutes.draft_id 为纯字符串指针，B#6「引用方永不复制真相，只持指针」），metadata 扫描测试钉死。
+- **API（+7 路由 307→314，蓝图 41→42，全部不进 api_catalog）**：`POST/GET /transcript-drafts`、`GET /transcript-drafts/{id}`、`POST …/discard`、`POST …/promote`、`GET /interview-minutes`、`GET /interview-minutes/{id}`。权限=草稿读写 can_view（T-A3 校准「录入 member 已可用」同构）、**晋升 can_manage**（入正式库=管理动作）；列表有界分页（50/200+truncated）、行不带正文防大载荷。
+- **红线三面**：①**只收文本**——无任何音频字段，录音原件永不进平台（SOP :109/:111 逐字锚，UI 注记钉住）；②**T-A2 代号化不豁免**——create/promote 两处 title/content/确认人文本先过 `redact_text_detailed`（词典命中→enterprise_code 首段代号、疑似同样替换），词典不可用 fail-closed 503 `pseudonym_dict_unavailable`（guidance 同码），复核条目（#160 同形状）随草稿行存储+详情回显、墓碑时一并抹除，正式库只留命中计数；③**无客户确认的转写文本无法进正式库**——晋升三要素（确认人/时间戳/确认方式）缺一即 422 + 未来时戳拒绝（CR-029 教训）+ CHECK 双保险。
+- **T+7 自动清理**：`purge_expired_drafts` 接入 cli scheduler 循环（与过期清扫/退避提醒同拍），到期活动草稿墓碑化 + 独立文件根（`FDE_TRANSCRIPT_DRAFT_ROOT`，默认 `.fde-transcript-drafts`，与 `.fde-storage` 不共根）子树删除；skip_locked 防并发互堵；墓碑行留作 T+7 合规对账凭据。
+- **桌面**：NEW `transcripts/TranscriptDraftsPanel.tsx` 挂 overview tab guidanceSlot（presurvey 录入卡旁）——本地文件导入（只读文本进表单、原件不上传）、草稿列表/详情（正文+复核清单词典命中徽标）、弃置、晋升表单（canManage 显隐与服务端同构）、纪要正式库列表/详情；加载失败 fail-静默（教训 51），动作错误 alert 呈现。
+- **测试**：服务端 NEW `test_transcript_drafts.py` 8 例；变异三连全红→还原绿（摘晋升三要素校验→红 / 代号化改直通→红 / 清理谓词取反→红）。桌面 NEW `transcript-drafts-panel.test.tsx` 7 例。pytest **2109 收集 = 2103 passed + 6 skipped**（+8）/ vitest **925/925**（77 文件，+7）/ mypy 基线 279 不变。server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）；桌面变更 ⇒ 便携版重打包（r20）。
+
 ## [未发布] — goal-ta4 路由审计清单 CI 同步钉（#174 教训机械化，零业务代码，2026-11-07）
 
 - NEW `server/tests/test_route_inventory_sync.py`（pytest +1）：`create_app().url_map` 实际路由对账 `docs/audit/v3-route-inventory.csv`——比对口径与生成器 `scripts/audit/extract_workbench_inventory.py` 一致（跳过 static、剔除 HEAD/OPTIONS、method 多值按字母序 `|` 连接），同一 (method, path) 集合逐位相等，漂移即红并报「实际有而清单缺 / 清单有而实际无」两份明细＋重生成指引。**「动路由必同步审计清单」从此有机械闸兜底**（#174：#171/#162 两次清单落后靠人工发现；AGENTS「审计清单刷新有前置条件」节人工纪律不变，加机器兜底）。handler/service/auth 等富化列不在钉内（归生成器自守，避免钉子复制第二份生成器逻辑）。

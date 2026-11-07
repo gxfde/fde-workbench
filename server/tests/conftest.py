@@ -350,6 +350,10 @@ def db_session(app) -> Session:
         __import__("fde_api.agents.models", fromlist=["SeatActionLedger"]).SeatActionLedger,
         # goal-d9：翻译器草稿（created_by 挂 users RESTRICT，先于 users 清）
         __import__("fde_api.translator.models", fromlist=["TranslatorTranslation"]).TranslatorTranslation,
+        # T-A9（goal-tb tb1）：纪要/草稿（均引用 projects/users RESTRICT；
+        # minutes.draft_id 为纯指针无 FK，两表同簇先后无约束依赖）
+        __import__("fde_api.transcripts.models", fromlist=["InterviewMinutes"]).InterviewMinutes,
+        __import__("fde_api.transcripts.models", fromlist=["TranscriptDraft"]).TranscriptDraft,
         # goal-d3：审核节点与产物引用 project_solutions（RESTRICT），先于方案；
         # tool_calls/artifacts 引用 runs，同样先清。
         __import__("fde_api.agents.models", fromlist=["SolutionReviewCheckpoint"]).SolutionReviewCheckpoint,
