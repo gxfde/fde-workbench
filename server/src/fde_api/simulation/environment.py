@@ -51,6 +51,10 @@ class SimulationEnvironment:
         self._faults: list[dict[str, Any]] = list(faults or [])
         self._mailbox: list[dict[str, Any]] = []
         self._calls: list[dict[str, Any]] = []
+        # **越界**（调了非 sim.* 工具）�� **注入故障**（sim 工具按场景失败）是两件事：
+        # 前者是安全越界 ⇒ 硬性失败；后者是场景机制 ⇒ 只记录，不判硬失败。
+        self._boundary_violations: list[dict[str, Any]] = []
+        self._tool_failures: list[dict[str, Any]] = []
         self._tools: dict[str, Callable[[dict[str, Any]], Any]] = {
             "sim.crm.list_leads": self._list_leads,
             "sim.crm.search_leads": self._search_leads,
@@ -78,23 +82,23 @@ class SimulationEnvironment:
         arguments = dict(arguments or {})
         if not isinstance(tool, str) or not tool.startswith(SIM_TOOL_PREFIX):
             violation = SimulationBoundaryViolation(tool)
-            self._record_call(tool, arguments, rejected=True, reason=violation.reason)
+            self._record_call(tool, arguments, kind="boundary", reason=violation.reason)
             raise violation
         handler = self._tools.get(tool)
         if handler is None:
             violation = SimulationBoundaryViolation(tool, reason="unknown_sim_tool")
-            self._record_call(tool, arguments, rejected=True, reason=violation.reason)
+            self._record_call(tool, arguments, kind="boundary", reason=violation.reason)
             raise violation
         fault = self._match_fault(tool)
         if fault is not None:
             error_code = str(fault.get("error") or "sim_tool_crash")
-            self._record_call(tool, arguments, rejected=True, reason=error_code)
+            self._record_call(tool, arguments, kind="fault", reason=error_code)
             raise SimulationToolError(tool, error_code)
         try:
             result = handler(arguments)
         except SimulationToolError:
             raise
-        self._record_call(tool, arguments, rejected=False, reason=None)
+        self._record_call(tool, arguments, kind="ok", reason=None)
         return {"tool": tool, "ok": True, "data": result}
 
     def _match_fault(self, tool: str) -> dict[str, Any] | None:
@@ -113,21 +117,29 @@ class SimulationEnvironment:
         tool: str,
         arguments: dict[str, Any],
         *,
-        rejected: bool,
+        kind: str,
         reason: str | None,
     ) -> None:
+        """记一次工具调用。``kind`` ∈ ok / boundary / fault。"""
         record = {
             "tool": tool,
             "arguments": arguments,
-            "rejected": rejected,
+            "kind": kind,
+            "rejected": kind == "boundary",
             "reason": reason,
         }
         self._calls.append(record)
+        if kind == "boundary":
+            self._boundary_violations.append(record)
+        elif kind == "fault":
+            self._tool_failures.append(record)
         if self._trace is not None:
             self._trace.record(
                 phase="implementation",
-                event_type="boundary_violation" if rejected else "tool_call",
-                payload={"tool": tool, "rejected": rejected, "reason": reason},
+                event_type="tool_failure" if kind == "fault" else (
+                    "boundary_violation" if kind == "boundary" else "tool_call"
+                ),
+                payload={"tool": tool, "kind": kind, "reason": reason},
                 tool_call=record,
             )
 
@@ -150,7 +162,13 @@ class SimulationEnvironment:
 
     @property
     def rejected_calls(self) -> list[dict[str, Any]]:
-        return [call for call in self._calls if call.get("rejected")]
+        """**越界**调用（安全越界 ⇒ 硬性失败证据）。"""
+        return list(self._boundary_violations)
+
+    @property
+    def failed_calls(self) -> list[dict[str, Any]]:
+        """**注入故障**（场景机制 ⇒ 只记录，不判硬失败）。"""
+        return list(self._tool_failures)
 
     # -- 各虚拟系统实现 ---------------------------------------------------
 

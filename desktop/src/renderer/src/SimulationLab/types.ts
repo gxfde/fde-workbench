@@ -159,3 +159,203 @@ export function isScenarioListDto(value: unknown): value is ScenarioListDto {
     typeof payload.truncated === "boolean"
   )
 }
+
+// ---------------------------------------------------------------------------
+// 运行 / 评估 / 失败 / 提案 / 回归（G3–G6）
+// ---------------------------------------------------------------------------
+
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "awaiting_approval"
+  | "completed"
+  | "failed"
+  | "failed_hard"
+  | "timeout"
+  | "cancelled"
+
+export type EvaluationVerdict =
+  | "pass"
+  | "conditional"
+  | "fail"
+  | "hard_fail"
+  | "inconclusive"
+  | "unavailable"
+
+export interface SimulationRunDto {
+  id: string
+  run_key: string
+  scenario_id: string
+  scenario_version: number
+  split: "train" | "regression" | "blind"
+  status: RunStatus
+  adapter_mode: "real" | "mock"
+  seed: number
+  attempt: number
+  actor_set: Record<string, { actor_id: string; display_name: string }>
+  cost: Record<string, number>
+  error: { code?: string; tools?: string[] } | null
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface SimulationRunListDto {
+  items: SimulationRunDto[]
+  total: number
+  truncated: boolean
+}
+
+export interface TraceItemDto {
+  seq: number
+  parent_seq: number | null
+  actor_id: string | null
+  phase: string
+  event_type: string
+  payload: Record<string, unknown>
+  tool_call: Record<string, unknown> | null
+  evidence: Record<string, unknown> | null
+  cost: Record<string, number> | null
+  created_at: string | null
+}
+
+export interface TraceListDto {
+  items: TraceItemDto[]
+  total: number
+  truncated: boolean
+  next_seq: number | null
+}
+
+export interface EvaluationLayerDto {
+  id: string
+  run_id: string
+  layer: "deterministic" | "model" | "human"
+  evaluator_id: string
+  mode: string
+  rubric_version: string
+  total_score: number
+  verdict: EvaluationVerdict
+  unverified_ratio: number
+  scores: {
+    criteria?: Array<{
+      key: string
+      dimension: string
+      title: string
+      score: number
+      verified: boolean
+      evidence_refs?: Array<Record<string, unknown>>
+    }>
+    dimension_scores?: Record<string, number>
+    dimensions?: Array<{ key: string; name: string; weight: number }>
+  }
+  hard_failures: Array<{ code: string; title: string; evidence_refs?: unknown[] }>
+  note: string | null
+  created_at: string | null
+}
+
+export interface EvaluationReportDto {
+  run_id: string
+  layers: EvaluationLayerDto[]
+  deterministic: EvaluationLayerDto | null
+  model: EvaluationLayerDto | null
+  human: EvaluationLayerDto[]
+  final: EvaluationLayerDto | null
+  disagreement: number
+  human_review_required: boolean
+  meta: { rubric_version: string; adapter_mode: string; disclaimer: string }
+}
+
+export interface FindingDto {
+  id: string
+  run_id: string
+  code: string
+  title: string
+  severity: "high" | "medium" | "low"
+  dimension: string
+  description: string
+  evidence_refs: Array<Record<string, unknown>>
+  root_causes: Array<{ code: string; confidence: string; analysis: string }>
+  status: string
+}
+
+export interface ProposalDto {
+  id: string
+  proposal_key: string
+  title: string
+  problem: string
+  finding_ids: string[]
+  finding_codes: string[]
+  target: { kind: string; ref: string }
+  current_version: string
+  proposed_version: string
+  change_summary: string
+  expected_effect: Record<string, unknown>
+  impact_scope: string[]
+  regression_plan: Record<string, unknown>
+  override_json: Record<string, unknown>
+  status: "draft" | "in_review" | "approved" | "rejected"
+  decided_by_user_id: string | null
+  decided_at: string | null
+  note: string | null
+  created_at: string | null
+}
+
+export interface RegressionSuiteDto {
+  id: string
+  name: string
+  split: "train" | "regression" | "blind" | "mixed"
+  scenario_ids: string[]
+  baseline_config: Record<string, unknown>
+  note: string | null
+  created_at: string | null
+}
+
+export interface RegressionResultDto {
+  id: string
+  suite_id: string
+  proposal_id: string | null
+  before: { runs: number; mean_total: number; hard_failures?: string[] }
+  after: { runs: number; mean_total: number; hard_failures?: string[] }
+  deltas: {
+    total_delta?: number
+    dimension_deltas?: Record<string, number>
+    regressed_dimensions?: string[]
+    new_failure_codes?: string[]
+    cost_delta?: Record<string, number>
+    train_gain?: number
+    blind_gain?: number
+  }
+  new_hard_failures: string[]
+  resolved_hard_failures: string[]
+  generalization_gap: number
+  overfit_risk: boolean
+  verdict: "improved" | "regressed" | "mixed" | "no_change" | "inconclusive"
+  note: string | null
+  created_at: string | null
+}
+
+export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
+  queued: "排队中",
+  running: "执行中",
+  awaiting_approval: "待人工确认",
+  completed: "已完成",
+  failed: "失败",
+  failed_hard: "硬性失败",
+  timeout: "超时",
+  cancelled: "已取消",
+}
+
+export const VERDICT_LABEL: Record<EvaluationVerdict, string> = {
+  pass: "通过",
+  conditional: "有条件通过",
+  fail: "未通过",
+  hard_fail: "硬性失败",
+  inconclusive: "结论不可靠",
+  unavailable: "未评估",
+}
+
+export const LAYER_LABEL: Record<"deterministic" | "model" | "human", string> = {
+  deterministic: "规则层",
+  model: "模型层",
+  human: "人工层",
+}

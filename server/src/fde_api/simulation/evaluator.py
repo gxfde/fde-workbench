@@ -131,27 +131,53 @@ def evaluate_run(
         )
         outcome = aggregate(criteria, hard_failures, rubric_version=RUBRIC_VERSION)
 
-        deterministic_row = SimulationEvaluation(
-            run_id=run.id,
-            layer="deterministic",
-            evaluator_id=DETERMINISTIC_EVALUATOR,
-            mode="rules",
-            rubric_version=outcome.rubric_version,
-            scores_json={
+        # 幂等：同 (run, 层, 评估器, 规则版本) 只有一行——重评**更新**该行，
+        # 不插入新行（否则撞唯一约束 ⇒ 500）。
+        deterministic_row = session.scalar(
+            select(SimulationEvaluation).where(
+                SimulationEvaluation.run_id == run.id,
+                SimulationEvaluation.layer == "deterministic",
+                SimulationEvaluation.evaluator_id == DETERMINISTIC_EVALUATOR,
+                SimulationEvaluation.rubric_version == outcome.rubric_version,
+            )
+        )
+        if deterministic_row is None:
+            deterministic_row = SimulationEvaluation(
+                run_id=run.id,
+                layer="deterministic",
+                evaluator_id=DETERMINISTIC_EVALUATOR,
+                mode="rules",
+                rubric_version=outcome.rubric_version,
+                scores_json={
+                    "criteria": [dict(item) for item in _criteria_json(outcome)],
+                    "dimension_scores": dict(outcome.dimension_scores),
+                    "dimensions": [
+                        {"key": key, "name": name, "weight": weight}
+                        for key, name, weight in DIMENSIONS
+                    ],
+                },
+                hard_failures_json=[failure.to_json() for failure in outcome.hard_failures],
+                total_score=outcome.total_score,
+                verdict=outcome.verdict,
+                unverified_ratio=outcome.unverified_ratio,
+                evidence_refs_json=[],
+            )
+            session.add(deterministic_row)
+        else:
+            deterministic_row.scores_json = {
                 "criteria": [dict(item) for item in _criteria_json(outcome)],
                 "dimension_scores": dict(outcome.dimension_scores),
                 "dimensions": [
                     {"key": key, "name": name, "weight": weight}
                     for key, name, weight in DIMENSIONS
                 ],
-            },
-            hard_failures_json=[failure.to_json() for failure in outcome.hard_failures],
-            total_score=outcome.total_score,
-            verdict=outcome.verdict,
-            unverified_ratio=outcome.unverified_ratio,
-            evidence_refs_json=[],
-        )
-        session.add(deterministic_row)
+            }
+            deterministic_row.hard_failures_json = [
+                failure.to_json() for failure in outcome.hard_failures
+            ]
+            deterministic_row.total_score = outcome.total_score
+            deterministic_row.verdict = outcome.verdict
+            deterministic_row.unverified_ratio = outcome.unverified_ratio
         session.flush()
 
         model_payload: dict[str, Any] | None = None
@@ -163,21 +189,38 @@ def evaluate_run(
                 traces=traces,
                 rubric_version=RUBRIC_VERSION,
             )
-            model_row = SimulationEvaluation(
-                run_id=run.id,
-                layer="model",
-                evaluator_id=f"{MODEL_EVALUATOR_PREFIX}{model_result.mode}",
-                mode=model_result.mode,
-                rubric_version=RUBRIC_VERSION,
-                scores_json={"criteria": [dict(item) for item in model_result.criteria]},
-                hard_failures_json=[],
-                total_score=model_result.total_score,
-                verdict=model_result.verdict,
-                unverified_ratio=0.0,
-                evidence_refs_json=[],
-                note=model_result.note,
+            model_evaluator_id = f"{MODEL_EVALUATOR_PREFIX}{model_result.mode}"
+            model_row = session.scalar(
+                select(SimulationEvaluation).where(
+                    SimulationEvaluation.run_id == run.id,
+                    SimulationEvaluation.layer == "model",
+                    SimulationEvaluation.evaluator_id == model_evaluator_id,
+                    SimulationEvaluation.rubric_version == RUBRIC_VERSION,
+                )
             )
-            session.add(model_row)
+            if model_row is None:
+                model_row = SimulationEvaluation(
+                    run_id=run.id,
+                    layer="model",
+                    evaluator_id=model_evaluator_id,
+                    mode=model_result.mode,
+                    rubric_version=RUBRIC_VERSION,
+                    scores_json={"criteria": [dict(item) for item in model_result.criteria]},
+                    hard_failures_json=[],
+                    total_score=model_result.total_score,
+                    verdict=model_result.verdict,
+                    unverified_ratio=0.0,
+                    evidence_refs_json=[],
+                    note=model_result.note,
+                )
+                session.add(model_row)
+            else:
+                model_row.scores_json = {
+                    "criteria": [dict(item) for item in model_result.criteria]
+                }
+                model_row.total_score = model_result.total_score
+                model_row.verdict = model_result.verdict
+                model_row.note = model_result.note
             session.flush()
             model_payload = _serialize_evaluation(model_row)
 

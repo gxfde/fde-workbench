@@ -19,6 +19,20 @@ from fde_api.simulation.schemas import normalize_tags
 
 VARIANTS = ("normal", "vague", "complex")
 
+# 数据集三分的**案例级**分配（G6，G1 §11.1）。
+# train ＝允许用于提改进；regression ＝检退化；blind ＝最终盲测（不向被测方
+# 暴露参考答案，且**不允许**用它的失败案例去提改进——否则等于在盲测集上调参）。
+# 分配刻意按**案例**而非按变体切：同案例的三个变体必须同属一个数据集，
+# 否则「换个客户行为就换个数据集」会让对比失去可比性。
+CASE_SPLIT: dict[str, str] = {
+    "CASE-A-QUALITY-TRACE": "train",
+    "CASE-B-TRADE-LEADS": "train",
+    "CASE-C-INVENTORY-PURCHASING": "train",
+    "CASE-D-MAINTENANCE-KB": "train",
+    "CASE-E-SCHEDULING": "regression",
+    "CASE-F-AFTERSALES": "blind",
+}
+
 
 def build_seed_rows() -> list[dict[str, Any]]:
     """从基线案例文件物化全部种子行（纯函数，不落库）。"""
@@ -38,7 +52,7 @@ def build_seed_rows() -> list[dict[str, Any]]:
                     "industry": base.get("industry", "general"),
                     "variant": variant,
                     "difficulty": base.get("difficulty", "standard"),
-                    "split": base.get("split", "train"),
+                    "split": CASE_SPLIT.get(case_code, base.get("split", "train")),
                     "status": "active",
                     "tags": normalize_tags(base.get("tags")),
                     "content_json": materialized,
@@ -53,10 +67,16 @@ def build_seed_rows() -> list[dict[str, Any]]:
 
 
 def seed_scenarios(session) -> dict[str, Any]:
-    """幂等播种内置案例。返回 ``{"inserted": n, "skipped": n}``。"""
+    """幂等播种内置案例。返回 ``{"inserted": n, "skipped": n, "split_corrected": n}``。
+
+    **split 校正**：G6 起案例按 ``CASE_SPLIT`` 分入 train/regression/blind。既有
+    种子行（``source_kind="seed"``）的 split 若与分配不符，**就地校正**——这是
+    元数据修正，不改场景内容（内容不可变纪律不受影响）。
+    """
     rows = build_seed_rows()
     inserted = 0
     skipped = 0
+    split_corrected = 0
     for row in rows:
         existing = session.scalar(
             select(SimulationScenario.id).where(
@@ -67,6 +87,10 @@ def seed_scenarios(session) -> dict[str, Any]:
         )
         if existing is not None:
             skipped += 1
+            seeded = session.get(SimulationScenario, existing)
+            if seeded is not None and seeded.split != row["split"]:
+                seeded.split = row["split"]
+                split_corrected += 1
             continue
         session.add(
             SimulationScenario(
@@ -89,4 +113,9 @@ def seed_scenarios(session) -> dict[str, Any]:
         )
         inserted += 1
     session.flush()
-    return {"inserted": inserted, "skipped": skipped, "total": len(rows)}
+    return {
+        "inserted": inserted,
+        "skipped": skipped,
+        "split_corrected": split_corrected,
+        "total": len(rows),
+    }

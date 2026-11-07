@@ -1,14 +1,25 @@
-// V3.2 G2 模拟训练场 · 页面外壳。
+// V3.2 G7 · 模拟训练场 · 页面外壳。
 //
-// 两块：总览（盘点）与案例库（管理）。运行/评估/失败分析/改进提案/回归盲测
-// 五块在 G3–G6 落地后依次挂入——不在本轮放占位假数据。
+// 六块：总览（盘点）／案例库（管理）／运行台（Trace·评估·失败）／
+// 改进提案／回归与盲测。运行、评估、失败三块共处「运行台」页（选中运行后分栏呈现）。
 
 import { useState, type ReactElement } from "react"
 
+import { ImprovementProposals } from "./ImprovementProposals"
+import { RegressionDashboard } from "./RegressionDashboard"
 import { ScenarioLibrary } from "./ScenarioLibrary"
 import { SimulationDashboard } from "./SimulationDashboard"
+import { SimulationRunDetail } from "./SimulationRunDetail"
 
-type Tab = "overview" | "library"
+type Tab = "overview" | "library" | "runs" | "proposals" | "regression"
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "overview", label: "总览" },
+  { key: "library", label: "案例库" },
+  { key: "runs", label: "运行台" },
+  { key: "proposals", label: "改进提案" },
+  { key: "regression", label: "回归与盲测" },
+]
 
 export function SimulationLabPage(): ReactElement {
   const [tab, setTab] = useState<Tab>("overview")
@@ -16,24 +27,23 @@ export function SimulationLabPage(): ReactElement {
   return (
     <main className="simulation-lab">
       <nav className="simulation-tabs" aria-label="模拟训练场分区">
-        <button
-          type="button"
-          className={`simulation-tab${tab === "overview" ? " active" : ""}`}
-          aria-current={tab === "overview" ? "page" : undefined}
-          onClick={() => setTab("overview")}
-        >
-          总览
-        </button>
-        <button
-          type="button"
-          className={`simulation-tab${tab === "library" ? " active" : ""}`}
-          aria-current={tab === "library" ? "page" : undefined}
-          onClick={() => setTab("library")}
-        >
-          案例库
-        </button>
+        {TABS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`simulation-tab${tab === item.key ? " active" : ""}`}
+            aria-current={tab === item.key ? "page" : undefined}
+            onClick={() => setTab(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
       </nav>
-      {tab === "overview" ? <SimulationDashboard /> : <ScenarioLibrary />}
+      {tab === "overview" ? <SimulationDashboard /> : null}
+      {tab === "library" ? <ScenarioLibrary /> : null}
+      {tab === "runs" ? <SimulationRunDetail /> : null}
+      {tab === "proposals" ? <ImprovementProposals /> : null}
+      {tab === "regression" ? <RegressionDashboard /> : null}
     </main>
   )
 }

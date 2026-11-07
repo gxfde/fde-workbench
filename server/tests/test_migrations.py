@@ -65,7 +65,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3.2 G3：simulation_runs/simulation_actors/simulation_traces（运行层三表，additive）
 # V3.2 G4：simulation_evaluations（评估层单表，additive）
 # V3.2 G5：simulation_findings + improvement_proposals（改进层两表，additive）
-HEAD_REVISION = "e3b7d9f1a5c6"
+# V3.2 G6：regression_suites + regression_results（回归层两表）+ proposals 扩列 override_json
+HEAD_REVISION = "e8b1d5f9a3c7"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1070,9 +1071,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    # 迁移文件全集权威=alembic ScriptDirectory（V3.2 G3 e3b7d9f1a5c6 后 = 43）；
+    # 迁移文件全集权威=alembic ScriptDirectory（V3.2 G3 e8b1d5f9a3c7 后 = 44）；
     # v3-workbench-inventory.json 的 revision_count=31 为审计滞后快照，重生成归审计轮（挂账）
-    assert len(known) == 43
+    assert len(known) == 44
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

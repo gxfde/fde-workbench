@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -388,6 +389,9 @@ class ImprovementProposal(Base, TimestampMixin):
     expected_effect_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     impact_scope_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     regression_plan_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # 候选改进在**模拟域内**的覆盖载荷（G1 §11.3）：{"run_config": {...}}。
+    # 只影响模拟运行参数，**不触及任何生产配置**。
+    override_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     created_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
@@ -396,4 +400,76 @@ class ImprovementProposal(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     decided_at: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class RegressionSuite(Base, TimestampMixin):
+    """回归 / 盲测套件（G6）：一组案例 + 一组基线运行参数。
+
+    套件可**跨数据集**（train/regression/blind 混装）——这正是泛化差（泛化 gap）
+    的测量面：同一套件在 train 与 blind 上的增益差即过拟合信号。
+    """
+
+    __tablename__ = "regression_suites"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_regression_suites_name"),
+        CheckConstraint(
+            "split IN ('train', 'regression', 'blind', 'mixed')",
+            name="ck_regression_suites_split",
+        ),
+        Index("ix_regression_suites_split", "split"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # 套件归属的数据集（mixed ＝ 跨集，用于泛化差测量）
+    split: Mapped[str] = mapped_column(String(16), nullable=False, default="train")
+    # 案例引用 = 场景 id 列表
+    scenario_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # 基线运行参数（候选组 = 基线 + 提案覆盖）
+    baseline_config_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class RegressionResult(Base, TimestampMixin):
+    """一次回归对比结果（G6）：基线组 vs 候选组。"""
+
+    __tablename__ = "regression_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "suite_id", "proposal_id", "fingerprint", name="uq_regression_results_identity"
+        ),
+        CheckConstraint(
+            "verdict IN ('improved', 'regressed', 'mixed', 'no_change', 'inconclusive')",
+            name="ck_regression_results_verdict",
+        ),
+        Index("ix_regression_results_suite", "suite_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    suite_id: Mapped[str] = mapped_column(
+        ForeignKey("regression_suites.id", ondelete="CASCADE"), nullable=False
+    )
+    # 提案可空：空 = 无候选改进的「基线自比」（用于校准噪声）
+    proposal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("improvement_proposals.id", ondelete="SET NULL")
+    )
+    fingerprint: Mapped[str] = mapped_column(String(32), nullable=False)
+    before_run_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    after_run_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    before_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    after_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    deltas_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    new_hard_failures_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    resolved_hard_failures_json: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    generalization_gap: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=0)
+    overfit_risk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verdict: Mapped[str] = mapped_column(String(16), nullable=False, default="inconclusive")
     note: Mapped[str | None] = mapped_column(Text)

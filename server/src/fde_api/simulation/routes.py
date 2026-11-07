@@ -17,6 +17,7 @@ from fde_api.errors import error_response
 from fde_api.simulation import (
     evaluator,
     improvement_service,
+    regression_service,
     run_service,
     service,
 )
@@ -364,6 +365,88 @@ def decide_proposal(proposal_id):
     try:
         data = improvement_service.decide_proposal(
             actor=g.current_user, proposal_id=proposal_id, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+# ---------------------------------------------------------------------------
+# 回归与盲测（G6）
+# ---------------------------------------------------------------------------
+
+
+@simulation_blueprint.get("/regression/suites")
+@require_auth
+def list_regression_suites():
+    """回归套件清单。"""
+    try:
+        data = regression_service.list_suites(actor=g.current_user)
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/regression/suites")
+@require_auth
+def create_regression_suite():
+    """创建回归套件（可按 split 自动取该集全部场景）。"""
+    try:
+        data = regression_service.create_suite(
+            actor=g.current_user, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data), 201
+
+
+@simulation_blueprint.get("/regression/suites/<suite_id>")
+@require_auth
+def get_regression_suite(suite_id):
+    """套件详情。"""
+    try:
+        data = regression_service.get_suite(actor=g.current_user, suite_id=suite_id)
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/regression/suites/<suite_id>/run")
+@require_auth
+def run_regression_suite(suite_id):
+    """跑一次回归对比（基线组 vs 候选组）。"""
+    payload = _payload()
+    try:
+        data = regression_service.run_regression(
+            actor=g.current_user,
+            suite_id=suite_id,
+            proposal_id=payload.get("proposal_id"),
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data), 201
+
+
+@simulation_blueprint.get("/regression/results")
+@require_auth
+def list_regression_results():
+    """回归结果清单。"""
+    try:
+        data = regression_service.list_results(
+            actor=g.current_user, suite_id=request.args.get("suite_id")
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.get("/regression/results/<result_id>")
+@require_auth
+def get_regression_result(result_id):
+    """回归结果详情。"""
+    try:
+        data = regression_service.get_result(
+            actor=g.current_user, result_id=result_id
         )
     except service.ScenarioServiceError as error:
         return error_response(error.code, error.message, error.status, error.detail or None)

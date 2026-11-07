@@ -46,6 +46,14 @@ PROPOSAL_TARGET_KINDS = (
 FINDING_STATUSES = ("open", "confirmed", "rejected")
 
 
+def _run_split(session, run_id: str) -> str | None:
+    """取运行所属数据集（用于「改进只许用 train 集失败」纪律）。"""
+    from fde_api.simulation.models import SimulationRun
+
+    row = session.get(SimulationRun, run_id)
+    return row.split if row is not None else None
+
+
 def _finding_fingerprint(finding_ids: list[str], target: dict[str, Any]) -> str:
     canonical = json.dumps(
         {"findings": sorted(finding_ids), "target": target},
@@ -88,6 +96,7 @@ def _serialize_proposal(row: ImprovementProposal) -> dict[str, Any]:
         "expected_effect": dict(row.expected_effect_json or {}),
         "impact_scope": list(row.impact_scope_json or []),
         "regression_plan": dict(row.regression_plan_json or {}),
+        "override_json": dict(row.override_json or {}),
         "status": row.status,
         "decided_by_user_id": row.decided_by_user_id,
         "decided_at": row.decided_at,
@@ -217,6 +226,22 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
         )
         if len(rows) != len(set(finding_ids)):
             raise ScenarioServiceError("not_found", "部分失败发现不存在。", 404)
+        # 数据集纪律（G6）：改进只能基于**训练集**的失败——用回归/盲测集的失败
+        # 去提改进等于在评测集上调参，会让回归与盲测失去意义。
+        non_train = [
+            row.code
+            for row in rows
+            if row.run_id
+            and _run_split(session, row.run_id) not in (None, "train")
+        ]
+        if non_train:
+            raise ScenarioServiceError(
+                "conflict",
+                "改进提案只能引用训练集（train）的失败发现；"
+                "回归集与盲测集的失败只用于检验，不得据此调参。",
+                409,
+                {"finding_codes": non_train},
+            )
         confirmed = [
             row
             for row in rows
@@ -259,6 +284,15 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
         change_summary = payload.get("change_summary")
         if not isinstance(change_summary, str) or not change_summary.strip():
             raise ScenarioServiceError("invalid_request", "change_summary 必填。")
+        override = payload.get("override_json")
+        if override is not None and not isinstance(override, dict):
+            raise ScenarioServiceError("invalid_request", "override_json 必须是对象。")
+        if isinstance(override, dict) and override:
+            run_config = override.get("run_config")
+            if not isinstance(run_config, dict):
+                raise ScenarioServiceError(
+                    "invalid_request", "override_json 只接受 {'run_config': {...}} 形状。"
+                )
 
         row = ImprovementProposal(
             proposal_key=f"PROP-{fingerprint[:8].upper()}",
@@ -274,6 +308,7 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
             expected_effect_json=dict(payload.get("expected_effect") or {}),
             impact_scope_json=list(payload.get("impact_scope") or [meta.get("target_scope", "")]),
             regression_plan_json=dict(payload.get("regression_plan") or {}),
+            override_json=dict(override or {}),
             status="draft",
             created_by_user_id=actor.id,
         )
@@ -337,6 +372,8 @@ def update_proposal(*, actor: User, proposal_id: str, payload: dict[str, Any]) -
             row.impact_scope_json = list(payload["impact_scope"])
         if "regression_plan" in payload and isinstance(payload["regression_plan"], dict):
             row.regression_plan_json = dict(payload["regression_plan"])
+        if "override_json" in payload and isinstance(payload["override_json"], dict):
+            row.override_json = dict(payload["override_json"])
         if payload.get("status") == "in_review":
             row.status = "in_review"
         session.flush()

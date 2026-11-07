@@ -295,6 +295,7 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             "tokens": 0,
             "tool_calls": len(environment.calls),
             "rejected_calls": len(violations),
+            "tool_failures": len(environment.failed_calls),
             "rounds": customer.state.probe_count,
         }
         run.actor_set_json = {
