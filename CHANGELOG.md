@@ -2,6 +2,10 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-ta4 路由审计清单 CI 同步钉（#174 教训机械化，零业务代码，2026-11-07）
+
+- NEW `server/tests/test_route_inventory_sync.py`（pytest +1）：`create_app().url_map` 实际路由对账 `docs/audit/v3-route-inventory.csv`——比对口径与生成器 `scripts/audit/extract_workbench_inventory.py` 一致（跳过 static、剔除 HEAD/OPTIONS、method 多值按字母序 `|` 连接），同一 (method, path) 集合逐位相等，漂移即红并报「实际有而清单缺 / 清单有而实际无」两份明细＋重生成指引。**「动路由必同步审计清单」从此有机械闸兜底**（#174：#171/#162 两次清单落后靠人工发现；AGENTS「审计清单刷新有前置条件」节人工纪律不变，加机器兜底）。handler/service/auth 等富化列不在钉内（归生成器自守，避免钉子复制第二份生成器逻辑）。
+- 变异验证：删 CSV 一行→红（报缺失明细）→还原→绿。零业务代码零路由变更零迁移；pytest **2095 收集 = 2089 passed + 6 skipped**（基线 main@b5ed440 实测 2094 收集=2088+6s〔含 #183 +15〕，本轮 +1；CI 复核）；vitest/路由/表数/迁移头全不动。
 ## [未发布] — goal-c CR-029 服务端小轮：集成桥 captured_at 服务端钟 sanity（2026-11-07）
 
 ### 修复
