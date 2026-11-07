@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -77,6 +78,19 @@ TRACE_PHASES = (
 )
 # 工具白名单前缀（G1 §6.3）：只有 sim.* 工具在模拟面可达
 SIM_TOOL_PREFIX = "sim."
+
+# ---- 评估层（G4）----------------------------------------------------------
+# 评估层：deterministic=规则层（**唯一**可判硬性失败）/ model=模型层 / human=人工层
+EVALUATION_LAYERS = ("deterministic", "model", "human")
+# 评估结论
+EVALUATION_VERDICTS = (
+    "pass",
+    "conditional",
+    "fail",
+    "hard_fail",
+    "inconclusive",
+    "unavailable",
+)
 
 
 class SimulationScenario(Base, TimestampMixin, VersionedMixin):
@@ -247,3 +261,139 @@ class SimulationTrace(Base, TimestampMixin):
     state_after_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     evidence_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     cost_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class SimulationEvaluation(Base, TimestampMixin):
+    """一次评估结果（G4）：按层各留一行，**并列不合并**。
+
+    唯一约束 = (run_id, layer, evaluator_id, rubric_version)：同层同评估器同
+    规则版本只留一行（重评幂等）；换规则版本 ⇒ 新行（历史不改写）。
+    """
+
+    __tablename__ = "simulation_evaluations"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "layer",
+            "evaluator_id",
+            "rubric_version",
+            name="uq_simulation_evaluations_identity",
+        ),
+        CheckConstraint(
+            "layer IN ('deterministic', 'model', 'human')",
+            name="ck_simulation_evaluations_layer",
+        ),
+        CheckConstraint(
+            "verdict IN ('pass', 'conditional', 'fail', 'hard_fail', "
+            "'inconclusive', 'unavailable')",
+            name="ck_simulation_evaluations_verdict",
+        ),
+        Index("ix_simulation_evaluations_run_layer", "run_id", "layer"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("simulation_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    layer: Mapped[str] = mapped_column(String(16), nullable=False)
+    evaluator_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    # rules / stub / server / manual——**显式记录**，不让 stub 冒充真模型
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="rules")
+    rubric_version: Mapped[str] = mapped_column(String(32), nullable=False, default="rubric-v1")
+    scores_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    hard_failures_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    total_score: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False, default=0)
+    verdict: Mapped[str] = mapped_column(String(16), nullable=False, default="inconclusive")
+    unverified_ratio: Mapped[float] = mapped_column(Numeric(6, 4), nullable=False, default=0)
+    evidence_refs_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class SimulationFinding(Base, TimestampMixin):
+    """失败发现（G5）：由评估结论归因而来。
+
+    唯一键 = (evaluation_id, code)：同一次评估的同一失败分类只留一行（重跑分析
+    不增殖）；换评估（换规则版本）⇒ 新行，历史留痕。
+    """
+
+    __tablename__ = "simulation_findings"
+    __table_args__ = (
+        UniqueConstraint(
+            "evaluation_id", "code", name="uq_simulation_findings_evaluation_code"
+        ),
+        CheckConstraint(
+            "severity IN ('high', 'medium', 'low')",
+            name="ck_simulation_findings_severity",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'confirmed', 'rejected')",
+            name="ck_simulation_findings_status",
+        ),
+        Index("ix_simulation_findings_run", "run_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("simulation_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("simulation_evaluations.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    dimension: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence_refs_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    root_causes_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    detail_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class ImprovementProposal(Base, TimestampMixin):
+    """改进提案（G5）——**只提案，不落地**。
+
+    状态机止于 ``approved``：**没有** publish / apply 状态，也**没有**任何指向
+    生产配置的写列（``target_json`` 只是**文本指针**，由人工在 V3.1 的治理面
+    自行实施）。这��「改进先过评估与回归、再经人工审批、最后才发布」的分闸
+    在数据层的落点。
+    """
+
+    __tablename__ = "improvement_proposals"
+    __table_args__ = (
+        UniqueConstraint("fingerprint", name="uq_improvement_proposals_fingerprint"),
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'approved', 'rejected')",
+            name="ck_improvement_proposals_status",
+        ),
+        Index("ix_improvement_proposals_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    proposal_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    problem: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    finding_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    finding_codes_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # 幂等指纹 = (失败发现集合 + 改进对象)
+    fingerprint: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 改进对象**文本指针**（kind + ref）；**不是**任何生产配置的写入口
+    target_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    current_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
+    proposed_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v2")
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    expected_effect_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    impact_scope_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    regression_plan_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    decided_at: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)

@@ -219,7 +219,7 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             phase="analysis",
             event_type="artifact",
             actor_role="fde_consultant",
-            payload={"kind": "analysis"},
+            payload={"kind": "analysis", "artifact": analysis},
             evidence={"facts_known": len(disclosed)},
         )
         design_ctx = dataclasses.replace(
@@ -230,7 +230,7 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             phase="design",
             event_type="artifact",
             actor_role="fde_consultant",
-            payload={"kind": "design"},
+            payload={"kind": "design", "artifact": design},
             evidence={"acceptance_count": len(design.get("acceptance_criteria") or [])},
         )
         implementation: dict[str, Any]
@@ -245,7 +245,7 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             phase="implementation",
             event_type="artifact",
             actor_role="implementer",
-            payload={"kind": "implementation"},
+            payload={"kind": "implementation", "artifact": implementation},
             evidence={"artifact_count": implementation.get("evidence_count", 0)},
         )
 
@@ -263,7 +263,7 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             phase="validation",
             event_type="artifact",
             actor_role="acceptance_reviewer",
-            payload={"kind": "validation"},
+            payload={"kind": "validation", "artifact": validation},
             evidence={"checks": validation.get("total", 0), "passed": validation.get("passed", 0)},
         )
 

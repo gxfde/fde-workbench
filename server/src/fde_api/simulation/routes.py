@@ -14,7 +14,12 @@ from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
-from fde_api.simulation import run_service, service
+from fde_api.simulation import (
+    evaluator,
+    improvement_service,
+    run_service,
+    service,
+)
 
 simulation_blueprint = Blueprint("simulation", __name__, url_prefix="/api/v1/simulation")
 
@@ -219,4 +224,147 @@ def list_traces(run_id):
         after_seq=_int_arg("after_seq"),
         limit=_int_arg("limit", run_service.TRACE_PAGE_SIZE) or run_service.TRACE_PAGE_SIZE,
     )
+    return _data(data)
+
+
+# ---------------------------------------------------------------------------
+# 评估（G4）
+# ---------------------------------------------------------------------------
+
+
+@simulation_blueprint.post("/runs/<run_id>/evaluate")
+@require_auth
+def evaluate_run(run_id):
+    """评估一次运行：L-A 规则层（+ 可选 L-B 模型层），落评估行。"""
+    include_model = request.args.get("include_model") != "false"
+    model_mode = request.args.get("model_mode") or "stub"
+    try:
+        data = evaluator.evaluate_run(
+            actor=g.current_user,
+            run_id=run_id,
+            include_model=include_model,
+            model_mode=model_mode,
+        )
+    except evaluator.EvaluationError as error:
+        return error_response(error.code, error.message, error.status)
+    return _data(data)
+
+
+@simulation_blueprint.get("/runs/<run_id>/evaluation")
+@require_auth
+def get_evaluation(run_id):
+    """读取评估报告（按层并列，不合并）。"""
+    try:
+        data = evaluator.get_evaluation_report(actor=g.current_user, run_id=run_id)
+    except evaluator.EvaluationError as error:
+        return error_response(error.code, error.message, error.status)
+    return _data(data)
+
+
+@simulation_blueprint.post("/runs/<run_id>/evaluation/human")
+@require_auth
+def record_human_evaluation(run_id):
+    """人工抽检结论（L-C）：留痕，**不覆盖**机器原行。"""
+    try:
+        data = evaluator.record_human_evaluation(
+            actor=g.current_user, run_id=run_id, payload=_payload()
+        )
+    except evaluator.EvaluationError as error:
+        return error_response(error.code, error.message, error.status)
+    return _data(data), 201
+
+
+# ---------------------------------------------------------------------------
+# 失败分析与改进提案（G5）
+# ---------------------------------------------------------------------------
+
+
+@simulation_blueprint.get("/findings")
+@require_auth
+def list_findings():
+    """失败发现清单。"""
+    try:
+        data = improvement_service.list_findings(
+            actor=g.current_user, run_id=request.args.get("run_id")
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/runs/<run_id>/analyze")
+@require_auth
+def analyze_run(run_id):
+    """失败分析：由评估结论归因，落失败发现行（幂等）。"""
+    try:
+        data = improvement_service.analyze_run(actor=g.current_user, run_id=run_id)
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.get("/proposals")
+@require_auth
+def list_proposals():
+    """改进提案清单。"""
+    try:
+        data = improvement_service.list_proposals(
+            actor=g.current_user,
+            status=request.args.get("status"),
+            target_kind=request.args.get("target_kind"),
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/proposals")
+@require_auth
+def create_proposal():
+    """由失败发现生成改进提案（**只提案，不落地**）。"""
+    try:
+        data = improvement_service.create_proposal(
+            actor=g.current_user, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data), 201
+
+
+@simulation_blueprint.get("/proposals/<proposal_id>")
+@require_auth
+def get_proposal(proposal_id):
+    """提案详情。"""
+    try:
+        data = improvement_service.get_proposal(
+            actor=g.current_user, proposal_id=proposal_id
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.patch("/proposals/<proposal_id>")
+@require_auth
+def update_proposal(proposal_id):
+    """编辑提案（仅草稿态）。"""
+    try:
+        data = improvement_service.update_proposal(
+            actor=g.current_user, proposal_id=proposal_id, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/proposals/<proposal_id>/decide")
+@require_auth
+def decide_proposal(proposal_id):
+    """审批提案（approve/reject）——**审批 ≠ 发布**。"""
+    try:
+        data = improvement_service.decide_proposal(
+            actor=g.current_user, proposal_id=proposal_id, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
     return _data(data)
