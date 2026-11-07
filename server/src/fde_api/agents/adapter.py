@@ -90,8 +90,17 @@ class OutputScanner(Protocol):
     def scan(self) -> Sequence[ArtifactFile]: ...
 
 
+# TODO(T-Z1 实施轮 / D1=A)：本函数仍是登记期的「容器内 zcode run」虚构契约，
+# 与真机实测的 0.17.1 不符。真实 argv 与 `--json` 单对象汇总解析已独立落在
+# `agents/zcode_contract.py`（纯函数、夹具回放），供宿主侧代理与实施轮共用。
+# A 通道裁定后 zcode **不进容器**：本段连同其 `sandbox.exec` 的 spawn 位置，
+# 须在「宿主代理 ↔ agent_runs 状态机咬合方式」拍板后整体重划——在此之前
+# 只改 argv 会制造「契约修好了但执行位置仍错」的假象，故此处刻意不预改。
 def spawn_argv(*, cli_command: str, task_file: str, output_dir: str) -> list[str]:
-    """容器内 CLI 启动参数（三段之①；经 SandboxHandle.exec 注入凭据）。"""
+    """容器内 CLI 启动参数（三段之①；经 SandboxHandle.exec 注入凭据）。
+
+    ⚠️ 现存形态为占位契约，**不得**据此断言真实 zcode CLI；见上方 TODO。
+    """
     return [
         cli_command,
         "run",

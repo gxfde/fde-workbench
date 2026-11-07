@@ -2,12 +2,32 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 22:25 交互拍板：人工项方向收口 + PR #193 合并授权（2026-11-07）
+
+- **交互方式**：用户「人工部分你使用交互式选择方式解决」⇒ 两轮 5 张选择卡片（依据/收益/代价/推荐理由写正文、卡片只用 A/B/C 编号）。
+- **Q1=A**：PR #193 合并已授权——rebase 到 `c2fe869`（#194 B# 线 FREEZE，CHANGELOG 冲突按「以 main 段为底叠加本轮增量」解决、两节均保留）→ CI 复跑 4 job 全绿 → squash 合并。
+- **Q2=B / Q3=C / Q4=C / Q5=A**：D3 回执＝用户**主张**已取得但原件指针+sha256 未提供；N1/N2＝授权人·首个 run 发起人·真机窗口未提供；N3/D7＝产出物定义·阈值 N 与依据未提供且 `approval_rows=0` ⇒ **方向先落文本、四闸维持关闭**，`adapter_missing` 维持、E8 不实施、阈值不预支。Agent 不代填外部事实、不代发起 run、不代跑真机、不造证据。
+- **留痕六处**：本文件、`docs/audit/下一步实施台账-2026-11-07.md` §12、`D1-D3拍板留痕…md` §8、`D4-D7人工项推进包…md` §6、`docs/implementation/v3-backlog.md` 22:25 补录、`docs/architecture/售前驱动交付模式改造方案.md` 22:25 补录；20:08／20:38 原文保留作沿革。
+- **零迁移／零路由／零配置／零安装／零种子改写／零 DSH 改动／零红线放宽**；H1–H13／N1–N7 原样；本续轮只改文档留痕与 rebase 后的发布动作。
+
 ## [未发布] — 演进方向评估 v1.1 落地批：台账同步钉 + 三项拍板 + B# 线 FREEZE（#190/#192 后续，2026-11-07）
 
 - **B# 线 FREEZE（P1-5 落地）**：B# 登记号封顶 B#40（backlog B# 节 FREEZE 注记）；《开源项目借鉴总览》《实施实况报告》转只读档案（头注 ARCHIVED；上游 LICENSE/HEAD 复核义务仍按红线第 8 条④）。解冻=40 条全终态 ∧ 方法级新借鉴 ∧ 用户显式拍板。
 - **AGENTS**：①口径行 pytest 2114→**2116 收集 = 2110 passed + 6 skipped**（#190 +2；CI run 42366699714 直测合并后 main 2110+6s）——补 #190 轮未随轮同步的缺口；②新增 B# FREEZE bullet（工作流与陷阱节）。
 - **关联轮次**：#190（台账同步钉两钉 + backlog T-A2..T-A8 七条标题行状态同步 + DoD 四件套入 AGENTS + 两份评估文档归档入库）；#192（三项拍板：执行通道=A 宿主侧代理、商业验证决策单〔90 天止损线 + 2027-02-05 复评，先到者为准〕、行业口径复议受理〔全行业=目标态，现状=自用〕）。
 - 口径：pytest **2116 收集 = 2110 passed + 6 skipped**（CI run 42366699714）；vitest **927/927**（77 文件，PR 192 run 42373576921 实测——#190/#191/#192 桌面零改动）；mypy 基线 279 不变；**零业务代码零迁移零路由零桌面改动** ⇒ 无需 rebuild/alembic/重打包。台账同步钉自检：backlog 零 T- 标题增删（钉①放行）；本节为拍板落地记录（delivery 类，钉②放行）。
+
+## [未发布] — D1–D3 拍板落地 + T-Z1 实施轮准备（2026-11-07 20:08）
+
+- **拍板（用户「D1–D3 按你推荐的拍板。其它你去处理」）**：D1＝**A 宿主侧 zcode 代理**（B 降可选演进／C 否决，依据 #191 E1–E4 四重阻断）；D2＝AGENTS.md「bridge 只读」红线**显式扩写宿主侧写通道**＋五条边界；D3＝zcode 商用条款**以供应商书面确认为准**。**D3 是决策不是外部事实**——书面回执仍缺，生产启用闸不解除、`adapter_missing` 维持。Q6 由「形态待裁定」结案为「形态已定 A，宿主代理接线待实施」。
+- **留痕四处**：`AGENTS.md` 红线第 6 条／`docs/architecture/售前驱动交付模式改造方案.md` §10「✅ Q6 结案」／`docs/implementation/v3-backlog.md` T-Z1 标题·闸⑤·拍板落地段／`docs/audit/下一步实施台账-2026-11-07.md` §8·§11。
+- **NEW 契约层（纯函数，零 spawn／零凭据／零落库）**：`server/src/fde_api/agents/zcode_contract.py`——`build_cli_argv`（真实 `-p --json --cwd`，`--resume <sessionId>` 取值开关，`--mode` 由授权档位显式传入、不预设业务语义）／`parse_json_summary`（`--json` **单对象汇总**→结构化计账字段；缺字段坏类型如实归零，`response` 正文与 `usage.provider` 一律不收）／`summary_to_events`（`cost`+`done`，**不伪造 `tool_call`**）／`JsonSummaryEventProvider`（B#14 固定夹具一次性回放）。`agents/adapter.py:93` 加定向警示 TODO 指向本模块（**零行为变更**），spawn 段整体重划待 P2′ 架构决策。
+- **NEW 夹具与用例**：`server/tests/fixtures/zcode_json_summary.json`（形状取自 #191 实测样本、内容全部自拟，零客户资料／零真实凭据；原始样本 `D:\test\FDE\tz1-probe\` 只留本地永不进仓）＋`test_zcode_contract.py` **14 例**（真实 argv 与禁用虚构契约／`--resume` 取值／汇总字段映射与容错／夹具形状钉／回放 provider／汇总事件喂既有 `ZcodeAdapter` 监听段）。**定向验证：14 passed ＋既有 `test_agents_adapter.py` 9 passed；ruff `--select F401,F841 src tests` 全绿；mypy 基线 279 occurrences / 104 distinct 不变。全量 pytest/vitest 口径以合并后 CI 实测为准，本轮不预写数字。**
+- **A 裁决连锁口径校正（本轮新发现，防后续轮把 zcode 塞进容器）**：`docker/sandbox/Dockerfile` 注释明示**不安装 zcode**（镜像只留 nodejs + iptables）；`docs/试点前联调-iptables与zcodeCLI-检查单.md` 二表整表改写（钉定对象由「沙箱镜像内 zcode」→**宿主侧代理进程**：CLI 0.17.1 + `zcode.cjs` sha256 + provider revision；#3 与 iptables 一表解耦；证据表标签同步），**一表 iptables 生效性断言原样有效**；backlog T-Z1「修改文件」行与台账 §2/§3 E1·E10/§4 P2 拆行同步。
+- **`spawn_argv` 未机械改写**：A 通道下 `sandbox.exec` 在 Linux 容器执行，而 zcode 只在 Windows 宿主；只换 argv 会制造「契约修好但执行位置仍错」的假象（#191 §2 明写随拍板后实施轮执行）。本轮改落可独立验证的契约层；**新识别 P2′ 决策**＝宿主代理 ↔ `agent_runs` 状态机咬合方式（推荐「宿主轮询领取」，决策卡见台账 §11.3）。
+- **NEW 文档**：`docs/audit/D1-D3拍板留痕与实施轮交付-2026-11-07.md`、`docs/audit/D4-D7人工项推进包-2026-11-07.md`（D3 确认函草稿／D4 试点立项卡／D6 A 轨诉求问询卡／D7 四口径复审报告骨架；**均为准备件，不代发函、不代选试点、不代拍阈值**）。
+- **人工闸一个不放宽**：H1–H13／N1–N7 原样；D3 回执、N1 试点授权、N2 真机联调签核、P2′ 拍板、D4–D7 均留人工，Agent 不代跑真机、不造运行证据。**零迁移／零路由／零配置／零安装／零种子改写／零 DSH 改动**；改动留本地隔离 worktree 分支 `feat/tz1-host-proxy-contract`，20:08 时点未 push／未建 PR（并发轮活跃 + CI 需人工守望）〔**20:38 已由用户「确认」授权解除，见下条**〕。
+- **【2026-11-07 20:38 续轮，用户「确认」】P2′ 咬合方式按推荐拍板＝① 宿主轮询领取**（② 长连接否决／③ 人工中转仅作降级验证），并授权 `commit → push fork → 开 PR → 守望 CI`。六条决策级约束：宿主→服务端单向；领取／回执两写路由幂等且复用既有鉴权、`queued`／`host_running` 入状态机；超时失联只标记不自动重试（H4）；凭据只在宿主内存管道零落盘、客户真实资料零外发；`zcode_contract.py` 为唯一 argv／汇总形状来源；③ 仅用于首次降级验证且证据只留指针 + sha256。**形态已定 ≠ 接线实装**，`adapter_missing` 维持；AGENTS.md 红线第 6 条文本不改写。留痕：方案 §10 Q6 结案表、backlog T-Z1 标题与拍板落地段、台账 §0/§3/§4/§8/§11.3/§11.4/§11.5、`D1-D3拍板留痕` §0/§4/§5/§6/§7。**仍留人工**：D3 供应商书面回执、N1 试点授权、N2 真机联调签核、N3 A 轨诉求、D7 阈值、**PR 合并拍板**；H1–H13／N1–N7 原样。本续轮**零代码改动**（相对 20:08 基线只加文档留痕与发布动作）；PR 号／CI run id／全量收集数属运行事实，以 PR 页面与 CI 实测为准，不在版本库预写。
 
 ## [未发布] — goal-tb tb3：T-Z1 zcode 真机实测报告 + 执行通道裁定提案（纯文档，2026-11-07）
 

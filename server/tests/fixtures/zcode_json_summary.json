@@ -1,0 +1,21 @@
+{
+  "sessionId": "sess_fixture_0001",
+  "traceId": "trace_fixture_0001",
+  "turnId": "turn_fixture_0001",
+  "response": "收到",
+  "usage": {
+    "provider": "fixture",
+    "modelRequestCount": 1,
+    "inputTokens": 120,
+    "outputTokens": 2,
+    "cacheReadTokens": 0
+  },
+  "eventCount": 2,
+  "projection": {
+    "status": "completed",
+    "turnCount": 1,
+    "totalTokenCount": 122,
+    "contextUsed": 120,
+    "contextWindow": 128000
+  }
+}
