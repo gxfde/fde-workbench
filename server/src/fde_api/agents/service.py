@@ -57,6 +57,11 @@ from fde_api.agents.context import (
     SanitizationError,
     render_masked_context,
 )
+from fde_api.agents.host_channel import (
+    HostChannelError,
+    HostChannelSettings,
+    run_host_channel,
+)
 from fde_api.agents.models import (
     AgentArtifact,
     AgentCredential,
@@ -619,6 +624,84 @@ def _execute_run(
         )
 
     _write_workspace(workspace, context_text=context_text, project_code=project.project_code, capability=agent.capability_tier)
+
+    # T-Z1 裁定 A：宿主侧 zcode 代理通道（仅开发自用；config 默认关）。
+    # 开启时不建容器沙箱（零 docker 依赖，zcode 用宿主自身登录态），产出
+    # 与容器适配器同构的 AgentRunResult ⇒ 下方 _finalize 零改动复用。
+    # 分支判据只看 settings 开关（agent.kind 已由 _unavailability 闸保证
+    # kind=zcode；宿主通道不改变注册可见性语义——available 判定不变）。
+    host_settings: HostChannelSettings | None = None
+    if bool(getattr(settings, "agent_host_channel_enabled", False)):
+        if not settings.agent_host_zcode_bin or not settings.agent_host_zcode_cjs:
+            _mark_l2(db.session(), run_id, "host_channel_bin_missing")
+            raise _error(
+                "agent_unavailable",
+                "宿主通道已开启但 zcode 路径未配置（agent_host_zcode_bin / agent_host_zcode_cjs），已转 L2 模板填空，本次不计费。",
+                503,
+                detail={"run_id": run_id, "fallback_level": "L2", "reason": "host_channel_bin_missing"},
+            )
+        host_settings = HostChannelSettings(
+            zcode_bin=settings.agent_host_zcode_bin,
+            cjs_path=settings.agent_host_zcode_cjs,
+        )
+    if host_settings is not None:
+        scanner_factory_host = current_app.extensions.get("fde_agent_output_scanner_factory")
+        host_scanner = (
+            scanner_factory_host(run_id, workspace) if scanner_factory_host else ManifestOutputScanner(workspace / _OUTPUT_DIR)
+        )
+        host_ctx = AgentRunContext(
+            run_id=run_id,
+            project_code=project.project_code,
+            capability=agent.capability_tier,
+            workspace_host=str(workspace),
+            allowed_tools=effective_tools,
+            credentials={},  # 宿主通道零凭据注入（解密结果不进 argv/env/磁盘）
+            timeout_ms=agent.max_duration_ms or settings.agent_max_duration_ms,
+            max_cost_units=agent.max_cost_units,
+        )
+        try:
+            result = run_host_channel(host_ctx, host_settings, output_scanner=host_scanner)
+        except HostChannelError as error:
+            _mark_l2(db.session(), run_id, str(error))
+            raise _error(
+                "agent_unavailable",
+                "智能体未就绪（宿主通道失败），已转 L2 模板填空，本次不计费。",
+                503,
+                detail={"run_id": run_id, "fallback_level": "L2", "reason": str(error)},
+            ) from error
+        with db.session() as session, session.begin():
+            run_row = session.get(AgentRun, run_id)
+            if run_row is not None:
+                run_row.status = "running"
+        data, failures, gate_open = _finalize(
+            db.session,
+            run_id=run_id,
+            result=result,
+            known_refs=set(problem_refs),
+            workspace=workspace,
+            solution_id=solution.id if solution is not None else None,
+        )
+        if failures:
+            with db.session() as session, session.begin():
+                record_event(session, actor, "ai_output_intercepted", project, {
+                    "run_id": run_id,
+                    "intercepted_count": len(failures),
+                    "reasons": sorted({reason for item in failures for reason in item.get("reasons", [])})[:10],
+                })
+            raise _error(
+                "artifact_validation_failed",
+                "产物校验未通过，已拒绝进入终审；请回退补录后重试。",
+                422,
+                detail={"run_id": run_id, "failures": failures},
+            )
+        if gate_open:
+            raise _error(
+                "review_gate_open",
+                "T2 评审门未放行：请先召开产物评审会并封存纪要，再重试提交。",
+                409,
+                detail={"run_id": run_id, "gate": "T2", "required": "sealed_mandatory_minutes"},
+            )
+        return data, 201
 
     backend: SandboxBackend | None = current_app.extensions.get("fde_agent_sandbox_backend")
     if backend is None:

@@ -663,13 +663,21 @@
 - 验收：一次 run 的产物可封包为 `handover_packages` 且逐项 sha256 可校验；原件不进库。
 - 回滚：alembic downgrade（新表零外键依赖安全）；**已封包行不可逆**（指纹链已出系统，需人工处置）。风险：中（迁移纪律）。依赖：T-A8。复杂度：**M**。
 
-### T-Z1 zcode 真机跑通 + 执行通道裁定 — **◐ 实测半 DONE（goal-tb tb3，2026-11-07）/ 通道形态 DECIDED＝A（2026-11-07 20:08 拍板）/ P2′ 咬合方式 DECIDED＝① 宿主轮询领取（2026-11-07 20:38 拍板）/ 宿主代理接线待实施**
+### T-Z1 zcode 真机跑通 + 执行通道裁定 — **◐ 生产接线待实施（P2′① 宿主轮询代理——状态机咬合、领取/回执路由、H4 失联标记待实装）｜✅ dev 直连通道已实施并合并（2026-11-07 宿主裸跑态：agents/host_channel.py，config 默认关，pytest +22）**（沿革：实测半 DONE goal-tb tb3/#191 → 通道形态 DECIDED＝A〔20:08〕→ P2′ 咬合①〔20:38〕→ #193 契约层 zcode_contract.py 落地 → dev 直连通道实施轮落地）
 - 目标：让编码智能体这条线**跑出真实证据**，同时**先实测再裁定执行通道形态**（不预先承诺复用 openfde）。
 - **实测事实（2026-11-06 复审，登记为裁决依据）**：① zcode 装在 `D:/software/zcode`（Electron 应用 + 内置 CLI **0.17.1**），**不在 PATH** ⇒ 需 wrapper；② **provider 根因＝查找路径错位，非文件缺失**——`zcode-builtin.json` 实存于 `resources/config/provider/`（约 260KB / 35 templateId），而 CLI 查的是 `resources\glm\provider\` 与 `D:/config/provider/`（两者不存在）⇒ 修复＝部署一份到 `D:/config/provider/`；③ **`ZcodeAdapter` 契约错位**——`agents/adapter.py` 的 `spawn_argv` 按 `zcode run --task --output --events ndjson` 调用，**真实 zcode 0.17.1 无 `run` 子命令、无 `--task`/`--events`**，真实形态为 `zcode -p/--mode/--json/--cwd` 或 `zcode app-server`（stdio ZCode Protocol）⇒ **适配器 CLI 调用段必须重写**；④ **`--resume` 为布尔开关**（`[["--resume"],0]`，无 sessionId 取值）⇒ **「会话续接」能力未验证**（借鉴总览 §6.6 采集项口径：未核实则以降级路径为默认；B#2 repair 增强档维持降级）；⑤ `--json` 事件流格式**未实测**（实跑被 429 截断）。
 - **执行通道关键实测（登记为开工前置）**：服务端跑在 Linux 容器内，**subprocess 够不到任何宿主侧编码 CLI**——`server/src/fde_api/bridge/__init__.py:3-8` 明示「openfde CLI 是宿主侧 Windows Node 工具（better-sqlite3 按 Win 编译 + pnpm/tsx），Linux 容器 subprocess 不到它——采集在宿主侧」；zcode 同为 Windows 宿主侧 Electron 工具 ⇒ **「工作台 Flask 侧直接 spawn zcode」不成立**，编码执行必须落在宿主侧进程空间。
 - **第三阶段开工前的半天实测（必做项）**：**zcode 能否进 `sandbox-runner` 容器内执行**（`compose.yaml` sandbox 服务：`privileged: false` + `network_mode: none` + `tmpfs /workspace:size=512m`）。**能** ⇒ 容器内直连 `ZcodeAdapter`（方案 §5.3 沙箱红线完整成立，且不引入第二运行时）；**不能** ⇒ 在「给 openfde 加 zcode executor」与「自建 Windows 宿主侧 zcode 代理」之间定稿（两条都须先扩写通道授权并修 AGENTS.md「bridge 只读」红线，且按借鉴登记 B#35 登记 openfde 版本/许可/快照日期——实测 MIT、HEAD `a54be6c` 2026-10-27，距今未超 30 天失效线，**当前未登记**）。
 - 修改文件：`agents/adapter.py`（CLI 调用段重写）；`docker/sandbox/Dockerfile`（zcode 0.17.1 CLI + provider 配置打进镜像或 wrapper 注入）；宿主侧代理脚本（路径待实测裁定）。
 - DB：无。API：无新增。测试：适配器契约用例（真实 CLI 形态的 spawn 参数断言）；**实机跑通 ≠ 可回归测试**——事件流契约须以固定夹具回放方式落 pytest（借鉴登记 B#14 executor 对抗性测试组织，**其前置「决策逻辑抽纯函数重构」不在本条范围**）。
+
+#### ✅ 实施轮（T-Z1 裁定 A 宿主通道，2026-11-07，feat/host-zcode-channel）
+
+- **商用前置改判（用户拍板 2026-11-07）**：目前仅开发、尚未推向市场 ⇒ 暂不申请商用授权；**推向市场前须取得 zcode 供应商书面授予**（挂账保留，时点前置）。
+- NEW `agents/host_channel.py`：宿主侧 zcode 代理——0.17.1 实测契约（`-p <task书路径> --json --cwd <workspace> --mode build` + `ELECTRON_RUN_AS_NODE=1`）；`--json` 单对象汇总解析（fail-closed，不伪造 completed）；超时=kill+communicate 回收（PIPE 不死锁）；预算超限按上限截断报 budget_exceeded（对齐容器版 B-2「越界不入账」）；**零凭据注入**（解密结果不进 argv/env/磁盘；出现未用凭据标 degraded 走 L1 强制人工终审）；workspace 拒绝清单复用 `FORBIDDEN_MOUNT_MARKERS`。
+- 接线：config 新增 `agent_host_channel_enabled`（**默认 False**——容器内 server spawn 不到宿主桌面进程，仅宿主裸跑态开启）/`agent_host_zcode_bin`/`agent_host_zcode_cjs`（缺失时 503+L2 零计费 fail-closed）；`_execute_run` 开关分支产出与容器适配器同构 `AgentRunResult` ⇒ `_finalize`/C-1/T2 门/回执语义零改动复用；容器路径与虚构契约 `spawn_argv` 不动（T-Z1 裁定维持降级现状）。
+- 测试 pytest **+22**（test_host_channel 19：argv/env 契约逐位/拒绝清单/--json 解析四态/超时/预算/凭据零外泄/spawn OSError；test_host_channel_service 3：开关关=容器路径零变化/开=宿主成功+落账/bin 缺失=L2）；变异四连全红→还原绿（M1 拒绝清单失效/M2 超时不 kill/M3 预算截断失效/M4 fail-closed 失效）。诚实缺失：宿主版无逐事件流 ⇒ tool_calls 恒空、运行期无逐工具留痕（模块 docstring 差异 2 登记）。
+- DB 无迁移无新表；API 零新增路由（复用既有 POST /agents/{id}/run）；桌面零改动。server 变更 ⇒ 合并后 rebuild 三镜像（alembic 幂等 no-op）。
 - 验收：① zcode 在隔离环境内完成一次非交互执行并产出可校验产物；② `--json` 事件流格式取得实测样本并落夹具；③ 执行通道形态经实测裁定并回写本条。
 - 回滚：适配器改动 revert 单 commit；镜像版本回退。风险：**高**（依赖外部 CLI 行为与配额）。依赖：T-B1。复杂度：**L**。
 - 闸：**开工前须拍板**——① zcode 会话续接核查 + 商用条款核验（借鉴总览 §6.6 采集项 + 方案 §5.2 必答项）② 执行通道形态（实测后）③ 降级声明：zcode 若始终跑不通，kind 维持 `adapter_missing`，**不阻塞第一阶段主线**。

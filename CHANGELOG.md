@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — T-Z1 宿主通道实施轮：裁定 A 落地（agents/host_channel.py 宿主侧 zcode 代理，2026-11-07）
+
+- **T-Z1 裁定 A 实施落地（用户拍板商用前置改判：仅开发自用即刻可用，推向市场前须 zcode 书面授予）**：NEW `server/src/fde_api/agents/host_channel.py`——宿主侧 zcode 代理通道，0.17.1 实测契约（`-p <任务书路径> --json --cwd <workspace> --mode build` + `ELECTRON_RUN_AS_NODE=1`）；`--json` 单对象汇总 fail-closed 解析（空/非对象/exit0 不可解析一律不伪造 completed）；超时=kill+communicate 回收（PIPE 缓冲不死锁）；预算超限按上限截断报 `budget_exceeded`（对齐容器版 B-2「越界不入账」）；**零凭据注入**（平台凭据解密结果不进 argv/env/磁盘，出现未用凭据标 `degraded` 经 `_finalize` 走 L1 强制人工终审）；workspace 拒绝清单复用 `FORBIDDEN_MOUNT_MARKERS`（真相层/.env/fdeops/openfde）。
+- **契约收敛（rebase #193 后）**：`host_channel_argv` 委托 `zcode_contract.build_cli_argv`（#193 拍板唯一 argv 形状来源；本模块只补宿主壳前缀 `<ZCode.exe> <zcode.cjs>` 与 `--mode`）；`summarize_host_payload` 委托 `parse_json_summary().billable_units`（优先投影 totalTokenCount，回落 input+output——与容器版 cost 事件同口径）；`parse_host_summary` fail-closed 外壳（空/非对象拒绝）仍由本模块承担。测试期望值随 billable 口径同步（128→192）。
+- **接线**：`config.py` 新增 `agent_host_channel_enabled`（**默认 False**——容器内 server 进程 spawn 不到宿主桌面进程，仅宿主裸跑态显式开启；关闭时容器路径行为零变化）/`agent_host_zcode_bin`/`agent_host_zcode_cjs`（开启但缺失 ⇒ 503 `agent_unavailable` + run 落 L2 零计费）；`agents/service.py` `_execute_run` 开关分支（`_write_workspace` 后、容器 backend 前）产出与容器适配器**同构 `AgentRunResult`** ⇒ `_finalize`/C-1 产物校验/T2 强制门/回执缺失独立终态**零改动复用**；容器路径与虚构契约 `spawn_argv` **不动**（T-Z1 裁定维持 `adapter_missing` 降级现状）。
+- **测试 pytest +22**：NEW `test_host_channel.py` 19（argv/env 契约逐位断言/拒绝清单/--json 解析四态〔happy/前缀噪声/空/非对象〕/usage 缺失诚实计 0/超时 kill+双回收/非零退出 failed/exit0 坏汇总 fail-closed/预算截断与恰好达标/凭据零外泄/spawn OSError/workspace 红线先于 spawn）；NEW `test_host_channel_service.py` 3（开关关=容器路径零变化回归/开关开=宿主 spawner 成功+落账 42 tokens/bin 缺失=L2）。**变异四连全红→还原绿**（M1 拒绝清单失效/M2 超时不 kill/M3 预算截断失效/M4 fail-closed 失效）。
+- 诚实缺失登记：宿主版无逐事件流（--json 仅单对象汇总；逐事件只有 app-server stdio 协议一条路，本轮不做）⇒ `tool_calls` 恒空、运行期无逐工具留痕；白名单语义由任务书文字面承载（与容器版同源）。
+- 口径：pytest **2152 收集 = 2146 passed + 6 skipped**（2116 基线 + #193 契约层 14 + 本轮 22；rebase 合并口径推演，终值以本 PR CI run 实测为准）；vitest 927/927 不变；**零迁移零新表零新路由零桌面**（复用既有 POST /agents/{id}/run）⇒ 无需 alembic/路由清单重生成，server 变更 ⇒ 合并后 rebuild 三镜像。台账同步钉自检：backlog T-Z1 标题行升 ✅ 已实施并合并（钉①同轮闭环）；本节含 pytest + 交付信号（delivery 类，钉②放行）。
+
 ## [未发布] — goal-tb tb4：T-B1 封包半——结项交付包 handover_packages（D11 立项拍板落地，2026-11-07）
 
 - **拍板落定（§拍板闸 6⑪，蔡工「第3件需要拍板的按你建议处理」）**：D11 立项按台账 §二草案+§十三.4 改名裁决执行；「首批真实数据到位」**不阻塞代码实现**（合成 run 测试覆盖，投产使用自然等待真实 run）。台账 §二已追加拍板记录节（留痕可推翻，#124 先例）。

@@ -135,6 +135,17 @@ class Settings(BaseSettings):
     agent_workspace_root: str = "agent-workspaces"
     # 沙箱内 agent CLI 命令（zcode 适配器 spawn 段）
     agent_cli_command: str = "zcode"
+    # 宿主侧 zcode 代理通道（T-Z1 裁定 A 方案实施轮，2026-11-07；仅开发
+    # 自用，商用前须 zcode 供应商书面授予——见 backlog T-Z1 挂账）。默认
+    # False：容器内 server 进程无法 spawn 宿主桌面进程（zcode 登录态在
+    # Windows 宿主），只有宿主裸跑态（scripts/run-server-tests.mjs 同款
+    # 直跑形态）显式开启后才走本通道；关闭时 run 走既有容器沙箱路径，
+    # kind=zcode 无 docker 时沿 SandboxError→L2 链降级，行为零变化。
+    agent_host_channel_enabled: bool = False
+    # ZCode.exe 全路径（Electron 壳；宿主通道 spawn 段）
+    agent_host_zcode_bin: str = ""
+    # zcode.cjs 全路径（相对安装根 resources/glm/zcode.cjs；宿主通道 spawn 段）
+    agent_host_zcode_cjs: str = ""
     # goal-d6 试点开关族（PRD §10 / 技术文档 S1-7 / 总纲 UM-1）：30 天 / 20 run
     # 先到为准；窗口内超限 409 pilot_run_limit_exceeded，窗口走完不再拦（试点
     # 结束由报告定升级）。started_at 留空 = 以最早 agent_run.created_at 推导
