@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P0-0 基线审计轮（智能交付自动化升级路线图第一轮，纯文档零代码，2026-11-07）
+
+- **任务书入库**：`docs/蔡工_FDE_Workbench_V3.1_智能交付自动化升级路线图与Goal实施任务书.md`（自述基线提交 `7368094`）正式入库作为 V3.1 唯一权威任务书；审计基线取 fork/main `65db88c`（其后 1 提交=#196）。
+- **四报告**（NEW `docs/v3.1/`）：`00-baseline-audit.md`（任务书 §2 十条核验逐项：25 路径 24 命中 1 修正〔AgentsConsole 实际在 `agents/` 子目录〕；**zcode_contract.py 纯函数契约层判断成立**——171 行零 subprocess/socket，建模真实 0.17.1 CLI `zcode -p --json --cwd [--mode] [--resume]`；发现 `adapter.py:99-113` spawn 段为自认虚构契约=P1-1 重构靶点；`control/ontology.py` vs `ontology/` **零代码级重叠**〔75 行静态字典+MCP 唯一消费方〕，ADR-002 列 P0-2 文档交付物）、`00-data-model-map.md`（109 表按域全分组+迁移链 39 rev 头 `e5f1a7c3b9d4`+事件 22 目标类型+12 job_type+API 面）、`00-test-baseline.md`（环境/命令/结果全量实测+209 测试文件与各阶段回归面映射）、`00-gap-register.md`（P0-1~P1-3 逐能力**复用/扩展/新建/暂缓**四档裁决——每项「新建」附负结论核验〔requirements/business_facts/discovery_extractions/delivery_plans/test_plans 全仓 grep 零命中〕；P0-1 四表成立但分类枚举须对齐 guidance 五分类；P0-2 变更集全链复用仅缺 term_id 试点链接+跨项目别名冲突待拍板；P0-4 模板底座在但零种子零内容；P1-1 须先对齐在途 host-channel 线〔D-3 拍板项〕；4 项拍板项 D-1~D-4 待蔡工确认）+ `phase-status.md`（阶段状态台账，P0-0=completed，**允许进入 P0-1**）。
+- **活库运行数据（部署库直查，alembic=e5f1a7c3b9d4 与代码头一致）**：agent_runs/workflow_runs/workflow_definitions/agent_artifacts/automation_approvals/ontology_change_sets/transcript_drafts/interview_minutes/project_solutions/delivery_packages/handover_packages **全 0**；projects=4（somwyn G1–G6 passed）；guidance_analyses=5（3 failed：ai_authentication_failed×1+ai_output_invalid×2=唯一真实 AI 失败分布）；project_evidence=3 全 bridge_sync；skill 消费事件 1——P1-3 指标基线=insufficient_data，与任务书预判一致。
+- **口径现测**（AGENTS 现测纪律；任务书 §2 旧台账 107 表/38 rev/315 路由/pytest 2116 为陈旧值全数校正）：**109 表/39 rev 单链 head `e5f1a7c3b9d4`/323 路由/94 ENTRIES/mypy 279**——与 fork/main CI 实测逐位一致；本轮全量测试实测：pytest **2136 收集=2130 passed+6 skipped**（32:40 EXIT=0）/ vitest **932/932**/ typecheck 绿 / mypy 279 官方闸绿；API Catalog↔路由差异=设计性（治理面有意不进 catalog，CI 双钉在位）。
+- 顺带修复 AGENTS 残渣一行（「版本号按发布列车同步」句的孤儿重复片段，冲突残渣家族）。零迁移零路由零业务代码零桌面 ⇒ 无需 rebuild/alembic/重打包；审计在隔离 worktree（主树并发脏集零触碰）。
 ## [未发布] — T-Z1 宿主通道实施轮：裁定 A 落地（agents/host_channel.py 宿主侧 zcode 代理，2026-11-07）
 
 - **T-Z1 裁定 A 实施落地（用户拍板商用前置改判：仅开发自用即刻可用，推向市场前须 zcode 书面授予）**：NEW `server/src/fde_api/agents/host_channel.py`——宿主侧 zcode 代理通道，0.17.1 实测契约（`-p <任务书路径> --json --cwd <workspace> --mode build` + `ELECTRON_RUN_AS_NODE=1`）；`--json` 单对象汇总 fail-closed 解析（空/非对象/exit0 不可解析一律不伪造 completed）；超时=kill+communicate 回收（PIPE 缓冲不死锁）；预算超限按上限截断报 `budget_exceeded`（对齐容器版 B-2「越界不入账」）；**零凭据注入**（平台凭据解密结果不进 argv/env/磁盘，出现未用凭据标 `degraded` 经 `_finalize` 走 L1 强制人工终审）；workspace 拒绝清单复用 `FORBIDDEN_MOUNT_MARKERS`（真相层/.env/fdeops/openfde）。
