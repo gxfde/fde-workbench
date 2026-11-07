@@ -402,9 +402,13 @@
 > **范围声明**：本主线是**售前业务链路**（访谈→事实分层→方案→报价→SOW），**不重造** V3 已收口的 workflow 定义/运行/节点/生命周期（T-W1..T-W5）、本体（T-O1..T-O4b）、Skill 治理（T-S1/T-S2）、门禁证据候选（T-G1/T-W7）、证据一等表（T-E1..T-E3）、Delivery Compiler（T-C1）、桌面控制台三页（T-W6/T-UI1）、只读执行事实链面板（B#9）。
 > **与既有已落地项的边界**：T-UI1/T-W6 已交付的「workflow/术语表/Skill 版本」三页与 B#9 的「执行事实」页**均不含**本主线所需的三态入口、售前三层可视化、agents run 列表、meetings 列表 ⇒ 不构成重复立项；本主线控制台（T-A8）与 B#9 **事实链面板**（项目 tab「执行事实」，只读三源聚合）在**数据源与用途上不重叠**（前者=智能体运行态，后者=证据/审计事实链），**建议合批但界面分离**（待 T-A8 开工前拍板，见 §拍板闸 6）。
 
-### T-A1 presurvey S3 前置闸的桌面可读提示与拦截反馈 — **PROPOSED（登记轮，零代码）**
+### T-A1 presurvey S3 前置闸的桌面可读提示与拦截反馈 — **DONE（2026-11-07 goal-ta3 核销——#156 已先行兑现，零补码）**
 - 目标：G3（SOW-A 签署 + A 款预付到账 + 数据授权书四项勾选）未通过时，售前在桌面端能看见**可读的拦截原因与跳转入口**，而不是只见 409。
 - 现状实测（fork/main@d3adf1c）：**闸已落地**——`server/src/fde_api/guidance/service.py:402` `_require_s3_gate`，在 `:41`（`set_presurvey_source`）与 `:63`（`create_analysis`）**两处强制调用**，未通过即抛 409 `presurvey_s3_gate_open`（`:413` 文案含四项清单）；门禁种子 `server/seeds/gates.json` G3 `evidence_checklist` 四项逐项对应。⇒ **本条不是「闸未落地」，是「闸缺桌面呈现」**（原方案 §2.3 G2 缺口结论已在 v1.2 订正）。
+
+#### ✅ T-A1 核销轮（goal-ta3，2026-11-07，纯文档零代码——桌面呈现已由 #156 先行交付）
+- **核销判定（fork/main@1a1d34e 实测）**：`PresurveyGateHint.tsx` 在位且已接线（`PresurveyAnalysisAction.tsx` 消费 409 `presurvey_s3_gate_open` 拦截态挂载）——①服务端 message 原文呈现；②G3 证据清单四项逐项渲染（claim_status 徽标沿用 GateBoard 的 claimed≠accepted 黄标语义）；③「前往门禁页」跳转锚 `gatesHref=#projects/{id}?tab=gates`（复用既有路由零新路由，点击直达门禁详情面）；④非门禁失败走原通用文案（通过时原路径零变化）。既有专项测试 `presurvey-gate-hint.test.tsx` **5 例全绿**（拦截态可读/四项清单+徽标语义/跳转锚/非门禁回退/gates 拉取失败降级）——登记验收四项全部被既有用例钉住，**零补码**（T-UI1 同款先例）。
+- 登记「复杂度 S/回滚 revert 单 commit」等规格由 #156 实施轮兑现，本核销轮零 diff（本节与本核销记录本身除外）。
 - 修改文件：`desktop/src/renderer/src/guidance/`（presurvey 录入卡）+ 错误码映射（复用既有 `GuidanceServiceError` → `error.details`，**零新错误码**）。
 - DB：无。API：无新增（仅消费既有 409 `presurvey_s3_gate_open`）。
 - 测试：桌面 vitest（拦截态渲染四项清单 + 跳转按钮存在/点击可达 G3 详情）；服务端零改动零用例。
@@ -767,7 +771,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
 
  售前主线（T-A 系列，2026-11-06 登记轮；串行交付，每轮一 PR）
  T-A2(代号化, ✅已实施) ── T-A3(三态UI, ✅已实施) ── T-A4(三层可视化, ✅已实施) ── T-A5(方案骨架, ✅已实施) ── T-A6(claims→SOW, ✅已实施并合并 #175) ── T-A7(谈判版本, ✅已实施并合并 #178)
- T-A1(S3闸提示)：独立，可与 T-A2 并行
+ T-A1(S3闸提示)：✅已由 #156 兑现（goal-ta3 核销零补码）
  T-A8(agents+meetings 控制台，含 +2 只读列表路由)：✅已实施(goal-ta2，与 #171 收口同批)
  T-A9(转写草稿区)：依赖 T-A2(✅已实施) + ASR 通道立项（✅立项已批 2026-11-07 §拍板闸 6⑨，选型拍板后开工）
  T-B1(artifacts 扩列 + handover_packages 闭环)：依赖 T-A8；新迁移 additive-only

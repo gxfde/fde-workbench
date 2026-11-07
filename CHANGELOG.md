@@ -2,6 +2,11 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — goal-ta3 T-A1 核销：S3 前置闸桌面提示已由 #156 兑现（纯文档，2026-11-07）
+
+- **零代码零迁移零路由零桌面 diff**：backlog T-A1 状态 PROPOSED→**DONE（核销）**——桌面呈现（`PresurveyGateHint.tsx`：409 `presurvey_s3_gate_open` 拦截态渲染服务端 message＋G3 四项证据清单＋claimed≠accepted 徽标＋「前往门禁页」跳转锚）已由 #156（2026-11-06）先行交付并接线 `PresurveyAnalysisAction`；goal-ta3 按 fork/main@1a1d34e 实测逐项核对登记验收四项全部成立，专项测试 `presurvey-gate-hint.test.tsx` 5 例全绿，**零补码**（T-UI1 同款核销先例）。依赖图同步。
+- 口径全不动（pytest 2079 收集 = 2073 passed + 6 skipped / vitest 912 / 路由 307，均为 #182 CI PR-head 实测）；无需 rebuild/alembic/重打包。
+
 ## [未发布] — T-A8 agents/meetings 桌面控制台 + #171 复核清单桌面收口（goal-ta2，2026-11-07）
 
 ### 行为变更（+2 只读路由；零迁移零新表；桌面变更 ⇒ 便携版重打包）
