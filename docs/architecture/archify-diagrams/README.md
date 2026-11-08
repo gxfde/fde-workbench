@@ -3,7 +3,7 @@
 用 **archify**（v3.2.0，`~/.agents/skills/archify`）从本仓库**真实代码取证**生成的五个视角架构图（2026-11-08 全量同步 fork/main）。
 每张都是**独立 standalone HTML**（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、带路径/透镜视图），
 `candidate.json` 为生成输入，`receipts/` 为该图**通过那一轮**的 finalize/deliver/check/browser-check 回执，
-`preview.png` 为 1440×900 亮色截图。五张的 `validate / deliver / check / browser-check` 四闸全绿、0 诊断。
+`preview.png` 为 **1440px 宽整页实拍**（含图、卡片与节点索引，非首屏截图）。五张的 `validate / deliver / check / browser-check` 四闸全绿、0 诊断。
 
 > 仓库全程**只读**生成，本目录只放产物与证据，不改动任何业务代码。
 
@@ -57,8 +57,29 @@ node ~/.agents/skills/archify/archify/bin/archify.mjs check <type>-*.html --requ
 `candidate.json` 是 archify 的 typed JSON 输入；重渲染用
 `... finalize <type> candidate.json <type>-*.html --repo-root <repo> --quality showcase`。
 
+### 整图完整性（preview.png 验收，2026-11-08 截断事故的永久防线）
+
+archify `visual-check` / `browser-check` 的截图是**固定视口首屏实拍**（1440×900 等），
+高图（本目录 sequence/architecture/workflow 三张）首屏装不下——2026-11-08 曾因此交付过
+底部被截断的 preview.png（HTML 本体完整、滚动可达全部内容，但预览图「整个图不完整」）。
+规则：
+
+- **preview.png 必须整页实拍**：`tools/capture-full-preview.mjs` 先由页面实测
+  scrollHeight，再以 `Page.captureScreenshot{captureBeyondViewport:true}` 一次拍全，
+  逐张断言 PNG 高度 ≥ 页面高度（PASS/FAIL 输出，任一 FAIL 退出码非 0）。
+- 重拍命令（在 `archify-diagrams/` 下）：
+
+  ```bash
+  ARCHIFY_CHROME="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+    node tools/capture-full-preview.mjs sequence/*.html architecture/*.html workflow/*.html dataflow/*.html lifecycle/*.html
+  ```
+
+- 拍完**逐张目检底部**（图例 / 卡片 / 节点索引必须入画）。四闸全绿 ≠ 整图完整，
+  完整性以预览实拍为准。
+
 ## 硬约束备忘（archify v3 取证/排版）
 
 - 桌面可读性下限：viewBox 宽 ≤ **992px**（1440 视口 930px 图宽预算，6px 投影字号下限）；超宽会撞 `composition/desktop-readability`。
 - 反向/回环边共用走廊会撞 `composition/ambiguous-corridor`；解法常是**结构**（把被闸控的节点挪进同一车道）而非加显式 `via` 几何。
 - `meta.views` 在 `meta` 下，不在顶层。
+- workflow（readable-v2）装饰性 semantic-sigil 会被画到 viewBox 底缘之外（v3.2.0 实测至 +173 单位，画高不计 sigil）；节点/边/标签等真实内容不受影响。用 `meta.viewBox` 加高会翻转车道独立测量模式（实测要求 1010×3193 重排），得不偿失，维持不修、如实记录。
