@@ -2,15 +2,15 @@
 
 - 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）
 - 当前分支：`feat/v31-p0-1-discovery`（隔离 worktree `D:/test/fde-wt-v31p0`）
-- 当前阶段：P0-1 访谈事实与需求结构化——**批A（服务端）completed 待合并；批B（桌面审阅 UI）pending**
-- 状态：in_progress（批A 已交付）
+- 当前阶段：P0-2 本体候选与稳定 ID（completed 待合并）；P0-1 已收口（PR #203 合并 `92ca0bd`）
+- 状态：in_progress（P0-2 已交付）
 - 开始/完成时间：P0-0=2026-11-07 完成（PR #197 已合并 fork/main `14d2b62`）；P0-1 批A=2026-11-08 完成
 
 ## P0-0（completed，已合并）
 
 四报告+任务书入库+复用/扩展/新建裁决（详见 `00-baseline-audit.md` 等），PR #197 squash 合并为 `14d2b62`，CI 4 job 全绿。遗留：拍板项 D-1~D-4 待蔡工确认（不阻塞 P0-1 批A——批A 不踩跨项目别名/发布权限/锚点粒度三议题；D-3 宿主通道对齐已由 #195 落地自动消解大半）。
 
-## P0-1 批A（服务端，completed）
+## P0-1 批A（服务端，completed——已合并 PR #203 `92ca0bd`）
 
 - **交付**：NEW `discovery/` 五文件（models/contract/prompt/jobs/routes）+ 迁移 `c3d5e7f9a1b4`（挂上游 V3.2 G6 头 `e8b1d5f9a3c7`）+ 8 路由 + 14 例测试；7 处注册点（app 蓝图/jobs handler+失败钩子/reconcile RECOVERABLE/env.py/conftest 清理序/test_migrations HEAD/extract 脚本 BLUEPRINTS）+ 提示词卫生闸登记（`_ALLOWED_PROMPT_CONSTANTS`）。
 - **设计裁决**（00-gap-register P0-1 全部落地）：七组示例收敛 facts[].fact_type 十值+requirements 独立组；classification 对齐 guidance 五分类；抽取行 status 四值（accepted/rejected=派生态不物化，B#13-C 先例）；requirements 结构化 acceptance_criteria 列表；requirement_sources 关系表（任务书原文）。
@@ -29,9 +29,14 @@
 2. D-4（锚点粒度）已在批A 以三形态闭合枚举（line/transcript_segment/char_span）落地，契约层收敛，批B UI 按此呈现。
 3. 任务书 §16 其余文档（architecture/api-contracts/data-model/security-review/pilot-runbook）随对应阶段交付。
 
+## P0-2（completed，本 PR）
+
+- **交付**：ADR-002（decisions/）+ 候选桥（`generate_discovery_candidates`：accepted 事实→create_term 条目→既有 change-set 管线；幂等/确定性/占用跳过）+ 稳定 ID 试点（subjects+term_id 迁移 `d6f2a8b4c9e1`；confirmed 落定自动链接同名 subject=回填；合并不改写）+ D-1 只读告警。+2 路由 365/46 rev/表 122。
+- **ADR 摘要**：control/ontology.py=AI 阅读语义快照（MCP 契约冻结）；ontology/=唯一治理权威；业务表写面关联逐步走 term_id（试点：research subjects），读面/影响分析仍以名字域为权威。
+
 ## 是否允许进入下一阶段
 
-P0-1 批B（桌面）→ 批B 合并后 P0-1 整阶段收口 → **P0-2 本体候选与稳定 ID**（先落 ADR-002 文档+D-1 拍板确认）。
+P0-2 合并并部署（rebuild 三镜像+alembic）后 → **P0-3 交付方案生成与任务分解**（delivery_plans 三表新建 + 复用 solutions 骨架/compiler 先例；依赖 P0-1 requirements 已落）。P0-1 部署义务已履行（三镜像+alembic c3d5e7f9a1b4+ready 活体绿）；P0-2 部署随本 PR 合并后执行。
 
 ## 本阶段目标
 

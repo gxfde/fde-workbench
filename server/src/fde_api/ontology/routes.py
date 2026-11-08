@@ -135,6 +135,39 @@ def retire_relation_type(project_id: str, relation_type_id: str):
     return jsonify({"data": data, "error": None})
 
 
+@ontology_blueprint.post("/candidates/generate")
+@require_auth
+def generate_candidates(project_id: str):
+    """从已接受访谈事实生成本体术语候选（can_manage，V3.1 P0-2）。
+
+    AI 只创建候选（change-set draft，captured_from=discovery:<id>）；采纳
+    走既有 submit→confirm 人工管线（决策分离/指纹闸/事务物化全复用）。
+    响应附跳过清单与跨项目同名告警（D-1 只读）。
+    """
+    payload = request.get_json(silent=True) or {}
+    extraction_id = payload.get("extraction_id") if isinstance(payload, dict) else None
+    if not isinstance(extraction_id, str) or not extraction_id:
+        raise service.OntologyServiceError(
+            "invalid_request", "extraction_id 必填。", 400
+        )
+    data = service.generate_discovery_candidates(
+        actor=g.current_user,
+        project_id=project_id,
+        extraction_id=extraction_id,
+    )
+    return jsonify({"data": data, "error": None}), 201 if data.get("created") else 200
+
+
+@ontology_blueprint.get("/candidates")
+@require_auth
+def list_candidates(project_id: str):
+    """发现域候选变更集清单（can_view）：captured_from=discovery:% 投影。"""
+    data = service.list_discovery_candidates(
+        actor=g.current_user, project_id=project_id, limit=50
+    )
+    return jsonify({"data": data, "error": None})
+
+
 @ontology_blueprint.get("/change-sets")
 @require_auth
 def list_change_sets(project_id: str):

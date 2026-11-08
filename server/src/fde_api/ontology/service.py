@@ -48,7 +48,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -144,6 +144,70 @@ def _normalize_term_type(value: object) -> str:
     return value
 
 
+def _link_subjects_to_term(session: Session, *, project_id: str, term_id: str, name: str) -> int:
+    """ADR-002 稳定 ID 试点：术语落定（confirmed）时自动链接同名调研主体。
+
+    一次性 UPDATE、只链接尚未链接的行（term_id IS NULL）——已链接行不回改，
+    术语合并/停用不改写历史行（读路径由 impact_of_term 名字域继续兜底）。
+    name 为 String(160) 而 term ≤120：超长主体名天然无匹配（不链接）。
+    """
+    from fde_api.research.models import ProjectResearchSubject  # 延迟导入防环（research→ontology）
+
+    result = session.execute(
+        update(ProjectResearchSubject)
+        .where(
+            ProjectResearchSubject.project_id == project_id,
+            ProjectResearchSubject.name == name,
+            ProjectResearchSubject.term_id.is_(None),
+        )
+        .values(term_id=term_id)
+    )
+    rowcount = getattr(result, "rowcount", 0)
+    return int(rowcount or 0)
+
+
+def cross_project_name_conflicts(
+    session: Session, *, project_id: str, names: list[str]
+) -> list[dict[str, Any]]:
+    """D-1 只读告警：同名术语/别名在**其它项目**中的分布。
+
+    不阻断、不动项目内唯一约束（多项目隔离是刻意设计）；仅把「同一名字
+    在别处也是概念」的事实带给操作者（改名/合并决策输入）。
+    """
+    if not names:
+        return []
+    hits: dict[str, set[str]] = {}
+    for pid, name in session.execute(
+        select(OntologyTerm.project_id, OntologyTerm.term).where(
+            OntologyTerm.term.in_(names),
+            OntologyTerm.project_id != project_id,
+            OntologyTerm.status == "confirmed",
+        )
+    ):
+        hits.setdefault(name, set()).add(pid)
+    for pid, name in session.execute(
+        select(OntologyTermAlias.project_id, OntologyTermAlias.alias).where(
+            OntologyTermAlias.alias.in_(names),
+            OntologyTermAlias.project_id != project_id,
+        )
+    ):
+        hits.setdefault(name, set()).add(pid)
+    return [
+        {"term": name, "project_ids": sorted(pids)} for name, pids in sorted(hits.items())
+    ]
+
+
+def _occupied_term_names(session: Session, *, project_id: str) -> set[str]:
+    """项目内名字域占用集（根规范名 ∪ 别名；含 merged/superseded 历史名）。"""
+    terms = session.scalars(
+        select(OntologyTerm.term).where(OntologyTerm.project_id == project_id)
+    ).all()
+    aliases = session.scalars(
+        select(OntologyTermAlias.alias).where(OntologyTermAlias.project_id == project_id)
+    ).all()
+    return set(terms) | set(aliases)
+
+
 def create_term(
     session: Session,
     *,
@@ -223,6 +287,9 @@ def create_term(
         raise OntologyServiceError(
             "term_exists", f"术语「{name}」在同项目已存在。", 409
         ) from None
+    if initial_status == "confirmed":
+        # ADR-002 试点：术语落定即链接同名调研主体（一次性、幂等、可空列）
+        _link_subjects_to_term(session, project_id=project_id, term_id=row.id, name=name)
     return row
 
 
@@ -1352,6 +1419,143 @@ def serialize_change_set(row: OntologyChangeSet) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+_FACT_TYPE_TO_TERM_TYPE = {
+    "metric": "metric",
+    "data_object": "attribute",
+}
+# 其余 fact_type（process/role/system/rule/constraint/pain_point/decision/open_question）→ entity
+
+def generate_discovery_candidates(
+    *, actor: User, project_id: str, extraction_id: str
+) -> dict[str, Any]:
+    """V3.1 P0-2：从已接受访谈事实生成本体术语候选（can_manage）。
+
+    只消费 ``review_status=accepted`` 的 business_facts（任务书：AI 只能创建
+    候选、候选必须引用已确认事实）；按 subject 聚组为 create_term 条目走
+    既有 change-set 提案→提交→确认管线（captured_from=discovery:<id>）；
+    名字域（术语∪别名）已占用的候选跳过。幂等：同抽取至多一个活跃
+    （draft/in_review）候选变更集，重复调用返回既有行。
+    """
+    from fde_api.discovery.models import BusinessFact, DiscoveryExtraction  # 延迟导入防环
+
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=True)
+        extraction = session.get(DiscoveryExtraction, extraction_id)
+        if extraction is None or extraction.project_id != project.id:
+            raise OntologyServiceError(
+                "extraction_not_found", "抽取不存在或不属于该项目。", 404
+            )
+        if extraction.status != "review_required":
+            raise OntologyServiceError(
+                "extraction_not_ready",
+                "抽取尚未完成（仅 review_required 状态可生成候选）。",
+                409,
+            )
+        captured_from = f"discovery:{extraction.id}"
+        existing = session.scalar(
+            select(OntologyChangeSet).where(
+                OntologyChangeSet.project_id == project.id,
+                OntologyChangeSet.captured_from == captured_from,
+                OntologyChangeSet.status.in_(("draft", "in_review")),
+            )
+        )
+        if existing is not None:
+            return {
+                "change_set": serialize_change_set(existing),
+                "created": False,
+                "skipped": [],
+                "cross_project_conflicts": [],
+            }
+        facts = session.scalars(
+            select(BusinessFact)
+            .where(
+                BusinessFact.extraction_id == extraction.id,
+                BusinessFact.review_status == "accepted",
+            )
+            .order_by(BusinessFact.created_at, BusinessFact.id)
+        ).all()
+        if not facts:
+            raise OntologyServiceError(
+                "no_accepted_facts",
+                "该抽取尚无已接受的事实：先在事实清单完成审阅再生成候选。",
+                409,
+            )
+        grouped: dict[str, list[tuple[str, str]]] = {}
+        for fact in facts:
+            value = fact.object_value
+            summary_value = (
+                value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+            )
+            grouped.setdefault(fact.subject, []).append(
+                (fact.fact_type, f"{fact.predicate}：{summary_value}")
+            )
+        occupied = _occupied_term_names(session, project_id=project.id)
+        items: list[dict[str, Any]] = []
+        skipped: list[dict[str, str]] = []
+        for subject, typed_summaries in grouped.items():
+            if subject in occupied:
+                skipped.append({"term": subject, "reason": "同名术语或别名已存在"})
+                continue
+            if len(subject) > TERM_MAX_LENGTH:
+                skipped.append({"term": subject, "reason": f"名称超过 {TERM_MAX_LENGTH} 字"})
+                continue
+            # 组内定义取字典序最小摘要——事实行 id 为 uuid4 无内在顺序，
+            # 取「最小」保证同输入恒同输出（确定性候选，变更集指纹稳定）。
+            definition = min(summary for _, summary in typed_summaries)[:TERM_MAX_LENGTH]
+            first_type = sorted({fact_type for fact_type, _ in typed_summaries})[0]
+            items.append({
+                "action": "create_term",
+                "term": subject,
+                "definition": definition,
+                "term_type": _FACT_TYPE_TO_TERM_TYPE.get(first_type, "entity"),
+            })
+            occupied.add(subject)
+        if not items:
+            raise OntologyServiceError(
+                "no_candidates",
+                "已接受事实未能形成新术语候选（全部已存在或名称超长）。",
+                409,
+            )
+        items = items[:CHANGE_SET_MAX_ITEMS]
+        row = propose_change_set(
+            session,
+            project_id=project.id,
+            actor=actor,
+            title="访谈事实术语候选（discovery）",
+            proposed_json=items,
+            description=f"来源抽取 {extraction.id}；仅含人工已接受事实。",
+            captured_from=captured_from,
+        )
+        conflicts = cross_project_name_conflicts(
+            session, project_id=project.id, names=[item["term"] for item in items]
+        )
+        return {
+            "change_set": serialize_change_set(row),
+            "created": True,
+            "skipped": skipped,
+            "cross_project_conflicts": conflicts,
+        }
+
+
+def list_discovery_candidates(
+    *, actor: User, project_id: str, limit: int = 50
+) -> dict[str, Any]:
+    """发现域候选变更集清单（can_view）：captured_from=discovery:% 投影。"""
+    with db.session() as session, session.begin():
+        project = _load_project(session, actor, project_id, manage=False)
+        rows = session.scalars(
+            select(OntologyChangeSet)
+            .where(
+                OntologyChangeSet.project_id == project.id,
+                OntologyChangeSet.captured_from.is_not(None),
+                OntologyChangeSet.captured_from.like("discovery:%"),
+            )
+            .order_by(OntologyChangeSet.created_at.desc())
+            .limit(limit)
+        ).all()
+        return {"items": [serialize_change_set(row) for row in rows], "limit": limit}
 
 
 def list_project_terms(

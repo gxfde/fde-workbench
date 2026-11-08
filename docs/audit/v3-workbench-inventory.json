@@ -1,9 +1,10 @@
 {
- "route_count": 366,
+ "route_count": 368,
  "blueprint_count": 45,
  "table_count": 122,
- "revision_count": 46,
+ "revision_count": 47,
  "heads": [
+  "d6f2a8b4c9e1",
   "f6d3a9c1e7b2"
  ],
  "roots": [
@@ -248,6 +249,14 @@
    "create_tables": [],
    "add_column_tables": [
     "automation_approvals"
+   ]
+  },
+  "d6f2a8b4c9e1": {
+   "file": "d6f2a8b4c9e1_subject_term_link.py",
+   "down_revision": "c3d5e7f9a1b4",
+   "create_tables": [],
+   "add_column_tables": [
+    "project_research_subjects"
    ]
   },
   "d7a3e8c5f1b9": {

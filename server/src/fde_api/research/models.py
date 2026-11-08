@@ -206,6 +206,7 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
         Index("ix_project_research_subjects_project_id", "project_id"),
         Index("ix_project_research_subjects_subject_type", "subject_type"),
         Index("ix_project_research_subjects_merged_into", "merged_into_subject_id"),
+        Index("ix_project_research_subjects_term", "term_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -223,6 +224,13 @@ class ProjectResearchSubject(Base, TimestampMixin, VersionedMixin):
     tracking_code: Mapped[str | None] = mapped_column(String(40))
     # V3 T-O4b：非空 ⇔ 本行因合并让位（status=archived）；指向同项目存续方。
     merged_into_subject_id: Mapped[str | None] = mapped_column(String(36))
+    # ADR-002 稳定 ID 试点（V3.1 P0-2）：本行业务名对应的本体术语（可空——
+    # 旧行不回填、读路径仍以名字域为权威；术语落定（confirmed）时对同名
+    # subject 自动链接；术语合并/停用不改写历史行（impact_of_term 名字域
+    # 继续兜底）。RESTRICT：术语行永不物理删除（merged/superseded 是状态）。
+    term_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ontology_terms.id", ondelete="RESTRICT"), nullable=True
+    )
 
     project: Mapped["Project"] = relationship(back_populates="research_subjects")
     forms: Mapped[list[ProjectResearchForm]] = relationship(

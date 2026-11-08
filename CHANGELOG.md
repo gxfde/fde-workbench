@@ -2,6 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P0-2：本体候选与稳定 ID（ADR-002+discovery 候选桥+term_id 试点，2026-11-08）
+
+- **范围**：任务书 §6（P0-2）三件套——①ADR-002 文档（NEW `docs/v3.1/decisions/ADR-002-ontology-ownership.md`：control/ontology.py=AI 阅读用语义快照 vs ontology/=唯一治理权威，零代码级重叠实测收编、MCP `ontology_read` 契约冻结、不删旧模块、防漂移三边界）；②discovery→本体候选桥（AI 只创建候选，采纳走既有 change-set submit→confirm 人工管线）；③稳定 ID 试点（`project_research_subjects.term_id` 可空 FK，旧行不回填读路径零变化）。设计裁决见 `docs/v3.1/00-gap-register.md` P0-2 节。
+- **候选桥**（`ontology/service.py` NEW `generate_discovery_candidates`/`list_discovery_candidates`）：只消费 `review_status=accepted` 的 business_facts（任务书「候选必须引用已确认事实」原文）；按 subject 聚组为 create_term 条目（组内定义取字典序最小摘要=同输入恒同输出、变更集指纹稳定；fact_type→term_type 映射 metric→metric/data_object→attribute/余→entity）；名字域（术语∪别名）占用跳过并回显 skipped；`captured_from=discovery:<id>` 服务层写入（HTTP 人工路径维持拒收）；幂等=同抽取至多一个活跃（draft/in_review）候选变更集（重复调用 200 复用）；**无 accepted 事实 409 不生成**（杜绝空壳候选）。API +2 路由 363→365（POST `/projects/{id}/ontology/candidates/generate` 201/200、GET `/projects/{id}/ontology/candidates`，蓝图不变全部不进 api_catalog，生成=can_manage/清单=can_view）。
+- **稳定 ID 试点**（迁移 `d6f2a8b4c9e1`，45→46 rev，additive 一列一索引）：`project_research_subjects +term_id`（String36 可空 FK→ontology_terms RESTRICT——术语行永不物理删除〔merged/superseded 是状态〕故不构成生命周期阻塞）。链接时机=术语落定：`create_term` confirmed 路径（change-set confirm 物化与直落 confirmed 同汇点）后一次性 UPDATE 同名 subject（只链接 term_id IS NULL 行=幂等回填；已链接行不回改，术语合并不改写历史链接、读路径 impact_of_term 名字域继续兜底）；conftest 清理序现测安全（subjects 两簇均在 terms 之前，RESTRICT 无需重排）。
+- **D-1 跨项目同名告警（只读）**：`cross_project_name_conflicts` 助手（confirmed 术语∪别名跨项目查询），候选生成响应附 `cross_project_conflicts`；不动项目内唯一约束（多项目隔离是刻意设计，告警仅作改名/合并决策输入——拍板项 D-1 按推荐项先行、留痕可推翻）。
+- **测试**：NEW `test_ontology_discovery_candidates.py` 10 例（happy path 仅 accepted 入候选/同名占用跳过/幂等+409 闸族〔no_accepted_facts·running·缺参〕/权限族〔member 403 生成、200 清单、跨项目 403·伪造抽取 404〕/跨项目告警只读性/清单投影排除人工 change-set/confirm 物化自动链接/直落 confirmed 回填旧数据+重复落定 409/合并不改写链接/无术语主体 NULL+读路径零变化）；回归 ontology 三件套 43 例全绿；test_migrations 26 例（roundtrip 过新头）；ruff 绿；mypy 279 不变。
+- **实施中修正（诚实注记）**：①组内定义初版取「首条摘要」但事实行 id=uuid4 无内在顺序→同输入不同输出（变更集指纹不稳），改为字典序最小+测试钉；②审阅戳 CHECK 正确拦截测试工厂无戳 accepted 行（约束按设计工作，工厂补戳）；③mypy Result.rowcount attr-defined → getattr 收窄。
+- 口径：pytest **2297 收集 = 2291 passed + 6 skipped**（本轮 +10，基线 2287=2281+6s 本地实测；CI 终值以本 PR run 为准）/ vitest **951** 不变（桌面零改动）/ mypy 279 / 路由 365 / 蓝图 45 / 表 122 / **46 rev 单头 `d6f2a8b4c9e1`**；审计 CSV 已重生成（365/45/122/46 逐位一致）；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）。
+
+
 ## [未发布] — P2′① 宿主轮询领取：服务端咬合接线（领取/回执/失联三面，2026-11-08）
 
 - **形态落地（§11.3 六条约束 → 代码）**：NEW 迁移 `f6d3a9c1e7b2`（39→40 rev 头 `f6d3a9c1e7b2`）——`agent_runs.status` CHECK 置换加 `host_running`（对齐 T-J2 先例，零列重建）+ 5 新列（`execution_provider`〔sandbox 默认/host_poll〕/`host_claimed_at`/`host_token_hash`〔sha256 零明文〕/`host_receipt_at`/`host_lost_at`）+ 领取面索引；`IN_FLIGHT_STATUSES` 补 `host_running`。
