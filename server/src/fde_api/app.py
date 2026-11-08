@@ -3,6 +3,8 @@ from flask import Flask
 from fde_api.auth.routes import auth_blueprint
 from fde_api.ai.routes import ai_blueprint
 from fde_api.cli import register_cli
+from fde_api.commercial.admin_routes import admin_commercial_blueprint  # 商业化 G1
+from fde_api.commercial.routes import commercial_blueprint  # 商业化 G1
 from fde_api.config import Settings
 from fde_api.control import control_blueprint
 from fde_api.control.dsh_runtime import dsh_runtime
@@ -131,6 +133,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # V3.2 G2：FDE 交付模拟训练场（独立域；不进 api_catalog）
     from fde_api.simulation.routes import simulation_blueprint
     app.register_blueprint(simulation_blueprint)
+    # 商业化 G1：权益四分与角色分层（读面本人/admin；写面 admin+密码确认；均不进 api_catalog）
+    app.register_blueprint(commercial_blueprint)
+    app.register_blueprint(admin_commercial_blueprint)
     app.extensions["fde_weixin_message_handler"] = weixin_message_handler
     from fde_api.control.ai_server_client import apply_runtime_plugin
     app.extensions["fde_plugin_executor"] = apply_runtime_plugin

@@ -71,7 +71,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3.1 P0-3：delivery_plans 三表（交付方案版本化+条目+任务映射，additive）
 # V3.1 P1-2：test_plans/test_cases/test_executions 三表（质量模块，additive）
 # V3.1 P1-1：agent_runs 扩列 +5 / agent_artifacts 扩列 +4（执行面字段，additive）
-HEAD_REVISION = "e7c4a9d2f6b8"
+# 商业化 G1：commercial_entitlements + training_entitlements 两表（权益四分，additive）
+HEAD_REVISION = "e9c4a1f7b3d2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1105,10 +1106,10 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    # 迁移文件全集权威=alembic ScriptDirectory（V3.1 P0-1 discovery
-    # c3d5e7f9a1b4 + P2′① host_poll f6d3a9c1e7b2 之后 = 48）；；
-    # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 50
+    # 迁移文件全集权威=alembic ScriptDirectory（V3.1 P1-1 e7c4a9d2f6b8 +
+    # 商业化 G1 e9c4a1f7b3d2 之后 = 51）；v3-workbench-inventory.json 的
+    # revision_count 为审计快照（随清单重生成同步）
+    assert len(known) == 51
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

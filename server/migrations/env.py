@@ -28,7 +28,7 @@ from fde_api.simulation import models as simulation_models  # noqa: F401  (V3.2 
 from fde_api.discovery import models as discovery_models  # noqa: F401  (V3.1 P0-1)
 from fde_api.plans import models as plans_models  # noqa: F401  (V3.1 P0-3)
 from fde_api.quality import models as quality_models  # noqa: F401  (V3.1 P1-2)
-from fde_api.quality import models as quality_models  # noqa: F401  (V3.1 P1-2)
+from fde_api.commercial import models as commercial_models  # noqa: F401  (商业化 G1)
 from fde_api.control import model_preferences, weixin_models, chat, lcsc_skills  # noqa: F401
 
 

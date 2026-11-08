@@ -1,10 +1,10 @@
 {
- "route_count": 384,
- "blueprint_count": 47,
- "table_count": 128,
- "revision_count": 50,
+ "route_count": 391,
+ "blueprint_count": 49,
+ "table_count": 130,
+ "revision_count": 51,
  "heads": [
-  "e7c4a9d2f6b8"
+  "e9c4a1f7b3d2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -391,6 +391,15 @@
    "add_column_tables": [
     "improvement_proposals"
    ]
+  },
+  "e9c4a1f7b3d2": {
+   "file": "e9c4a1f7b3d2_commercial_g1_entitlements.py",
+   "down_revision": "e7c4a9d2f6b8",
+   "create_tables": [
+    "commercial_entitlements",
+    "training_entitlements"
+   ],
+   "add_column_tables": []
   },
   "ebb003a5c3a8": {
    "file": "ebb003a5c3a8_baseline_pg.py",

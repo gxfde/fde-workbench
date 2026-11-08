@@ -59,6 +59,8 @@ from fde_api.app import (
 from fde_api.bridge import bridge_blueprint
 from fde_api.control.api_actions import actions_blueprint
 from fde_api.control.chat import chat_blueprint
+from fde_api.commercial.admin_routes import admin_commercial_blueprint  # 商业化 G1
+from fde_api.commercial.routes import commercial_blueprint  # 商业化 G1
 from fde_api.control.clawbot_weixin import weixin_blueprint
 from fde_api.control.extension_management_routes import management_blueprint
 from fde_api.control.lcsc_desktop import desktop_lcsc_blueprint
@@ -132,6 +134,8 @@ BLUEPRINTS = [
     desktop_lcsc_blueprint,
     actions_blueprint,
     simulation_blueprint,  # V3.2 G2：app.py 注册序在 actions_blueprint 之后
+    commercial_blueprint,  # 商业化 G1：app.py 注册序紧随 simulation_blueprint
+    admin_commercial_blueprint,  # 商业化 G1：app.py 注册序紧随 commercial_blueprint
 ]
 
 app = Flask(__name__)
