@@ -10,8 +10,8 @@
 ## G2：免费额度与三个体验入口（T-07）— 当前阶段
 
 - 分支：`feat/commercial-g2-free-quota`（工作树 `D:\test\fde-wt-g1`）
-- 基线 SHA：fork/main `7c32736`
-- 状态：**进行中**（实现与测试已就位，待 CI 实测回填 pytest 口径后收口）
+- 基线 SHA：fork/main `7c32736`（开工时）→ 合并后 fork/main `b0fd5fc`
+- 状态：**completed**（PR #228 squash 合并 `b0fd5fc`；PR run 42505691928 四绿 + **main run 42506701371 四绿**；**部署活体绿**——三镜像 rebuild 自本工作树 + `alembic upgrade head` `e9c4a1f7b3d2`→`b3e7c9d1a5f2`）
 
 ### 目标
 
@@ -87,6 +87,13 @@
 | 交付者触及上限即受限 | `test_experience_limit_exceeded_at_cap`（used≥cap 409）；变异 M4 转红 |
 | 至少 1 条变异用例证明「额度按账号计」会转红 | M1／M2 双条，均转红→还原转绿 |
 
+### 部署活体验证（合并后）
+
+- 三镜像（api/worker/scheduler）自本工作树 `D:/test/fde-wt-g1` 重建；`docker compose -p fde-workbench up -d` 后三容器 healthy。
+- `alembic upgrade head`：`e9c4a1f7b3d2` → **`b3e7c9d1a5f2`**（G2 additive 两表）。
+- 活体断言：`alembic current` = `b3e7c9d1a5f2`；`url_map` **398** 条（审计口径 397，+1 恒定差）；**commercial 13 条**（G1 七条 + G2 六条）；`enterprise_quota_subjects` 6 列 / `enterprise_free_quota` 12 列；四条 CHECK 齐备（`state`／`bound_shape`／`completed_shape`／`confirm_requires_completed`）；两表**零行**（无客户数据）。
+- `/api/v1/health/ready` 与 `/api/v1/health/live` 均 **200**。
+
 ### 遗留问题
 
 1. 主体认定口径待法务最终确认（ADR-004 状态行已注）。
@@ -96,7 +103,8 @@
 
 ### 是否允许进入下一阶段
 
-**G2 收口（CI 四绿＋合并＋main run 收口＋部署活体绿）后允许进入 G3（订阅、培训与科目结算，T-10/T-11/T-13）**——ADR-005（区域商业化闸）仍归 G5，不预支。
+**允许进入 G3（订阅、培训与科目结算，T-10/T-11/T-13）**——前置已全部满足：PR 四绿 ＋ 合并态 main run 四绿 ＋ 部署活体绿。
+ADR-005（区域商业化闸）仍归 G5，不预支；GAP-15（采纳率埋点）仍开放。
 
 ---
 
