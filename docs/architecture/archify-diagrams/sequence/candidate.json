@@ -4,12 +4,12 @@
   "meta": {
     "title": "Workflow run 一次执行的完整调用链",
     "locale": "zh-CN",
-    "output": ".archify/sequence-run-20261108-191000/workflow-run-sequence.html",
+    "output": "docs/architecture/archify-diagrams/sequence/workflow-run-sequence.html",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
-      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
+      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
       "link_mode": "local-only"
     },
     "views": [
@@ -68,13 +68,13 @@
       "sources": [
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 119,
-          "end_line": 125,
+          "line": 114,
+          "end_line": 129,
           "label": "run 列表 GET"
         },
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 170,
+          "line": 165,
           "end_line": 179,
           "label": "cancel / resume POST"
         }
@@ -108,14 +108,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 161,
-          "end_line": 250,
+          "line": 186,
+          "end_line": 285,
           "label": "start_run 服务层"
         },
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 306,
-          "end_line": 350,
+          "line": 324,
+          "end_line": 394,
           "label": "cancel_run / resume_run"
         }
       ]
@@ -128,8 +128,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/models.py",
-          "line": 108,
-          "end_line": 207,
+          "line": 111,
+          "end_line": 190,
           "label": "workflow_runs / workflow_node_runs"
         },
         {
@@ -180,20 +180,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 502,
-          "end_line": 557,
+          "line": 435,
+          "end_line": 489,
           "label": "run_workflow_run 调度主循环"
         },
         {
-          "path": "server/src/fde_api/workflows/executor.py",
-          "line": 646,
-          "end_line": 700,
+          "path": "server/src/fde_api/workflows/dispatch.py",
+          "line": 42,
+          "end_line": 97,
           "label": "_execute_node 独立事务"
         },
         {
-          "path": "server/src/fde_api/workflows/executor.py",
-          "line": 942,
-          "end_line": 1010,
+          "path": "server/src/fde_api/workflows/dispatch.py",
+          "line": 155,
+          "end_line": 173,
           "label": "_dispatch 分派入口"
         }
       ]
@@ -231,9 +231,9 @@
       "sublabel": "decide_approval",
       "sources": [
         {
-          "path": "server/src/fde_api/workflows/executor.py",
-          "line": 1192,
-          "end_line": 1290,
+          "path": "server/src/fde_api/workflows/dispatch.py",
+          "line": 405,
+          "end_line": 503,
           "label": "_dispatch_human_approval"
         },
         {

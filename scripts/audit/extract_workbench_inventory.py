@@ -31,129 +31,41 @@ OUT_DIR = REPO_ROOT / "docs" / "audit"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# 1. 蓝图注册（复制 fde_api/app.py create_app 的注册顺序，不调用 create_app，
+# 1. 蓝图注册（**从 app.py 的唯一权威注册表派生**，不调用 create_app，
 #    以避免 db/redis/object_storage/dsh_runtime 初始化与持久化配置读取）
+#
+#    2026-11-08（架构评估 P2-5）：此前本文件照抄了一份硬编码 BLUEPRINTS 清单，
+#    已漏条三次（T-J2/CR-027 的两个 admin 面板、#145 的 fact_chain_blueprint、
+#    #177 前审计）——新增/移除蓝图后忘了同步登记就会静默漏条。现在清单真身是
+#    server/src/fde_api/app.py::_BLUEPRINT_SPECS，经 iter_blueprints() 出货；
+#    漏登不再可能（新增蓝图只改 app.py 一处）。
 # ---------------------------------------------------------------------------
-from fde_api.agents.routes import agents_blueprint
-from fde_api.app import (
-    ai_blueprint,
-    auth_blueprint,
-    control_blueprint,
-    dispatch_blueprint,
-    document_templates_blueprint,
-    files_blueprint,
-    guidance_blueprint,
-    health_blueprint,
-    local_storage_blueprint,
-    mailing_blueprint,
-    modules_blueprint,
-    project_documents_blueprint,
-    project_research_blueprint,
-    projects_blueprint,
-    solutions_blueprint,
-    system_configuration_blueprint,
-    template_research_blueprint,
-    templates_blueprint,
-    users_blueprint,
-)
-from fde_api.bridge import bridge_blueprint
-from fde_api.control.api_actions import actions_blueprint
-from fde_api.control.chat import chat_blueprint
-from fde_api.commercial.admin_routes import admin_commercial_blueprint  # 商业化 G1
-from fde_api.commercial.routes import commercial_blueprint  # 商业化 G1
-from fde_api.control.clawbot_weixin import weixin_blueprint
-from fde_api.control.extension_management_routes import management_blueprint
-from fde_api.control.lcsc_desktop import desktop_lcsc_blueprint
-from fde_api.control.lcsc_skills import lcsc_blueprint
-from fde_api.control.mcp_gateway import mcp_blueprint
-from fde_api.control.task_board import task_board_blueprint
-from fde_api.dispatch.admin_routes import admin_dispatch_blueprint  # goal-c CR-027
-from fde_api.evidence.routes import evidence_blueprint, fact_chain_blueprint  # 借鉴 B#9 事实链只读面
-from fde_api.expirations import blueprint as expirations_blueprint  # B#13-D 跨域到期投影
-from fde_api.jobs.admin_routes import admin_jobs_blueprint  # V3 T-J2（域 14）
-from fde_api.meetings.routes import meetings_blueprint
-from fde_api.transcripts.routes import transcripts_blueprint  # T-A9（goal-tb tb1）
-from fde_api.handover.routes import handover_blueprint
-from fde_api.discovery.routes import discovery_blueprint  # V3.1 P0-1
-from fde_api.plans.routes import plans_blueprint  # V3.1 P0-3
-from fde_api.quality.routes import quality_blueprint  # V3.1 P1-2
-from fde_api.metrics.routes import metrics_blueprint
-from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
-from fde_api.ontology.routes import global_ontology_blueprint  # V3 T-O2c 全局只读面
-from fde_api.translator.routes import translator_blueprint
-from fde_api.simulation.routes import simulation_blueprint  # V3.2 G2 交付模拟训练场
-from fde_api.workbench.routes import workbench_blueprint
-from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
+from fde_api.app import iter_blueprints
 
-BLUEPRINTS = [
-    health_blueprint,
-    auth_blueprint,
-    ai_blueprint,
-    users_blueprint,
-    system_configuration_blueprint,
-    modules_blueprint,
-    templates_blueprint,
-    template_research_blueprint,
-    projects_blueprint,
-    workbench_blueprint,
-    bridge_blueprint,
-    project_research_blueprint,
-    local_storage_blueprint,
-    files_blueprint,
-    document_templates_blueprint,
-    project_documents_blueprint,
-    solutions_blueprint,
-    evidence_blueprint,
-    fact_chain_blueprint,  # 借鉴 B#9：app.py 注册序紧随 evidence_blueprint
-    ontology_blueprint,  # V3 T-O2
-    global_ontology_blueprint,  # V3 T-O2c：app.py 注册序紧随 ontology_blueprint
-    expirations_blueprint,  # B#13-D：app.py 注册序紧随 ontology_blueprint
-    workflows_blueprint,
-    dispatch_blueprint,
-    guidance_blueprint,
-    agents_blueprint,
-    # app.py 注册序：agents 之后、meetings 之前挂两个 admin 面板（T-J2 / CR-027）
-    admin_jobs_blueprint,
-    admin_dispatch_blueprint,
-    meetings_blueprint,
-    transcripts_blueprint,  # T-A9：app.py 注册序紧随 meetings_blueprint
-    handover_blueprint,  # T-B1：app.py 注册序紧随 transcripts_blueprint
-    discovery_blueprint,  # V3.1 P0-1：app.py 注册序紧随 handover_blueprint
-    plans_blueprint,  # V3.1 P0-3：app.py 注册序紧随 discovery_blueprint
-    quality_blueprint,  # V3.1 P1-2：app.py 注册序紧随 plans_blueprint
-    metrics_blueprint,
-    translator_blueprint,
-    mailing_blueprint,
-    control_blueprint,
-    task_board_blueprint,
-    management_blueprint,
-    weixin_blueprint,
-    mcp_blueprint,
-    chat_blueprint,
-    lcsc_blueprint,
-    desktop_lcsc_blueprint,
-    actions_blueprint,
-    simulation_blueprint,  # V3.2 G2：app.py 注册序在 actions_blueprint 之后
-    commercial_blueprint,  # 商业化 G1：app.py 注册序紧随 simulation_blueprint
-    admin_commercial_blueprint,  # 商业化 G1：app.py 注册序紧随 commercial_blueprint
-]
+BLUEPRINTS = list(iter_blueprints())
+
 
 app = Flask(__name__)
 for bp in BLUEPRINTS:
     app.register_blueprint(bp)
 
 # ---------------------------------------------------------------------------
-# 1.5 蓝图对账断言（架构评估 2026-11-07 D1 防复发）：本清单是**硬编码列表**
-# （照抄 app.py 的蓝图注册序，不调 create_app 以避开 DB/Redis 初始化）——
-# AGENTS「新增或移除 Flask 蓝图后必须同步登记，否则重生成会静默漏条」已
-# 复发三次（T-J2/CR-027、#145、#177 前审计）。这里对 app.py 源码正则计数
-# 对账：register_blueprint 调用数 != 清单长度即中止生成（宁红不漏）。
-_APP_SOURCE = (SERVER_SRC / "fde_api" / "app.py").read_text(encoding="utf-8")
-_REGISTERED_COUNT = len(re.findall(r"register_blueprint\(", _APP_SOURCE))
-assert len(BLUEPRINTS) == _REGISTERED_COUNT, (
-    f"BLUEPRINTS 清单({len(BLUEPRINTS)} 项) != app.py register_blueprint({_REGISTERED_COUNT} 处)"
-    "——新增/移除蓝图未同步登记本清单（AGENTS 工作流陷阱，先补清单再重生成）"
+# 1.5 蓝图对账断言（架构评估 2026-11-08 P2-5）：清单真身已搬到
+#     server/src/fde_api/app.py::_BLUEPRINT_SPECS（经 iter_blueprints() 出货），
+#     「新增/移除蓝图忘了登记」这个坑从流程纪律变成结构不可能——这里从
+#     「与 app.py 源码正则对计数」升级为「与实际注册结果对**名字集合**」：
+#       ① 本地裸应用注册出的蓝图名集合 ≡ 权威表导出的名字集合（漏条/多条即红）；
+#       ② 名字不得重复（同名蓝图注册会被 Flask 静默覆盖）。
+#     AGENTS「审计清单刷新有前置条件」那条随之改写：不再需要人工同步清单。
+# ---------------------------------------------------------------------------
+_DERIVED_NAMES = [bp.name for bp in BLUEPRINTS]
+_REGISTERED_NAMES = sorted(app.blueprints)
+assert sorted(_DERIVED_NAMES) == _REGISTERED_NAMES, (
+    f"权威蓝图表导出 {_DERIVED_NAMES} 与实际注册 {_REGISTERED_NAMES} 不一致"
+    "——app.py::_BLUEPRINT_SPECS 与实际注册必须一致（宁红不漏）"
 )
+_duplicates = {name for name in _DERIVED_NAMES if _DERIVED_NAMES.count(name) > 1}
+assert not _duplicates, f"蓝图名重复：{sorted(_duplicates)}（同名注册会被静默覆盖）"
 
 # ---------------------------------------------------------------------------
 # 2. 测试文件内容（用于 route → test_file 匹配）

@@ -857,3 +857,34 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
 **交互方式**：`AskUserQuestion` 两轮共 5 题（第一轮 4 题、第二轮 1 题补参）；依据／收益／代价／推荐理由写在正文表格、卡片只用 A/B/C 编号（交互选择卡片规范）。20:08 与 20:38 原文全部保留作决策沿革。
 
 **实施登记**：本补录**不新增 B# 编号**（#194 已把 B# 线 FREEZE 封顶 B#40，《借鉴总览》《实况报告》转只读档案，本轮不触碰）；T-Z1 接线实施轮的开工闸仍为「① 实装 + D3 原件核验 + N2 联调签核」三者齐备，本次交互未解除任何一项。PR #193 合并＝Q1=A 已授权执行。
+
+---
+
+## 架构评估十项实施登记（2026-11-08，来源：`docs/architecture/archify-diagrams` 架构评估）
+
+> 十项＝P1×3 / P2×4 / P3×3，外加第六张架构图。性质：给**已上线**的架构补机械闸与
+> 边界文档，不是新功能。两项拍板：`paused`＝保留 CHECK + 加机械钉；pytest 提速＝
+> xdist + 每 worker 独立库 + CI 并行（均「按推荐执行 + 留痕可推翻」）。
+
+| 项 | 事项 | 状态 | 落点 |
+|---|---|---|---|
+| P1-1 | 迁移链必须恰好一个 head | ✅ 已实施 | `server/tests/test_migrations.py::test_alembic_chain_has_exactly_one_head`（双来源互校：文件解析 + alembic `get_heads()`） |
+| P1-2 | 工作流执行器按调度/分派/结算/恢复拆分 | ✅ 已实施 | `workflows/{executor,constants,dag_utils,serialization,settlement,dispatch,recovery}.py`；门面 `__all__` 63 个再导出名；另附 `test_source_size_budgets.py`（四个热点只钉不拆） |
+| P1-3 | pytest 反馈环提速（1h+ → 分钟量级） | ✅ 已实施 | `tests/conftest.py`（每 worker 独立库／同库分 schema 两条隔离路径）+ `pytest-xdist` + CI `-n 4 --dist loadfile` + `test_xdist_isolation.py` |
+| P2-4 | 结构口径同步钉 | ✅ 已实施 | `server/tests/test_structure_inventory_sync.py`（JSON ↔ 路由/蓝图/表/迁移链逐项对账） |
+| P2-5 | 蓝图清单自动派生（消灭第二份真身） | ✅ 已实施 | `app.py::_BLUEPRINT_SPECS` + `iter_blueprints()` + `test_blueprint_registry_sync.py`（含「不得绕过注册表」静态钉） |
+| P2-6 | `paused` 死值域 | ✅ 已实施（拍板：保留 CHECK + 机械钉） | `server/tests/test_workflow_run_status_domain.py`（形状钉 ×2 + 写入方钉） |
+| P2-7 | 图纸防陈旧 + 六图刷新 | ✅ 已实施 | `scripts/audit/check_archify_diagram_freshness.py`（已接 CI）+ 六图重锚/重渲染 |
+| P3-8 | Redis 降级行为文档 | ✅ 已实施 | `docs/architecture/降级与失败路径契约-v1.md` §1（**并修正评估稿两处事实错误**：派发信号在 Redis／登录限流默认 fail-open 可配） |
+| P3-9 | 桌面发起 workflow run | ✅ 已实施 | `desktop/src/renderer/src/workflows/WorkflowConsole.tsx` + `workflow-console-launch.test.tsx` |
+| P3-10 | Worker 横向扩缩容边界 | ✅ 已实施（文档化，不改实现） | 同上文档 §2（已安全六项 / 不宜扩三理由 / 可扩前提五条 / 缺口四条） |
+| 图 | 第六张架构图「降级与失败路径」 | ✅ 已实施 | `docs/architecture/archify-diagrams/degradation/`（12 节点 / 8 边 / 3 车道，四闸全绿 + 整页实拍） |
+
+**依赖关系**：P1-2 先行（其余项的锚点引用拆分后的模块）→ P2-5 → P2-4（对着注册表校验口径）
+→ P2-7（对着机器口径校验图纸）；P1-3 与 P1-2 互不依赖（前者只碰 conftest/CI/依赖），
+P3-8/P3-10 依赖 P1-2 后的行号锚点。
+
+**未决与挂账**：①`ensure_background_job` 缺数据库唯一约束（多实例可能重复建 job）——已登记
+于契约文档 §4-④，随「可扩前提 2」一起排期；②Redis 无守卫的三处（AI 确认密码计数 /
+AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不代拍板**；③`paused` 若将来要真启用，
+需先拍板并补暂停/恢复语义（写入方钉会先红）。

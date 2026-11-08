@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "d33c875e-b88c-4ac9-8df3-e8fe2fcacea0",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\candidate.json",
+  "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
+  "specification": {
+    "sha256": "9055261dc8bdd0a16110107e4bfcfce2c5d17d9e38f4d84a683e0c33c78861d2",
+    "bytes": 11899
+  },
+  "artifact": {
+    "sha256": "75a40beb1bf412daa9b2a1c41d1062a2ea119d8be43bdd2822b36ab93189d15d",
+    "bytes": 834853
+  }
+}

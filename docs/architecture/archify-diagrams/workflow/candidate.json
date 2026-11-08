@@ -5,12 +5,12 @@
     "title": "蔡工FDE智能交付系统 · 交付主流程：从项目到回款",
     "locale": "zh-CN",
     "quality_profile": "showcase",
-    "output": ".archify/workflow-delivery-20261108-190500/delivery-workflow.html",
+    "output": "docs/architecture/archify-diagrams/workflow/delivery-workflow.html",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b"
+      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
     }
   },
   "lanes": [

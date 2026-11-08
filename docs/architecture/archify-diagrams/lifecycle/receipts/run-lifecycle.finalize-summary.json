@@ -6,14 +6,14 @@
   "type": "lifecycle",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-    "sha256": "d9f2c3fd7a06a6d85515ec9da5d1fcb374715a49275fe68ba1964b14e6a96220",
-    "bytes": 9892
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+    "sha256": "3a035615b5154bbd3c4e93cea7e74cc34a6b8e39cc0492d3779dd892c668f804",
+    "bytes": 11991
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
-    "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
-    "bytes": 847850
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+    "bytes": 847851
   },
   "gates": {
     "validate": "pass",
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 8159,
+  "durationMs": 14071,
   "browserCheck": {
     "requested": true,
     "ran": true

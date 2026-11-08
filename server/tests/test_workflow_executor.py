@@ -690,8 +690,10 @@ def test_skill_usage_count_failure_does_not_fail_node(db_session, settings, monk
     # 既有测试基建特性：alembic env.py 每次迁移都 fileConfig（默认
     # disable_existing_loggers=True），导入期创建的模块级 logger 会被全量禁用
     # ——与 test_storage_contract 对 oss2 sdk_logger 的解禁先例同型。
-    logging.getLogger("fde_api.workflows.executor").disabled = False
-    with caplog.at_level(logging.WARNING, logger="fde_api.workflows.executor"):
+    # 架构评估 P1-2 拆分后 skill 分派面住 fde_api.workflows.dispatch
+    # （原 executor.py 的分派实现已搬入该模块），logger 名随之改名。
+    logging.getLogger("fde_api.workflows.dispatch").disabled = False
+    with caplog.at_level(logging.WARNING, logger="fde_api.workflows.dispatch"):
         run_workflow_run(run.id)
 
     db_session.expire_all()

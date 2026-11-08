@@ -26,6 +26,9 @@ WORKFLOW_STATUSES = ("draft", "published", "archived")
 # 没有 condition/wait 节点——when 表达式与 depends_on 已覆盖既有需求；新类型待真实需求
 NODE_TYPES = ("call", "skill", "agent", "human_approval")
 # ready = 依赖全绿待调度（T-W3 执行器的调度循环状态）；waiting 供 human_approval
+# 「paused」= 预留值域·当前无写入方（run 永不进入 paused）。2026-11-08 架构评估
+# P2-6 拍板：保留 CHECK（不收窄、不迁移），用机械钉把它钉成「登记在册的预留值」
+# ——形状钉与写入方钉见 server/tests/test_workflow_run_status_domain.py。
 RUN_STATUSES = (
     "queued",
     "running",

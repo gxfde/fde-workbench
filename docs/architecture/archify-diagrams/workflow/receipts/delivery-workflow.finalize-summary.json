@@ -6,13 +6,13 @@
   "type": "workflow",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
-    "sha256": "e82e707e04d5b4f97dc400e960900b33ffc2b7d0da0b570278b64473424b84d8",
-    "bytes": 18889
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+    "sha256": "ab93829f334dce53ae5015d9ad1f6f70a5075f0e5baa6429eaa817037b5644bc",
+    "bytes": 19626
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
-    "sha256": "4581db8ec5aece72cf65b72bc8e28fb5be20f4b54587a70b7384cf9fd72f917d",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+    "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
     "bytes": 855470
   },
   "gates": {
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 9502,
+  "durationMs": 16679,
   "browserCheck": {
     "requested": true,
     "ran": true

@@ -6,13 +6,13 @@
   "type": "architecture",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
-    "sha256": "fbb7cb6a4dd5a91510b6b5ff8f8db441190d3374fb9c4c80f397b27a7a3f8acd",
-    "bytes": 11547
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+    "sha256": "bd2ba1f780335efe6a9d5688e7327223ed17eb7fe870949e6dc2c969ccd6d0b1",
+    "bytes": 15320
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
-    "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+    "sha256": "fc9c3d6af5842d39bcf46609048f015a4d585c94bdb7f84835597c5456180f16",
     "bytes": 845314
   },
   "gates": {
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 11458,
+  "durationMs": 11284,
   "browserCheck": {
     "requested": true,
     "ran": true

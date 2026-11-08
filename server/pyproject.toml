@@ -39,10 +39,15 @@ test = [
   "pytest-cov>=6,<7",
   "freezegun>=1.5,<2"
 ]
+# xdist 并行跑测（架构评估 P1-3）：本地 `pytest -n 4 --dist loadfile` 把反馈环
+# 从 1 小时量级压到分钟量级。**每 worker 一个独立测试库**（conftest 按
+# PYTEST_XDIST_WORKER 派生 fde_workbench_w{N}_test）——否则并发 worker 的
+# 每用例 DELETE-all 清库与会话级 advisory lock 会互相踩踏。
 dev = [
   "ruff>=0.17",
   "mypy>=1.11",
-  "pre-commit>=3.8"
+  "pre-commit>=3.8",
+  "pytest-xdist>=3,<4"
 ]
 
 [tool.ruff]

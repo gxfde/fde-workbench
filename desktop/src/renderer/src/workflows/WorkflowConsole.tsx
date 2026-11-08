@@ -178,16 +178,36 @@ export function WorkflowConsole({ projectId, canManage }: WorkflowConsoleProps) 
     }
   }
 
+  // 发起运行（can_manage，服务端闸已存在）：只有已发布定义可发起。成功后重拉
+  // 运行列表（新 run 是 queued，由 worker 接单）。403/409 原样呈现不吞——
+  // 与 cancel/resume 同一纪律。
+  async function launch(definition: WorkflowDefinitionDto): Promise<void> {
+    setActionError("")
+    setBusy(true)
+    try {
+      await apiRequest<{ run: WorkflowRunDto; created: boolean }>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(definition.id)}/runs`,
+        { method: "POST", body: {} },
+      )
+      await load()
+    } catch (caught) {
+      setActionError(actionMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) return <p className="empty-copy" role="status">正在加载工作流…</p>
   if (error) return <p className="empty-copy" role="alert">{error}</p>
 
   return (
     <div className="page-stack">
+      {actionError ? <p role="alert" className="empty-copy">{actionError}</p> : null}
       <section className="panel">
         <div className="panel-heading">
           <div>
             <h2>工作流定义</h2>
-            <p>项目内流程定义（草稿与已发布）；发布走管理通道，控制台只读呈现。</p>
+            <p>项目内流程定义（草稿与已发布）；已发布的定义可直接发起运行（需管理权限）。</p>
           </div>
         </div>
         {definitions.length ? (
@@ -203,6 +223,13 @@ export function WorkflowConsole({ projectId, canManage }: WorkflowConsoleProps) 
                 </div>
                 <p>{definition.description || "暂无说明"}</p>
                 <small>{nodeCount(definition.dag_json)}{definition.published_at ? ` · 发布于 ${definition.published_at.slice(0, 10)}` : ""}</small>
+                {canManage && definition.status === "published" ? (
+                  <div className="plugin-actions">
+                    <button className="secondary-button" disabled={busy} onClick={() => void launch(definition)}>
+                      启动
+                    </button>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
@@ -218,7 +245,6 @@ export function WorkflowConsole({ projectId, canManage }: WorkflowConsoleProps) 
             <p>取消幂等（终态拒绝）；恢复仅限失败运行，失败/跳过节点放回重跑。</p>
           </div>
         </div>
-        {actionError ? <p role="alert" className="empty-copy">{actionError}</p> : null}
         {runs.length ? (
           <table className="data-table">
             <thead>

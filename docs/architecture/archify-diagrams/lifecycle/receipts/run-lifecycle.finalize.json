@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "lifecycle",
   "quality": "showcase",
-  "startedAt": "2026-11-08T11:36:10.966Z",
+  "startedAt": "2026-11-08T14:43:18.286Z",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-    "sha256": "d9f2c3fd7a06a6d85515ec9da5d1fcb374715a49275fe68ba1964b14e6a96220",
-    "bytes": 9892
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+    "sha256": "3a035615b5154bbd3c4e93cea7e74cc34a6b8e39cc0492d3779dd892c668f804",
+    "bytes": 11991
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
-    "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
-    "bytes": 847850
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+    "bytes": 847851
   },
   "stages": {
     "validate": {
@@ -27,12 +27,12 @@
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "lifecycle",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch",
+        "D:\\test\\fde-wt-arch-fix",
         "--json"
       ],
       "receipt": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "d9f2c3fd7a06a6d85515ec9da5d1fcb374715a49275fe68ba1964b14e6a96220",
-          "bytes": 9892
+          "sha256": "3a035615b5154bbd3c4e93cea7e74cc34a6b8e39cc0492d3779dd892c668f804",
+          "bytes": 11991
         },
         "validation": {
           "checksPassed": 9,
@@ -56,35 +56,35 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 1769,
+      "durationMs": 4599,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "lifecycle",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch",
+        "D:\\test\\fde-wt-arch-fix",
         "--json"
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "c2b846fa-4416-4dce-a16a-0dd8a1f3b8d0",
+        "receiptId": "8fcafeb3-74d6-4c78-ac19-7533e634eede",
         "ok": true,
         "command": "deliver",
         "type": "lifecycle",
-        "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-        "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+        "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "specification": {
-          "sha256": "d9f2c3fd7a06a6d85515ec9da5d1fcb374715a49275fe68ba1964b14e6a96220",
-          "bytes": 9892
+          "sha256": "3a035615b5154bbd3c4e93cea7e74cc34a6b8e39cc0492d3779dd892c668f804",
+          "bytes": 11991
         },
         "artifact": {
-          "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
-          "bytes": 847850
+          "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+          "bytes": 847851
         },
         "validation": {
           "checksPassed": 9,
@@ -97,7 +97,7 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/gxfde/fde-workbench",
-          "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
+          "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
           "references": 20,
           "linkMode": "local-only"
         },
@@ -117,20 +117,20 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 391,
+      "durationMs": 933,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "check",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "--require-provenance"
       ],
       "receipt": {
         "ok": true,
-        "file": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "file": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "artifact": {
-          "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
-          "bytes": 847850
+          "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+          "bytes": 847851
         },
         "checks": [
           {
@@ -247,22 +247,22 @@
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "c2b846fa-4416-4dce-a16a-0dd8a1f3b8d0"
+        "deliveryReceiptId": "8fcafeb3-74d6-4c78-ac19-7533e634eede"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 4874,
+      "durationMs": 6313,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "browser-check",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
         "--json",
         "--require-provenance",
         "--out-dir",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts"
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts"
       ],
       "execution": "in-process",
       "receipt": {
@@ -273,11 +273,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "c2b846fa-4416-4dce-a16a-0dd8a1f3b8d0",
+        "deliveryReceiptId": "8fcafeb3-74d6-4c78-ac19-7533e634eede",
         "artifact": {
-          "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
-          "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
-          "bytes": 847850
+          "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+          "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+          "bytes": 847851
         },
         "state": {
           "detail": "read",
@@ -958,7 +958,7 @@
           "contactSheet": null
         },
         "sidecars": {
-          "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts",
+          "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts",
           "receipt": "run-lifecycle.browser-check.json",
           "files": []
         }
@@ -971,13 +971,13 @@
   },
   "diagnostics": [],
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-11-08T11:36:19.126Z",
-  "durationMs": 8159,
+  "finishedAt": "2026-11-08T14:43:32.358Z",
+  "durationMs": 14071,
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",

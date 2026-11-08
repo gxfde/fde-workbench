@@ -1,4 +1,4 @@
-"""Workflow 执行器（V3 T-W3，设计 workflow-dag-v1 §3/§5）。
+"""Workflow 执行器门面（V3 T-W3，设计 workflow-dag-v1 §3/§5）。
 
 决策 3 落实：workflow 是 background_jobs 的一个 job_type（``workflow.run``，
 target_id=workflow_run_id）——编排 handler 在一个 job 内驱动节点循环，复用既有
@@ -34,16 +34,31 @@ T-W4 范围：agent + human_approval 节点。
 
 §6 用例 4 的「paused→resume」精确化为 failed + resume_run（§3 终态语义优先：有
 failed → run failed）；resume 的 HTTP 面随 T-W5 与 cancel 一起开，服务层本轮可用。
+
+【架构评估 P1-2 拆分地图（2026-11-08）】本文件从 1562 行收成门面，原实现按职责
+拆到五个同包模块，**对外公开名一个不减**（本文件底部 ``__all__`` 即再导出清单）：
+
+===================  ========================================================
+子模块                职责
+===================  ========================================================
+``constants``         异常类与常量（单点真值，依赖图的根）
+``dag_utils``         DAG 抽取 / 拓扑序 / 占位符解析 / when 裁决（纯函数）
+``serialization``     run·node 读取与投影 + 定义版本行 + 拓扑序节点行
+``settlement``        节点与 run 的终态结算（成功/失败/跳过/等待/审批拍板）
+``dispatch``          节点调度与分派（tx A → call/skill/agent/human_approval）
+``recovery``          worker 侧恢复与终态收敛（崩溃恢复/熔断/丢失收口）
+===================  ========================================================
+
+依赖方向单向无环：constants ← dag_utils ← serialization；settlement ← dispatch；
+settlement·dag_utils ← recovery；本门面在最上层。跨模块调用有两处**刻意**走
+惰性导入——结算面的退避常量与调度面的结算调用点都必须经本门面的属性解析，
+否则测试对 ``executor._RETRY_BACKOFF_BASE_SECONDS`` / ``executor._settle_node_success``
+的 monkeypatch 会失效（拆分类重构最容易丢的一条语义）。
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
-import re
-import time
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -55,66 +70,76 @@ from fde_api.jobs.outbox import enqueue_outbox, utcnow
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.workbench.models import Project
-from fde_api.workflows.definition_service import (
-    PLACEHOLDER_PATTERN,
-    serialize_definition,
+from fde_api.workflows.constants import (
+    CANCELLED_AFTER_DISPATCH_MARKER,
+    MAX_RUN_HOPS,
+    SUPPORTED_NODE_TYPES,
+    TERMINAL_NODE_STATUSES,
+    TERMINAL_RUN_STATUSES,
+    WORKFLOW_JOB_TYPE,
+    WorkflowRunError,
+    _APPROVAL_PAYLOAD_LIMIT_BYTES,
+    _MissingPlaceholder,
+    _NodeFailure,
+    _RETRY_BACKOFF_BASE_SECONDS,
+    _RETRY_BACKOFF_CAP_SECONDS,
+)
+from fde_api.workflows.dag_utils import (
+    _dag_nodes,
+    _lookup,
+    _resolve_value,
+    _topo_order,
+    _when_truthy,
+)
+from fde_api.workflows.definition_service import serialize_definition
+from fde_api.workflows.dispatch import (
+    _begin_node,
+    _call_action_identifier,
+    _dispatch,
+    _dispatch_agent,
+    _dispatch_call,
+    _dispatch_human_approval,
+    _dispatch_skill,
+    _execute_node,
+    _is_external_call,
+    _split_call_params,
 )
 from fde_api.workflows.models import (
     WorkflowDefinition,
-    WorkflowDefinitionVersion,
     WorkflowNodeRun,
     WorkflowRun,
 )
-
-if TYPE_CHECKING:
-    from fde_api.jobs.models import BackgroundJob
+from fde_api.workflows.recovery import (
+    _fail_run_if_hops_exceeded,
+    _fail_run_on_worker_loss,
+    _finalize_pass,
+    _recover_interrupted,
+)
+from fde_api.workflows.serialization import (
+    _iso,
+    _load_version_dag,
+    _serialize_node,
+    _version_dag,
+    _version_row,
+    ordered_nodes,
+    serialize_run,
+    serialize_run_summary,
+)
+from fde_api.workflows.settlement import (
+    _attach_gate_evidence_marker,
+    _record_cancelled_after_dispatch,
+    _settle_node_failure,
+    _settle_node_success,
+    _settle_node_waiting,
+    _settle_run,
+    _skip_node,
+    settle_approval_node,
+)
 
 logger = logging.getLogger(__name__)
 
-WORKFLOW_JOB_TYPE = "workflow.run"
-TERMINAL_RUN_STATUSES = ("succeeded", "failed", "cancelled")
-TERMINAL_NODE_STATUSES = ("succeeded", "failed", "skipped", "cancelled")
-# B#1 跳数熔断（agent-autoloop decide 语义）：重投代际链长上限——resume_run
-# 每次拍板重投 hops+1（继承不清零），入口超限 honest failed(hops_exceeded)。
-MAX_RUN_HOPS = 8
-# 四类节点全部落地（T-W3：call/skill；T-W4：agent/human_approval）；守卫防未来类型漏实现
-SUPPORTED_NODE_TYPES = ("call", "skill", "agent", "human_approval")
-# CR-022：节点被取消后在途派发返回的稳定标记（node.error / output_json 键）
-CANCELLED_AFTER_DISPATCH_MARKER = "cancelled_after_dispatch"
-# 审批材料体上限（与 control.service.create_dsh_approval_request 同口径）
-_APPROVAL_PAYLOAD_LIMIT_BYTES = 64_000
-# 重试退避（指数，封顶）；测试里 monkeypatch 基数即可归零
-_RETRY_BACKOFF_BASE_SECONDS = 1.0
-_RETRY_BACKOFF_CAP_SECONDS = 20.0
-
-
-class WorkflowRunError(Exception):
-    """运行生命周期错误（HTTP 面与内部调用共用；shape 同 WorkflowDefinitionError）。"""
-
-    def __init__(
-        self, code: str, message: str, status: int, detail: dict[str, Any] | None = None
-    ):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.status = status
-        self.detail = detail or {}
-
-
-class _NodeFailure(Exception):
-    """节点分派失败（内部信号：由 _settle_node_failure 落表，绝不外抛出 handler）。"""
-
-    def __init__(self, code: str, message: str, *, retryable: bool):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.retryable = retryable
-
-
-class _MissingPlaceholder(Exception):
-    def __init__(self, name: str):
-        super().__init__(name)
-        self.name = name
+if TYPE_CHECKING:
+    from fde_api.jobs.models import BackgroundJob
 
 
 # ---------------------------------------------------------------------------
@@ -272,13 +297,6 @@ RUN_LIST_LIMIT_DEFAULT = 50
 RUN_LIST_LIMIT_MAX = 200
 
 
-def serialize_run_summary(run: WorkflowRun) -> dict[str, Any]:
-    """run 列表行：serialize_run 去 nodes——列表瘦身，节点树随详情按需取。"""
-    data = serialize_run(run, ())
-    data.pop("nodes")
-    return data
-
-
 def list_project_runs(
     *, actor: User, project_id: str, limit: int = RUN_LIST_LIMIT_DEFAULT
 ) -> dict[str, Any]:
@@ -399,58 +417,6 @@ def _load_run(
 
 
 # ---------------------------------------------------------------------------
-# 序列化
-# ---------------------------------------------------------------------------
-
-
-def _iso(value: Any) -> str | None:
-    return value.isoformat() if value is not None else None
-
-
-def serialize_run(
-    run: WorkflowRun, nodes: Sequence[WorkflowNodeRun], *, now: datetime | None = None
-) -> dict[str, Any]:
-    data = {
-        "id": run.id,
-        "definition_id": run.definition_id,
-        "definition_version": run.definition_version,
-        "project_id": run.project_id,
-        "status": run.status,
-        "idempotency_key": run.idempotency_key,
-        "initiated_by_user_id": run.initiated_by_user_id,
-        "context_json": run.context_json,
-        "error": run.error,
-        "started_at": _iso(run.started_at),
-        "finished_at": _iso(run.finished_at),
-        "created_at": _iso(run.created_at),
-        "nodes": [_serialize_node(node) for node in nodes],
-    }
-    # B#5 挂起时长统计进 run 详情：waiting_approval 的挂起秒数（锚=
-    # updated_at——状态翻进 waiting 的最近一次落库时刻；该态下无其他
-    # 常规写路径，resume 拍板即刻离态）。终态/他态不出该键。
-    if run.status == "waiting_approval" and run.updated_at is not None:
-        current = now or utcnow()
-        data["waiting_approval_seconds"] = int((current - run.updated_at).total_seconds())
-    return data
-
-
-def _serialize_node(node: WorkflowNodeRun) -> dict[str, Any]:
-    return {
-        "node_key": node.node_key,
-        "node_type": node.node_type,
-        "status": node.status,
-        "attempt": node.attempt,
-        "depends_on": node.depends_on,
-        "idempotency_key": node.idempotency_key,
-        "input_snapshot": node.input_snapshot,
-        "output_json": node.output_json,
-        "error": node.error,
-        "started_at": _iso(node.started_at),
-        "finished_at": _iso(node.finished_at),
-    }
-
-
-# ---------------------------------------------------------------------------
 # jobs 接线：handler 注册 + failure hook + 执行主循环
 # ---------------------------------------------------------------------------
 
@@ -464,39 +430,6 @@ def register_workflow_handler() -> None:
 
 def _run_workflow_job(job: BackgroundJob) -> None:
     run_workflow_run(job.target_id)
-
-
-def _fail_run_if_hops_exceeded(run_id: str) -> None:
-    """B#1 跳数熔断入口复核（outbox 上下文无 actor，语义同 worker 丢失收口：
-    error 落行即留痕，resume 重跑面由 resume_run 的 hops 闸拒绝）。"""
-    with db.session() as session, session.begin():
-        run = session.get(WorkflowRun, run_id)
-        if run is None or run.status in TERMINAL_RUN_STATUSES:
-            return
-        if run.hops <= MAX_RUN_HOPS:
-            return
-        run.status = "failed"
-        run.error = f"hops_exceeded:重投代际超上限（{MAX_RUN_HOPS}），熔断。"
-        run.finished_at = utcnow()
-
-
-def _fail_run_on_worker_loss(session: Session, job: BackgroundJob) -> None:
-    """reconcile 放弃（尝试耗尽/不可恢复）时把 run 与悬挂节点推到终态。
-
-    悬挂的 running 节点标 failed（产物未落表即未发生——诚实呈现，resume 可重跑）。
-    """
-    run = session.get(WorkflowRun, job.target_id)
-    if run is None or run.status in TERMINAL_RUN_STATUSES:
-        return
-    run.status = "failed"
-    run.error = "worker_lost:job_attempts_exhausted"
-    run.finished_at = utcnow()
-    for node in session.scalars(
-        select(WorkflowNodeRun).where(WorkflowNodeRun.run_id == run.id)
-    ):
-        if node.status == "running":
-            node.status = "failed"
-            node.error = "worker_lost"
 
 
 def run_workflow_run(run_id: str) -> None:
@@ -553,67 +486,7 @@ def run_workflow_run(run_id: str) -> None:
             continue
         if _finalize_pass(run_id, specs, nodes, context, outputs):
             return
-    _settle_run(run_id, "failed", "scheduler_stuck:迭代超限，无可推进节点（疑似调度缺陷）")
-
-
-def _recover_interrupted(run_id: str) -> None:
-    """handler 入口恢复：queued / waiting_approval → running；worker 死亡遗留的
-    running 节点放回 pending（attempt 保留）。重跑安全由「succeeded 即锚点 +
-    写节点幂等键 / 审批幂等键」保证。"""
-    with db.session() as session, session.begin():
-        run = session.get(WorkflowRun, run_id)
-        if run is None or run.status in TERMINAL_RUN_STATUSES:
-            return
-        if run.status in ("queued", "waiting_approval"):
-            run.status = "running"
-        if run.started_at is None:
-            run.started_at = utcnow()
-        for node in session.scalars(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.status == "running"
-            )
-        ):
-            node.status = "pending"
-            node.error = "interrupted:recovered"
-
-
-def _finalize_pass(
-    run_id: str,
-    specs: dict[str, dict[str, Any]],
-    nodes: dict[str, WorkflowNodeRun],
-    context: dict[str, Any],
-    outputs: dict[str, Any],
-) -> bool:
-    """一轮走到无可推进：终态收敛或断链跳过。返回 True 表示主循环应停止。"""
-    non_terminal = [key for key, node in nodes.items() if node.status not in TERMINAL_NODE_STATUSES]
-    if not non_terminal:
-        failed = any(node.status == "failed" for node in nodes.values())
-        _settle_run(run_id, "failed" if failed else "succeeded")
-        return True
-    progressed = False
-    for key in non_terminal:
-        node = nodes[key]
-        if node.status == "waiting":
-            continue  # 审批外挂中：永不 skip、不算进展（拍板落点负责推动）
-        deps = list(node.depends_on or [])
-        if not all(dep in nodes and nodes[dep].status in TERMINAL_NODE_STATUSES for dep in deps):
-            continue  # 还有依赖未终态：交给下一轮
-        if _when_truthy(specs.get(key, {}).get("when"), context, outputs):
-            # 真值裁决成立却未被 ready 选中：本轮依赖刚终态，回到主循环重判
-            continue
-        _skip_node(run_id, key, "upstream_not_succeeded")
-        progressed = True
-    if not progressed:
-        if any(node.status == "waiting" for node in nodes.values()):
-            # 有 failed 先断链收敛（FV-F1）；否则整 run 挂起等拍板（重投续跑）
-            if any(node.status == "failed" for node in nodes.values()):
-                _settle_run(run_id, "failed")
-            else:
-                _settle_run(run_id, "waiting_approval")
-            return True
-        _settle_run(run_id, "failed", "scheduler_stuck:无可推进节点且无终态路径")
-        return True
-    return False  # 有节点被跳过：下游 may become ready/可继续收敛
+        _settle_run(run_id, "failed", "scheduler_stuck:迭代超限，无可推进节点（疑似调度缺陷）")
 
 
 def _deps_green(
@@ -639,924 +512,83 @@ def _deps_green(
 
 
 # ---------------------------------------------------------------------------
-# 单节点执行（独立事务链）
+# 再导出清单（架构评估 P1-2 拆分：对外公开名一个不减）
+#
+# 拆分前这些名字都住在 executor.py，调用方（routes / control.service /
+# jobs.handlers / 既有测试）一律从 `fde_api.workflows.executor` 取。拆分后
+# 名字的真身搬进了子模块，本门面原样再导出——**改这里的清单等于改公开 API**，
+# 新增名字必须同时更新本清单与 `__all__`。
 # ---------------------------------------------------------------------------
 
-
-def _execute_node(
-    run_id: str, key: str, specs: dict[str, dict[str, Any]]
-) -> bool:
-    """tx A（running+attempt+input 幂等键）→ 分派（无事务）→ tx B（终态+产物）。
-
-    human_approval 节点分派 = 建审批行（tx 内），落点 tx 把节点置 waiting 并挂
-    审批 id 作幂等键。返回 False 仅当 run 已外部终态（取消），主循环随即退出。
-    """
-    prepared = _begin_node(run_id, key, specs)
-    if prepared is None:
-        return False
-    if not prepared["dispatch"]:
-        return True
-    node_id = prepared["node_id"]
-    attempt = prepared["attempt"]
-    node_type = specs[key].get("type")
-    if node_type == "human_approval":
-        try:
-            approval_id = _dispatch_human_approval(
-                run_id, key, specs[key], node_id, prepared["input"]
-            )
-        except _NodeFailure as failure:
-            _settle_node_failure(run_id, key, attempt, specs[key], failure)
-        except Exception:  # noqa: BLE001
-            logger.exception("workflow node dispatch crashed run_id=%s node=%s", run_id, key)
-            _settle_node_failure(
-                run_id,
-                key,
-                attempt,
-                specs[key],
-                _NodeFailure("dispatch_crashed", "节点执行异常，请查看执行器日志。", retryable=True),
-            )
-        else:
-            _settle_node_waiting(run_id, key, approval_id)
-        return True
-    try:
-        payload = _dispatch(run_id, key, specs[key], node_id, prepared["input"], attempt)
-    except _NodeFailure as failure:
-        _settle_node_failure(run_id, key, attempt, specs[key], failure)
-    except Exception:  # noqa: BLE001 —— 未预期异常按失败落表，不让 job 层重投整个 run
-        logger.exception("workflow node dispatch crashed run_id=%s node=%s", run_id, key)
-        # agent 分派崩溃不自动重试：start_run 可能已拉起沙箱 run，同图重试有二次执行面
-        retryable = node_type != "agent"
-        _settle_node_failure(
-            run_id,
-            key,
-            attempt,
-            specs[key],
-            _NodeFailure("dispatch_crashed", "节点执行异常，请查看执行器日志。", retryable=retryable),
-        )
-    else:
-        _settle_node_success(run_id, key, payload)
-    return True
-
-
-def _begin_node(
-    run_id: str, key: str, specs: dict[str, dict[str, Any]]
-) -> dict[str, Any] | None:
-    """tx A：占位符解析 + 标 running；解析失败直接落 failed（绝不填空串）。
-
-    写类 call 节点在此落节点级幂等键（分派前持久化——崩溃恢复同键的前提）。
-    """
-    with db.session() as session, session.begin():
-        run = session.get(WorkflowRun, run_id)
-        if run is None or run.status in TERMINAL_RUN_STATUSES:
-            return None
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if node is None or node.status not in ("pending", "ready"):
-            return None  # 已取消或并发接管
-        all_nodes = {
-            row.node_key: row
-            for row in session.scalars(
-                select(WorkflowNodeRun).where(WorkflowNodeRun.run_id == run_id)
-            )
-        }
-        context = dict(run.context_json or {})
-        outputs = {
-            specs[dep_key]["output"]: all_nodes[dep_key].output_json
-            for dep_key in all_nodes
-            if dep_key in specs
-            and specs[dep_key].get("output")
-            and all_nodes[dep_key].status == "succeeded"
-            and all_nodes[dep_key].output_json is not None
-        }
-        try:
-            resolved = _resolve_value(specs[key].get("params") or {}, context, outputs)
-        except _MissingPlaceholder as missing:
-            node.status = "failed"
-            node.error = f"placeholder_missing:{missing.name}"
-            node.finished_at = utcnow()
-            return {"dispatch": False, "attempt": node.attempt, "node_id": node.id}
-        node.attempt = (node.attempt or 0) + 1
-        node.status = "running"
-        node.started_at = utcnow()
-        node.input_snapshot = resolved
-        if _is_external_call(specs[key]) and not node.idempotency_key:
-            node.idempotency_key = _call_action_identifier(
-                run, node, specs[key], resolved
-            )
-        return {"dispatch": True, "attempt": node.attempt, "node_id": node.id, "input": resolved}
-
-
-def _attach_gate_evidence_marker(
-    session: Session, *, run_id: str, node: WorkflowNodeRun, output: Any
-) -> None:
-    """V3 T-W7：节点成功同事务读 output_json 顶层保留键 ``gate_evidence`` 挂候选。
-
-    产物要成为候选必须由生产方自带指针+指纹，平台永不自动派生（立项 D1）；标记
-    缺失 = 零副作用。坏标记不炸节点：非对象标记在此落 skipped 事件，字段级坏
-    形状（gate 非法 / sha 非 64hex / 超长 / 双字段缺一）由 gate_service.
-    attach_workflow_evidence_candidate 校验裁决——候选是建议性旁路，绝不改变节点
-    成功语义。call 节点产物 = API 响应 dict 是自然生产方；skill/agent 产物为
-    平台包装形（{text}/agent 摘要），顶层标记透传留待现实需求（不发明约束）。
-    """
-    marker = output.get("gate_evidence") if isinstance(output, dict) else None
-    if marker is None:
-        return
-    run = session.get(WorkflowRun, run_id)
-    if run is None or run.status in TERMINAL_RUN_STATUSES:
-        return
-    initiator = (
-        session.get(User, run.initiated_by_user_id) if run.initiated_by_user_id else None
-    )
-    project = session.get(Project, run.project_id) if run.project_id else None
-    if initiator is None or project is None:
-        return
-    if not isinstance(marker, dict):
-        record_event(
-            session,
-            initiator,
-            "gate_evidence_candidate_skipped",
-            run,
-            {
-                "gate_key": None,
-                "workflow_run_id": run_id,
-                "workflow_node_key": node.node_key,
-                "reason": "marker_not_object",
-            },
-        )
-        return
-    # 延迟导入：gate_service 侧事件/权限链与 executor 初始化顺序解耦
-    # （task_service._sync_task_evidence 同款先例）
-    from fde_api.projects.gate_service import attach_workflow_evidence_candidate
-
-    attach_workflow_evidence_candidate(
-        session,
-        actor=initiator,
-        project=project,
-        run_id=run_id,
-        node_key=node.node_key,
-        gate_key=marker.get("gate"),
-        source_uri=marker.get("source_uri"),
-        content_hash=marker.get("content_sha256"),
-        label=marker.get("label"),
-    )
-
-
-def _record_cancelled_after_dispatch(
-    node: WorkflowNodeRun, payload: Any, *, outcome: str
-) -> None:
-    """CR-022：在途派发于节点被取消之后返回——「已执行外呼不回收（诚实呈现）」
-    从账本事实升级为节点面可读事实：终态**不复活**（节点仍是 cancelled，
-    FV-F1「断链不静默 done」不破），但把「确实执行了」落到 output_json：
-    标记 + 派发产物 + action_id 指针（写类操作可回 api_actions 反查）。
-    node.error 同时落稳定标记——桌面 WorkflowConsole 的「错误」列直接可见，
-    零桌面改动即有呈现通道。
-    """
-    result = payload if isinstance(payload, dict) else {"value": payload}
-    action_id = result.get("action_id") if isinstance(result, dict) else None
-    node.output_json = {
-        "cancelled_after_dispatch": True,
-        "dispatch_outcome": outcome,
-        "action_id": action_id,
-        "dispatch_result": result,
-    }
-    node.error = CANCELLED_AFTER_DISPATCH_MARKER
-
-
-def _settle_node_success(run_id: str, key: str, payload: dict[str, Any]) -> None:
-    """tx B：产物先落表再前进（崩溃恢复锚点）。"""
-    with db.session() as session, session.begin():
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if node is None:
-            return
-        if node.status not in ("pending", "ready", "running"):
-            # CR-022：节点在派发后被取消——在途成功返回不得静默丢弃，诚实记录
-            if node.status == "cancelled":
-                _record_cancelled_after_dispatch(node, payload, outcome="succeeded")
-            return
-        node.status = "succeeded"
-        node.output_json = payload
-        node.error = None
-        node.finished_at = utcnow()
-        # V3 T-W7：顶层保留键 gate_evidence → 同事务挂门禁证据候选（call/skill/agent 共用此点）
-        _attach_gate_evidence_marker(session, run_id=run_id, node=node, output=payload)
-
-
-def _settle_node_failure(
-    run_id: str,
-    key: str,
-    attempt: int,
-    spec: dict[str, Any],
-    failure: _NodeFailure,
-) -> None:
-    """失败落表：可重试且未超 max_retries → ready（退避后重派）；否则 failed。
-
-    attempt 语义：首次尝试 attempt=1，重试条件 attempt <= max_retries，
-    总尝试次数 = 1 + max_retries。
-    """
-    max_retries = int(spec.get("max_retries", 0) or 0)
-    will_retry = failure.retryable and attempt <= max_retries
-    with db.session() as session, session.begin():
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if node is None:
-            return
-        if node.status not in ("pending", "ready", "running"):
-            # CR-022：节点在派发后被取消——在途失败同样不得静默丢弃（外呼可能
-            # 已产生部分效果）；记录「取消后派发失败」+ 失败原因
-            if node.status == "cancelled":
-                _record_cancelled_after_dispatch(
-                    node,
-                    {"error": f"{failure.code}:{failure.message}"},
-                    outcome="failed",
-                )
-            return
-        node.error = f"{failure.code}:{failure.message}"
-        if will_retry:
-            node.status = "ready"
-            node.finished_at = None
-        else:
-            node.status = "failed"
-            node.finished_at = utcnow()
-    if will_retry:
-        delay = min(
-            _RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)),
-            _RETRY_BACKOFF_CAP_SECONDS,
-        )
-        if delay > 0:
-            time.sleep(delay)
-
-
-def _skip_node(run_id: str, key: str, reason: str) -> None:
-    with db.session() as session, session.begin():
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if node is None or node.status in TERMINAL_NODE_STATUSES:
-            return
-        node.status = "skipped"
-        node.error = reason
-        node.finished_at = utcnow()
-
-
-def _settle_run(run_id: str, status: str, error: str | None = None) -> None:
-    with db.session() as session, session.begin():
-        run = session.get(WorkflowRun, run_id)
-        if run is None or run.status in TERMINAL_RUN_STATUSES:
-            return
-        run.status = status
-        run.error = error
-        # waiting_approval 不是终态：run 还没跑完，不盖 finished_at
-        run.finished_at = utcnow() if status in TERMINAL_RUN_STATUSES else None
-        actor = (
-            session.get(User, run.initiated_by_user_id)
-            if run.initiated_by_user_id
-            else None
-        )
-        if actor is not None:
-            record_event(
-                session,
-                actor,
-                f"workflow_run_{status}",
-                run,
-                {"error": error} if error else {},
-            )
-
-
-# ---------------------------------------------------------------------------
-# 分派：call（execute_api 同闸）与 skill（pinned 版本 AI 调用）
-# ---------------------------------------------------------------------------
-
-
-def _dispatch(
-    run_id: str,
-    key: str,
-    spec: dict[str, Any],
-    node_id: str,
-    input_snapshot: dict[str, Any],
-    attempt: int,
-) -> dict[str, Any]:
-    node_type = spec.get("type")
-    if node_type == "call":
-        return _dispatch_call(run_id, spec, node_id, input_snapshot)
-    if node_type == "skill":
-        return _dispatch_skill(run_id, spec, node_id, input_snapshot)
-    if node_type == "agent":
-        return _dispatch_agent(run_id, spec, node_id, input_snapshot, attempt)
-    raise _NodeFailure(
-        "unsupported_node_type", f"执行器不支持节点类型：{node_type}。", retryable=False
-    )
-
-
-def _dispatch_call(
-    run_id: str, spec: dict[str, Any], node_id: str, input_snapshot: dict[str, Any]
-) -> dict[str, Any]:
-    """call 节点 = api_execute 同一闸（鉴权/确认/项目 scope），绝不旁路。
-
-    参数约定：params 中与 ref 路径模板匹配的键 → path 参数（须为字符串）；
-    保留键 body（对象）→ 请求体；其余 → query。写类操作命中确认闸（sensitive）
-    时 execute_api 不执行任何变更，节点按 failed 诚实呈现（T-W4 接审批前置）。
-    """
-    from fde_api.control.access import capabilities_for_level, effective_ai_access
-    from fde_api.control.api_actions import execute_api
-    from fde_api.control.service import ControlServiceError
-
-    ref = str(spec["ref"])
-    parameters, body, query = _split_call_params(ref, input_snapshot)
-    with db.session() as session:
-        run = session.get(WorkflowRun, run_id)
-        user = session.get(User, run.initiated_by_user_id) if run else None
-        if run is None or user is None or not user.is_active:
-            raise _NodeFailure(
-                "initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False
-            )
-        allowed = capabilities_for_level(effective_ai_access(user)[0])
-        project_id = run.project_id
-    claims = {"execution_id": f"wfnode-{node_id}", "project_id": project_id}
-    try:
-        result = execute_api(
-            user=user,
-            claims=claims,
-            allowed=allowed,
-            operation=ref,
-            parameters=parameters,
-            body=body,
-            query=query,
-        )
-    except ControlServiceError as error:
-        raise _NodeFailure(
-            error.code, error.message, retryable=getattr(error, "status", 500) >= 500
-        ) from error
-    if not isinstance(result, dict):
-        raise _NodeFailure("invalid_api_response", "API 执行未返回对象结果。", retryable=False)
-    status = result.get("status")
-    if status == "awaiting_confirmation":
-        raise _NodeFailure(
-            "awaiting_confirmation",
-            f"该操作需要人工确认（工作流暂无确认通道），未执行；"
-            f"action_id={result.get('action_id')}。请走 AI 会话或人工执行。",
-            retryable=False,
-        )
-    if status == "running":
-        raise _NodeFailure("action_in_flight", "同名操作正在执行，稍后重试。", retryable=True)
-    # goal-c CR-020（executor 子代理 F3）：写类节点结果未确认（started 无 finished
-    # → uncertain；被 cancelled）不得折叠为 succeeded——FV-F1「断链不静默 done」
-    # 红线；结果未知按失败断链，同键去重在 api_actions 层兜底不二次外呼。
-    if status in ("uncertain", "cancelled"):
-        raise _NodeFailure(
-            "action_not_confirmed",
-            f"写操作已开始但结果未确认（status={status}，action_id={result.get('action_id')}），"
-            "不自动重试；请人工核实目标状态后处置。",
-            retryable=False,
-        )
-    http_status = result.get("http_status")
-    if isinstance(http_status, int) and http_status >= 400:
-        raise _NodeFailure(
-            f"api_http_{http_status}", f"API 返回 {http_status}。", retryable=http_status >= 500
-        )
-    return result
-
-
-def _dispatch_skill(
-    run_id: str, spec: dict[str, Any], node_id: str, input_snapshot: dict[str, Any]
-) -> dict[str, Any]:
-    """skill 节点 = pinned 版本 instructions 作系统提示的确定性 AI 调用。
-
-    use_tools=False：不签发 MCP token，skill 只做文本变换；工具面属于 call 节点。
-    execution_id = wfnode-{node 行 id}（跨重试/恢复稳定，审计可回溯）。
-    """
-    from fde_api.control.access import capabilities_for_level, effective_ai_access
-    from fde_api.control.ai_server_client import execute_ai_prompt
-    from fde_api.control.dsh_runtime import DSHRuntimeError
-    from fde_api.control.models import SkillDefinition, SkillVersion
-    from fde_api.control.service import ControlServiceError
-
-    key_part, _, version_part = str(spec["ref"]).partition("@")
-    with db.session() as session:
-        run = session.get(WorkflowRun, run_id)
-        if run is None:
-            raise _NodeFailure("run_not_found", "运行不存在。", retryable=False)
-        rows = session.execute(
-            select(SkillDefinition, SkillVersion)
-            .join(
-                SkillVersion,
-                (SkillVersion.skill_id == SkillDefinition.id)
-                & (SkillVersion.version_number == int(version_part)),
-            )
-            .where(
-                SkillDefinition.skill_key == key_part,
-                SkillDefinition.status == "published",
-            )
-            .order_by(SkillDefinition.scope.desc(), SkillDefinition.created_at, SkillDefinition.id)
-            .limit(1)
-        ).first()
-        if rows is None:
-            raise _NodeFailure(
-                "skill_ref_unavailable",
-                f"skill 版本不可用：{spec['ref']}（只接受已发布（published）技能，与定义期白名单同口径）。",
-                retryable=False,
-            )
-        _skill, version = rows
-        instructions = version.instructions_text
-        skill_id = _skill.id
-        initiator_id, project_id = run.initiated_by_user_id, run.project_id
-        # agent-policy-v1 §T-S1 消费面两闸（与 mcp_gateway._skills 同口径）：
-        # 个人技能仅所有者可消费；required_capabilities ⊆ 发起人实时 AI 档位。
-        initiator = session.get(User, initiator_id) if initiator_id else None
-        if initiator is None or not initiator.is_active:
-            raise _NodeFailure(
-                "initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False
-            )
-        initiator_id = initiator.id
-        if _skill.scope != "public" and _skill.owner_user_id != initiator.id:
-            raise _NodeFailure(
-                "skill_ref_forbidden",
-                f"技能 {spec['ref']} 为个人技能，仅所有者可在工作流中消费。",
-                retryable=False,
-            )
-        allowed = capabilities_for_level(effective_ai_access(initiator)[0])
-        missing = sorted(set(version.required_capabilities or []) - set(allowed))
-        if missing:
-            raise _NodeFailure(
-                "ai_access_insufficient",
-                f"发起人 AI 档位不足以消费该技能（缺少：{'、'.join(missing)}）。",
-                retryable=False,
-            )
-    prompt = json.dumps(input_snapshot, ensure_ascii=False)
-    try:
-        answer = execute_ai_prompt(
-            user_id=initiator_id,
-            prompt=prompt,
-            execution_id=f"wfnode-{node_id}",
-            project_id=project_id,
-            use_tools=False,
-            system_prompt=instructions,
-        )
-    except DSHRuntimeError as error:
-        raise _NodeFailure(error.code, error.public_message, retryable=error.retryable) from error
-    except ControlServiceError as error:
-        raise _NodeFailure(
-            error.code, error.message, retryable=getattr(error, "status", 500) >= 500
-        ) from error
-    if not isinstance(answer, str):
-        answer = json.dumps(answer, ensure_ascii=False)
-    # V3 T-S2：pinned 版本完成一次确定性调用即消费——独立微事务计数，
-    # 节点失败（AI 异常/重试）不计；attempt 代际各自计一次（每次都真消费了）。
-    # CR-013：计数侧故障不升级消费侧——AI 已成功，计数失败只记 warning 不冒泡
-    # （否则 _execute_node 兜底 catch 为 dispatch_crashed(retryable=True)：
-    # 已成功的 AI 调用被丢弃重跑成双份成本、节点误标 failed；chat 面
-    # ai_tool_loop 对工具异常同型有守卫，唯此处曾裸露）。
-    from fde_api.control.extensions_service import record_skill_usage
-    try:
-        record_skill_usage(actor_id=initiator_id, skill_id=skill_id, surface="workflow",
-                           version=int(version_part))
-    except Exception as error:  # noqa: BLE001 —— 计数失败是噪声不是效果（T-S2 对称语义）
-        logger.warning(
-            "workflow skill usage count failed node=%s skill=%s error_type=%s",
-            node_id, skill_id, type(error).__name__,
-        )
-    return {"text": answer}
-
-
-def _dispatch_agent(
-    run_id: str,
-    spec: dict[str, Any],
-    node_id: str,
-    input_snapshot: dict[str, Any],
-    attempt: int,
-) -> dict[str, Any]:
-    """agent 节点 = agents.start_run 同闸（实时鉴权/预算/试点/T1/T6/沙箱/产物校验）。
-
-    幂等键 ``wfnode-{节点行id}:{attempt}``：agents 服务对失败终态 run 拒绝同键重跑
-    （V8：重试必须显式），工作流以 attempt 代际表达「显式重试」（resume_run /
-    retryable 崩溃恢复各开新代际）；同 attempt 内重复投递命中 completed 复用。
-    params.solution_id（占位符解析后）透传给 run——agent_assisted / T1 等方案闸
-    随之生效。失败一律 retryable=False：agents 自带重试族与退避，工作流不叠加。
-    """
-    from fde_api.agents import service as agents_service
-
-    with db.session() as session:
-        run = session.get(WorkflowRun, run_id)
-        user = session.get(User, run.initiated_by_user_id) if run else None
-        if run is None or user is None or not user.is_active:
-            raise _NodeFailure(
-                "initiator_unavailable", "发起人账号不可用，无法执行节点。", retryable=False
-            )
-        project_id = run.project_id
-    payload: dict[str, Any] = {
-        "project_id": project_id,
-        "idempotency_key": f"wfnode-{node_id}:{attempt}",
-    }
-    solution_id = input_snapshot.get("solution_id")
-    if isinstance(solution_id, str) and solution_id.strip():
-        payload["solution_id"] = solution_id.strip()
-    try:
-        data, _status = agents_service.start_run(
-            actor=user, agent_id=str(spec["ref"]), payload=payload
-        )
-    except agents_service.AgentsServiceError as error:
-        raise _NodeFailure(error.code, error.message, retryable=False) from error
-    if not isinstance(data, dict) or not data.get("id"):
-        raise _NodeFailure(
-            "invalid_agent_response", "智能体 run 未返回可解析结果。", retryable=False
-        )
-    agent_status = str(data.get("status"))
-    if agent_status != "completed":
-        raise _NodeFailure(
-            f"agent_run_{agent_status}",
-            f"智能体 run 终态为 {agent_status}，未产出 completed 结果。",
-            retryable=False,
-        )
-    return {
-        "agent_run_id": data["id"],
-        "agent_run_status": agent_status,
-        "token_cost": data.get("token_cost"),
-        "duration_ms": data.get("duration_ms"),
-        "degraded": data.get("degraded"),
-        "fallback_level": data.get("fallback_level"),
-        "artifacts": data.get("artifacts") or [],
-    }
-
-
-def _dispatch_human_approval(
-    run_id: str,
-    key: str,
-    spec: dict[str, Any],
-    node_id: str,
-    input_snapshot: dict[str, Any],
-) -> str:
-    """human_approval 节点 = 复用 automation_approvals（run_id 空 + 节点反链）。
-
-    定义期已闸 capability ∈ 登记表白名单；分派时按 DSH 审批同款实时校验发起人
-    当下仍具备该能力。审批材料 = 运行上下文事实（run/节点/输入快照），敏感键命中
-    或超 64KB 拒绝入审。幂等：节点幂等键已挂审批 id 或存在同节点 pending 审批时
-    直接复用（崩溃恢复不重复建单）。风险档固定 4（人工门 = 保守高险，诚实标注）。
-    """
-    from fde_api.control.access import authorize_ai_capability, contains_sensitive_argument
-    from fde_api.control.models import AutomationApproval
-
-    expires_minutes = int(spec.get("expires_minutes", 15) or 15)
-    capability = str(spec["capability"])
-    with db.session() as session, session.begin():
-        run = session.get(WorkflowRun, run_id)
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if run is None or node is None:
-            raise _NodeFailure("run_not_found", "运行不存在。", retryable=False)
-        if node.idempotency_key:
-            existing = session.get(AutomationApproval, node.idempotency_key)
-            if existing is not None and existing.status == "pending":
-                return existing.id  # 崩溃恢复：审批已建且仍在等拍板，直接复用
-            # goal-c CR-014：键所指的审批已终态（reject/expired/approved/executed）
-            # ——resume 是全新分派而非崩溃恢复，不能把节点重新挂到终态审批上
-            # （否则 waiting_approval 无人可拍板，run 唯一出口只剩 cancel）。
-            # 清掉过期键，落到下方按 workflow_node_run_id 复用 pending / 或新建。
-            node.idempotency_key = None
-        pending = session.scalar(
-            select(AutomationApproval).where(
-                AutomationApproval.workflow_node_run_id == node.id,
-                AutomationApproval.status == "pending",
-            )
-        )
-        if pending is not None:
-            return pending.id  # waiting 落表前崩溃：回收既有 pending 审批
-        initiator = (
-            session.get(User, run.initiated_by_user_id) if run.initiated_by_user_id else None
-        )
-        if initiator is None or not initiator.is_active:
-            raise _NodeFailure(
-                "initiator_unavailable", "发起人账号不可用，无法发起审批。", retryable=False
-            )
-        project = session.get(Project, run.project_id)
-        decision = authorize_ai_capability(user=initiator, capability=capability, project=project)
-        if not decision.allowed:
-            raise _NodeFailure(
-                decision.reason or "permission_revoked",
-                "发起人已不具备该审批节点所需能力，无法发起审批。",
-                retryable=False,
-            )
-        arguments = {
-            "kind": "workflow.human_approval",
-            "workflow_run_id": run_id,
-            "node_key": key,
-            "input": input_snapshot,
-        }
-        canonical = json.dumps(
-            arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
-        if len(canonical.encode("utf-8")) > _APPROVAL_PAYLOAD_LIMIT_BYTES:
-            raise _NodeFailure(
-                "approval_payload_too_large",
-                f"审批材料超过 {_APPROVAL_PAYLOAD_LIMIT_BYTES} 字节上限。",
-                retryable=False,
-            )
-        if contains_sensitive_argument(arguments):
-            raise _NodeFailure(
-                "sensitive_argument_rejected",
-                "审批材料包含敏感键，拒绝进入审批（与 DSH 审批同闸）。",
-                retryable=False,
-            )
-        approval = AutomationApproval(
-            run_id=None,
-            workflow_node_run_id=node.id,
-            project_id=run.project_id,
-            requested_by_user_id=initiator.id,
-            request_key=f"wfnode:{node.id}"[:160],
-            capability=capability,
-            tool_name="workflow.human_approval",
-            arguments_json=arguments,
-            arguments_sha256=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-            risk_level=4,
-            status="pending",
-            expires_at=utcnow() + timedelta(minutes=expires_minutes),
-            decision_reason="",
-        )
-        session.add(approval)
-        session.flush()
-        return approval.id
-
-
-def _settle_node_waiting(run_id: str, key: str, approval_id: str) -> None:
-    """审批已建/复用 → 节点 waiting；审批 id 挂节点幂等键（崩溃恢复锚点）。"""
-    with db.session() as session, session.begin():
-        node = session.scalar(
-            select(WorkflowNodeRun).where(
-                WorkflowNodeRun.run_id == run_id, WorkflowNodeRun.node_key == key
-            )
-        )
-        if node is None or node.status not in ("pending", "ready", "running"):
-            return
-        node.status = "waiting"
-        node.idempotency_key = approval_id
-
-
-def settle_approval_node(
-    session: Session,
-    approval: Any,
-    *,
-    approved: bool | None,
-    reviewer: User | None,
-) -> None:
-    """审批拍板落点（control.decide_automation_approval 事务内调用，同事务提交）。
-
-    approved=True → 节点 succeeded（output 携审批事实）并重投 workflow.run；
-    False=拒绝 / None=过期 → 节点 failed（断链语义，重投后主循环收敛 run failed
-    + 下游 skipped）。节点已不在 waiting（被取消/恢复重派）或 run 已终态时不动
-    ——审批不再驱动节点（取消后补拍板只落审批行，如实记录）。
-    """
-    node = (
-        session.get(WorkflowNodeRun, approval.workflow_node_run_id)
-        if approval.workflow_node_run_id
-        else None
-    )
-    if node is None or node.status != "waiting":
-        return
-    run = session.get(WorkflowRun, node.run_id)
-    if run is None or run.status in TERMINAL_RUN_STATUSES:
-        return
-    node.finished_at = utcnow()
-    if approved is True:
-        node.status = "succeeded"
-        node.error = None
-        node.output_json = {
-            "approval_id": approval.id,
-            "decision": "approved",
-            "reviewed_by_user_id": reviewer.id if reviewer else None,
-            "decision_reason": approval.decision_reason,
-        }
-        # V3 T-W7：批准产物同事务读标记——现合同 output 无 gate_evidence → 零副作用；
-        # 与 _settle_node_success 一致接线，未来包装层自带标记时零改生效。
-        _attach_gate_evidence_marker(
-            session, run_id=run.id, node=node, output=node.output_json
-        )
-    else:
-        node.status = "failed"
-        node.output_json = None
-        node.error = (
-            "approval_expired:操作审批已过期。"
-            if approved is None
-            else f"approval_rejected:{approval.decision_reason or '操作审批被拒绝。'}"
-        )
-    run.status = "running"
-    run.error = None
-    decision_label = "approved" if approved is True else ("expired" if approved is None else "rejected")
-    if reviewer is not None:
-        record_event(
-            session,
-            reviewer,
-            "workflow_run_approval_decided",
-            run,
-            {
-                "node_key": node.node_key,
-                "decision": decision_label,
-                "approval_id": approval.id,
-            },
-        )
-    enqueue_outbox(session, WORKFLOW_JOB_TYPE, run.id, {})
-
-
-# ---------------------------------------------------------------------------
-# call 参数拆分与幂等键（与 control/api_actions 同构）
-# ---------------------------------------------------------------------------
-
-
-def _split_call_params(
-    ref: str, resolved: dict[str, Any]
-) -> tuple[dict[str, str], dict[str, Any], dict[str, Any]]:
-    from fde_api.control.api_catalog import CATALOG
-
-    path = str(CATALOG[ref]["path"])
-    path_params = set(re.findall(r"\{(\w+)\}", path))
-    parameters = {
-        key: value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        for key, value in resolved.items()
-        if key in path_params
-    }
-    raw_body = resolved.get("body")
-    body: dict[str, Any] = dict(raw_body) if isinstance(raw_body, dict) else {}
-    query = {
-        key: value
-        for key, value in resolved.items()
-        if key not in path_params and key != "body"
-    }
-    return parameters, body, query
-
-
-def _is_external_call(spec: dict[str, Any]) -> bool:
-    """外副作用判定（T-R2 起消费目录结构化 effect：非 read 即有副作用面）。"""
-    from fde_api.control.api_catalog import CATALOG
-
-    return spec.get("type") == "call" and CATALOG[str(spec["ref"])]["effect"] != "read"
-
-
-def _call_action_identifier(
-    run: WorkflowRun, node: WorkflowNodeRun, spec: dict[str, Any], resolved: dict[str, Any]
-) -> str:
-    """与 api_actions.execute_api 完全同构的 sha256：
-    identifier = sha256(json([user_id, execution_id, data]))，其中 execution_id =
-    ``wfnode-{node 行 id}``、data = {operation, parameters, body, query}。
-    节点行跨重试/恢复稳定 ⇒ 同键 ⇒ api_execute 层按 action 去重，不二次外呼。"""
-    parameters, body, query = _split_call_params(str(spec["ref"]), resolved)
-    data = {"operation": str(spec["ref"]), "parameters": parameters, "body": body, "query": query}
-    payload = json.dumps(
-        [run.initiated_by_user_id, f"wfnode-{node.id}", data],
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# dag / 拓扑 / 占位符（执行器侧纯函数）
-# ---------------------------------------------------------------------------
-
-
-def _dag_nodes(dag: Any) -> list[dict[str, Any]]:
-    nodes = dag.get("nodes") if isinstance(dag, dict) else None
-    if not isinstance(nodes, list) or not nodes:
-        raise WorkflowRunError("dag_invalid", "定义快照损坏：nodes 缺失。", 422)
-    return [node for node in nodes if isinstance(node, dict)]
-
-
-def _topo_order(dag_nodes: list[dict[str, Any]]) -> list[str]:
-    """执行器侧确定性拓扑序（Kahn，key 字典序稳定）；定义期已过环检测，
-    防御性场景下的部分序由主循环迭代上限兜底。"""
-    by_key = {str(node["key"]): node for node in dag_nodes}
-    indegree = {key: 0 for key in by_key}
-    children: dict[str, list[str]] = {key: [] for key in by_key}
-    for key, node in by_key.items():
-        for dep in node.get("depends_on") or []:
-            dep_key = str(dep)
-            if dep_key in by_key:
-                indegree[key] += 1
-                children[dep_key].append(key)
-    queue = sorted(key for key, degree in indegree.items() if degree == 0)
-    order: list[str] = []
-    while queue:
-        key = queue.pop(0)
-        order.append(key)
-        for child in children[key]:
-            indegree[child] -= 1
-            if indegree[child] == 0:
-                queue.append(child)
-                queue.sort()
-    return order
-
-
-def _version_row(
-    session: Session, definition: WorkflowDefinition, version_number: int
-) -> WorkflowDefinitionVersion:
-    version = session.scalar(
-        select(WorkflowDefinitionVersion).where(
-            WorkflowDefinitionVersion.definition_id == definition.id,
-            WorkflowDefinitionVersion.version == version_number,
-        )
-    )
-    if version is None:
-        raise WorkflowRunError(
-            "definition_not_published", "定义版本快照缺失，请先发布。", 409
-        )
-    return version
-
-
-def _version_dag(session: Session, run: WorkflowRun) -> Any:
-    version = session.scalar(
-        select(WorkflowDefinitionVersion).where(
-            WorkflowDefinitionVersion.definition_id == run.definition_id,
-            WorkflowDefinitionVersion.version == run.definition_version,
-        )
-    )
-    if version is None:
-        raise WorkflowRunError(
-            "definition_version_missing", "运行钉住的定义版本快照缺失。", 422
-        )
-    return version.dag_json
-
-
-def _load_version_dag(run_id: str) -> list[dict[str, Any]]:
-    with db.session() as session:
-        run = session.get(WorkflowRun, run_id)
-        if run is None:
-            raise WorkflowRunError("run_not_found", "运行不存在。", 404)
-        return _dag_nodes(_version_dag(session, run))
-
-
-def ordered_nodes(session: Session, run: WorkflowRun) -> list[WorkflowNodeRun]:
-    """节点行按运行钉住版本的拓扑序排列（详情树稳定可读）。"""
-    rows = list(
-        session.scalars(
-            select(WorkflowNodeRun).where(WorkflowNodeRun.run_id == run.id)
-        )
-    )
-    order = {key: index for index, key in enumerate(_topo_order(_dag_nodes(_version_dag(session, run))))}
-    return sorted(rows, key=lambda node: order.get(node.node_key, len(order)))
-
-
-def _lookup(path: str, context: dict[str, Any], outputs: dict[str, Any]) -> Any:
-    root, _, rest = path.partition(".")
-    if root in context:
-        value: Any = context[root]
-    elif root in outputs:
-        value = outputs[root]
-    else:
-        raise _MissingPlaceholder(path)
-    for part in (part for part in rest.split(".") if part):
-        if isinstance(value, dict) and part in value:
-            value = value[part]
-        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
-            value = value[int(part)]
-        else:
-            raise _MissingPlaceholder(path)
-    return value
-
-
-def _resolve_value(
-    value: Any, context: dict[str, Any], outputs: dict[str, Any]
-) -> Any:
-    """深解析：整串单占位符 → 原类型替换（不字符串化）；内嵌占位符 → 字符串插值；
-    缺键 → _MissingPlaceholder（节点 failed，绝不填空串——修 fde-v2 缺陷）。"""
-    if isinstance(value, str):
-        whole = PLACEHOLDER_PATTERN.fullmatch(value.strip())
-        if whole:
-            return _lookup(whole.group(1), context, outputs)
-
-        def _substitute(match: re.Match[str]) -> str:
-            resolved = _lookup(match.group(1), context, outputs)
-            if isinstance(resolved, str):
-                return resolved
-            return json.dumps(resolved, ensure_ascii=False)
-
-        return PLACEHOLDER_PATTERN.sub(_substitute, value)
-    if isinstance(value, dict):
-        return {k: _resolve_value(v, context, outputs) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_resolve_value(item, context, outputs) for item in value]
-    return value
-
-
-def _when_truthy(when: Any, context: dict[str, Any], outputs: dict[str, Any]) -> bool:
-    """T-W3 最小语义：when 仅支持整串单占位符，取其 JSON 值的 Python 真值；
-    缺键/其它形态一律 False（诚实不猜）。表达式引擎待真实需求。"""
-    if not isinstance(when, str):
-        return False
-    whole = PLACEHOLDER_PATTERN.fullmatch(when.strip())
-    if whole is None:
-        return False
-    try:
-        return bool(_lookup(whole.group(1), context, outputs))
-    except _MissingPlaceholder:
-        return False
+__all__ = [
+    # 常量与异常
+    "WORKFLOW_JOB_TYPE",
+    "TERMINAL_RUN_STATUSES",
+    "TERMINAL_NODE_STATUSES",
+    "MAX_RUN_HOPS",
+    "SUPPORTED_NODE_TYPES",
+    "CANCELLED_AFTER_DISPATCH_MARKER",
+    "_APPROVAL_PAYLOAD_LIMIT_BYTES",
+    "_RETRY_BACKOFF_BASE_SECONDS",
+    "_RETRY_BACKOFF_CAP_SECONDS",
+    "WorkflowRunError",
+    "_NodeFailure",
+    "_MissingPlaceholder",
+    # 生命周期（本门面自有）
+    "load_project",
+    "load_definition",
+    "_normalize_idempotency_key",
+    "_load_run",
+    "start_run",
+    "get_run_detail",
+    "RUN_LIST_LIMIT_DEFAULT",
+    "RUN_LIST_LIMIT_MAX",
+    "list_project_runs",
+    "cancel_run",
+    "resume_run",
+    "list_platform_definitions",
+    "register_workflow_handler",
+    "_run_workflow_job",
+    "run_workflow_run",
+    "_deps_green",
+    # 读取与呈现（serialization）
+    "_iso",
+    "serialize_run",
+    "_serialize_node",
+    "serialize_run_summary",
+    "_version_row",
+    "_version_dag",
+    "_load_version_dag",
+    "ordered_nodes",
+    # dag 纯函数（dag_utils）
+    "_dag_nodes",
+    "_topo_order",
+    "_lookup",
+    "_resolve_value",
+    "_when_truthy",
+    # 结算（settlement）
+    "_attach_gate_evidence_marker",
+    "_record_cancelled_after_dispatch",
+    "_settle_node_success",
+    "_settle_node_failure",
+    "_settle_node_waiting",
+    "_skip_node",
+    "_settle_run",
+    "settle_approval_node",
+    # 调度与分派（dispatch）
+    "_execute_node",
+    "_begin_node",
+    "_dispatch",
+    "_dispatch_call",
+    "_dispatch_skill",
+    "_dispatch_agent",
+    "_dispatch_human_approval",
+    "_split_call_params",
+    "_is_external_call",
+    "_call_action_identifier",
+    # 恢复（recovery）
+    "_recover_interrupted",
+    "_finalize_pass",
+    "_fail_run_if_hops_exceeded",
+    "_fail_run_on_worker_loss",
+]

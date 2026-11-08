@@ -6,13 +6,13 @@
   "type": "dataflow",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-    "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
-    "bytes": 10376
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+    "sha256": "79a8da7324fb5cea1fab392ad7ece74dd7553f09b5a60def2d4fdabe3a39dff8",
+    "bytes": 12106
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
-    "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+    "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
     "bytes": 829693
   },
   "gates": {
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 9165,
+  "durationMs": 15963,
   "browserCheck": {
     "requested": true,
     "ran": true

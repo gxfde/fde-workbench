@@ -6,14 +6,14 @@
   "type": "sequence",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\candidate.json",
-    "sha256": "4bea613e901b9f9d94541b4e35f5546465af14e3ec2a8f4021be6b1d9483b020",
-    "bytes": 18122
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\candidate.json",
+    "sha256": "a9e8f7434f2b3d2d4ec8a55d9ea5e8579bca8aab5c00fa9a54b263f2b84039be",
+    "bytes": 18845
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
-    "sha256": "fda5a0007e11eac5d2662e077ddfc1de28589d6d63e5709243db52d79a690e8e",
-    "bytes": 854498
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
+    "sha256": "d1d007d1506e23dc3bb79860d4ac623f6465a7c06297dac06791f2b9a2c48d01",
+    "bytes": 854493
   },
   "gates": {
     "validate": "pass",
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\receipts\\workflow-run-sequence.browser-check.json"
   },
   "update": {
     "status": "current",
@@ -43,7 +43,7 @@
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 8739,
+  "durationMs": 15549,
   "browserCheck": {
     "requested": true,
     "ran": true

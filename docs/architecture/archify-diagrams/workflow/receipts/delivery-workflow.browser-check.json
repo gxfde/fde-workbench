@@ -6,10 +6,10 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "bcc45f12-feae-417a-891e-fc7cdba5c0a7",
+  "deliveryReceiptId": "26987f5a-0e5e-4855-870d-70cfdd816fe6",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
-    "sha256": "4581db8ec5aece72cf65b72bc8e28fb5be20f4b54587a70b7384cf9fd72f917d",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+    "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
     "bytes": 855470
   },
   "state": {
@@ -1627,7 +1627,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts",
+    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts",
     "receipt": "delivery-workflow.browser-check.json",
     "files": []
   }

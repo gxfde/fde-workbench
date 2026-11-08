@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -91,11 +92,120 @@ def resolve_test_database_url() -> str:
     return url
 
 
+# ---------------------------------------------------------------------------
+# xdist 每 worker 隔离（架构评估 P1-3：把 1 小时量级的反馈环压到分钟量级）
+#
+# 为什么必须每个 worker 独占一块（两条独立的互踩面）：
+#   ① 每用例的 DELETE-all 清库：并发 worker 在同一份数据上会互删对方的数据；
+#   ② 会话级 advisory lock（_SESSION_LOCK_KEY）：PG 的 advisory lock 以
+#      **database** 为域，同库多 worker 会把整场测试重新串行化——那正是本项
+#      要消除的等待。
+#
+# 两条隔离路径（按可用权限择一，**都不回落共享 public**）：
+#   A. 每 worker 一个独立**库**（fde_workbench_w{N}_test）：需要 CREATEDB；
+#      CI 的 postgres:16 容器里 POSTGRES_USER=fde 即超级用户，天然具备。
+#   B. 每 worker 一个独立 **schema**（fde_xdist_w{N}，同一库不同 schema）：
+#      本机开发库常常没有建库权限时走这条——search_path 隔离 + advisory lock
+#      键按 worker 分化，等价隔离。
+#
+# A 路径的库名保持 *_test 结尾 ⇒ 上面那道「只允许测试库」硬闸一字不改（红线不动）。
+# 派生方式：xdist 给每个 worker 进程注入 PYTEST_XDIST_WORKER=gwN。
+# ---------------------------------------------------------------------------
+
+_XDIST_WORKER_ENV = "PYTEST_XDIST_WORKER"
+_XDIST_DB_PREFIX = "fde_workbench_w"
+_XDIST_DB_SUFFIX = "_test"
+_XDIST_SCHEMA_PREFIX = "fde_xdist_w"
+
+
+def _xdist_worker_index() -> int | None:
+    """当前进程是第几个 xdist worker；非 xdist 运行返回 None。"""
+    worker = os.environ.get(_XDIST_WORKER_ENV, "").strip()
+    if not worker:
+        return None
+    match = re.fullmatch(r"gw(\d+)", worker)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _database_exists(maintenance_url: str, name: str) -> bool:
+    with create_engine(maintenance_url).connect() as conn:
+        row = conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name}
+        ).first()
+    return row is not None
+
+
+def _try_create_worker_database(base_url: str, name: str) -> bool:
+    """尝试建 worker 专用测试库；成功返回 True，无建库权限返回 False。
+
+    **绝不静默回落到共享库**：共享库下并发 worker 会互删数据、清库与
+    advisory lock 互相踩踏，那不是「慢一点」，是「不可信的绿」。
+    """
+    parsed = make_url(base_url)
+    maintenance = parsed.set(database="postgres").render_as_string(hide_password=False)
+    try:
+        engine = create_engine(maintenance, isolation_level="AUTOCOMMIT")
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name}
+            ).first()
+            if exists is None:
+                conn.execute(text(f'CREATE DATABASE "{name}"'))
+        engine.dispose()
+        return True
+    except Exception:  # noqa: BLE001 —— 无建库权限或并发竞态都落到 B 路径
+        # 并发建库竞态：另一个 worker 刚建好 → 再查一次，存在即视为成功。
+        try:
+            return _database_exists(maintenance, name)
+        except Exception:  # noqa: BLE001 —— 连查都失败就是真的没权限
+            return False
+
+
+def _ensure_worker_schema(base_url: str, schema: str) -> str:
+    """B 路径：建 worker 专用 schema，并把 URL 指向它（search_path）。
+
+    search_path 只含 worker schema（**不含 public**）：宁可「relation does not
+    exist」当场炸，也不静默回落到 public 的同名表（那正是跨 worker 串数据的
+    形态）。迁移文件里无任何 `public.` 限定、无 CREATE EXTENSION、无显式
+    schema=——DDL 会整体落在 worker schema 内（PG 的 DDL 用 search_path 首位）。
+    """
+    engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    with engine.connect() as conn:
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+    engine.dispose()
+    url = make_url(base_url)
+    return url.update_query_dict({"options": f"-c search_path={schema}"}).render_as_string(
+        hide_password=False
+    )
+
+
+def _resolve_worker_database_url(base_url: str) -> str:
+    """xdist worker → 隔离 URL；非 xdist 运行原样返回。"""
+    index = _xdist_worker_index()
+    if index is None:
+        return base_url
+    db_name = f"{_XDIST_DB_PREFIX}{index}{_XDIST_DB_SUFFIX}"
+    if _try_create_worker_database(base_url, db_name):
+        return make_url(base_url).set(database=db_name).render_as_string(hide_password=False)
+    # B 路径：同一库、不同 schema（并按 schema 分化 advisory lock 键）
+    return _ensure_worker_schema(base_url, f"{_XDIST_SCHEMA_PREFIX}{index}")
+
+
+def _worker_schema_from_url(database_url: str) -> str | None:
+    """从 URL 里读回 worker schema（B 路径）；A 路径或单进程返回 None。"""
+    raw_options = make_url(database_url).query.get("options", "")
+    options = raw_options if isinstance(raw_options, str) else ""
+    match = re.search(r"search_path=([A-Za-z0-9_]+)", options)
+    return match.group(1) if match else None
+
+
 @pytest.fixture(scope="session")
 def test_settings(tmp_path_factory):
     return Settings(
         env="test",
-        database_url=resolve_test_database_url(),
+        database_url=_resolve_worker_database_url(resolve_test_database_url()),
         redis_url=os.environ.get("FDE_TEST_REDIS_URL", "redis://127.0.0.1:16379/2"),
         jwt_secret="test-secret-with-at-least-thirty-two-characters",
         local_storage_root=tmp_path_factory.mktemp("fde-object-storage"),
@@ -128,6 +238,18 @@ def engine(test_settings):
 _SESSION_LOCK_KEY = "fde_workbench_test_session"
 
 
+def _session_lock_key(database_url: str) -> str:
+    """会话级 advisory lock 的键。
+
+    PG 的 advisory lock 以 **database** 为域：A 路径（每 worker 一个库）下
+    各 worker 各锁各的，天然隔离；B 路径（同一库、不同 schema）下库相同 ⇒
+    必须让锁键也按 worker 分化，否则并发 worker 仍被这一把锁重新串行化
+    （那正是本项要消除的等待）。单进程运行沿用原键，不改变既有行为。
+    """
+    schema = _worker_schema_from_url(database_url)
+    return _SESSION_LOCK_KEY if schema is None else f"{_SESSION_LOCK_KEY}_{schema}"
+
+
 @pytest.fixture(scope="session", autouse=True)
 def migrated_test_schema(test_settings):
     assert test_settings.env == "test"
@@ -135,10 +257,13 @@ def migrated_test_schema(test_settings):
     # 会话级 PG advisory lock：本机/CI 上若有两个 pytest 进程同时指向同一
     # 测试库（运行器重复派发、并行任务），迁移 downgrade/upgrade 与每用例
     # 清理会互相踩踏（死锁/表消失的假失败）。持锁串行化整个测试会话。
+    # xdist 并行时按 worker 分化（B 路径），并行 worker 之间不再互相等待。
+    lock_key = _session_lock_key(test_settings.database_url)
+    worker_schema = _worker_schema_from_url(test_settings.database_url)
     lock_engine = create_engine(test_settings.database_url)
     lock_conn = lock_engine.connect()
     try:
-        lock_conn.execute(text(f"SELECT pg_advisory_lock(hashtext('{_SESSION_LOCK_KEY}'))"))
+        lock_conn.execute(text(f"SELECT pg_advisory_lock(hashtext('{lock_key}'))"))
     except Exception:
         lock_conn.close()
         lock_engine.dispose()
@@ -146,7 +271,7 @@ def migrated_test_schema(test_settings):
     try:
         config = Config(str(SERVER_ROOT / "alembic.ini"))
         config.attributes["settings"] = test_settings
-        _reconcile_test_schema(config, lock_conn)
+        _reconcile_test_schema(config, lock_conn, schema=worker_schema)
         # 项目建行的 projects.sop_phase 外键指向 sop_nodes.node_key，生产环境由
         # load_seeds.py 灌入 SOP 快照；测试库迁移后同样灌入，保证同一行为。
         seed_reference_data(test_settings.database_url)
@@ -155,7 +280,7 @@ def migrated_test_schema(test_settings):
         # 保险带：中途任何语句留下 aborted 事务都不该让解锁本身炸掉
         # （解锁是持锁清理的唯一出口；干净事务上 rollback 是无害空操作）。
         lock_conn.rollback()
-        lock_conn.execute(text(f"SELECT pg_advisory_unlock(hashtext('{_SESSION_LOCK_KEY}'))"))
+        lock_conn.execute(text(f"SELECT pg_advisory_unlock(hashtext('{lock_key}'))"))
         lock_conn.close()
         lock_engine.dispose()
 
@@ -183,8 +308,6 @@ def _known_alembic_revisions(config) -> set[str]:
       revision = "d4e6f8a2c7b9"          （无注解）
       revision: str = 'b4e8c1a7d2f6'     （带类型注解，单引号）
     """
-    import re
-
     versions_dir = SERVER_ROOT / "migrations" / "versions"
     known: set[str] = set()
     for path in versions_dir.glob("*.py"):
@@ -198,15 +321,18 @@ def _known_alembic_revisions(config) -> set[str]:
     return known
 
 
-def _reconcile_test_schema(config, lock_conn) -> None:
+def _reconcile_test_schema(config, lock_conn, *, schema: str | None = None) -> None:
     """迁移到 head；对外来迁移链戳自愈（goal-c CR-002 根治）。
 
     共享测试库可能被另一个 worktree 会话盖成**本树迁移链之外**的 revision
     （其未提交/已合并但本地树滞后时）。此时 `downgrade base` 报
     "Can't locate revision" 使全部 DB 用例 setup 即 E。检测法：读当前戳，若不在
-    本树 `script.versions`（含多 head 各支）内→`DROP SCHEMA public CASCADE` 重建
-    （alembic_version 一并删除）再 `upgrade head`；base（无戳/空戳）直接 upgrade；
+    本树 `script.versions`（含多 head 各支）内→重建 schema 再 `upgrade head`
+    （alembic_version 一并删除）；base（无戳/空戳）直接 upgrade；
     链内任意已落戳照旧 `downgrade base`→`upgrade head`（roundtrip 干净）。
+
+    ``schema`` 非空 = xdist 的 B 路径（同一库分 schema）：外来戳时只重建
+    worker 自己那块 schema——重建 public 会连坐掉别的 worker 与并发会话的数据。
     """
     stamp = _current_alembic_stamp(lock_conn)
     if not stamp:  # 空 schema 或 base：无外来戳，直接升级到 head
@@ -217,8 +343,12 @@ def _reconcile_test_schema(config, lock_conn) -> None:
         command.upgrade(config, "head")
         return
     # 外来戳（本树无此 revision）：重建 schema 再升级，避开 "Can't locate revision"。
-    lock_conn.execute(text("DROP SCHEMA public CASCADE"))
-    lock_conn.execute(text("CREATE SCHEMA public"))
+    if schema is None:
+        lock_conn.execute(text("DROP SCHEMA public CASCADE"))
+        lock_conn.execute(text("CREATE SCHEMA public"))
+    else:
+        lock_conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        lock_conn.execute(text(f'CREATE SCHEMA "{schema}"'))
     lock_conn.commit()
     command.upgrade(config, "head")
 

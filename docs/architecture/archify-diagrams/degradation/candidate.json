@@ -1,0 +1,418 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "降级与失败路径：故障 → 判定 → 兜底与人工",
+    "locale": "zh-CN",
+    "subtitle": "架构评估第六图：L0–L3 降级链、Redis 停摆边界与永不降级红线",
+    "quality_profile": "showcase",
+    "output": "docs/architecture/archify-diagrams/degradation/degradation-paths.html",
+    "repository": {
+      "url": "https://github.com/gxfde/fde-workbench.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
+    }
+  },
+  "lanes": [
+    {
+      "id": "fault",
+      "label": "故障面 · 依赖不可用 / 条件不满足"
+    },
+    {
+      "id": "judge",
+      "label": "判定与降级 · agents fallback L0–L3"
+    },
+    {
+      "id": "fallback",
+      "label": "兜底与人工 · 事实落点与红线",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "detect",
+      "label": "探测",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "judge",
+      "label": "判定与降级",
+      "fromCol": 2,
+      "toCol": 3
+    },
+    {
+      "id": "settle",
+      "label": "兜底与收敛",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "agent_unavailable",
+    "l2_unavailable",
+    "l3_handoff",
+    "manual"
+  ],
+  "nodes": [
+    {
+      "id": "redis_down",
+      "lane": "fault",
+      "col": 0,
+      "yOffset": 0,
+      "width": 150,
+      "type": "messagebus",
+      "label": "Redis 不可用",
+      "sublabel": "派发信号面停摆",
+      "sources": [
+        {
+          "path": "server/src/fde_api/jobs/queue.py",
+          "line": 29,
+          "end_line": 40,
+          "label": "JobQueue enqueue/dequeue"
+        },
+        {
+          "path": "server/src/fde_api/extensions.py",
+          "line": 51,
+          "end_line": 66,
+          "label": "RedisClient"
+        }
+      ]
+    },
+    {
+      "id": "agent_unavailable",
+      "lane": "fault",
+      "col": 1,
+      "yOffset": 0,
+      "width": 200,
+      "type": "cloud",
+      "label": "沙箱/凭据/宿主通道不可用",
+      "sublabel": "adapter/credential 缺失 · 通道默认关",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 225,
+          "end_line": 231,
+          "label": "adapter/credential 缺失判定"
+        },
+        {
+          "path": "server/src/fde_api/agents/sandbox.py",
+          "line": 9,
+          "end_line": 12,
+          "label": "egress 默认 --network none"
+        },
+        {
+          "path": "server/src/fde_api/config.py",
+          "line": 144,
+          "end_line": 148,
+          "label": "宿主通道默认 False"
+        }
+      ]
+    },
+    {
+      "id": "upstream_unknown",
+      "lane": "fault",
+      "col": 5,
+      "yOffset": 0,
+      "width": 160,
+      "type": "external",
+      "label": "上游结果未知",
+      "sublabel": "started 无 finished · 需人工确认",
+      "sources": [
+        {
+          "path": "server/src/fde_api/workflows/dispatch.py",
+          "line": 175,
+          "end_line": 243,
+          "label": "_dispatch_call 同闸"
+        }
+      ]
+    },
+    {
+      "id": "l0_normal",
+      "lane": "judge",
+      "col": 2,
+      "yOffset": -110,
+      "width": 145,
+      "type": "backend",
+      "label": "L0 正常完成",
+      "sublabel": "无降级",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/models.py",
+          "line": 74,
+          "end_line": 75,
+          "label": "fallback_level 值域 L0–L3"
+        }
+      ]
+    },
+    {
+      "id": "l1_degraded",
+      "lane": "judge",
+      "col": 2,
+      "yOffset": -45,
+      "width": 145,
+      "type": "backend",
+      "label": "L1 降级完成",
+      "sublabel": "degraded · completed",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 516,
+          "end_line": 520,
+          "label": "L1/L2 落点"
+        },
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 1130,
+          "end_line": 1135,
+          "label": "L1 判定"
+        }
+      ]
+    },
+    {
+      "id": "l2_unavailable",
+      "lane": "judge",
+      "col": 2,
+      "yOffset": 30,
+      "width": 170,
+      "type": "backend",
+      "label": "L2 不可用·非完成终态",
+      "sublabel": "沙箱起不来 / run 未 completed",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 425,
+          "end_line": 426,
+          "label": "L2 落点"
+        },
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 1292,
+          "end_line": 1300,
+          "label": "L1/L2 终态构造"
+        }
+      ]
+    },
+    {
+      "id": "l3_handoff",
+      "lane": "judge",
+      "col": 3,
+      "yOffset": 30,
+      "width": 150,
+      "type": "security",
+      "label": "L3 人工接管",
+      "sublabel": "人工门 · 事件留痕",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 1142,
+          "end_line": 1151,
+          "label": "L3 落点与事件"
+        }
+      ]
+    },
+    {
+      "id": "queue_pause",
+      "lane": "fallback",
+      "col": 1,
+      "yOffset": -40,
+      "width": 150,
+      "type": "messagebus",
+      "label": "队列停摆待恢复",
+      "sublabel": "LPOP 弹出即出队",
+      "sources": [
+        {
+          "path": "server/src/fde_api/jobs/queue.py",
+          "line": 32,
+          "end_line": 40,
+          "label": "dequeue 语义"
+        }
+      ]
+    },
+    {
+      "id": "reconcile",
+      "lane": "fallback",
+      "col": 2,
+      "yOffset": 60,
+      "width": 150,
+      "type": "backend",
+      "label": "reconcile 补投",
+      "sublabel": "周期捞回无主作业",
+      "sources": [
+        {
+          "path": "server/src/fde_api/cli.py",
+          "line": 191,
+          "end_line": 193,
+          "label": "worker 周期对账"
+        },
+        {
+          "path": "server/src/fde_api/jobs/outbox.py",
+          "line": 50,
+          "end_line": 98,
+          "label": "dispatch_pending 补投"
+        }
+      ]
+    },
+    {
+      "id": "facts_pg",
+      "lane": "fallback",
+      "col": 3,
+      "yOffset": -40,
+      "width": 160,
+      "type": "database",
+      "label": "事实留在 PG",
+      "sublabel": "background_jobs + outbox_events",
+      "sources": [
+        {
+          "path": "server/src/fde_api/jobs/models.py",
+          "line": 79,
+          "end_line": 86,
+          "label": "background_jobs 租约语义"
+        },
+        {
+          "path": "server/src/fde_api/jobs/outbox.py",
+          "line": 29,
+          "end_line": 49,
+          "label": "事务性 outbox"
+        }
+      ]
+    },
+    {
+      "id": "manual",
+      "lane": "fallback",
+      "col": 4,
+      "yOffset": 0,
+      "width": 150,
+      "type": "security",
+      "label": "人工核实与接管",
+      "sublabel": "不代决策 · 走既有任务中心",
+      "sources": [
+        {
+          "path": "server/src/fde_api/agents/service.py",
+          "line": 1151,
+          "end_line": 1151,
+          "label": "agent_run_handoff 事件"
+        }
+      ]
+    },
+    {
+      "id": "no_degrade",
+      "lane": "fallback",
+      "col": 5,
+      "yOffset": 0,
+      "width": 170,
+      "type": "security",
+      "label": "写外呼·发信·付款 永不降级",
+      "sublabel": "失败即留痕，不走替身",
+      "sources": [
+        {
+          "path": "docs/architecture/降级与失败路径契约-v1.md",
+          "line": 108,
+          "end_line": 116,
+          "label": "§1.3 永不降级项"
+        },
+        {
+          "path": "server/src/fde_api/control/api_actions.py",
+          "line": 261,
+          "end_line": 266,
+          "label": "写类确认闸"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-redis-pause",
+      "from": "redis_down",
+      "to": "queue_pause",
+      "label": "派发停摆",
+      "role": "error",
+      "variant": "security"
+    },
+    {
+      "id": "e-queue-reconcile",
+      "from": "queue_pause",
+      "to": "reconcile",
+      "label": "恢复后补投",
+      "role": "branch"
+    },
+    {
+      "id": "e-agent-l2",
+      "from": "agent_unavailable",
+      "to": "l2_unavailable",
+      "label": "沙箱/凭据/通道不可用",
+      "role": "error"
+    },
+    {
+      "id": "e-l0-facts",
+      "from": "l0_normal",
+      "to": "facts_pg",
+      "label": "产物落表",
+      "role": "main"
+    },
+    {
+      "id": "e-l1-facts",
+      "from": "l1_degraded",
+      "to": "facts_pg",
+      "label": "降级产物",
+      "role": "branch"
+    },
+    {
+      "id": "e-l2-l3",
+      "from": "l2_unavailable",
+      "to": "l3_handoff",
+      "label": "转人工接管",
+      "role": "error"
+    },
+    {
+      "id": "e-l3-manual",
+      "from": "l3_handoff",
+      "to": "manual",
+      "label": "接管留痕",
+      "role": "return"
+    },
+    {
+      "id": "e-upstream-nodegrade",
+      "from": "upstream_unknown",
+      "to": "no_degrade",
+      "label": "失败即留痕·不自动重试",
+      "role": "error",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "降级链 L0–L3（准确语义，不是 L0–L4）",
+      "items": [
+        "L0 正常完成；L1 降级完成（degraded+completed，产物仍可用）；L2 不可用或非完成终态（沙箱起不来 / run 未 completed）；L3 人工接管",
+        "值域权威 = agent_runs.fallback_level 的 CHECK（agents/models.py:74）——只有 L0–L3 四值；对外的 L4 属商业编号（commercial/ladder.py），与本链无关",
+        "L1 的降级事实不被 L3 覆写；L3 落 agent_run_handoff 事件，事实链可追",
+        "工作流节点级另有可重试判定（retryable ∧ attempt ≤ max_retries）与跳数熔断（hops>8 → honest failed）——两层不是一回事",
+        "重投代际 hops>8 → run honest failed（熔断，见 workflows/constants.py::MAX_RUN_HOPS）；熔断后由人另起新运行"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "永不降级项（红线）",
+      "items": [
+        "对外发信、写类外呼、付款/结算、门禁裁决与拍板：依赖故障时失败并留痕，不走「降级替身」",
+        "上游结果未知（started 无 finished）不折叠为 succeeded，也不自动重试——结果未知按失败断链，人工核实",
+        "人工门不代决策：L2/L3 都落到既有任务中心，由人拍板",
+        "本图只描述现状与边界，不改实现"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "沙箱与宿主通道的边界",
+      "items": [
+        "沙箱默认 egress = --network none（deny 基线）；allowlist 档才建 per-run 网络 + iptables 白名单",
+        "宿主执行通道默认关闭（config.agent_host_channel_enabled=False）：容器内 server 跑不到宿主进程，缺失二进制 → L2 零计费",
+        "沙箱凭据明文只在注入时刻经进程环境管道，argv/磁盘/日志零明文",
+        "Redis 挂掉只停派发信号：任务事实与租约都在 PG，reconcile 周期补投（详见 docs/architecture/降级与失败路径契约-v1.md）",
+        "Redis 恢复后由 reconcile 周期补投（worker 每 60s 对账一次），租约到期的无主作业一并捞回"
+      ]
+    }
+  ]
+}

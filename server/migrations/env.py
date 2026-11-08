@@ -95,6 +95,13 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_item=render_custom_types,
+            # 测试环境按「每个迁移一个事务」跑（架构评估 P1-3 并行跑测）：
+            # 一次 downgrade base 会连续 DROP 130 张表 + 数百个索引，全链单事务
+            # ⇒ 每个 worker 同时持锁上千，4 worker 并发直接撑爆 PG 的 lock 表
+            # （out of shared memory / HINT: increase max_locks_per_transaction）。
+            # 逐迁移提交把持锁峰值降到单个迁移量级；**生产环境保持单事务**
+            # （原子性语义不变——生产升级必须全成或全无）。
+            transaction_per_migration=settings.env == "test",
         )
 
         with context.begin_transaction():

@@ -24,7 +24,8 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "fde_api"
 
 # 形参直传链（上游实参已在契约 §2 表逐点登记来源）：变量名允许清单。
 # 上游来源 = chat.py:187 _workbench_system_prompt()（常量+config+内置手册）/
-# executor.py:1098 治理面发布 instructions / structured 固定常量。
+# workflows/dispatch.py 的 skill 分派（治理面发布 instructions，P1-2 拆分后
+# 由 executor.py 搬到 dispatch.py）/ structured 固定常量。
 _SYSTEM_PROMPT_PARAM_NAMES = {"system_prompt"}
 
 # 已登记例外（契约 §2 表锚定，逐符号登记；域外新增即红）：
@@ -114,22 +115,27 @@ def test_j1_system_message_contents_are_whitelisted_shapes():
 
 
 def test_j1_executors_system_prompt_call_site_is_still_governed_instructions():
-    """J-1 附钉：executor skill 节点 system_prompt 仍=治理面发布 instructions（T-S1）。
+    """J-1 附钉：工作流 skill 节点 system_prompt 仍=治理面发布 instructions（T-S1）。
 
     若有人把运行期外部文字接进该实参，说明白名单④被旁路——直接转红。
+
+    扫描范围=**整个 workflows 包**（架构评估 P1-2 拆分后 skill 分派实现搬到了
+    workflows/dispatch.py；这条钉的是「工作流侧的 system_prompt 实参」，不是某个
+    具体文件——否则下次再挪文件就会让钉失效）。
     """
-    path = SRC / "workflows" / "executor.py"
-    matches = [
-        (node.lineno, kw.value)
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.Call)
-        for kw in node.keywords
-        if kw.arg == "system_prompt"
-    ]
-    assert matches, "executor 的 system_prompt 调用点消失了？"
-    for lineno, value in matches:
+    package = SRC / "workflows"
+    matches: list[tuple[str, int, object]] = []
+    for path in sorted(package.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            for kw in node.keywords:
+                if kw.arg == "system_prompt":
+                    matches.append((path.name, node.lineno, kw.value))
+    assert matches, "工作流侧的 system_prompt 调用点消失了？"
+    for filename, lineno, value in matches:
         assert isinstance(value, ast.Name) and value.id == "instructions", (
-            f"executor.py:{lineno} system_prompt 实参不再是治理面 instructions 变量"
+            f"workflows/{filename}:{lineno} system_prompt 实参不再是治理面 instructions 变量"
         )
 
 

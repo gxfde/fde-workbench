@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "cd063e24-790b-47e1-9099-4b72175620ca",
+  "deliveryReceiptId": "dc93e42e-db40-4aba-b699-01668164a3d5",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
-    "sha256": "fda5a0007e11eac5d2662e077ddfc1de28589d6d63e5709243db52d79a690e8e",
-    "bytes": 854498
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
+    "sha256": "d1d007d1506e23dc3bb79860d4ac623f6465a7c06297dac06791f2b9a2c48d01",
+    "bytes": 854493
   },
   "state": {
     "detail": "read",
@@ -691,7 +691,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\sequence\\receipts",
+    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\receipts",
     "receipt": "workflow-run-sequence.browser-check.json",
     "files": []
   }

@@ -4,37 +4,57 @@
   "meta": {
     "title": "蔡工FDE智能交付系统 · 系统总体架构",
     "locale": "zh-CN",
-    "output": ".archify/architecture-system-20261108-190000/system-architecture.html",
+    "output": "docs/architecture/archify-diagrams/architecture/system-architecture.html",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b"
+      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
     },
     "views": [
       {
         "id": "main-journey",
         "label": "主链路",
-        "focus": ["users", "renderer", "preload", "main", "api"],
+        "focus": [
+          "users",
+          "renderer",
+          "preload",
+          "main",
+          "api"
+        ],
         "note": "桌面端经本机回环 HTTP 访问 API"
       },
       {
         "id": "async-jobs",
         "label": "异步任务",
-        "focus": ["api", "worker", "scheduler", "redis", "db"],
+        "focus": [
+          "api",
+          "worker",
+          "scheduler",
+          "redis",
+          "db"
+        ],
         "note": "outbox 事件 + Redis fde-jobs 队列"
       },
       {
         "id": "bridge-view",
         "label": "集成桥",
-        "focus": ["bridge", "truth", "main", "api"],
+        "focus": [
+          "bridge",
+          "truth",
+          "main",
+          "api"
+        ],
         "note": "宿主 4h 定时只读采集, 快照投影进 PG"
       },
       {
         "id": "ai-channel",
         "label": "AI 通道",
-        "focus": ["api", "ai_server"],
+        "focus": [
+          "api",
+          "ai_server"
+        ],
         "note": "chat/completions 出呼 + MCP 工具回调"
       }
     ]
@@ -45,8 +65,14 @@
       "type": "external",
       "label": "蔡工 / FDE 工程师",
       "sublabel": "桌面端单机操作",
-      "pos": [49, 40],
-      "size": [140, 56]
+      "pos": [
+        49,
+        40
+      ],
+      "size": [
+        140,
+        56
+      ]
     },
     {
       "id": "renderer",
@@ -54,10 +80,21 @@
       "label": "React 渲染层",
       "sublabel": "项目/派单/工作流等页面群",
       "sources": [
-        { "path": "desktop/src/renderer/src/api/client.ts", "line": 53, "end_line": 58, "label": "apiRequest" }
+        {
+          "path": "desktop/src/renderer/src/api/client.ts",
+          "line": 53,
+          "end_line": 58,
+          "label": "apiRequest"
+        }
       ],
-      "pos": [34, 160],
-      "size": [170, 72]
+      "pos": [
+        34,
+        160
+      ],
+      "size": [
+        170,
+        72
+      ]
     },
     {
       "id": "preload",
@@ -65,10 +102,21 @@
       "label": "Preload 桥",
       "sublabel": "contextBridge · window.fde",
       "sources": [
-        { "path": "desktop/src/preload/index.ts", "line": 54, "end_line": 54, "label": "exposeInMainWorld" }
+        {
+          "path": "desktop/src/preload/index.ts",
+          "line": 54,
+          "end_line": 54,
+          "label": "exposeInMainWorld"
+        }
       ],
-      "pos": [244, 160],
-      "size": [150, 72]
+      "pos": [
+        244,
+        160
+      ],
+      "size": [
+        150,
+        72
+      ]
     },
     {
       "id": "main",
@@ -77,11 +125,27 @@
       "sublabel": "api-ipc · auth-store · lcsc-runner",
       "tag": "桌面运行时",
       "sources": [
-        { "path": "desktop/src/main/index.ts", "line": 180, "end_line": 186, "label": "IPC 注册" },
-        { "path": "desktop/src/main/api-ipc.ts", "line": 85, "end_line": 85, "label": "Bearer JWT" }
+        {
+          "path": "desktop/src/main/index.ts",
+          "line": 180,
+          "end_line": 186,
+          "label": "IPC 注册"
+        },
+        {
+          "path": "desktop/src/main/api-ipc.ts",
+          "line": 85,
+          "end_line": 85,
+          "label": "Bearer JWT"
+        }
       ],
-      "pos": [434, 160],
-      "size": [200, 72]
+      "pos": [
+        434,
+        160
+      ],
+      "size": [
+        200,
+        72
+      ]
     },
     {
       "id": "lcsc",
@@ -89,23 +153,50 @@
       "label": "立创商城 LCSC",
       "sublabel": "白名单域受控会话",
       "sources": [
-        { "path": "desktop/src/main/index.ts", "line": 50, "end_line": 56, "label": "域名白名单" }
+        {
+          "path": "desktop/src/main/index.ts",
+          "line": 50,
+          "end_line": 56,
+          "label": "域名白名单"
+        }
       ],
-      "pos": [444, 40],
-      "size": [180, 56]
+      "pos": [
+        444,
+        40
+      ],
+      "size": [
+        180,
+        56
+      ]
     },
     {
       "id": "api",
       "type": "backend",
       "label": "Flask API (fde_api)",
-      "sublabel": "127.0.0.1:8010 · 47 蓝图 · 384 路由",
+      "sublabel": "127.0.0.1:8010 · 49 蓝图 · 391 路由",
       "tag": "v0.3.0",
       "sources": [
-        { "path": "server/src/fde_api/app.py", "line": 44, "end_line": 133, "label": "蓝图注册" },
-        { "path": "compose.yaml", "line": 29, "end_line": 43, "label": "api 服务" }
+        {
+          "path": "server/src/fde_api/app.py",
+          "line": 28,
+          "end_line": 101,
+          "label": "蓝图注册"
+        },
+        {
+          "path": "compose.yaml",
+          "line": 29,
+          "end_line": 43,
+          "label": "api 服务"
+        }
       ],
-      "pos": [419, 480],
-      "size": [230, 88]
+      "pos": [
+        419,
+        480
+      ],
+      "size": [
+        230,
+        88
+      ]
     },
     {
       "id": "worker",
@@ -113,12 +204,33 @@
       "label": "后台 Worker",
       "sublabel": "flask worker · 租约/心跳",
       "sources": [
-        { "path": "server/src/fde_api/cli.py", "line": 165, "end_line": 200, "label": "worker 循环" },
-        { "path": "server/src/fde_api/jobs/worker.py", "line": 183, "end_line": 200, "label": "失败退避重投" },
-        { "path": "compose.yaml", "line": 66, "end_line": 92, "label": "worker 服务" }
+        {
+          "path": "server/src/fde_api/cli.py",
+          "line": 165,
+          "end_line": 200,
+          "label": "worker 循环"
+        },
+        {
+          "path": "server/src/fde_api/jobs/worker.py",
+          "line": 183,
+          "end_line": 200,
+          "label": "失败退避重投"
+        },
+        {
+          "path": "compose.yaml",
+          "line": 66,
+          "end_line": 92,
+          "label": "worker 服务"
+        }
       ],
-      "pos": [90, 640],
-      "size": [180, 72]
+      "pos": [
+        90,
+        640
+      ],
+      "size": [
+        180,
+        72
+      ]
     },
     {
       "id": "scheduler",
@@ -126,12 +238,33 @@
       "label": "定时调度器",
       "sublabel": "flask scheduler · 到期扫描",
       "sources": [
-        { "path": "server/src/fde_api/control/scheduler.py", "line": 62, "end_line": 95, "label": "到期任务入队" },
-        { "path": "server/src/fde_api/control/scheduler.py", "line": 97, "end_line": 160, "label": "过期清扫+退避提醒" },
-        { "path": "compose.yaml", "line": 103, "end_line": 121, "label": "scheduler 服务" }
+        {
+          "path": "server/src/fde_api/control/scheduler.py",
+          "line": 62,
+          "end_line": 95,
+          "label": "到期任务入队"
+        },
+        {
+          "path": "server/src/fde_api/control/scheduler.py",
+          "line": 97,
+          "end_line": 160,
+          "label": "过期清扫+退避提醒"
+        },
+        {
+          "path": "compose.yaml",
+          "line": 103,
+          "end_line": 121,
+          "label": "scheduler 服务"
+        }
       ],
-      "pos": [310, 640],
-      "size": [180, 72]
+      "pos": [
+        310,
+        640
+      ],
+      "size": [
+        180,
+        72
+      ]
     },
     {
       "id": "redis",
@@ -139,23 +272,50 @@
       "label": "Redis 7.4",
       "sublabel": "fde-jobs 队列 · 限流 · 心跳",
       "sources": [
-        { "path": "server/src/fde_api/jobs/queue.py", "line": 17, "end_line": 40, "label": "Redis 队列" },
-        { "path": "compose.yaml", "line": 13, "end_line": 27, "label": "redis 服务" }
+        {
+          "path": "server/src/fde_api/jobs/queue.py",
+          "line": 17,
+          "end_line": 40,
+          "label": "Redis 队列"
+        },
+        {
+          "path": "compose.yaml",
+          "line": 13,
+          "end_line": 27,
+          "label": "redis 服务"
+        }
       ],
-      "pos": [90, 830],
-      "size": [180, 68]
+      "pos": [
+        90,
+        830
+      ],
+      "size": [
+        180,
+        68
+      ]
     },
     {
       "id": "db",
       "type": "database",
       "label": "PostgreSQL 16",
-      "sublabel": "twenty-db:5432/fde_workbench · 128 表",
+      "sublabel": "twenty-db:5432/fde_workbench · 130 表",
       "tag": "WSL 既有实例",
       "sources": [
-        { "path": "compose.yaml", "line": 37, "end_line": 37, "label": "FDE_DATABASE_URL" }
+        {
+          "path": "compose.yaml",
+          "line": 37,
+          "end_line": 37,
+          "label": "FDE_DATABASE_URL"
+        }
       ],
-      "pos": [490, 960],
-      "size": [200, 68]
+      "pos": [
+        490,
+        960
+      ],
+      "size": [
+        200,
+        68
+      ]
     },
     {
       "id": "storage",
@@ -163,11 +323,27 @@
       "label": "本地对象存储",
       "sublabel": "fde_storage 卷 · 指针+sha256",
       "sources": [
-        { "path": "server/src/fde_api/extensions.py", "line": 69, "end_line": 90, "label": "存储后端" },
-        { "path": "compose.yaml", "line": 50, "end_line": 51, "label": "fde_storage" }
+        {
+          "path": "server/src/fde_api/extensions.py",
+          "line": 69,
+          "end_line": 90,
+          "label": "存储后端"
+        },
+        {
+          "path": "compose.yaml",
+          "line": 50,
+          "end_line": 51,
+          "label": "fde_storage"
+        }
       ],
-      "pos": [640, 830],
-      "size": [180, 68]
+      "pos": [
+        640,
+        830
+      ],
+      "size": [
+        180,
+        68
+      ]
     },
     {
       "id": "ai_server",
@@ -175,10 +351,21 @@
       "label": "AI Server (DSH)",
       "sublabel": "OpenAI 兼容 /chat/completions",
       "sources": [
-        { "path": "server/src/fde_api/control/ai_server_client.py", "line": 108, "end_line": 141, "label": "直连补全" }
+        {
+          "path": "server/src/fde_api/control/ai_server_client.py",
+          "line": 108,
+          "end_line": 141,
+          "label": "直连补全"
+        }
       ],
-      "pos": [859, 488],
-      "size": [180, 72]
+      "pos": [
+        859,
+        488
+      ],
+      "size": [
+        180,
+        72
+      ]
     },
     {
       "id": "bridge",
@@ -187,11 +374,27 @@
       "sublabel": "scripts/bridge-poll.mjs · 只读",
       "tag": "schtasks · 4h",
       "sources": [
-        { "path": "scripts/bridge-poll.mjs", "line": 5, "end_line": 17, "label": "只读纪律" },
-        { "path": "scripts/install-bridge-poll-task.ps1", "line": 16, "end_line": 17, "label": "计划任务" }
+        {
+          "path": "scripts/bridge-poll.mjs",
+          "line": 5,
+          "end_line": 17,
+          "label": "只读纪律"
+        },
+        {
+          "path": "scripts/install-bridge-poll-task.ps1",
+          "line": 16,
+          "end_line": 17,
+          "label": "计划任务"
+        }
       ],
-      "pos": [966, 1080],
-      "size": [200, 72]
+      "pos": [
+        966,
+        1080
+      ],
+      "size": [
+        200,
+        72
+      ]
     },
     {
       "id": "truth",
@@ -199,56 +402,237 @@
       "label": "openfde / fdeops 真相层",
       "sublabel": "D:\\test\\FDE 工作目录 · 原件不出本地",
       "sources": [
-        { "path": "scripts/bridge-poll.mjs", "line": 29, "end_line": 31, "label": "工作目录" }
+        {
+          "path": "scripts/bridge-poll.mjs",
+          "line": 29,
+          "end_line": 31,
+          "label": "工作目录"
+        }
       ],
-      "pos": [924, 1220],
-      "size": [210, 72]
+      "pos": [
+        924,
+        1220
+      ],
+      "size": [
+        210,
+        72
+      ]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
       "label": "桌面端 · Electron 便携版 (Windows)",
-      "wraps": ["renderer", "preload", "main"]
+      "wraps": [
+        "renderer",
+        "preload",
+        "main"
+      ]
     },
     {
       "kind": "region",
       "label": "服务端 · Docker Compose (WSL Ubuntu-24.04)",
-      "wraps": ["api", "worker", "scheduler", "redis", "storage"]
+      "wraps": [
+        "api",
+        "worker",
+        "scheduler",
+        "redis",
+        "storage"
+      ]
     },
     {
       "kind": "security-group",
       "label": "仅回环 127.0.0.1:8010",
-      "wraps": ["api"]
+      "wraps": [
+        "api"
+      ]
     },
     {
       "kind": "region",
       "label": "Windows 宿主 · 采集器与真相层 (只读纪律)",
-      "wraps": ["bridge", "truth"]
+      "wraps": [
+        "bridge",
+        "truth"
+      ]
     }
   ],
   "connections": [
-    { "id": "users-renderer", "from": "users", "to": "renderer", "label": "桌面端操作", "variant": "emphasis" },
-    { "id": "renderer-preload", "from": "renderer", "to": "preload" },
-    { "id": "preload-main", "from": "preload", "to": "main" },
-    { "id": "main-api", "from": "main", "to": "api", "label": "HTTP 127.0.0.1:8010 · Bearer JWT", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
-    { "id": "main-lcsc", "from": "main", "to": "lcsc", "label": "受控浏览器自动化", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
-    { "id": "main-bridge", "from": "main", "to": "bridge", "label": "schtasks 立即采集", "variant": "dashed", "fromSide": "right", "toSide": "top", "via": [[1066, 196]] },
-    { "id": "api-db", "from": "api", "to": "db", "label": "SQLAlchemy", "fromSide": "bottom", "toSide": "top" },
-    { "id": "api-redis", "from": "api", "to": "redis", "label": "登录限流", "fromSide": "left", "toSide": "left", "via": [[40, 524], [40, 864]] },
-    { "id": "api-storage", "from": "api", "to": "storage", "label": "文件对象读写", "fromSide": "bottom", "toSide": "top", "via": [[534, 786], [730, 786]] },
-    { "id": "worker-redis", "from": "worker", "to": "redis", "fromSide": "bottom", "toSide": "top" },
-    { "id": "worker-db", "from": "worker", "to": "db", "label": "认领 outbox" },
-    { "id": "scheduler-db", "from": "scheduler", "to": "db", "label": "到期任务写 outbox", "fromSide": "bottom", "toSide": "top" },
-    { "id": "api-ai", "from": "api", "to": "ai_server", "label": "chat/completions", "fromSide": "right", "toSide": "left" },
-    { "id": "ai-api-mcp", "from": "ai_server", "to": "api", "label": "MCP 工具回调", "variant": "security", "fromSide": "top", "toSide": "top", "via": [[949, 435], [534, 435]] },
-    { "id": "bridge-api", "from": "bridge", "to": "api", "label": "POST 快照 · FDE_BRIDGE_TOKEN", "fromSide": "left", "toSide": "bottom", "via": [[955, 1116], [955, 660], [534, 660]] },
-    { "id": "bridge-truth", "from": "bridge", "to": "truth", "label": "只读 CLI/文件采集", "variant": "dashed" }
+    {
+      "id": "users-renderer",
+      "from": "users",
+      "to": "renderer",
+      "label": "桌面端操作",
+      "variant": "emphasis"
+    },
+    {
+      "id": "renderer-preload",
+      "from": "renderer",
+      "to": "preload"
+    },
+    {
+      "id": "preload-main",
+      "from": "preload",
+      "to": "main"
+    },
+    {
+      "id": "main-api",
+      "from": "main",
+      "to": "api",
+      "label": "HTTP 127.0.0.1:8010 · Bearer JWT",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "main-lcsc",
+      "from": "main",
+      "to": "lcsc",
+      "label": "受控浏览器自动化",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "main-bridge",
+      "from": "main",
+      "to": "bridge",
+      "label": "schtasks 立即采集",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          1066,
+          196
+        ]
+      ]
+    },
+    {
+      "id": "api-db",
+      "from": "api",
+      "to": "db",
+      "label": "SQLAlchemy",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "api-redis",
+      "from": "api",
+      "to": "redis",
+      "label": "登录限流",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          40,
+          524
+        ],
+        [
+          40,
+          864
+        ]
+      ]
+    },
+    {
+      "id": "api-storage",
+      "from": "api",
+      "to": "storage",
+      "label": "文件对象读写",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          534,
+          786
+        ],
+        [
+          730,
+          786
+        ]
+      ]
+    },
+    {
+      "id": "worker-redis",
+      "from": "worker",
+      "to": "redis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "worker-db",
+      "from": "worker",
+      "to": "db",
+      "label": "认领 outbox"
+    },
+    {
+      "id": "scheduler-db",
+      "from": "scheduler",
+      "to": "db",
+      "label": "到期任务写 outbox",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "api-ai",
+      "from": "api",
+      "to": "ai_server",
+      "label": "chat/completions",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "ai-api-mcp",
+      "from": "ai_server",
+      "to": "api",
+      "label": "MCP 工具回调",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          949,
+          435
+        ],
+        [
+          534,
+          435
+        ]
+      ]
+    },
+    {
+      "id": "bridge-api",
+      "from": "bridge",
+      "to": "api",
+      "label": "POST 快照 · FDE_BRIDGE_TOKEN",
+      "fromSide": "left",
+      "toSide": "bottom",
+      "via": [
+        [
+          955,
+          1116
+        ],
+        [
+          955,
+          660
+        ],
+        [
+          534,
+          660
+        ]
+      ]
+    },
+    {
+      "id": "bridge-truth",
+      "from": "bridge",
+      "to": "truth",
+      "label": "只读 CLI/文件采集",
+      "variant": "dashed"
+    }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "服务端业务域 (fde_api 单体 · 47 蓝图)",
+      "title": "服务端业务域 (fde_api 单体 · 49 蓝图)",
       "items": [
         "项目交付: 门禁 G1–G9 · 报价/收款/合同/任务 · 产物候选与换版徽标",
         "售前主线: 调研 discovery · 交付方案 plans · 测试证据 quality · 结项封包 handover",

@@ -1,35 +1,99 @@
-from flask import Flask
+"""Flask 应用装配（蓝图注册的**唯一权威**）。
 
-from fde_api.auth.routes import auth_blueprint
-from fde_api.ai.routes import ai_blueprint
-from fde_api.cli import register_cli
-from fde_api.commercial.admin_routes import admin_commercial_blueprint  # 商业化 G1
-from fde_api.commercial.routes import commercial_blueprint  # 商业化 G1
+蓝图注册序写在 ``_BLUEPRINT_SPECS`` 一张表里，应用装配与审计清单生成共用同一个
+来源。此前审计脚本另抄了一份硬编码列表，已漏条三次（T-J2/CR-027 的两个 admin
+面板、#145 的 fact_chain_blueprint、#177 前审计）——那类漏条是**流程纪律**挡不住
+的（人记得住一次，记不住十次），因此本轮把它变成机器可校验的单一来源：
+``iter_blueprints()`` 出货一次，``server/tests/test_blueprint_registry_sync.py``
+双向比对「本表 vs 实际注册」。
+
+导入一律惰性（``import_module`` 在函数内完成）：部分蓝图模块与 control/agents
+存在模块级互相引用，顶层 import 会把导入序变成地雷——仓库既有惯例就是函数内
+惰性导入（``control.service`` → workflows 同款）。
+"""
+from __future__ import annotations
+
+from collections.abc import Iterator
+from importlib import import_module
+
+from flask import Blueprint, Flask
+
 from fde_api.config import Settings
-from fde_api.control import control_blueprint
-from fde_api.control.dsh_runtime import dsh_runtime
-from fde_api.documents.template_routes import document_templates_blueprint
-from fde_api.documents.project_routes import project_documents_blueprint
-from fde_api.dispatch.routes import blueprint as dispatch_blueprint
-from fde_api.evidence.routes import evidence_blueprint, fact_chain_blueprint  # noqa: F401 借鉴#9
-from fde_api.expirations import blueprint as expirations_blueprint  # B#13-D
-from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
-from fde_api.workflows.routes import workflows_blueprint  # V3 T-W3
-from fde_api.solutions.routes import solutions_blueprint
 from fde_api.errors import register_error_handlers
 from fde_api.extensions import db, object_storage, redis_client
-from fde_api.files.routes import files_blueprint
-from fde_api.health import health_blueprint
-from fde_api.guidance.routes import guidance_blueprint
-from fde_api.mailing.routes import mailing_blueprint
-from fde_api.modules import modules_blueprint
-from fde_api.projects import projects_blueprint
-from fde_api.storage.local_routes import local_storage_blueprint
-from fde_api.research.template_routes import template_research_blueprint
-from fde_api.research.project_routes import project_research_blueprint
-from fde_api.templates import templates_blueprint
-from fde_api.users import users_blueprint
-from fde_api.system_configuration import blueprint as system_configuration_blueprint, apply_persisted_configuration
+from fde_api.system_configuration import apply_persisted_configuration
+
+# 蓝图注册序（唯一权威）：形如 (模块路径, 蓝图属性名)。
+# 顺序即注册顺序——审计清单的 route CSV 顺序与桌面控制台呈现顺序都依赖它。
+_BLUEPRINT_SPECS: tuple[tuple[str, str], ...] = (
+    ("fde_api.health", "health_blueprint"),
+    ("fde_api.auth.routes", "auth_blueprint"),
+    ("fde_api.ai.routes", "ai_blueprint"),
+    ("fde_api.users", "users_blueprint"),
+    ("fde_api.system_configuration", "blueprint"),
+    ("fde_api.modules", "modules_blueprint"),
+    ("fde_api.templates", "templates_blueprint"),
+    ("fde_api.research.template_routes", "template_research_blueprint"),
+    ("fde_api.projects", "projects_blueprint"),
+    ("fde_api.workbench.routes", "workbench_blueprint"),
+    ("fde_api.bridge", "bridge_blueprint"),
+    ("fde_api.research.project_routes", "project_research_blueprint"),
+    ("fde_api.storage.local_routes", "local_storage_blueprint"),
+    ("fde_api.files.routes", "files_blueprint"),
+    ("fde_api.documents.template_routes", "document_templates_blueprint"),
+    ("fde_api.documents.project_routes", "project_documents_blueprint"),
+    ("fde_api.solutions.routes", "solutions_blueprint"),
+    ("fde_api.evidence.routes", "evidence_blueprint"),
+    ("fde_api.evidence.routes", "fact_chain_blueprint"),
+    ("fde_api.ontology.routes", "ontology_blueprint"),
+    ("fde_api.ontology.routes", "global_ontology_blueprint"),
+    ("fde_api.expirations", "blueprint"),
+    ("fde_api.workflows.routes", "workflows_blueprint"),
+    ("fde_api.dispatch.routes", "blueprint"),
+    ("fde_api.guidance.routes", "guidance_blueprint"),
+    ("fde_api.agents.routes", "agents_blueprint"),
+    ("fde_api.jobs.admin_routes", "admin_jobs_blueprint"),
+    ("fde_api.dispatch.admin_routes", "admin_dispatch_blueprint"),
+    ("fde_api.meetings.routes", "meetings_blueprint"),
+    ("fde_api.transcripts.routes", "transcripts_blueprint"),
+    ("fde_api.handover.routes", "handover_blueprint"),
+    ("fde_api.discovery.routes", "discovery_blueprint"),
+    ("fde_api.plans.routes", "plans_blueprint"),
+    ("fde_api.quality.routes", "quality_blueprint"),
+    ("fde_api.metrics.routes", "metrics_blueprint"),
+    ("fde_api.translator.routes", "translator_blueprint"),
+    ("fde_api.mailing.routes", "mailing_blueprint"),
+    ("fde_api.control", "control_blueprint"),
+    ("fde_api.control.task_board", "task_board_blueprint"),
+    ("fde_api.control.extension_management_routes", "management_blueprint"),
+    ("fde_api.control.clawbot_weixin", "weixin_blueprint"),
+    ("fde_api.control.mcp_gateway", "mcp_blueprint"),
+    ("fde_api.control.chat", "chat_blueprint"),
+    ("fde_api.control.lcsc_skills", "lcsc_blueprint"),
+    ("fde_api.control.lcsc_desktop", "desktop_lcsc_blueprint"),
+    ("fde_api.control.api_actions", "actions_blueprint"),
+    ("fde_api.simulation.routes", "simulation_blueprint"),
+    ("fde_api.commercial.routes", "commercial_blueprint"),
+    ("fde_api.commercial.admin_routes", "admin_commercial_blueprint"),
+)
+
+
+def iter_blueprints() -> Iterator[Blueprint]:
+    """按注册序产出全部蓝图（唯一权威序）。
+
+    审计清单生成脚本（``scripts/audit/extract_workbench_inventory.py``）直接用
+    本函数派生蓝图列表——不再照抄一份硬编码清单，也不再调 ``create_app``
+    （那会牵出 DB/Redis 初始化）。
+    """
+    for module_path, attribute in _BLUEPRINT_SPECS:
+        module = import_module(module_path)
+        blueprint = getattr(module, attribute)
+        if not isinstance(blueprint, Blueprint):
+            raise RuntimeError(
+                f"{module_path}.{attribute} 不是 Flask Blueprint"
+                "——蓝图注册表登记有误（新增/改名蓝图时必须同步 _BLUEPRINT_SPECS）"
+            )
+        yield blueprint
 
 
 def create_app(settings: Settings | None = None) -> Flask:
@@ -40,105 +104,21 @@ def create_app(settings: Settings | None = None) -> Flask:
     db.init_app(app, settings)
     redis_client.init_app(app, settings)
     object_storage.init_app(app, settings)
+    from fde_api.control.dsh_runtime import dsh_runtime
+
     dsh_runtime.init_app(app, settings)
     apply_persisted_configuration(app)
     register_error_handlers(app)
-    app.register_blueprint(health_blueprint)
-    app.register_blueprint(auth_blueprint)
-    app.register_blueprint(ai_blueprint)
-    app.register_blueprint(users_blueprint)
-    app.register_blueprint(system_configuration_blueprint)
-    app.register_blueprint(modules_blueprint)
-    app.register_blueprint(templates_blueprint)
-    app.register_blueprint(template_research_blueprint)
-    app.register_blueprint(projects_blueprint)
-    # WP29/J1：业务枚举选项表下发（前端保留本地兜底）
-    from fde_api.workbench.routes import workbench_blueprint
-    app.register_blueprint(workbench_blueprint)
-    # P2 集成桥：真相层（openfde/fdeops）→ PG 单向投影
-    from fde_api.bridge import bridge_blueprint
-    app.register_blueprint(bridge_blueprint)
-    app.register_blueprint(project_research_blueprint)
-    app.register_blueprint(local_storage_blueprint)
-    app.register_blueprint(files_blueprint)
-    app.register_blueprint(document_templates_blueprint)
-    app.register_blueprint(project_documents_blueprint)
-    app.register_blueprint(solutions_blueprint)
-    # V3 T-E1：一等证据登记簿（只存指针+指纹；人工写路径有意不进 api_catalog）
-    app.register_blueprint(evidence_blueprint)
-    app.register_blueprint(fact_chain_blueprint)
-    # V3 T-O2：本体注册表路由（关系类型登记；术语面随 T-O3 开；人工路径不进 api_catalog）
-    app.register_blueprint(ontology_blueprint)
-    # V3 T-O2c：全局注册类型只读面（无项目上下文的桌面消费方；不进 api_catalog）
-    from fde_api.ontology.routes import global_ontology_blueprint
-    app.register_blueprint(global_ontology_blueprint)
-    # B#13-D：跨域到期只读投影（admin-only；服务层 union 零 DDL，不进 api_catalog）
-    app.register_blueprint(expirations_blueprint)
-    # V3 T-W3：Workflow 定义/运行路由（§5 五条；cancel/resume 随 T-W5 开）
-    app.register_blueprint(workflows_blueprint)
-    app.register_blueprint(dispatch_blueprint)
-    app.register_blueprint(guidance_blueprint)
-    # S1 编程工作台（goal-d4）：agent 注册表 + run 生命周期（适配器/溯源/成本）
-    from fde_api.agents.routes import agents_blueprint
-    app.register_blueprint(agents_blueprint)
-    # V3 T-J2（域 14）：admin 后台任务取消面（幂等/不强杀/留痕，不进 api_catalog）
-    from fde_api.jobs.admin_routes import admin_jobs_blueprint
-    app.register_blueprint(admin_jobs_blueprint)
-    # goal-c CR-027：admin 规则版本显式管理面（发布 + 激活；公示窗不绕过，不进 api_catalog）
-    from fde_api.dispatch.admin_routes import admin_dispatch_blueprint
-    app.register_blueprint(admin_dispatch_blueprint)
-    # S1 评审会最小闭环（goal-d5）：T2 强制门 + 纪要封存（技术文档 §6）
-    from fde_api.meetings.routes import meetings_blueprint
-    app.register_blueprint(meetings_blueprint)
-    # T-A9 转写草稿区 + 访谈纪要正式库（goal-tb tb1）：文本-only，不进 api_catalog
-    from fde_api.transcripts.routes import transcripts_blueprint
-    app.register_blueprint(transcripts_blueprint)
-    # T-B1 封包半（goal-tb tb4）：结项交付包 handover_packages，不进 api_catalog
-    from fde_api.handover.routes import handover_blueprint
-    app.register_blueprint(handover_blueprint)
-    # V3.1 P0-1：访谈事实/需求结构化（审阅治理面，不进 api_catalog）
-    from fde_api.discovery.routes import discovery_blueprint
-    app.register_blueprint(discovery_blueprint)
-    # V3.1 P0-3：交付方案（审阅治理面，不进 api_catalog）
-    from fde_api.plans.routes import plans_blueprint
-    app.register_blueprint(plans_blueprint)
+    for blueprint in iter_blueprints():
+        app.register_blueprint(blueprint)
 
-    from fde_api.quality.routes import quality_blueprint  # V3.1 P1-2
-    app.register_blueprint(quality_blueprint)
-    # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
-    from fde_api.metrics.routes import metrics_blueprint
-    app.register_blueprint(metrics_blueprint)
-    # P3 翻译器门户（goal-d9）：引导式翻译 + AI 草稿落库
-    from fde_api.translator.routes import translator_blueprint
-    app.register_blueprint(translator_blueprint)
-    # WP-E SES：SNS 退信/投诉回调端点（默认随模块关闭，端点校验失败一律 403）
-    app.register_blueprint(mailing_blueprint)
-    app.register_blueprint(control_blueprint)
-    from fde_api.control.task_board import task_board_blueprint
-    from fde_api.control.extension_management_routes import management_blueprint
-    from fde_api.control.clawbot_weixin import weixin_blueprint
-    from fde_api.control.mcp_gateway import mcp_blueprint
-    from fde_api.control.chat import chat_blueprint, weixin_message_handler
-    from fde_api.control.lcsc_skills import lcsc_blueprint
-    app.register_blueprint(task_board_blueprint)
-    app.register_blueprint(management_blueprint)
-    app.register_blueprint(weixin_blueprint)
-    app.register_blueprint(mcp_blueprint)
-    app.register_blueprint(chat_blueprint)
-    app.register_blueprint(lcsc_blueprint)
-    from fde_api.control.lcsc_desktop import desktop_lcsc_blueprint
-    app.register_blueprint(desktop_lcsc_blueprint)
-    from fde_api.control.api_actions import actions_blueprint
-    app.register_blueprint(actions_blueprint)
-    # V3.2 G2：FDE 交付模拟训练场（独立域；不进 api_catalog）
-    from fde_api.simulation.routes import simulation_blueprint
-    app.register_blueprint(simulation_blueprint)
-    # 商业化 G1：权益四分与角色分层（读面本人/admin；写面 admin+密码确认；均不进 api_catalog）
-    app.register_blueprint(commercial_blueprint)
-    app.register_blueprint(admin_commercial_blueprint)
-    app.extensions["fde_weixin_message_handler"] = weixin_message_handler
     from fde_api.control.ai_server_client import apply_runtime_plugin
+    from fde_api.control.chat import weixin_message_handler
+
+    app.extensions["fde_weixin_message_handler"] = weixin_message_handler
     app.extensions["fde_plugin_executor"] = apply_runtime_plugin
+    from fde_api.cli import register_cli
+
     register_cli(app)
 
     return app

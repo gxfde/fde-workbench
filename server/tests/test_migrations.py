@@ -1115,6 +1115,66 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
         assert historical in known, historical
 
 
+def _parse_migration_graph() -> tuple[set[str], set[str]]:
+    """解析迁移目录成 (revision 集, down_revision 集)。
+
+    head 定义与 AGENTS「口径数字引用前现测」一致＝revision 集减 down_revision 集。
+    直接读文件而不依赖 alembic ScriptDirectory 内部 API（`versions`/
+    `iterate_revisions` 在不同 alembic 版有差异——conftest 同款理由）；
+    down_revision 支持三种形态：None（基线）、"id"（单前驱）、("a","b")（合并迁移）。
+    """
+    versions_dir = SERVER_ROOT / "migrations" / "versions"
+    revisions: set[str] = set()
+    down_revisions: set[str] = set()
+    for path in sorted(versions_dir.glob("*.py")):
+        body = path.read_text(encoding="utf-8")
+        revision_match = re.search(
+            r'^revision(?::\s*[^=]+)?\s*=\s*["\']([a-f0-9]+)["\']',
+            body,
+            flags=re.MULTILINE,
+        )
+        assert revision_match is not None, f"{path.name} 未声明 revision"
+        revisions.add(revision_match.group(1))
+        down_match = re.search(
+            r'^down_revision(?::\s*[^=]+)?\s*=\s*(.+)$', body, flags=re.MULTILINE
+        )
+        if down_match is None:
+            continue
+        down_revisions.update(re.findall(r'["\']([a-f0-9]+)["\']', down_match.group(1)))
+    return revisions, down_revisions
+
+
+def test_alembic_chain_has_exactly_one_head():
+    """迁移链必须恰好一个 head（架构评估 P1-1 机械闸）。
+
+    事故史：#215（e7c4a9d2f6b8）与商业化 G1（e9c4a1f7b3d2）曾同挂一个
+    down_revision 形成双头，事后靠人工 rebase 消解——这里把它变成机器闸，
+    双头 PR 直接红（宁红不漏）。两个独立来源互校：①文件解析（revision 集
+    减 down_revision 集）②alembic 自身 ScriptDirectory.get_heads() 图遍历。
+    """
+    revisions, down_revisions = _parse_migration_graph()
+    heads = revisions - down_revisions
+    assert len(heads) == 1, (
+        f"迁移链必须恰好一个 head，实测 {len(heads)} 个：{sorted(heads)}"
+        "——双头（两条迁移同挂一个 down_revision）会让 alembic upgrade head "
+        "的行为不确定（升到哪条取决于字典序）"
+    )
+    assert next(iter(heads)) == HEAD_REVISION, (
+        f"唯一 head {sorted(heads)[0]} != HEAD_REVISION {HEAD_REVISION}"
+        "——新增迁移后忘了同步本文件顶部的 HEAD_REVISION 常量"
+    )
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(SERVER_ROOT / "alembic.ini"))
+    script_heads = set(ScriptDirectory.from_config(config).get_heads())
+    assert script_heads == heads, (
+        f"alembic 自身遍历出的 head {sorted(script_heads)} != 文件解析出的 "
+        f"{sorted(heads)}——两个来源不一致即链结构异常，先查迁移文件再跑"
+    )
+
+
 def test_foreign_stamp_recognized_as_outside_tree(engine, test_settings):
     """外来戳（本树 34 revision 之外）必被判为外来；当前 live 头在集内。"""
     from alembic.config import Config

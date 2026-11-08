@@ -6,10 +6,10 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "327a4107-9cb5-414f-a1a4-ea95277d1308",
+  "deliveryReceiptId": "79d6a9dd-a641-4d7e-81c9-a2c0660e05de",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
-    "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+    "sha256": "fc9c3d6af5842d39bcf46609048f015a4d585c94bdb7f84835597c5456180f16",
     "bytes": 845314
   },
   "state": {
@@ -715,7 +715,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts",
+    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\architecture\\receipts",
     "receipt": "system-architecture.browser-check.json",
     "files": []
   }

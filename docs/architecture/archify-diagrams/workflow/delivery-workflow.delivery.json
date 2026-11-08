@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "26987f5a-0e5e-4855-870d-70cfdd816fe6",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+  "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+  "specification": {
+    "sha256": "ab93829f334dce53ae5015d9ad1f6f70a5075f0e5baa6429eaa817037b5644bc",
+    "bytes": 19626
+  },
+  "artifact": {
+    "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
+    "bytes": 855470
+  }
+}

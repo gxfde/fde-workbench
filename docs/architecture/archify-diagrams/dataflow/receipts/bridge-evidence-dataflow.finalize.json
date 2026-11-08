@@ -5,15 +5,15 @@
   "status": "pass",
   "type": "dataflow",
   "quality": "showcase",
-  "startedAt": "2026-11-08T11:35:27.177Z",
+  "startedAt": "2026-11-08T14:43:01.168Z",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-    "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
-    "bytes": 10376
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+    "sha256": "79a8da7324fb5cea1fab392ad7ece74dd7553f09b5a60def2d4fdabe3a39dff8",
+    "bytes": 12106
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
-    "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+    "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
     "bytes": 829693
   },
   "stages": {
@@ -27,12 +27,12 @@
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "dataflow",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch",
+        "D:\\test\\fde-wt-arch-fix",
         "--json"
       ],
       "receipt": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
-          "bytes": 10376
+          "sha256": "79a8da7324fb5cea1fab392ad7ece74dd7553f09b5a60def2d4fdabe3a39dff8",
+          "bytes": 12106
         },
         "validation": {
           "checksPassed": 9,
@@ -56,34 +56,34 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 2159,
+      "durationMs": 5281,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "dataflow",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch",
+        "D:\\test\\fde-wt-arch-fix",
         "--json"
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1",
+        "receiptId": "7e7de308-d5f3-48e0-9241-66409c5cdf77",
         "ok": true,
         "command": "deliver",
         "type": "dataflow",
-        "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-        "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "specification": {
-          "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
-          "bytes": 10376
+          "sha256": "79a8da7324fb5cea1fab392ad7ece74dd7553f09b5a60def2d4fdabe3a39dff8",
+          "bytes": 12106
         },
         "artifact": {
-          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
           "bytes": 829693
         },
         "validation": {
@@ -97,7 +97,7 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/gxfde/fde-workbench",
-          "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
+          "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
           "references": 27,
           "linkMode": "local-only"
         },
@@ -117,19 +117,19 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 734,
+      "durationMs": 1553,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "check",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--require-provenance"
       ],
       "receipt": {
         "ok": true,
-        "file": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "file": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "artifact": {
-          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
           "bytes": 829693
         },
         "checks": [
@@ -247,22 +247,22 @@
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1"
+        "deliveryReceiptId": "7e7de308-d5f3-48e0-9241-66409c5cdf77"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 5198,
+      "durationMs": 7181,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "browser-check",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--json",
         "--require-provenance",
         "--out-dir",
-        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts"
+        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts"
       ],
       "execution": "in-process",
       "receipt": {
@@ -273,10 +273,10 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1",
+        "deliveryReceiptId": "7e7de308-d5f3-48e0-9241-66409c5cdf77",
         "artifact": {
-          "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
-          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+          "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
           "bytes": 829693
         },
         "state": {
@@ -958,7 +958,7 @@
           "contactSheet": null
         },
         "sidecars": {
-          "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts",
+          "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts",
           "receipt": "bridge-evidence-dataflow.browser-check.json",
           "files": []
         }
@@ -971,13 +971,13 @@
   },
   "diagnostics": [],
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-11-08T11:35:36.342Z",
-  "durationMs": 9165,
+  "finishedAt": "2026-11-08T14:43:17.131Z",
+  "durationMs": 15963,
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",
