@@ -24,9 +24,15 @@ from sqlalchemy.orm import Session
 
 from fde_api.agents.models import AgentRun, SeatActionLedger
 from fde_api.agents.pilot import REHEARSAL_KEY_PREFIX
+from fde_api.control.models import AutomationApproval
+from fde_api.discovery.models import Requirement
 from fde_api.guidance.models import ProjectGuidanceAnalysis
 from fde_api.meetings.models import ReviewMeeting
+from fde_api.ontology.models import OntologyChangeSet
+from fde_api.plans.models import DeliveryPlan, DeliveryPlanItem, DeliveryPlanTaskLink
+from fde_api.quality.models import TestExecution
 from fde_api.workbench.models import OperationEvent
+from fde_api.workflows.models import WorkflowRun
 
 _TERMINAL_FAILED = ("failed", "timeout", "budget_exceeded")
 
@@ -218,11 +224,120 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
     )
     ongoing_quota["detail"] = {"over_quota_rows": sum(1 for flag in month_rows if flag)}
 
+    # ---- V3.1 P1-3：新域指标（00-gap-register 7.1/7.3；任务书 §11 口径）----
+    # 全部只读聚合、走 _metric（样本 0 → insufficient_data，不编造数值）；
+    # 进同一报表新节（裁决：不建平行指标面）。
+
+    # 7.3① Workflow 完成率（终态 succeeded 占比；非终态 run 不进分母）
+    wf_statuses = session.scalars(select(WorkflowRun.status)).all()
+    wf_terminal = [s for s in wf_statuses if s in ("succeeded", "failed", "cancelled")]
+    wf_done = _metric(
+        "workflow_completion_rate",
+        "Workflow 完成率",
+        value=round(wf_terminal.count("succeeded") / len(wf_terminal), 4) if wf_terminal else 0.0,
+        sample_size=len(wf_terminal),
+        definition="succeeded 终态 run / 全部终态 run（succeeded+failed+cancelled；非终态不进分母）",
+    )
+
+    # 7.3② Workflow 审批时延（workflow 域审批行 updated_at-created_at 中位数分钟；
+    # updated_at 近似拍板时刻——精确拍板时刻在 workflow_run_approval_decided 事件，细化口径挂账）
+    approval_rows = session.execute(
+        select(AutomationApproval.created_at, AutomationApproval.updated_at).where(
+            AutomationApproval.workflow_node_run_id.isnot(None),
+            # 已决闭集：approved/executed（rejected=否决速度不混入完成侧时延；
+            # expired=无人拍板——都不进样本）
+            AutomationApproval.status.in_(("approved", "executed")),
+        )
+    ).all()
+    latencies = sorted(
+        (updated - created).total_seconds() / 60.0 for created, updated in approval_rows if updated >= created
+    )
+    wf_approval = _metric(
+        "workflow_approval_latency_minutes",
+        "Workflow 审批时延（中位数，分钟）",
+        value=round(median(latencies), 2) if latencies else None,
+        sample_size=len(latencies),
+        definition="workflow 域审批行（已决）updated_at-created_at 中位数分钟（updated_at 近似拍板时刻，细化口径挂账）",
+    )
+
+    # 7.3③ hops 分布（B#1 自触发链代数：max + 平均）
+    hops_rows = session.scalars(select(WorkflowRun.hops)).all()
+    wf_hops = _metric(
+        "workflow_hops_distribution",
+        "Workflow 自触发链代数（hops）",
+        value={"avg": round(sum(hops_rows) / len(hops_rows), 2) if hops_rows else None, "max": max(hops_rows) if hops_rows else None},
+        sample_size=len(hops_rows),
+        definition="workflow_runs.hops 的 max 与 avg（B#1 MAX_RUN_HOPS 熔断前的链代数分布）",
+    )
+
+    # 7.1① 需求批准率（V3.1 P0-1 域：accepted/全量）
+    req_statuses = session.scalars(select(Requirement.status)).all()
+    req_rate = _metric(
+        "requirement_approval_rate",
+        "需求批准率",
+        value=round(req_statuses.count("accepted") / len(req_statuses), 4) if req_statuses else 0.0,
+        sample_size=len(req_statuses),
+        definition="discovery requirements accepted / 全部行（P0-1 需求审阅域）",
+    )
+
+    # 7.1② 本体候选采纳率（P0-2 域：discovery 候选变更集 confirmed 占比）
+    candidate_statuses = session.scalars(
+        select(OntologyChangeSet.status).where(OntologyChangeSet.captured_from.like("discovery:%"))
+    ).all()
+    cand_rate = _metric(
+        "ontology_candidate_adoption_rate",
+        "本体候选采纳率",
+        value=round(candidate_statuses.count("confirmed") / len(candidate_statuses), 4) if candidate_statuses else 0.0,
+        sample_size=len(candidate_statuses),
+        definition="captured_from=discovery:* 的变更集中 confirmed / 全部（P0-2 候选桥采纳闸）",
+    )
+
+    # 7.1③ 方案转任务率（P0-3 域：approved/published 方案条目已分解占比）
+    decomposed_items = int(session.scalar(
+        select(func.count()).select_from(DeliveryPlanItem)
+        .where(DeliveryPlanItem.plan_id.in_(
+            select(DeliveryPlan.id).where(DeliveryPlan.status.in_(("approved", "published")))
+        ))
+    ) or 0)
+    linked_count = int(session.scalar(
+        select(func.count())
+        .select_from(DeliveryPlanTaskLink)
+        .join(DeliveryPlanItem, DeliveryPlanTaskLink.item_id == DeliveryPlanItem.id)
+        .where(DeliveryPlanItem.plan_id.in_(
+            select(DeliveryPlan.id).where(DeliveryPlan.status.in_(("approved", "published")))
+        ))
+    ) or 0)
+    plan_rate = _metric(
+        "plan_task_decomposition_rate",
+        "方案转任务率",
+        value=round(linked_count / decomposed_items, 4) if decomposed_items else 0.0,
+        sample_size=decomposed_items,
+        definition="approved/published 方案中已建任务链接的条目 / 全部条目（P0-3 任务分解闸）",
+    )
+
+    # 7.1④ 自动测试首次通过率（P1-2 域：每用例第一条执行 passed 占比——重试不重复计数）
+    exec_rows = session.execute(
+        select(TestExecution.case_id, TestExecution.result, TestExecution.created_at)
+        .order_by(TestExecution.case_id, TestExecution.created_at, TestExecution.id)
+    ).all()
+    first_results: dict[str, str] = {}
+    for case_id, result, _created in exec_rows:
+        first_results.setdefault(case_id, result)
+    first_values = list(first_results.values())
+    test_rate = _metric(
+        "test_first_pass_rate",
+        "自动测试首次通过率",
+        value=round(first_values.count("passed") / len(first_values), 4) if first_values else 0.0,
+        sample_size=len(first_values),
+        definition="有执行的用例中首条执行为 passed 的占比（每用例只计首条——重试不重复计数）",
+    )
+
     return {
         "generated_at": now.isoformat(),
         "sections": {
             "p0": [p0_confirm, p0_draft_ms, p0_sow, p0_senior],
             "p1_pilot": [p1_lite, p1_first_pass, p1_degraded],
             "ongoing": [ongoing_cost, ongoing_intercept, ongoing_quota],
+            "v31": [wf_done, wf_approval, wf_hops, req_rate, cand_rate, plan_rate, test_rate],
         },
     }
