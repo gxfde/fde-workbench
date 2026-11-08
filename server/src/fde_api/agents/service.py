@@ -46,6 +46,7 @@ from sqlalchemy import func, select
 
 from fde_api.agents.adapter import (
     ADAPTER_KINDS,
+    AgentRunResult,
     AgentRunContext,
     ArtifactFile,
     OutputScanner,
@@ -113,7 +114,7 @@ def _derive_summary(kind: str, content: bytes, exit_code: int | None) -> dict[st
     return {**summary, "exit_code": exit_code if exit_code is not None else -1}
 
 FAILED_STATUSES = frozenset({"failed", "timeout", "budget_exceeded"})
-IN_FLIGHT_STATUSES = frozenset({"queued", "running"})
+IN_FLIGHT_STATUSES = frozenset({"queued", "running", "host_running"})
 AGENT_MAX_RETRIES = 2  # 循环提示词硬性：重试上限 2 次（家族 = 3 个 run）
 
 _CONTEXT_FILE = "context.md"
@@ -624,6 +625,25 @@ def _execute_run(
         )
 
     _write_workspace(workspace, context_text=context_text, project_code=project.project_code, capability=agent.capability_tier)
+
+    # P2′① 宿主轮询领取（§11.3；config 默认关）：发起 = 受理。run 落
+    # queued + execution_provider=host_poll 即返回 202，执行由宿主代理经
+    # /agents/host/* 轮询驱动（方向恒宿主→服务端单向）。优先级高于 dev
+    # 直连（同开时轮询形态胜出——生产形态拍板在 dev 形态之后）。H4 不变：
+    # 发起仍是人（start_run 全闸先于本分支）；宿主代理不是发起方。
+    if bool(getattr(settings, "agent_host_poll_enabled", False)):
+        with db.session() as session, session.begin():
+            run_row = session.get(AgentRun, run_id)
+            if run_row is not None:
+                run_row.execution_provider = "host_poll"
+                # status 保持 queued（领取时才转 host_running——状态迁移
+                # 全部发生在领取/回执两个显式写路由内）
+        return {
+            "id": run_id,
+            "status": "queued",
+            "execution_provider": "host_poll",
+            "detail": "宿主轮询通道已受理：run 等待宿主代理领取。",
+        }, 202
 
     # T-Z1 裁定 A：宿主侧 zcode 代理通道（仅开发自用；config 默认关）。
     # 开启时不建容器沙箱（零 docker 依赖，zcode 用宿主自身登录态），产出
@@ -1450,3 +1470,348 @@ def set_artifact_reviewed(*, actor: User, run_id: str, artifact_id: str, reviewe
             "derived_summary": artifact.derived_summary,
             "linked_solution_id": artifact.linked_solution_id,
         }
+
+
+# ---------------------------------------------------------------------------
+# P2′① 宿主轮询领取（§11.3 六条约束；迁移 f6d3a9c1e7b2，2026-11-08）
+# ---------------------------------------------------------------------------
+
+
+def _utcnow() -> datetime:
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
+
+    return _dt.now(_tz.utc)
+
+
+def _host_poll_token_hash(raw_token: str) -> str:
+    """领取令牌 sha256（入库/比对统一形态；零明文）。"""
+    return sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _require_host_poll_enabled(settings: Any) -> None:
+    """轮询面 fail-closed：开关或令牌未配置即 403（约束：闸不放宽）。"""
+    if not bool(getattr(settings, "agent_host_poll_enabled", False)):
+        raise _error("host_poll_disabled", "宿主轮询通道未开启。", 403)
+    token = getattr(settings, "agent_host_poll_token", None)
+    if token is None or not token.get_secret_value().strip():
+        raise _error("host_poll_disabled", "宿主轮询令牌未配置。", 403)
+
+
+def _verify_host_poll_token(settings: Any, presented: str) -> str:
+    """令牌比对（sha256 恒定时间性要求低——哈希后常量比对即可）；返回入库 hash。"""
+    digest = _host_poll_token_hash(presented)
+    expected = _host_poll_token_hash(getattr(settings, "agent_host_poll_token").get_secret_value())
+    if digest != expected:
+        raise _error("host_poll_forbidden", "宿主轮询令牌无效。", 403)
+    return digest
+
+
+def claim_host_run(*, presented_token: str, run_id: str | None = None) -> dict[str, Any]:
+    """宿主代理领取一个待执行 run（幂等；§11.3 约束 2）。
+
+    语义：
+    - 无 ``run_id``：取最早的 ``queued + host_poll`` run（FIFO）。
+    - 带 ``run_id``：领取指定 run（重试场景——宿主崩溃后重启续领）。
+    - 幂等：已 ``host_running`` 且 token_hash 一致 ⇒ 返回同一载荷（200）；
+      token 不一致 ⇒ 403（另一代理已领取，宿主不抢别人手里的活）。
+    - 行锁（``with_for_update``）防两代理并发领取同一 run。
+    - 领取即 ``host_running`` + ``host_claimed_at``（UTC）；**不发起执行**——
+      执行是宿主侧的事（约束 1 单向）。
+
+    返回载荷只含宿主执行所需（context_ref 指针 / 工具白名单 / 超时预算），
+    零凭据零客户资料（约束 4：解密在宿主登录态面，与平台凭据语义无关）。
+    """
+    settings = _settings()
+    _require_host_poll_enabled(settings)
+    token_hash = _verify_host_poll_token(settings, presented_token)
+    now = _utcnow()
+
+    with db.session() as session:
+        run: AgentRun | None
+        stmt = select(AgentRun).where(AgentRun.execution_provider == "host_poll")
+        if run_id is not None:
+            stmt = stmt.where(AgentRun.id == run_id)
+        else:
+            # 续领优先：本 token 已领取且未回执的 run（代理崩溃重启场景——
+            # 不带 run_id 也能续上自己手里的活）；无则走 FIFO 领新。
+            mine = session.scalar(
+                select(AgentRun)
+                .where(
+                    AgentRun.execution_provider == "host_poll",
+                    AgentRun.status == "host_running",
+                    AgentRun.host_token_hash == token_hash,
+                    AgentRun.host_receipt_at.is_(None),
+                )
+                .order_by(AgentRun.host_claimed_at.asc(), AgentRun.id.asc())
+            )
+            if mine is not None:
+                run_id = mine.id
+                run = mine
+                agent = session.get(AgentRegistry, run.agent_id)
+                session.expunge(run) if run in session else None
+                return {
+                    "run_id": run.id,
+                    "project_id": run.project_id,
+                    "capability": run.capability_used,
+                    "context_ref": run.context_ref,
+                    "allowed_tools": list(agent.allowed_tools) if agent is not None else [],
+                    "max_duration_ms": agent.max_duration_ms if agent is not None and agent.max_duration_ms else settings.agent_max_duration_ms,
+                    "max_cost_units": agent.max_cost_units if agent is not None else 0,
+                    "claimed_at": run.host_claimed_at.isoformat() if run.host_claimed_at else None,
+                    "already_running": True,
+                }
+            stmt = stmt.where(AgentRun.status == "queued")
+        stmt = stmt.order_by(AgentRun.created_at.asc(), AgentRun.id.asc())
+        if run_id is not None:
+            run = session.scalar(stmt)
+        else:
+            run = session.scalar(stmt.with_for_update(skip_locked=True))
+        if run is None:
+            raise _error("agent_run_not_found", "无可领取的宿主 run。", 404, detail={"run_id": run_id})
+
+        if run.status == "host_running":
+            # 幂等重领：token 一致才回同一载荷
+            if run.host_token_hash and run.host_token_hash == token_hash:
+                claimed_at = run.host_claimed_at
+                project_id = run.project_id
+            else:
+                raise _error("host_claim_conflict", "该 run 已被另一宿主代理领取。", 403, detail={"run_id": run.id})
+        elif run.status == "queued":
+            run.status = "host_running"
+            run.host_claimed_at = now
+            run.host_token_hash = token_hash
+            project_id = run.project_id
+            claimed_at = now
+            session.commit()
+        else:
+            raise _error(
+                "host_claim_invalid_state",
+                "该 run 不处于可领取状态。",
+                409,
+                detail={"run_id": run.id, "status": run.status},
+            )
+
+        agent = session.get(AgentRegistry, run.agent_id)
+        context_ref = run.context_ref
+        allowed_tools = list(agent.allowed_tools) if agent is not None else []
+        max_duration_ms = agent.max_duration_ms if agent is not None and agent.max_duration_ms else settings.agent_max_duration_ms
+        max_cost_units = agent.max_cost_units if agent is not None else 0
+        capability = run.capability_used
+
+    return {
+        "run_id": run.id,
+        "project_id": project_id,
+        "capability": capability,
+        "context_ref": context_ref,
+        "allowed_tools": allowed_tools,
+        "max_duration_ms": max_duration_ms,
+        "max_cost_units": max_cost_units,
+        "claimed_at": claimed_at.isoformat() if claimed_at else None,
+        "already_running": run.status == "host_running" and run.host_receipt_at is None and claimed_at is not None and claimed_at != now,
+    }
+
+
+
+
+def submit_host_receipt(*, presented_token: str, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """宿主代理回执落账（P2′① 约束 2/5/6；幂等；H4 不自动重试）。
+
+    与容器路径的关键差异：**产物原件在宿主磁盘**（红线：宿主工作区不入
+    服务端），服务端不读文件算指纹——登记「宿主侧 sha256 + 路径」指针
+    （约束 6 与红线同源）。终态语义与容器对齐：
+
+    - ``exit_code == 0`` → completed（或零产物时如实 completed——宿主任务
+      书是否要求 manifest 由宿主侧保证，``receipt_state`` 随载荷）；
+    - ``exit_code != 0`` → failed；宿主报 timeout/budget_exceeded → 同名终态；
+    - T2 评审门：solution 绑定场景当前不在宿主轮询载荷内（run 建时已无
+      solution 上下文透传——首版宿主通道不接 solution 终审链，留 P1-1 后续），
+      ``linked_solution_id=None``。
+    - 幂等：终态后重复回执且载荷指纹一致 → ``duplicate=True``；指纹不同 →
+      409 ``host_receipt_conflict``（人工介入，不自动仲裁）。
+    - 宿主回执校验失败（invalid kind/unsafe path 等）不向宿主抛 422：
+      状态机如实落 ``failed``（C-1 合同的可重试族不含外副作用），宿主侧
+      收到 200 + ``failures`` 明细，重试/接管由人（H4）。
+    """
+    settings = _settings()
+    _require_host_poll_enabled(settings)
+    token_hash = _verify_host_poll_token(settings, presented_token)
+
+    allowed_keys = {"exit_code", "status", "summary", "artifacts", "token_cost", "duration_ms", "degraded", "degraded_reason"}
+    if set(payload) - allowed_keys:
+        raise _error("invalid_request", "回执字段无效。")
+    raw_summary = payload.get("summary")
+    if not isinstance(raw_summary, dict):
+        raise _error("invalid_request", "summary 必填且为 --json 汇总对象。")
+
+    from fde_api.agents.zcode_contract import parse_json_summary
+
+    with db.session() as session:
+        run = session.get(AgentRun, run_id)
+        if run is None:
+            raise _error("agent_run_not_found", "run 不存在。", 404, detail={"run_id": run_id})
+        if run.execution_provider != "host_poll":
+            raise _error("host_receipt_rejected", "该 run 不属于宿主轮询通道。", 409, detail={"run_id": run_id})
+        if run.host_token_hash is None:
+            # 从未被领取：状态闸优先于令牌比对（信息最小暴露——不向未领取 run
+            # 的提交方确认/否认任何令牌值）。
+            raise _error(
+                "host_receipt_invalid_state",
+                "该 run 未被领取或不在执行态。",
+                409,
+                detail={"run_id": run_id, "status": run.status},
+            )
+        if run.host_token_hash != token_hash:
+            raise _error("host_poll_forbidden", "回执令牌与领取不一致。", 403, detail={"run_id": run_id})
+        if run.status in FAILED_STATUSES or run.status in ("completed", "succeeded_but_receipt_invalid"):
+            if run.host_receipt_at is not None:
+                return {"run_id": run_id, "status": run.status, "duplicate": True}
+            raise _error("host_receipt_conflict", "该 run 已终态且回执冲突，请人工介入。", 409, detail={"run_id": run_id})
+        if run.status != "host_running":
+            raise _error(
+                "host_receipt_invalid_state",
+                "该 run 未被领取或不在执行态。",
+                409,
+                detail={"run_id": run_id, "status": run.status},
+            )
+
+    parsed = parse_json_summary(raw_summary)
+    exit_code = payload.get("exit_code") if isinstance(payload.get("exit_code"), int) else 0
+    host_status = payload.get("status")
+    if host_status not in ("completed", "timeout", "budget_exceeded", "failed"):
+        host_status = "completed" if exit_code == 0 else "failed"
+
+    artifacts: list[ArtifactFile] = []
+    host_digests: dict[str, str] = {}
+    for item in payload.get("artifacts", []) or []:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        kind = item.get("kind")
+        refs = item.get("source_refs")
+        digest = item.get("sha256")
+        if not isinstance(path, str) or not path or kind not in ARTIFACT_KINDS:
+            continue
+        if isinstance(digest, str) and len(digest) == 64:
+            host_digests[path] = digest
+        artifacts.append(
+            ArtifactFile(
+                path=path,
+                kind=kind,
+                source_refs=tuple(r for r in refs if isinstance(r, str)) if isinstance(refs, list) else (),
+            )
+        )
+
+    token_cost = int(payload["token_cost"]) if isinstance(payload.get("token_cost"), int) and payload["token_cost"] >= 0 else parsed.billable_units
+    result = AgentRunResult(
+        status=host_status,
+        exit_code=exit_code,
+        token_cost=token_cost,
+        duration_ms=int(payload["duration_ms"]) if isinstance(payload.get("duration_ms"), int) and payload["duration_ms"] >= 0 else 0,
+        artifacts=tuple(artifacts),
+        tool_calls=(),  # --json 无逐事件流（诚实缺失，与 dev 直连同口径）
+        degraded=bool(payload.get("degraded")),
+        degraded_reason=payload.get("degraded_reason") if isinstance(payload.get("degraded_reason"), str) else None,
+    )
+
+    # 回执时刻（幂等锚）+ 终态落账单事务；产物走宿主侧指纹直录（不读文件）
+    now = _utcnow()
+    with db.session() as session, session.begin():
+        run_row = session.get(AgentRun, run_id)
+        if run_row is None:
+            raise _error("agent_run_not_found", "run 不存在。", 404, detail={"run_id": run_id})
+        run_row.host_receipt_at = now
+        if result.status == "completed":
+            run_row.status = "completed"
+            run_row.exit_code = result.exit_code
+            run_row.token_cost = result.token_cost
+            run_row.duration_ms = result.duration_ms
+            for artifact in result.artifacts:
+                digest = host_digests.get(artifact.path)
+                if not digest:
+                    # 指纹缺失/非法（非 64hex）：不落 AgentArtifact（红线：指纹
+                    # 必须完整成对）——该校验失败已记入 failures 供人工处置。
+                    continue
+                session.add(
+                    AgentArtifact(
+                        run_id=run_id,
+                        kind=artifact.kind,
+                        # 指针带 host: 前缀——与容器 storage_ref 语义区分
+                        # （原件在宿主磁盘，服务端永不回读）。
+                        storage_ref=f"host:{run_id}/output/{artifact.path}"[:255],
+                        sha256=digest,
+                        reviewed=False,
+                        linked_solution_id=None,
+                        derived_summary=None,  # 服务端无原件，可重建派生摘要不可算——诚实置空
+                    )
+                )
+        elif result.status in FAILED_STATUSES:
+            run_row.status = result.status
+            run_row.exit_code = result.exit_code
+            run_row.token_cost = result.token_cost
+            run_row.duration_ms = result.duration_ms
+        # 宿主侧产物校验（仓库内 C-1 同款规则，不读文件）：invalid kind/
+        # unsafe path/缺 source_refs 只记 failures 不改终态——状态机诚实，
+        # 人工按 failures 明细处置（H4）。
+        failures: list[dict[str, Any]] = []
+        for artifact in result.artifacts:
+            problems: list[str] = []
+            if artifact.kind not in ARTIFACT_KINDS:
+                problems.append("invalid_kind")
+            if not artifact.source_refs:
+                problems.append("missing_source_refs")
+            if artifact.path.startswith("/") or ".." in Path(artifact.path).parts:
+                problems.append("unsafe_path")
+            if artifact.path not in host_digests:
+                problems.append("sha256_missing_in_receipt")
+            if problems:
+                failures.append({"path": artifact.path, "reasons": problems})
+
+    return {"run_id": run_id, "status": result.status, "duplicate": False, "failures": failures}
+
+
+def mark_host_lost(*, stale_minutes: int | None = None, now: Any = None) -> dict[str, Any]:
+    """失联扫描（H4 约束 3：只标记，不迁移状态、不自动重试）。
+
+    ``host_running`` 且 ``host_claimed_at`` 早于阈值 ⇒ ``host_lost_at`` 打点
+    （幂等：已打点不重打）。由宿主代理下一次轮询顺带触发（或人工调用）；
+    无 scheduler 依赖。返回本批标记数。
+    """
+    settings = _settings()
+    _require_host_poll_enabled(settings)
+    threshold = int(stale_minutes if stale_minutes is not None else settings.agent_host_lost_mark_minutes)
+    moment = now if now is not None else _utcnow()
+    marked: list[str] = []
+    with db.session() as session, session.begin():
+        rows = session.scalars(
+            select(AgentRun).where(
+                AgentRun.execution_provider == "host_poll",
+                AgentRun.status == "host_running",
+                AgentRun.host_lost_at.is_(None),
+            )
+        ).all()
+        for row in rows:
+            if row.host_claimed_at is None:
+                continue
+            elapsed_minutes = (moment - row.host_claimed_at).total_seconds() / 60
+            if elapsed_minutes >= threshold:
+                row.host_lost_at = moment
+                marked.append(row.id)
+    return {"marked": marked, "count": len(marked)}
+
+
+def host_poll_status(*, presented_token: str) -> dict[str, Any]:
+    """宿主代理轮询探测面（轻量：待领取数 + 失联标记触发点）。
+
+    宿主代理每次循环先打本面：有 queued 即 claim；顺带触发失联扫描（约束 3
+    的标记不依赖服务端 scheduler——宿主在，标记就在）。
+    """
+    settings = _settings()
+    _require_host_poll_enabled(settings)
+    _verify_host_poll_token(settings, presented_token)
+    lost = mark_host_lost()
+    with db.session() as session:
+        pending = session.scalar(
+            select(func.count()).select_from(AgentRun).where(AgentRun.execution_provider == "host_poll", AgentRun.status == "queued")
+        )
+    return {"pending": int(pending or 0), "lost_marked": lost["count"]}

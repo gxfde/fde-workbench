@@ -146,6 +146,19 @@ class Settings(BaseSettings):
     agent_host_zcode_bin: str = ""
     # zcode.cjs 全路径（相对安装根 resources/glm/zcode.cjs；宿主通道 spawn 段）
     agent_host_zcode_cjs: str = ""
+    # P2′① 宿主轮询领取（§11.3 六条约束，迁移 f6d3a9c1e7b2；2026-11-08）：
+    # 开启后 kind=zcode 的 run 发起时落 queued + execution_provider=host_poll
+    # 即返回（HTTP 不阻塞），由宿主代理轮询领取（POST /agents/host/claim）→
+    # 本地 spawn zcode → 回执（POST /agents/host/runs/{id}/receipt）。
+    # **生产启用闸仍关**：adapter_missing 维持到「①实装 + D3 书面回执 +
+    # N2 联调签核」齐备——本开关只解除「形态未实装」，不解除人工闸。
+    agent_host_poll_enabled: bool = False
+    # 宿主代理轮询令牌（SHA-256 后入库比对；零明文落库——§11.3 约束 4）。
+    # 空 = 轮询路由 403 host_poll_disabled（fail-closed）。
+    agent_host_poll_token: SecretStr | None = Field(default=None, repr=False)
+    # 失联标记阈值（分钟）：host_running 超此时长未回执 ⇒ 标 host_lost_at
+    # （H4 只标记不自动重试；不迁移状态——接管/重试仍由人）。
+    agent_host_lost_mark_minutes: int = Field(default=30, ge=1)
     # goal-d6 试点开关族（PRD §10 / 技术文档 S1-7 / 总纲 UM-1）：30 天 / 20 run
     # 先到为准；窗口内超限 409 pilot_run_limit_exceeded，窗口走完不再拦（试点
     # 结束由报告定升级）。started_at 留空 = 以最早 agent_run.created_at 推导

@@ -67,7 +67,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3.2 G5：simulation_findings + improvement_proposals（改进层两表，additive）
 # V3.2 G6：regression_suites + regression_results（回归层两表）+ proposals 扩列 override_json
 # V3.1 P0-1：discovery 四表（discovery_extractions/business_facts/requirements/requirement_sources，additive）
-HEAD_REVISION = "c3d5e7f9a1b4"
+HEAD_REVISION = "f6d3a9c1e7b2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1066,15 +1066,16 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
 
 
 def test_known_alembic_revisions_covers_current_head(test_settings):
-    """本树判定基准必须包含当前 HEAD_REVISION（含 35 个迁移文件全集）。"""
+    """本树判定基准必须包含当前 HEAD_REVISION（含 45 个迁移文件全集）。"""
     from alembic.config import Config
 
     config = Config(str(SERVER_ROOT / "alembic.ini"))
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
-    # 迁移文件全集权威=alembic ScriptDirectory（V3.2 G3 e8b1d5f9a3c7 后 = 44）；
-    # v3-workbench-inventory.json 的 revision_count=31 为审计滞后快照，重生成归审计轮（挂账）
-    assert len(known) == 45
+    # 迁移文件全集权威=alembic ScriptDirectory（V3.1 P0-1 discovery
+    # c3d5e7f9a1b4 + P2′① host_poll f6d3a9c1e7b2 之后 = 46）；
+    # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
+    assert len(known) == 46
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

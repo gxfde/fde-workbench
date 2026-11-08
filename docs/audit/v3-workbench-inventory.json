@@ -1,10 +1,10 @@
 {
- "route_count": 363,
+ "route_count": 366,
  "blueprint_count": 45,
  "table_count": 122,
- "revision_count": 45,
+ "revision_count": 46,
  "heads": [
-  "c3d5e7f9a1b4"
+  "f6d3a9c1e7b2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -463,6 +463,14 @@
     "review_meeting_minutes"
    ],
    "add_column_tables": []
+  },
+  "f6d3a9c1e7b2": {
+   "file": "f6d3a9c1e7b2_host_poll_claim_receipt.py",
+   "down_revision": "c3d5e7f9a1b4",
+   "create_tables": [],
+   "add_column_tables": [
+    "agent_runs"
+   ]
   },
   "f7a2c9e4b1d3": {
    "file": "f7a2c9e4b1d3_gate_template_hash.py",

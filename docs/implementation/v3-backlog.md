@@ -678,6 +678,12 @@
 - 接线：config 新增 `agent_host_channel_enabled`（**默认 False**——容器内 server spawn 不到宿主桌面进程，仅宿主裸跑态开启）/`agent_host_zcode_bin`/`agent_host_zcode_cjs`（缺失时 503+L2 零计费 fail-closed）；`_execute_run` 开关分支产出与容器适配器同构 `AgentRunResult` ⇒ `_finalize`/C-1/T2 门/回执语义零改动复用；容器路径与虚构契约 `spawn_argv` 不动（T-Z1 裁定维持降级现状）。
 - 测试 pytest **+22**（test_host_channel 19：argv/env 契约逐位/拒绝清单/--json 解析四态/超时/预算/凭据零外泄/spawn OSError；test_host_channel_service 3：开关关=容器路径零变化/开=宿主成功+落账/bin 缺失=L2）；变异四连全红→还原绿（M1 拒绝清单失效/M2 超时不 kill/M3 预算截断失效/M4 fail-closed 失效）。诚实缺失：宿主版无逐事件流 ⇒ tool_calls 恒空、运行期无逐工具留痕（模块 docstring 差异 2 登记）。
 - DB 无迁移无新表；API 零新增路由（复用既有 POST /agents/{id}/run）；桌面零改动。server 变更 ⇒ 合并后 rebuild 三镜像（alembic 幂等 no-op）。
+
+#### ◐ 实施轮 2（P2′① 生产接线·服务端咬合半，2026-11-08，feat/host-p2-claim-receipt）
+
+- **范围（§11.3 六条约束 → 代码）**：迁移 `f6d3a9c1e7b2`（status CHECK 加 `host_running` + `execution_provider`/`host_claimed_at`/`host_token_hash`/`host_receipt_at`/`host_lost_at` 5 列）；三条宿主机器面路由（`GET /agents/host/status`、`POST /agents/host/claim`〔FIFO+skip_locked+幂等重领〕、`POST /agents/host/runs/{id}/receipt`〔终态与容器对齐 + 产物宿主侧 sha256 直录，`host:` 前缀指针〕）；发起侧 202 受理分支；`mark_host_lost` 失联只标记（H4）；config 三字段（默认全关）。pytest **+16**（test_host_poll.py）。
+- **形态边界**：本半完成的是**服务端咬合面**（状态机+路由+落账）；**宿主代理进程本体**（轮询循环→spawn zcode→回执的独立进程，任务书 §9）仍待实施轮 3；`adapter_missing` 生产启用闸维持到「①实装 + D3 书面回执 + N2 联调签核」齐备。
+- **与 V3.1 P1-1 分工**：授权票据（5.3）/execution_policy 命令白名单（5.4）/artifact size·mime·revoked 扩列（5.7）/RunEventProvider 协议替换 spawn 段（5.2 重构）归 V3.1 线（gap-register D-3 建议已消费 feat/host-zcode-channel 产出）。
 - 验收：① zcode 在隔离环境内完成一次非交互执行并产出可校验产物；② `--json` 事件流格式取得实测样本并落夹具；③ 执行通道形态经实测裁定并回写本条。
 - 回滚：适配器改动 revert 单 commit；镜像版本回退。风险：**高**（依赖外部 CLI 行为与配额）。依赖：T-B1。复杂度：**L**。
 - 闸：**开工前须拍板**——① zcode 会话续接核查 + 商用条款核验（借鉴总览 §6.6 采集项 + 方案 §5.2 必答项）② 执行通道形态（实测后）③ 降级声明：zcode 若始终跑不通，kind 维持 `adapter_missing`，**不阻塞第一阶段主线**。

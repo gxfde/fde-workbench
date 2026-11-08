@@ -201,3 +201,69 @@ def seat_quota():
     """O-3 配额快照（goal-d7，只读）：本席消耗/≤20% 提醒/超额标注/加油包入口/
     30 天重校窗口；他席 admin 传 ?user_id=。透明只读，无拦截语义（绝不断供）。"""
     return _data(service.get_seat_quota(actor=g.current_user, user_id=request.args.get("user_id")))
+
+
+# ---------------------------------------------------------------------------
+# P2′① 宿主轮询领取面（§11.3；2026-11-08）。鉴权 = FDE_AGENT_HOST_POLL_TOKEN
+# （X-Host-Poll-Token 头；宿主代理非用户，不走 JWT）。三条写/读面均 fail-closed
+# （开关/令牌未配置 403）。不进 api_catalog（宿主机器面，与 bridge 同族）。
+# ---------------------------------------------------------------------------
+
+
+def _host_token() -> str:
+    token = request.headers.get("X-Host-Poll-Token", "")
+    if not token.strip():
+        from flask import jsonify
+
+        resp = jsonify({"data": None, "error": {"code": "host_poll_token_missing", "message": "缺少 X-Host-Poll-Token 头。"}})
+        resp.status_code = 403
+        return ""
+    return token
+
+
+def _host_error_response(error):
+    from flask import jsonify
+
+    resp = jsonify({"data": None, "error": {"code": error.code, "message": error.message, "details": error.detail}})
+    resp.status_code = error.status
+    return resp
+
+
+@agents_blueprint.get("/host/status")
+def host_status():
+    """轮询探测：待领取数 + 失联标记顺带触发（约束 3：宿主在，标记就在）。"""
+    token = _host_token()
+    if not token:
+        return _host_error_response(service.AgentsServiceError("host_poll_token_missing", "缺少令牌。", 403))
+    try:
+        return _data(service.host_poll_status(presented_token=token))
+    except service.AgentsServiceError as error:
+        return _host_error_response(error)
+
+
+@agents_blueprint.post("/host/claim")
+def host_claim():
+    """领取一个待执行 run（幂等；token 一致的重复领取返回同一载荷）。"""
+    token = _host_token()
+    if not token:
+        return _host_error_response(service.AgentsServiceError("host_poll_token_missing", "缺少令牌。", 403))
+    body = _payload()
+    run_id = body.get("run_id") if isinstance(body, dict) else None
+    if run_id is not None and not isinstance(run_id, str):
+        raise service.AgentsServiceError("invalid_request", "run_id 须为字符串。", 400)
+    try:
+        return _data(service.claim_host_run(presented_token=token, run_id=run_id))
+    except service.AgentsServiceError as error:
+        return _host_error_response(error)
+
+
+@agents_blueprint.post("/host/runs/<run_id>/receipt")
+def host_receipt(run_id):
+    """回执落账（幂等；终态语义与容器对齐；H4 不自动重试）。"""
+    token = _host_token()
+    if not token:
+        return _host_error_response(service.AgentsServiceError("host_poll_token_missing", "缺少令牌。", 403))
+    try:
+        return _data(service.submit_host_receipt(presented_token=token, run_id=run_id, payload=_payload()))
+    except service.AgentsServiceError as error:
+        return _host_error_response(error)

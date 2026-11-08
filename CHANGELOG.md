@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — P2′① 宿主轮询领取：服务端咬合接线（领取/回执/失联三面，2026-11-08）
+
+- **形态落地（§11.3 六条约束 → 代码）**：NEW 迁移 `f6d3a9c1e7b2`（39→40 rev 头 `f6d3a9c1e7b2`）——`agent_runs.status` CHECK 置换加 `host_running`（对齐 T-J2 先例，零列重建）+ 5 新列（`execution_provider`〔sandbox 默认/host_poll〕/`host_claimed_at`/`host_token_hash`〔sha256 零明文〕/`host_receipt_at`/`host_lost_at`）+ 领取面索引；`IN_FLIGHT_STATUSES` 补 `host_running`。
+- **三条宿主机器面路由**（不进 api_catalog，与 bridge 同族；鉴权=`X-Host-Poll-Token` 头 sha256 比对）：`GET /agents/host/status`（待领取数+失联标记顺带触发）/`POST /agents/host/claim`（FIFO+行锁 skip_locked+幂等重领同 token 返回同载荷+异 token 403）/`POST /agents/host/runs/{id}/receipt`（终态语义与容器对齐：exit0=completed/非零=failed/宿主报 timeout·budget_exceeded 同名终态；产物**宿主侧 sha256 直录**〔storage_ref 带 `host:` 前缀，服务端永不回读原件〕；校验失败只记 failures 不改终态——H4 人工按明细处置）。
+- **发起侧**：`agent_host_poll_enabled` 开启时 start_run 落 `execution_provider=host_poll`+保持 queued 即返回 **202**（发起=受理，执行由宿主代理异步驱动；优先级高于 dev 直连）；config 新增 `agent_host_poll_enabled`（默认 False）/`agent_host_poll_token`（SecretStr）/`agent_host_lost_mark_minutes`（默认 30）。**生产启用闸未解除**：`adapter_missing` 维持到「①实装 + D3 书面回执 + N2 联调签核」齐备——本开关只解除形态未实装，不解除人工闸（H4/H1/N1/N2 原样）。
+- **H4 失联只标记**：`mark_host_lost` 扫描 host_running 超阈未回执 ⇒ 打 `host_lost_at`（幂等不重打；**不迁移状态不自动重试**）；由宿主代理 status 轮询顺带触发，零 scheduler 依赖。
+- **测试 pytest +19**：NEW `test_host_poll.py`——fail-closed 闸 3（默认关/半配置/坏令牌）/领取 6（FIFO+状态迁移+幂等重领+**续领语义**〔代理崩溃重启不带 run_id 续上自己手里的活〕+token 轮换后旧 hash 续领冲突+空队+sandbox 隔离）/回执 8（completed 产物直录+非零 failed+宿主 timeout+幂等 duplicate+令牌绑定+**轮换后回执 403**+未领取拒绝+校验失败明细与指纹缺失不落库）/失联 2（超阈标记+新鲜跳过）/HTTP 烟测 1（关闭态 403→status→claim→receipt 全链+错误投影）。
+- 口径：pytest 终值以本 PR CI run 实测为准（基线 fork/main `ba61d2c`（rebase 后权威树，含 #203 discovery）本地收集 2292 ——V3.2 G2-G7 +115 与 #203 +? 均未入 AGENTS 口径行 2152，本轮不代补、随轮以 CI 为准）；**+3 路由面**（rebase 后权威树实测 **366** 路由/45 蓝图/122 表/46 rev 单头 `f6d3a9c1e7b2`——含 #203 discovery 的 +7 路由 +4 表 +1 迁移一并基线校正；清单已重生成随 PR 提交）；vitest 不变。台账钉自检：本节含 pytest + 交付信号（delivery）。
+- 关联：消费 #193 §11.3 拍板（六条决策级约束）；与 V3.1 P1-1 分工——票据（5.3）/execution_policy（5.4）/artifact 扩列（5.7）/provider 字段扩展（5.6 部分本轮已带 execution_provider）归 V3.1 线后续轮。
 ## [未发布] — V3.1 P0-1：访谈事实与需求结构化（批A 服务端+批B 桌面审阅面同 PR，2026-11-08）
 
 - **范围**：任务书 §5（P0-1）服务端半——四表+迁移+契约校验器+后台抽取 job+8 路由+14 例测试；桌面审阅 UI（DiscoveryPanel）归批 B 另轮（任务书 §15「每个 Goal 一个明确子切片」）。设计裁决与负结论核验见 `docs/v3.1/00-gap-register.md` P0-1 节（复用 transcripts 生命周期/T-A2 脱敏三道防线/guidance 管线范式；四表确认无承接体）。
