@@ -74,6 +74,7 @@ from fde_api.transcripts.routes import transcripts_blueprint  # T-A9（goal-tb t
 from fde_api.handover.routes import handover_blueprint
 from fde_api.discovery.routes import discovery_blueprint  # V3.1 P0-1
 from fde_api.plans.routes import plans_blueprint  # V3.1 P0-3
+from fde_api.quality.routes import quality_blueprint  # V3.1 P1-2
 from fde_api.metrics.routes import metrics_blueprint
 from fde_api.ontology.routes import ontology_blueprint  # V3 T-O2
 from fde_api.ontology.routes import global_ontology_blueprint  # V3 T-O2c 全局只读面
@@ -117,6 +118,7 @@ BLUEPRINTS = [
     handover_blueprint,  # T-B1：app.py 注册序紧随 transcripts_blueprint
     discovery_blueprint,  # V3.1 P0-1：app.py 注册序紧随 handover_blueprint
     plans_blueprint,  # V3.1 P0-3：app.py 注册序紧随 discovery_blueprint
+    quality_blueprint,  # V3.1 P1-2：app.py 注册序紧随 plans_blueprint
     metrics_blueprint,
     translator_blueprint,
     mailing_blueprint,

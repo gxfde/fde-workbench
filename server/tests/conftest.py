@@ -454,6 +454,11 @@ def db_session(app) -> Session:
         __import__("fde_api.plans.models", fromlist=["DeliveryPlanTaskLink"]).DeliveryPlanTaskLink,
         __import__("fde_api.plans.models", fromlist=["DeliveryPlanItem"]).DeliveryPlanItem,
         __import__("fde_api.plans.models", fromlist=["DeliveryPlan"]).DeliveryPlan,
+        # V3.1 P1-2：测试计划三表（executions→cases→plans 子表先清；plans 引用
+        # project_tasks RESTRICT，必须先于 ProjectTask 清理）
+        __import__("fde_api.quality.models", fromlist=["TestExecution"]).TestExecution,
+        __import__("fde_api.quality.models", fromlist=["TestCase"]).TestCase,
+        __import__("fde_api.quality.models", fromlist=["TestPlan"]).TestPlan,
         OperationEvent,
         ProjectTaskDependency,
         ProjectTaskCollaborator,

@@ -1,10 +1,10 @@
 # V3.1 阶段状态
 
 - 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）；P0-4 开发基线=fork/main `889f964`
-- 当前分支：`feat/v31-p04-workflow-templates`（隔离 worktree `D:/test/fde-wt-v31p2`）
-- 当前阶段：P0-4 Workflow 模板与草稿生成（completed 本 PR）；P0-3 已收口（PR #207 合并 `889f964`）
-- 状态：in_progress（P0-4 已交付）
-- 开始/完成时间：P0-0=2026-11-07 完成（PR #197 已合并 fork/main `14d2b62`）；P0-1 批A=2026-11-08 完成；P0-3=2026-11-08 完成（PR #207 已合并 fork/main `889f964`）；P0-4=2026-11-08 交付
+- 当前分支：`feat/v31-p12-evidence`（隔离 worktree `D:/test/fde-wt-v31p2`）；P0-4 开发基线=fork/main `b196074`
+- 当前阶段：P1-2 自动测试与交付证据（completed 本 PR）；P0 阶段五阶段全部收口（#197/#203/#205/#207/#209）
+- 状态：in_progress（P1-2 已交付）
+- 开始/完成时间：P0-0=2026-11-07（#197 `14d2b62`）；P0-1=2026-11-08（#203 `92ca0bd`）；P0-2=2026-11-08（#205 `858e090`）；P0-3=2026-11-08（#207 `889f964`）；P0-4=2026-11-08（#209 `b196074`）；P1-2=2026-11-08 交付
 
 ## P0-0（completed，已合并）
 
@@ -50,6 +50,16 @@
 ## 是否允许进入下一阶段
 
 P0-4 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade head`〔幂等 no-op，零迁移〕+ **`seed-workflow-templates` 幂等落库** + `/api/v1/health/ready` 活体）→ **P1-2 自动测试与证据**（任务书 §13：测试计划→用例→执行→证据落证；复用 gate evidence 登记簿与任务产物候选挂接，00-gap-register §6 裁决待精读）。D-2 已按建议拍板执行（admin-only 维持）；D-1 已随 P0-2 以只读告警落地。
+
+## P1-2（completed，本 PR）
+
+- **交付**（00-gap-register 6.3/6.4/6.5 全落地；6.1/6.2 复用零代码）：NEW `quality/` 模块（models/service/routes）+ 迁移 `d5a8c2f4b7e1`（49 rev）+ 6 路由（全不进 api_catalog，蓝图 47）+ 7 例测试。三表 test_plans/test_cases/test_executions（requirement_key 强制追溯、append-only 执行〔失败不可改写=无更新路径+静态钉〕、production 服务层硬闸、报告指针+sha256 成对）；生成器=确定性拼装（字典序条目序，#209 教训）；需求覆盖闸（approved 时点名缺失键 409）；evidence/validate 五维只读校验（零写入零事件+可选 gate_key 类型范围）。**evidence_links 第四表不建**（登记簿+追溯已承载，冗余拒绝）。
+- **实施修正**：审核戳先于退位循环落（autoflush 抢跑撞 review_stamp CHECK）；双点退位语义（同一时刻至多一个 approved）约束测试设计（不能并行批准两计划做跨计划用例）。
+- **口径**：路由 377→**384**（+6）；蓝图 46→**47**（quality 新蓝图，BLUEPRINTS 已同步）；表 125→**128**（+3）；**49 rev 单头 `d5a8c2f4b7e1`**；pytest 2331→**2338**（+7）；mypy 279 不变；vitest 951 不变（零桌面）；CSV 重生成（385/129 行 wc 核对）。
+
+## 是否允许进入下一阶段（P1-2 后）
+
+P1-2 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade head`〔新迁移 d5a8c2f4b7e1〕+ ready 活体）→ **P1-1 ZCode 宿主执行通道**（任务书 §9；12 条安全前置未过前通道保持关闭——实施面以 #195 host_channel.py + 00-gap-register 5.1~5.7 裁决为基，先对齐在途宿主线成果再动工）。之后 P1-3 指标与经验沉淀（7.1 复用 metrics 报表、7.2 事件补齐、7.3 workflow 域指标、7.4/7.5 暂缓）。E2E「完整脱敏项目从访谈到交付验收」（任务书 §13.5）属 P2 试点验收面，随 P2 落地。
 
 ## 本阶段目标
 

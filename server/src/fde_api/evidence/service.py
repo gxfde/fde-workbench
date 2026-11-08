@@ -219,6 +219,86 @@ def register_evidence(*, actor: User, project_id: str, payload: Mapping[str, Any
         return {"evidence": serialize_evidence(row), "created": created}
 
 
+def validate_evidence(*, actor: User, project_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """证据完整性只读校验（V3.1 P1-2 6.5；任务书「证据完整性检查」语义）。
+
+    校验面（五维，任务书 P0-4 Gate 规则「类型/来源/时间/操作者/项目范围」）：
+    ①exists_in_project——行存在且属于本项目（项目范围，跨项目即失败不泄露）；
+    ②fingerprint_shape——sha256 64 位十六进制；③pointer_shape——source_uri
+    非空 ≤500；④channel_registered——captured_from 在登记通道闭集
+    （human 或 CAPTURED_FROM_PREFIXES 前缀）；⑤operator_registered——人工通道
+    必须留操作者（机器通道允许 created_by 空，T-E3 语义）。
+    可选 ``gate_key``：该门禁行须存在于本项目且证据 kind='gate'（类型/范围正确
+    ——「Gate 只接收类型和项目范围正确的证据」）。零写入零事件（只读干跑）。
+    """
+    evidence_ids = payload.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        raise EvidenceServiceError("invalid_request", "evidence_ids 须为非空数组。", 400)
+    if len(evidence_ids) > 100:
+        raise EvidenceServiceError("invalid_request", "单次最多校验 100 条证据。", 400)
+    if not all(isinstance(item, str) and item.strip() for item in evidence_ids):
+        raise EvidenceServiceError("invalid_request", "evidence_ids 须为非空字符串数组。", 400)
+    gate_key = payload.get("gate_key")
+    if gate_key is not None and (not isinstance(gate_key, str) or not gate_key.strip()):
+        raise EvidenceServiceError("invalid_request", "gate_key 须为非空字符串。", 400)
+
+    import re as _re
+
+    sha_pattern = _re.compile(r"^[0-9a-f]{64}$")
+    session = db.session()
+    try:
+        with session.begin():
+            _load_project(session, actor, project_id, manage=False)
+            gate: Gate | None = None
+            if gate_key:
+                gate = session.scalar(
+                    select(Gate).where(
+                        Gate.project_id == project_id, Gate.gate_key == gate_key.strip()
+                    )
+                )
+            results = []
+            for evidence_id in dict.fromkeys(evidence_ids):  # 去重保序
+                row = session.get(ProjectEvidence, evidence_id.strip())
+                failures = []
+                if row is None or row.project_id != project_id:
+                    failures.append({"check": "exists_in_project", "detail": "行不存在或不属于本项目"})
+                else:
+                    if not sha_pattern.fullmatch(row.content_sha256 or ""):
+                        failures.append({"check": "fingerprint_shape", "detail": "sha256 形状不合法"})
+                    if not row.source_uri or len(row.source_uri) > 500:
+                        failures.append({"check": "pointer_shape", "detail": "source_uri 缺失或超长"})
+                    captured = row.captured_from or ""
+                    channel_ok = captured == "human" or any(
+                        captured.startswith(prefix) and len(captured) > len(prefix)
+                        for prefix in CAPTURED_FROM_PREFIXES
+                        if prefix.endswith(":")
+                    )
+                    if not channel_ok:
+                        failures.append({"check": "channel_registered", "detail": f"来源通道不在册：{captured!r}"})
+                    if row.created_at is None:
+                        failures.append({"check": "timestamp_present", "detail": "缺登记时间"})
+                    if row.created_by_user_id is None and captured == "human":
+                        failures.append({"check": "operator_registered", "detail": "人工通道缺操作者"})
+                    if gate_key is not None:
+                        if gate is None:
+                            failures.append({"check": "gate_scope", "detail": "门禁行不存在于本项目"})
+                        elif row.kind != "gate":
+                            failures.append({"check": "evidence_kind_for_gate", "detail": f"kind={row.kind!r} 非 gate 类证据"})
+                results.append({
+                    "evidence_id": evidence_id,
+                    "valid": not failures,
+                    "failures": failures,
+                })
+            return {
+                "valid": all(item["valid"] for item in results),
+                "gate_key": gate_key.strip() if gate_key else None,
+                "results": results,
+                "checked": len(results),
+            }
+    finally:
+        session.close()
+
+
 def list_evidence(
     *,
     actor: User,

@@ -100,6 +100,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # V3.1 P0-3：交付方案（审阅治理面，不进 api_catalog）
     from fde_api.plans.routes import plans_blueprint
     app.register_blueprint(plans_blueprint)
+
+    from fde_api.quality.routes import quality_blueprint  # V3.1 P1-2
+    app.register_blueprint(quality_blueprint)
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)

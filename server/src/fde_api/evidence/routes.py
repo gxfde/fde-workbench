@@ -68,3 +68,11 @@ def register_evidence(project_id):
     """登记证据指针（can_manage）：同指纹幂等（created=false 时 200）。人工路径——有意不进 api_catalog。"""
     data = service.register_evidence(actor=g.current_user, project_id=project_id, payload=_payload())
     return jsonify({"data": data, "error": None}), (201 if data["created"] else 200)
+
+
+@evidence_blueprint.post("/validate")
+@require_auth
+def validate_evidence(project_id):
+    """证据完整性只读校验（can_view；V3.1 P1-2 6.5）：零写入零事件，逐条报五维检查。"""
+    data = service.validate_evidence(actor=g.current_user, project_id=project_id, payload=_payload())
+    return jsonify({"data": data, "error": None})

@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P1-2：自动测试与交付证据（quality 三表+覆盖闸+append-only 执行，2026-11-08）
+
+- **范围**：任务书 §10（P1-2）——测试计划/用例/执行三表新建（00-gap-register 6.3 负结论核验：quality/ 模块与 test_plan/test_case/test_execution 全仓 grep 零命中）+ 证据完整性只读校验端点（6.5）+ 环境维度与失败不可改写纪律（6.4）。6.1（agent_artifacts.kind=test_results 通道）/6.2（project_evidence 登记簿+gate 提交闸）按裁决复用零代码。
+- **DB（迁移 `d5a8c2f4b7e1`，48→49 rev，additive 三表）**：`test_plans`（项目内版本化 draft→approved+superseded；审核戳 CHECK 两段式；source_task_id 可空=任务书「按任务生成」语义）→`test_cases`（case_key 项目唯一 TC-<hex8>；**requirement_key 强制追溯**〔「测试用例可追溯需求」原文〕；acceptance_mode ∈ test/manual（manual=明确人工验收方式，计入需求覆盖）；risk_level 1..3；steps JSON 结构化）→`test_executions`（**append-only**：服务层零更新函数，重跑=新行；environment 三值+result 三值；report_uri/report_sha256 成对 CHECK）。**evidence_links 第四表不建**——测试↔证据关联由既有 project_evidence 登记簿（提交闸+候选采纳，6.2 复用裁决）+cases.requirement_key 追溯承载，单独关联表是冗余（偏差注记，评审可推翻）。
+- **生成器（确定性拼装无 AI）**：`generate_test_plan` 消费 accepted 需求（每条一条用例：expected=验收标准聚合、risk_level=priority 映射 high/medium/low→3/2/1、acceptance_mode=test、steps 留待人工补齐）；**条目序=requirement_key 字典序**（#209 教训：单事务 created_at 全同+uuid4 id 无序，插入序不可依赖）；无已批准需求 409 拒空壳；source_task_id 校验归属（跨项目任务 404）。**AI 用例通道为未来增强**——「模型生成用例先审核」由计划 draft→approved 人工闸承载（落库即待审核于 draft 计划）。
+- **需求覆盖闸（6.3）**：`review_test_plan` approved 时校验「每条批准需求至少有测试或明确人工验收方式」——本计划+既有 approved 计划的 cases.requirement_key 并集须覆盖全部 accepted 需求，缺失点名 409 `requirement_coverage_incomplete`（detail.missing_requirement_keys）；rejected→superseded（审核戳两分支同打——驳回也是一次审阅）；新 approved 使旧 approved 退位 superseded（历史行不覆盖）。**实施修正**：审核戳须先于退位循环落——循环查询 autoflush 抢跑 flush 本行，approved+无戳撞 `ck_test_plans_review_stamp`（P0-1 两段式 CHECK 家族教训再现）。
+- **执行登记（6.4）**：`execute_test_plan` 批量（≤100，单事务全成全败）append-only——**「失败结果不能被摘要 Agent 改写为成功」以「无更新路径」实现**（服务层零更新函数+静态钉断言无 PATCH/PUT/DELETE 执行路由）；**production 硬闸** 409 `production_forbidden`（值域含 production 仅为形状完备，写入唯一通道=服务闸；显式放行属后续拍板项）；报告指针+sha256 成对（400 拒单边）；跨计划用例 404。
+- **证据完整性校验（6.5）**：`POST /api/v1/projects/{id}/evidence/validate`（can_view，**零写入零事件**只读干跑）——五维检查：exists_in_project（项目范围，跨项目不泄露）/fingerprint_shape（sha256 64 hex）/pointer_shape（uri ≤500）/channel_registered（captured_from 通道闭集）/operator_registered（人工通道必须留操作者，机器通道 T-E3 语义允许空）；可选 `gate_key`：门禁行须在项目内（gate_scope）且证据 kind='gate'（类型正确——「Gate 只接收类型和项目范围正确的证据」）。
+- **API（+6 路由 377→384，NEW quality 蓝图 46→47〔BLUEPRINTS 已同步+CSV 重生成〕，全部不进 api_catalog 治理面）**：POST `/projects/{id}/test-plans/generate`（can_manage 201）、GET `/projects/{id}/test-plans?task_id=`（can_view，任务书「按任务查计划」的项目域落法——偏差注记：书原文 /api/tasks/{id}/test-plans 改项目域+task 过滤，沿 delivery-plans 路由惯例）、GET `/test-plans/{id}`、PATCH `/test-plans/{id}/review`、POST `/test-plans/{id}/execute`、GET `/test-executions/{id}`（书原文全局路径保留，项目范围经行加载校验）。
+- **事件**：target_type 注册表 +`test_plan`；三事件 test_plan_generated/reviewed/executed 直落 operation_events（changes 含 version/case_count/decision/created 数）。
+- **测试**：NEW `test_quality_test_plans.py` 7 例（生成确定性+追溯断言+字典序/无输入 409/source_task 闸含跨项目 404/覆盖闸点名+双点退位+仅 draft 可审阅+rejected→superseded/执行闸族〔draft 409+production 409+结果闭集 400+报告成对 400+跨计划 404〕+append-only 静态钉+重跑新行+权限族/validate 全分支〔含零写入事件断言+跨项目范围失败+形状闸 401/400〕/目录红线钉）；**三变异验证全红→还原→绿**（覆盖闸摘除/production 闸摘除/validate 项目范围摘除）。夹具教训=ProjectTask 直插需 planned_start/end_date+duration_days NOT NULL。
+- 口径：pytest **2338 收集 = 2332 passed + 6 skipped**（本地全量实测，本轮 +7；CI 终值以本 PR run 为准）/ vitest 951 不变（桌面零改动）/ 路由 **384** / 蓝图 **47** / 表 **128**（+3）/ **49 rev 单头 `d5a8c2f4b7e1`** / mypy 279 不变；审计 CSV 已重生成（384/47/128/49 逐位一致，route CSV 378→385 行、DB CSV 126→129 行 `wc -l` 核对）；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）。
+
 ## [未发布] — V3.1 P0-4：Workflow 模板与草稿生成（种子通道+三套模板+draft-from-plan，2026-11-08）
 
 - **范围**：任务书 §8（P0-4）——平台模板底座补种子通道，三套首批模板用既有四类节点表达；方案→Workflow 草稿生成（draft-from-plan）；发布权限拍板项 D-2 维持 admin-only。设计裁决见 `docs/v3.1/00-gap-register.md` P0-4 节（4.5 底座在无种子通道/4.6 三套内容新建/4.4 契约字段分两步/4.8 泛化 compiler 先例/4.9 独立干跑端点）。
