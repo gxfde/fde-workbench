@@ -1,9 +1,9 @@
 # V3.1 阶段状态
 
 - 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）；P0-4 开发基线=fork/main `889f964`
-- 当前分支：`feat/v31-p12-evidence`（隔离 worktree `D:/test/fde-wt-v31p2`）；P0-4 开发基线=fork/main `b196074`
-- 当前阶段：P1-2 自动测试与交付证据（completed 本 PR）；P0 阶段五阶段全部收口（#197/#203/#205/#207/#209）
-- 状态：in_progress（P1-2 已交付）
+- 当前分支：`feat/v31-p11-host-channel`（隔离 worktree `D:/test/fde-wt-v31p2`）；P1-1 开发基线=fork/main `036f8fd`
+- 当前阶段：P1-1 ZCode 宿主执行通道·结构化落地（completed 本 PR；通道保持关闭）；P0 五阶段+P1-2 已收口（#197/#203/#205/#207/#209/#211/#213）
+- 状态：in_progress（P1-1 已交付）
 - 开始/完成时间：P0-0=2026-11-07（#197 `14d2b62`）；P0-1=2026-11-08（#203 `92ca0bd`）；P0-2=2026-11-08（#205 `858e090`）；P0-3=2026-11-08（#207 `889f964`）；P0-4=2026-11-08（#209 `b196074`）；P1-2=2026-11-08 交付
 
 ## P0-0（completed，已合并）
@@ -60,6 +60,15 @@ P0-4 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade he
 ## 是否允许进入下一阶段（P1-2 后）
 
 P1-2 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade head`〔新迁移 d5a8c2f4b7e1〕+ ready 活体）→ **P1-1 ZCode 宿主执行通道**（任务书 §9；12 条安全前置未过前通道保持关闭——实施面以 #195 host_channel.py + 00-gap-register 5.1~5.7 裁决为基，先对齐在途宿主线成果再动工）。之后 P1-3 指标与经验沉淀（7.1 复用 metrics 报表、7.2 事件补齐、7.3 workflow 域指标、7.4/7.5 暂缓）。E2E「完整脱敏项目从访谈到交付验收」（任务书 §13.5）属 P2 试点验收面，随 P2 落地。
+
+## P1-1（completed，本 PR；通道保持关闭）
+
+- **交付**（00-gap-register 5.3/5.4/5.6/5.7 落地；5.10 闸纪律履行）：NEW `agents/execution_policy.py`（根锚定规范化+命令锚定+超时钳制+策略快照 hash，纯函数）+ NEW `agents/execution_authorization.py`（HMAC 短期票据签发/验证，HTTP 发行面随闸开放轮）+ 迁移 `e7c4a9d2f6b8`（50 rev；agent_runs +5/agent_artifacts +4 全可空 additive）+ 接线（宿主分支 root 锚定+命令锚定+快照落列+provider/workspace_ref 补写〔宿主直连此前不写 provider 的缺口〕+产物 size/mime）。**通道默认关闭零改动+双静态钉**（d4_settings 断言+config AST 字面 False）。5.2 容器 spawn 段维持降级现状；5.5 独立代理进程待分级开放拍板不预支。
+- **口径**：路由 384/蓝图 47/表 128 不变（零新表零新路由）；**50 rev 单头 `e7c4a9d2f6b8`**；pytest 2338→**2351**（+12 本地〔11 policy+roundtrip 1〕；基线 2339 收集含 #210 +1）；mypy 279 不变；vitest 951 不变；CSV 行数零变化（50 rev 核对）。
+
+## 是否允许进入下一阶段（P1-1 后）
+
+P1-1 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade head`〔新迁移 e7c4a9d2f6b8〕+ ready 活体）→ **P1-3 指标与经验沉淀**（00-gap-register 7.1 复用 metrics 报表加新指标、7.2 事件补齐随阶段、7.3 workflow 域指标、7.4/7.5 暂缓维持）。之后 **P2 真实项目试点**（任务书 §15/§16；E2E 完整脱敏项目验收面随试点落地）。P1-1 通道开启属**业务拍板项**（12 条安全前置+商用条款书面确认）——不随 P1-3/P2 自动开放。
 
 ## 本阶段目标
 

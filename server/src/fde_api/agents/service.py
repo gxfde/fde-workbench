@@ -32,6 +32,7 @@ source_refs）→ run failed + 产物 ``reviewed=False`` 永不进终审。
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import re
 from base64 import urlsafe_b64encode
@@ -58,6 +59,7 @@ from fde_api.agents.context import (
     SanitizationError,
     render_masked_context,
 )
+from fde_api.agents.execution_policy import normalize_workspace_under_root, policy_snapshot
 from fde_api.agents.host_channel import (
     HostChannelError,
     HostChannelSettings,
@@ -504,6 +506,7 @@ def _finalize(
             run.status = "failed"
         else:
             run.status = result.status
+            run.policy_snapshot_hash = result.policy_snapshot_hash
         run.token_cost = result.token_cost
         run.duration_ms = result.duration_ms
         run.exit_code = result.exit_code
@@ -550,6 +553,9 @@ def _finalize(
                         linked_solution_id=None if (gate_open or l1_path) else solution_id,
                         # T-B1：可重建派生摘要（exit_code 来自 run 结果，计数来自原件解析）
                         derived_summary=_derive_summary(artifact.kind, content, result.exit_code),
+                        # V3.1 P1-1（5.7）：原件大小 + MIME 推断（guess_type 纯形状，不读内容）
+                        size_bytes=len(content),
+                        mime_type=mimetypes.guess_type(file_path.name)[0],
                     )
                 )
         # V3 T-P0-1（WB-DEF-1 signoff 死锁）：非降级 completed 且绑定 solution 的
@@ -669,15 +675,26 @@ def _execute_run(
         host_scanner = (
             scanner_factory_host(run_id, workspace) if scanner_factory_host else ManifestOutputScanner(workspace / _OUTPUT_DIR)
         )
+        # V3.1 P1-1 策略层（前置 5）：工作目录根锚定（resolve 后必须落在
+        # agent_workspace_root 内——防 .. 与符号链接逃逸）；拒绝清单校验在
+        # run_host_channel 内继续兜底。
+        normalized_workspace = normalize_workspace_under_root(settings.agent_workspace_root, workspace)
         host_ctx = AgentRunContext(
             run_id=run_id,
             project_code=project.project_code,
             capability=agent.capability_tier,
-            workspace_host=str(workspace),
+            workspace_host=str(normalized_workspace),
             allowed_tools=effective_tools,
             credentials={},  # 宿主通道零凭据注入（解密结果不进 argv/env/磁盘）
             timeout_ms=agent.max_duration_ms or settings.agent_max_duration_ms,
             max_cost_units=agent.max_cost_units,
+            policy_snapshot_hash=policy_snapshot(
+                provider="host_channel",
+                workspace_ref=str(normalized_workspace),
+                allowed_tools=sorted(effective_tools),
+                timeout_ms=agent.max_duration_ms or settings.agent_max_duration_ms,
+                max_cost_units=agent.max_cost_units,
+            ),
         )
         try:
             result = run_host_channel(host_ctx, host_settings, output_scanner=host_scanner)
@@ -693,6 +710,8 @@ def _execute_run(
             run_row = session.get(AgentRun, run_id)
             if run_row is not None:
                 run_row.status = "running"
+                run_row.execution_provider = "host_channel"
+                run_row.workspace_ref = str(normalized_workspace)
         data, failures, gate_open = _finalize(
             db.session,
             run_id=run_id,

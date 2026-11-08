@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     ForeignKey,
@@ -135,6 +136,14 @@ class AgentRun(Base, TimestampMixin):
     host_token_hash: Mapped[str | None] = mapped_column(String(64))
     host_receipt_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     host_lost_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # V3.1 P1-1（00-gap-register 5.6）：执行面扩展列（全可空——旧行读路径零变化；
+    # 宿主轮询通道的 host_agent_id/authorization_id 由领取面写入，宿主直连
+    # 通道写 workspace_ref/policy_snapshot_hash，无独立代理进程故 host_agent_id 留空）。
+    host_agent_id: Mapped[str | None] = mapped_column(String(120))
+    authorization_id: Mapped[str | None] = mapped_column(String(64))
+    workspace_ref: Mapped[str | None] = mapped_column(String(255))
+    resume_session_ref: Mapped[str | None] = mapped_column(String(120))
+    policy_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class AgentArtifact(Base, TimestampMixin):
@@ -166,6 +175,12 @@ class AgentArtifact(Base, TimestampMixin):
     # 必须留谁/何时——缺省行 reviewed=False 双 NULL）
     reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # V3.1 P1-1（00-gap-register 5.7）：size/mime 落库时由原件 stat/guess 得出；
+    # revoked=复核撤回态留痕（现仅 reviewed 布尔翻转，撤回无操作者/时间——弱留痕补强）。
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    mime_type: Mapped[str | None] = mapped_column(String(120))
+    revoked_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class AgentToolCall(Base, TimestampMixin):

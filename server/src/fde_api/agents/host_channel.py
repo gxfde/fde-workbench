@@ -51,6 +51,7 @@ from typing import Any, Protocol
 
 from fde_api.agents import zcode_contract as zc
 from fde_api.agents.adapter import AgentRunContext, AgentRunResult
+from fde_api.agents.execution_policy import assert_command_allowed, clamp_timeout_ms
 from fde_api.agents.sandbox import FORBIDDEN_MOUNT_MARKERS
 
 # zcode CLI 契约（T-Z1 实测 0.17.1 §1.1）：Electron 壳 + cjs 入口；
@@ -236,6 +237,10 @@ def run_host_channel(
         prompt=task_prompt(ctx.workspace_host),
         workspace=ctx.workspace_host,
     )
+    # V3.1 P1-1 策略层（前置 4/8）：spawn 前命令锚定（argv 首元素=白名单 bin、
+    # 长度上限）+ 超时上限钳制（运行期熔断窗口仍以钳后值为准）。
+    assert_command_allowed(argv, allowed_bin=settings.zcode_bin)
+    effective_timeout_ms = clamp_timeout_ms(ctx.timeout_ms)
     try:
         proc = spawner(
             argv,
@@ -254,7 +259,7 @@ def run_host_channel(
     stderr_text = ""
     try:
         try:
-            remaining = ctx.timeout_ms / 1000 - (clock() - started)
+            remaining = effective_timeout_ms / 1000 - (clock() - started)
             stdout_text, stderr_text = proc.communicate(timeout=max(remaining, 0.0))
             exit_code = proc.returncode
         except subprocess.TimeoutExpired:
@@ -276,6 +281,7 @@ def run_host_channel(
             tool_calls=(),
             degraded=False,
             degraded_reason=None,
+            policy_snapshot_hash=ctx.policy_snapshot_hash,
         )
 
     degraded = bool(ctx.credentials)  # 平台凭据解密结果未被宿主通道使用 ⇒ L1
@@ -302,6 +308,7 @@ def run_host_channel(
             tool_calls=(),
             degraded=degraded,
             degraded_reason=degraded_reason,
+            policy_snapshot_hash=ctx.policy_snapshot_hash,
         )
 
     # B-2 宿主版：成本汇总后计账；超上限按上限截断 + budget_exceeded
@@ -316,6 +323,7 @@ def run_host_channel(
             tool_calls=(),
             degraded=degraded,
             degraded_reason=degraded_reason,
+            policy_snapshot_hash=ctx.policy_snapshot_hash,
         )
 
     artifacts = tuple(output_scanner.scan())
@@ -329,6 +337,7 @@ def run_host_channel(
         degraded=degraded,
         degraded_reason=degraded_reason,
         receipt_state=str(getattr(output_scanner, "receipt_state", "ok")),
+        policy_snapshot_hash=ctx.policy_snapshot_hash,
     )
 
 

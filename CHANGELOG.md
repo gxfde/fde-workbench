@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P1-1：ZCode 宿主执行通道·结构化落地（策略层+票据+扩列，通道保持关闭，2026-11-08）
+
+- **范围**：任务书 §9（P1-1）——00-gap-register 5.3/5.4/5.6/5.7 落地；**5.10 闸纪律：12 条安全前置未过前宿主通道保持关闭**（`agent_host_channel_enabled` 默认 False 零改动+两重静态钉），通道执行面（#195 宿主直连/宿主轮询）维持现状。5.2（adapter spawn 段重构）维持容器路径 `adapter_missing` 降级现状（宿主路径已是 T-Z1 实测契约，见 host_channel.py）；5.5（独立宿主代理进程）待分级开放拍板不预支。
+- **策略层（5.4，NEW `agents/execution_policy.py` 纯函数）**：①`normalize_workspace_under_root`——`Path.resolve()` 后根锚定（防 `..` 与符号链接逃逸；根内 `..` 穿越规范化后合法=无害穿越不拒）+`FORBIDDEN_MOUNT_MARKERS` 拒绝清单叠加；②`assert_command_allowed`——argv 首元素白名单锚定（大小写不敏感）+64 元素上限；③`clamp_timeout_ms`——30 分钟上限钳制；④`policy_snapshot`——canonical JSON（sort_keys+工具集合排序）sha256 快照，同输入恒同 hash（审计可重算，#209 确定性纪律）。
+- **短期授权票据（5.3，NEW `agents/execution_authorization.py` 纯函数）**：HMAC-SHA256 票据（MCP 15min JWT 原型的 agent_run 域对应物）——绑定 user/project/run/workspace/actions + 15min TTL + `hmac.compare_digest` 恒比较；动作闭集 `workspace.read/workspace.write/command.run/artifact.publish`；验证链=形状→签名→过期→run 绑定→动作覆盖五段。**HTTP 发行面不建**（5.10 闸未过——避免「结构存在但永远 409」的死面，随通道开放轮落地；账目注记可推翻）。
+- **扩列（5.6/5.7，迁移 `e7c4a9d2f6b8` 49→50 rev，additive 全可空）**：agent_runs +5（host_agent_id〔宿主代理标识——轮询领取面写入；宿主直连无独立代理进程留空〕/authorization_id〔票据引用〕/workspace_ref/resume_session_ref〔--resume 会话〕/policy_snapshot_hash〔策略快照〕）+ agent_artifacts +4（size_bytes/mime_type〔落库时由原件 len+guess_type 得出〕/revoked_by_user_id/revoked_at〔复核撤回留痕补强——此前仅 reviewed 布尔翻转〕）。
+- **接线**：宿主直连通道分支——spawn 前 `normalize_workspace_under_root` 根锚定（service 层）+ `assert_command_allowed` 命令锚定 + `clamp_timeout_ms`（run_host_channel 内）；策略快照经 `AgentRunContext.policy_snapshot_hash` → `AgentRunResult` → `_finalize` 落 `agent_runs.policy_snapshot_hash`；run 行补写 `execution_provider="host_channel"`+`workspace_ref`（**顺带补缺口：宿主直连此前不写 execution_provider**）；产物行落 size_bytes/mime_type。容器路径零改动（ctx 新字段缺省 None，AgentRunResult 同）。
+- **测试**：NEW `test_execution_policy.py` 11 例（规范化四分支〔含根内 `..` 无害穿越合法〕/命令锚定四拒一过/超时钳制/快照确定性+顺序无关/票据签发验证+六拒/签发四闸/扩列形状/**双静态钉**〔d4_settings 默认关+config.py AST 字面 False〕）；`test_migrations` 27 例（+roundtrip：downgrade 退列/upgrade 重得/projects 行保留）；三变异验证全红→还原→绿（逃逸校验摘除/签名比较摘除/快照排序摘除）；邻域 host_channel 全绿。实施注记：根内单层 `..` 经 resolve 落根内=无害穿越（首版测试误判为逃逸，已修正断言语义）。
+- 口径：pytest 本地全量 **2351 收集 = 2345 passed + 6 skipped**（EXIT=0 31:17；本轮 +12=test_execution_policy 11+migrations roundtrip 1；基线 2339 收集〔含 #210 +1〕）；路由 **384** / 蓝图 **47** / 表 **128** 不变（零新表）/ **50 rev 单头 `e7c4a9d2f6b8`** / mypy 279 不变 / vitest 951 不变（零桌面）；审计 CSV 重生成（385/129 行零变化，50 rev 单头核对）；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）。
+
 ## [未发布] — V3.1 P1-2：自动测试与交付证据（quality 三表+覆盖闸+append-only 执行，2026-11-08）
 
 - **范围**：任务书 §10（P1-2）——测试计划/用例/执行三表新建（00-gap-register 6.3 负结论核验：quality/ 模块与 test_plan/test_case/test_execution 全仓 grep 零命中）+ 证据完整性只读校验端点（6.5）+ 环境维度与失败不可改写纪律（6.4）。6.1（agent_artifacts.kind=test_results 通道）/6.2（project_evidence 登记簿+gate 提交闸）按裁决复用零代码。

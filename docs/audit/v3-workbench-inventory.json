@@ -2,9 +2,9 @@
  "route_count": 384,
  "blueprint_count": 47,
  "table_count": 128,
- "revision_count": 49,
+ "revision_count": 50,
  "heads": [
-  "d5a8c2f4b7e1"
+  "e7c4a9d2f6b8"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -371,6 +371,15 @@
     "handover_package_items"
    ],
    "add_column_tables": []
+  },
+  "e7c4a9d2f6b8": {
+   "file": "e7c4a9d2f6b8_p11_execution_columns.py",
+   "down_revision": "d5a8c2f4b7e1",
+   "create_tables": [],
+   "add_column_tables": [
+    "agent_artifacts",
+    "agent_runs"
+   ]
   },
   "e8b1d5f9a3c7": {
    "file": "e8b1d5f9a3c7_regression_suites_results.py",

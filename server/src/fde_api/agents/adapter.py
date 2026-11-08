@@ -60,6 +60,8 @@ class AgentRunContext:
     credentials: Mapping[str, str] = field(default_factory=dict)
     timeout_ms: int = 300_000
     max_cost_units: int = 0  # 0 = 单 run 不限额（月度预算在 service 层前置闸）
+    # V3.1 P1-1：策略快照 hash（execution_policy.policy_snapshot；宿主通道写入，容器版缺省 None）
+    policy_snapshot_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,8 @@ class AgentRunResult:
     degraded_reason: str | None
     # B#2 回执状态面（ManifestOutputScanner.receipt_state；其余 scanner 视为 ok）
     receipt_state: str = "ok"
+    # V3.1 P1-1：执行策略快照（透传 ctx，_finalize 落 agent_runs.policy_snapshot_hash）
+    policy_snapshot_hash: str | None = None
 
 
 class RunEventProvider(Protocol):
