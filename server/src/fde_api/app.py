@@ -97,6 +97,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     # V3.1 P0-1：访谈事实/需求结构化（审阅治理面，不进 api_catalog）
     from fde_api.discovery.routes import discovery_blueprint
     app.register_blueprint(discovery_blueprint)
+    # V3.1 P0-3：交付方案（审阅治理面，不进 api_catalog）
+    from fde_api.plans.routes import plans_blueprint
+    app.register_blueprint(plans_blueprint)
     # P0/P1 指标报表（goal-d8）：PRD §10 只读聚合
     from fde_api.metrics.routes import metrics_blueprint
     app.register_blueprint(metrics_blueprint)

@@ -2,8 +2,8 @@
 
 - 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）
 - 当前分支：`feat/v31-p0-1-discovery`（隔离 worktree `D:/test/fde-wt-v31p0`）
-- 当前阶段：P0-2 本体候选与稳定 ID（completed 待合并）；P0-1 已收口（PR #203 合并 `92ca0bd`）
-- 状态：in_progress（P0-2 已交付）
+- 当前阶段：P0-3 交付方案生成与任务分解（completed 待合并）；P0-2 已收口（PR #205 合并 `858e090`）
+- 状态：in_progress（P0-3 已交付）
 - 开始/完成时间：P0-0=2026-11-07 完成（PR #197 已合并 fork/main `14d2b62`）；P0-1 批A=2026-11-08 完成
 
 ## P0-0（completed，已合并）
@@ -34,9 +34,14 @@
 - **交付**：ADR-002（decisions/）+ 候选桥（`generate_discovery_candidates`：accepted 事实→create_term 条目→既有 change-set 管线；幂等/确定性/占用跳过）+ 稳定 ID 试点（subjects+term_id 迁移 `d6f2a8b4c9e1`；confirmed 落定自动链接同名 subject=回填；合并不改写）+ D-1 只读告警。+2 路由 365/46 rev/表 122。
 - **ADR 摘要**：control/ontology.py=AI 阅读语义快照（MCP 契约冻结）；ontology/=唯一治理权威；业务表写面关联逐步走 term_id（试点：research subjects），读面/影响分析仍以名字域为权威。
 
+## P0-3（completed，本 PR）
+
+- **交付**：NEW plans/ 模块（models/service/routes）+ 迁移 `a9c1e5f7b3d8`（48 rev）+ 6 路由 + 5 例测试。生成器=确定性拼装（accepted 需求逐条成目/confirmed 术语范围/needs_clarification 风险聚合，无输入 409）；审阅流 approved/rejected+发布+旧 published 退位 superseded；任务分解 dry_run 预览+选择性创建+幂等（每条目至多一任务，待认领不指派）。
+- **实施修正**：风险素材双重过滤恒空（accepted×open）→独立查 needs_clarification；ProjectTask 无 project_id（经模块间接挂）。
+
 ## 是否允许进入下一阶段
 
-P0-2 合并并部署（rebuild 三镜像+alembic）后 → **P0-3 交付方案生成与任务分解**（delivery_plans 三表新建 + 复用 solutions 骨架/compiler 先例；依赖 P0-1 requirements 已落）。P0-1 部署义务已履行（三镜像+alembic c3d5e7f9a1b4+ready 活体绿）；P0-2 部署随本 PR 合并后执行。
+P0-3 合并并部署后 → **P0-4 Workflow 模板与草稿生成**（三套模板内容新建+种子通道+draft-from-plan 泛化 compiler.py；D-2 发布权限拍板项维持 admin-only 先行）。P0-2 部署义务已履行（三镜像+alembic d6f2a8b4c9e1+ready 活体绿）；P0-3 部署随本 PR 合并后执行。
 
 ## 本阶段目标
 

@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P0-3：交付方案生成与任务分解（plans 三表+确定性生成器，2026-11-08）
+
+- **范围**：任务书 §7（P0-3）——从已批准需求/已接受事实/confirmed 术语生成可审核 Delivery Plan，映射到既有 project_tasks（不新建平行任务系统）。设计裁决见 `docs/v3.1/00-gap-register.md` P0-3 节（三表负结论核验=全仓 grep 零命中；任务唯一事实源=project_tasks 原文落地）。
+- **DB（迁移 `a9c1e5f7b3d8`，47→48 rev，additive 三表）**：`delivery_plans`（项目内版本化：状态机 draft→approved→published + superseded；审阅戳 CHECK 两段式；published 完整性 CHECK；新版本=新行不覆盖历史）→ `delivery_plan_items`（item_type 六值闭集 requirement/objective/milestone/risk/acceptance/non_goal；requirement_keys/fact_ids 引用清单——服务层闸只从已审阅输入拼装）→ `delivery_plan_task_links`（条目↔project_tasks RESTRICT 映射；UNIQUE(item,task)+**UNIQUE(item)=每条目至多一任务** 幂等锚）。
+- **生成器（确定性拼装，无 AI 调用）**：`generate_plan` 消费 accepted 需求（每条一个 requirement 条目，验收标准随行）+ confirmed 术语（objective 范围快照条目）+ needs_clarification 事实（**「待澄清」本身是审阅结论之一，作为风险素材独立于 accepted 集查询**——实施中发现双重过滤恒空的真缺陷并修正）；无任何输入 409 拒绝空壳方案（任务书「未核验不新建」精神）；每次生成=新行 version 递增。
+- **审阅流**：`review_plan`（approved/rejected 二选一，决策人+时间戳+备注留痕；**approved 使旧 published 行退位 superseded**——同项目至多一个现行方案，历史行内容永不覆盖）；`publish_plan`（仅 approved 可发布，同样先退位旧 published）。目标类型 `delivery_plan` 三事件（generated/reviewed/published）直落 operation_events。
+- **任务分解**：`create_plan_tasks`（dry_run 预览/选择性创建 item_ids/幂等跳过——已链接条目回 skipped[reason=已分解]，**幂等调用同样留痕 created=0** 审计诚实）；任务经既有 `create_project_task` 原语创建（module_id 必填=任务必须挂项目既有模块；**不传指派人**——create_project_task 落 default_assignee_role=None=待认领，任务书「未定负责人不随意指派」原文）；module 校验（不存在/跨项目 404）。
+- **API（+6 路由 368→374，NEW `plans/` 模块蓝图 45→46，全部不进 api_catalog）**：POST `/projects/{id}/delivery-plans/generate`（can_manage 201）、GET `/projects/{id}/delivery-plans`（can_view ?status=）、GET `/delivery-plans/{id}`（can_view，条目+任务映射）、PATCH `/delivery-plans/{id}/review`、POST `/delivery-plans/{id}/publish`、POST `/delivery-plans/{id}/tasks`（dry_run 默认 true=预览）。权限：写=can_manage、读=can_view、跨项目 403/404。
+- **测试**：NEW `test_delivery_plans.py` 5 例（生成 happy+事件/无输入 409/审阅发布全流转+supersede 链〔v1/v2/v3 三版本〕/分解预览-创建-幂等三段+待认领断言+事件双条〔created=1 与幂等 created=0〕/模块与权限闸族）；夹具教训=ProjectTask 无 project_id 列（经 ProjectModule 间接挂，查询三处修正）、ProjectModule 需 module_catalog_id NOT NULL（夹具补 ModuleCatalog 行）。回归：discovery/ontology/migrations 簇全绿；ruff 绿；mypy 279 不变。
+- 口径：pytest **2321 收集 = 2315 passed + 6 skipped**（本地全量 33:04 EXIT=0 实测，本轮 +5；CI 终值以本 PR run 为准）/ vitest **951** 不变（桌面零改动）/ 路由 **374** / 蓝图 **46** / 表 **125**（+3）/ **48 rev 单头 `a9c1e5f7b3d8`**；审计 CSV 已重生成（374/46/125/48 逐位一致，`wc -l` 核对 375/126）；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）。
+
+
 ## [未发布] — V3.1 P0-2：本体候选与稳定 ID（ADR-002+discovery 候选桥+term_id 试点，2026-11-08）
 
 - **范围**：任务书 §6（P0-2）三件套——①ADR-002 文档（NEW `docs/v3.1/decisions/ADR-002-ontology-ownership.md`：control/ontology.py=AI 阅读用语义快照 vs ontology/=唯一治理权威，零代码级重叠实测收编、MCP `ontology_read` 契约冻结、不删旧模块、防漂移三边界）；②discovery→本体候选桥（AI 只创建候选，采纳走既有 change-set submit→confirm 人工管线）；③稳定 ID 试点（`project_research_subjects.term_id` 可空 FK，旧行不回填读路径零变化）。设计裁决见 `docs/v3.1/00-gap-register.md` P0-2 节。

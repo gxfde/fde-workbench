@@ -449,6 +449,11 @@ def db_session(app) -> Session:
         # projects/users（RESTRICT/SET NULL），均先于两表清理
         __import__("fde_api.workflows.models", fromlist=["WorkflowDefinitionVersion"]).WorkflowDefinitionVersion,
         __import__("fde_api.workflows.models", fromlist=["WorkflowDefinition"]).WorkflowDefinition,
+        # V3.1 P0-3：交付方案三表（links→items→plans 子表先清；links 引用
+        # project_tasks RESTRICT，必须先于 ProjectTask 清理）
+        __import__("fde_api.plans.models", fromlist=["DeliveryPlanTaskLink"]).DeliveryPlanTaskLink,
+        __import__("fde_api.plans.models", fromlist=["DeliveryPlanItem"]).DeliveryPlanItem,
+        __import__("fde_api.plans.models", fromlist=["DeliveryPlan"]).DeliveryPlan,
         OperationEvent,
         ProjectTaskDependency,
         ProjectTaskCollaborator,
