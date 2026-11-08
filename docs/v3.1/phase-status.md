@@ -55,7 +55,7 @@ P0-4 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade he
 
 - **交付**（00-gap-register 6.3/6.4/6.5 全落地；6.1/6.2 复用零代码）：NEW `quality/` 模块（models/service/routes）+ 迁移 `d5a8c2f4b7e1`（49 rev）+ 6 路由（全不进 api_catalog，蓝图 47）+ 7 例测试。三表 test_plans/test_cases/test_executions（requirement_key 强制追溯、append-only 执行〔失败不可改写=无更新路径+静态钉〕、production 服务层硬闸、报告指针+sha256 成对）；生成器=确定性拼装（字典序条目序，#209 教训）；需求覆盖闸（approved 时点名缺失键 409）；evidence/validate 五维只读校验（零写入零事件+可选 gate_key 类型范围）。**evidence_links 第四表不建**（登记簿+追溯已承载，冗余拒绝）。
 - **实施修正**：审核戳先于退位循环落（autoflush 抢跑撞 review_stamp CHECK）；双点退位语义（同一时刻至多一个 approved）约束测试设计（不能并行批准两计划做跨计划用例）。
-- **口径**：路由 377→**384**（+6）；蓝图 46→**47**（quality 新蓝图，BLUEPRINTS 已同步）；表 125→**128**（+3）；**49 rev 单头 `d5a8c2f4b7e1`**；pytest 2331→**2338**（+7）；mypy 279 不变；vitest 951 不变（零桌面）；CSV 重生成（385/129 行 wc 核对）。
+- **口径**：路由 377→**384**（+6）；蓝图 46→**47**（quality 新蓝图，BLUEPRINTS 已同步）；表 125→**128**（+3）；**49 rev 单头 `d5a8c2f4b7e1`**；pytest 2331→**2338**（+7 本地；CI 融合树实测 2339=2333+6s 含并发 #210 +1，main run 全绿收口）；mypy 279 不变；vitest 951 不变（零桌面）；CSV 重生成（385/129 行 wc 核对）。
 
 ## 是否允许进入下一阶段（P1-2 后）
 
