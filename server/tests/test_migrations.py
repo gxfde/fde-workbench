@@ -72,7 +72,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3.1 P1-2：test_plans/test_cases/test_executions 三表（质量模块，additive）
 # V3.1 P1-1：agent_runs 扩列 +5 / agent_artifacts 扩列 +4（执行面字段，additive）
 # 商业化 G1：commercial_entitlements + training_entitlements 两表（权益四分，additive）
-HEAD_REVISION = "e9c4a1f7b3d2"
+# 商业化 G2：enterprise_quota_subjects + enterprise_free_quota 两表（免费额度主体认定，additive）
+HEAD_REVISION = "b3e7c9d1a5f2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -958,7 +959,8 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
     character_max = scalar(
         engine,
         "SELECT character_maximum_length FROM information_schema.columns "
-        "WHERE table_name='project_research_subjects' AND column_name='subject_type'",
+        "WHERE table_schema = current_schema() "
+        "AND table_name='project_research_subjects' AND column_name='subject_type'",
     )
     assert character_max == 60
     subject_id = str(uuid4())
@@ -1039,7 +1041,8 @@ def test_v4_subject_type_domain_roundtrip_preserves_subjects(alembic_config, eng
     character_max = scalar(
         engine,
         "SELECT character_maximum_length FROM information_schema.columns "
-        "WHERE table_name='project_research_subjects' AND column_name='subject_type'",
+        "WHERE table_schema = current_schema() "
+        "AND table_name='project_research_subjects' AND column_name='subject_type'",
     )
     assert character_max == 32
     with pytest.raises(IntegrityError):
@@ -1107,9 +1110,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
     # 迁移文件全集权威=alembic ScriptDirectory（V3.1 P1-1 e7c4a9d2f6b8 +
-    # 商业化 G1 e9c4a1f7b3d2 之后 = 51）；v3-workbench-inventory.json 的
-    # revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 51
+    # 商业化 G1 e9c4a1f7b3d2 + 商业化 G2 b3e7c9d1a5f2 之后 = 52）；
+    # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
+    assert len(known) == 52
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical
@@ -1214,9 +1217,16 @@ def _column_names(engine, table: str) -> set[str]:
 
 
 def _agent_status_check_ddl(engine) -> str:
+    # 按当前 schema 限定命名空间：pg_constraint / pg_class / pg_namespace 跨库可见，
+    # 同库若存在兄弟 schema（并行跑的遗留 schema）同名约束会一并命中——
+    # scalar_one_or_none() 将抛 MultipleResultsFound（与被测迁移无关的假失败）。
     return scalar(
         engine,
-        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_agent_runs_status'",
+        "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        "JOIN pg_class t ON t.oid = c.conrelid "
+        "JOIN pg_namespace n ON n.oid = t.relnamespace "
+        "WHERE c.conname = 'ck_agent_runs_status' "
+        "AND n.nspname = current_schema()",
     )
 
 

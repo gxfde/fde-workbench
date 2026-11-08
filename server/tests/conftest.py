@@ -597,6 +597,13 @@ def db_session(app) -> Session:
         __import__(
             "fde_api.commercial.models", fromlist=["CommercialEntitlement"]
         ).CommercialEntitlement,
+        # 商业化 G2：免费额度两表（quota 引用 subjects RESTRICT，子表先清）
+        __import__(
+            "fde_api.commercial.models", fromlist=["EnterpriseFreeQuota"]
+        ).EnterpriseFreeQuota,
+        __import__(
+            "fde_api.commercial.models", fromlist=["EnterpriseQuotaSubject"]
+        ).EnterpriseQuotaSubject,
         OperationEvent,
         ProjectTaskDependency,
         ProjectTaskCollaborator,

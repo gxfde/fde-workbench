@@ -13,8 +13,10 @@
 5. 权限：读面本人/admin，他人 403；未知用户 404；
 6. 对外编号映射闭包（ladder.py 唯一转换入口）+ 静态钉：商业包与迁移文件
    中带引号的 L 编号字面量只允许出现在 ladder.py；
-7. 迁移升级/兼容：head 上两表列与 CHECK 齐备；downgrade -1 双表消失，
-   回 head 恢复（additive 往返）；治理面不进 api_catalog。
+7. 迁移升级/兼容：head 上两表列与 CHECK 齐备；downgrade 至**本迁移的父
+   版本**（显式 revision，非 ``-1``——后续迁移叠在头上时 ``-1`` 会退错版本）
+   双表消失，回 head 恢复（additive 往返）；治理面不进 api_catalog。
+
 """
 
 from __future__ import annotations
@@ -549,7 +551,7 @@ def test_migration_roundtrip_and_head_shape(engine, alembic_config) -> None:
         "note",
     } <= train_cols
 
-    command.downgrade(alembic_config, "-1")
+    command.downgrade(alembic_config, "e7c4a9d2f6b8")
     inspector = sql_inspect(engine)
     tables = set(inspector.get_table_names())
     assert "commercial_entitlements" not in tables

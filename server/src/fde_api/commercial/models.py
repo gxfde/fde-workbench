@@ -18,8 +18,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fde_api.auth.models import UTCDateTime, UTC_TIMESTAMP_SQL
@@ -139,3 +140,166 @@ class TrainingEntitlement(Base, TimestampMixin):
 
     user = relationship("User", foreign_keys=[user_id])
     granted_by = relationship("User", foreign_keys=[granted_by_user_id])
+
+
+# ── 商业化 G2：企业免费额度（ADR-004 主体认定 + ADR-007 人工确认默认）──
+
+# 六项免费交付物闭集（完成判据=恰好六键全真，ADR-004 §1.5）
+FREE_DIAGNOSIS_DELIVERABLES = (
+    "diagnosis_report",  # 企业问题诊断报告
+    "process_analysis",  # 业务流程初步分析
+    "ai_opportunity_list",  # AI 应用机会清单
+    "implementation_plan",  # 建议实施方案
+    "project_tier_budget",  # 预计项目等级与预算区间（三档纯描述，无数值）
+    "next_steps",  # 下一步实施建议
+)
+
+# 不免费范围（免费边界即产品边界，ADR-004 §1.6——代码层权威清单）
+FREE_EXCLUSIONS = (
+    "full_implementation",  # 完整实施
+    "real_crm_erp_integration",  # 真实 CRM/ERP 接入
+    "large_scale_data_processing",  # 大规模数据处理
+    "custom_agent",  # 定制 Agent
+    "production_deployment",  # 生产部署
+    "continuous_operations",  # 持续运维
+    "onsite_residency",  # 驻场
+)
+
+# 三档项目等级（纯描述性表述，无数值区间；命名不带 T——与区域席位档 T1–T3 解耦）
+DIAGNOSIS_PROJECT_TIERS = {
+    "standardized": {
+        "label": "标准化程度高且风险低",
+        "description": "AI 自助完成候选——适合标准化产品化交付路径。",
+    },
+    "multi_system": {
+        "label": "涉及多个业务系统",
+        "description": "AI 辅助＋企业人员审核——需要双方协同的半自助路径。",
+    },
+    "complex": {
+        "label": "复杂业务流程、数据治理、系统集成",
+        "description": "转专业 FDE 项目交付——预算区间以正式报价为准（免费诊断不含数值报价）。",
+    },
+}
+
+# 两档体验上限（**保守占位缺省，试点前须填实数**——占位值非业务拍板数，ADR-004 §1.8）
+EXPERIENCE_LIMIT_KINDS = ("founder", "deliverer")
+EXPERIENCE_LIMITS = {
+    "founder": {"simulation_runs": 3, "mentor_sessions": 1},
+    "deliverer": {"simulation_runs": 5, "mentor_sessions": 2},
+}
+EXPERIENCE_LIMITS_PLACEHOLDER = True  # True=数值未拍板；试点数据到位后置 False 并填实数
+
+# ── 三入口隔离（任务书 §6 语义：企业＝真实业务问题／创业者＝模拟体验／
+#    交付者＝脱敏模拟项目考核）──
+# 入口注册表是**三入口隔离的结构性声明**：每个入口只允许自己的数据域，
+# 非企业入口取用 real_business 即拒（`trial_entry_scope_forbidden`）——
+# 「创业者不能取到企业真实商机」的验收面（商机归属/渠道保护本体归 G4）。
+REAL_BUSINESS_SCOPE = "real_business"
+
+FREE_TRIAL_ENTRIES: dict[str, dict[str, Any]] = {
+    "enterprise": {
+        "label": "企业真实业务诊断",
+        "scope": REAL_BUSINESS_SCOPE,
+        "allowed_scopes": (REAL_BUSINESS_SCOPE,),
+        "description": "基于企业真实业务问题的一次完整免费诊断（额度按企业主体计）。",
+        "subject_key_required": True,
+        "experience_limit_kind": None,  # 企业入口不适用体验档上限
+    },
+    "founder": {
+        "label": "创业者模拟体验",
+        "scope": "simulation",
+        "allowed_scopes": ("simulation",),
+        "description": "模拟场景中的交付能力体验——不触真实商机。",
+        "subject_key_required": False,
+        "experience_limit_kind": "founder",
+    },
+    "deliverer": {
+        "label": "交付者脱敏模拟项目考核",
+        "scope": "sanitized_simulation",
+        "allowed_scopes": ("sanitized_simulation",),
+        "description": "脱敏模拟项目考核——不触真实商机。",
+        "subject_key_required": False,
+        "experience_limit_kind": "deliverer",
+    },
+}
+FREE_TRIAL_ENTRY_KEYS = tuple(FREE_TRIAL_ENTRIES)
+
+QUOTA_STATES = ("granted", "in_progress", "completed")
+
+
+
+class EnterpriseQuotaSubject(Base, TimestampMixin):
+    """企业免费额度主体（PK=规范化统一社会信用代码，ADR-004 §1.1）。
+
+    ``subject_key`` 经 ``normalize_subject_key`` 生成（大写去空格连字符 +
+    mod-31 校验位验证）——**额度键挂主体而非账号**，是「换账号不重置」的
+    结构性保证（按账号计的实现会在反例用例上转红，任务书 §6 验收）。
+    """
+
+    __tablename__ = "enterprise_quota_subjects"
+
+    subject_key: Mapped[str] = mapped_column(String(18), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    first_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String(255))
+
+    first_user = relationship("User", foreign_keys=[first_user_id])
+
+
+class EnterpriseFreeQuota(Base, TimestampMixin):
+    """企业免费诊断额度（每主体一份；一次一主体、长期有效不重置）。
+
+    状态机（三条 CHECK 联锁，见 __table_args__）：
+    granted（授予未启动）→ in_progress（绑定账号，诊断进行中）→
+    completed（六项齐备；企业确认后为终态确认）。**无重置路径**。
+    """
+
+    __tablename__ = "enterprise_free_quota"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('granted', 'in_progress', 'completed')",
+            name="ck_enterprise_free_quota_state",
+        ),
+        CheckConstraint(
+            "(state = 'granted' AND bound_user_id IS NULL AND completed_at IS NULL "
+            "AND enterprise_confirmed_at IS NULL) OR "
+            "(state <> 'granted' AND bound_user_id IS NOT NULL)",
+            name="ck_enterprise_free_quota_bound_shape",
+        ),
+        CheckConstraint(
+            "state != 'completed' AND completed_at IS NULL "
+            "OR state = 'completed' AND completed_at IS NOT NULL",
+            name="ck_enterprise_free_quota_completed_shape",
+        ),
+        CheckConstraint(
+            "enterprise_confirmed_at IS NULL OR state = 'completed'",
+            name="ck_enterprise_free_quota_confirm_requires_completed",
+        ),
+    )
+
+    subject_key: Mapped[str] = mapped_column(
+        String(18),
+        ForeignKey("enterprise_quota_subjects.subject_key", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    state: Mapped[str] = mapped_column(String(12), nullable=False, default="granted")
+    granted_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    granted_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    bound_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    bound_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    deliverables: Mapped[dict[str, bool] | None] = mapped_column(JSON)
+    enterprise_confirmed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    enterprise_confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+    subject = relationship("EnterpriseQuotaSubject", foreign_keys=[subject_key])

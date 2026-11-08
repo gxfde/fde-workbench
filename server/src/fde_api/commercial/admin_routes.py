@@ -13,6 +13,7 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
+from fde_api.commercial.quota_service import complete_diagnosis, grant_or_get_quota
 from fde_api.commercial.service import (
     CommercialServiceError,
     activate_seat,
@@ -145,3 +146,36 @@ def set_delivery_eligibility_route(user_id: str):
         )
         return jsonify({"data": data, "error": None})
 
+
+
+# ── 商业化 G2：企业免费额度（治理写：授予/完成=admin+密码确认，ADR-007）──
+
+
+@admin_commercial_blueprint.post("/enterprise-quota/grant")
+@require_auth
+def grant_quota_route():
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = grant_or_get_quota(
+            session,
+            actor=g.current_user,
+            subject_key_raw=payload.get("subject_key"),
+            display_name=payload.get("display_name"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/enterprise-quota/<subject_key>/complete")
+@require_auth
+def complete_quota_route(subject_key: str):
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = complete_diagnosis(
+            session,
+            actor=g.current_user,
+            subject_key_raw=subject_key,
+            deliverables=payload.get("deliverables"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})

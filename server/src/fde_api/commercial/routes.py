@@ -10,6 +10,12 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify
 
 from fde_api.auth.decorators import require_auth
+from fde_api.commercial.quota_service import (
+    confirm_diagnosis,
+    free_diagnosis_profile,
+    get_quota_view,
+    start_diagnosis,
+)
 from fde_api.commercial.service import CommercialServiceError, get_entitlement_for_view
 from fde_api.extensions import db
 
@@ -41,3 +47,36 @@ def get_entitlement_route(user_id: str):
     with db.session() as session:
         data = get_entitlement_for_view(session, actor=g.current_user, user_id=user_id)
         return jsonify({"data": data, "error": None})
+
+
+# ── 商业化 G2：企业免费额度（读面：绑定账号本人或 admin）──
+
+
+@commercial_blueprint.get("/enterprise-quota/<subject_key>")
+@require_auth
+def get_quota_route(subject_key: str):
+    with db.session() as session:
+        data = get_quota_view(session, actor=g.current_user, subject_key_raw=subject_key)
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.post("/enterprise-quota/<subject_key>/start")
+@require_auth
+def start_quota_route(subject_key: str):
+    with db.session() as session, session.begin():
+        data = start_diagnosis(session, actor=g.current_user, subject_key_raw=subject_key)
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.post("/enterprise-quota/<subject_key>/confirm")
+@require_auth
+def confirm_quota_route(subject_key: str):
+    with db.session() as session, session.begin():
+        data = confirm_diagnosis(session, actor=g.current_user, subject_key_raw=subject_key)
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/free-diagnosis-profile")
+@require_auth
+def free_diagnosis_profile_route():
+    return jsonify({"data": free_diagnosis_profile(), "error": None})

@@ -1,10 +1,10 @@
 {
- "route_count": 391,
+ "route_count": 397,
  "blueprint_count": 49,
- "table_count": 130,
- "revision_count": 51,
+ "table_count": 132,
+ "revision_count": 52,
  "heads": [
-  "e9c4a1f7b3d2"
+  "b3e7c9d1a5f2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -83,6 +83,15 @@
     "gates",
     "workflow_runs"
    ]
+  },
+  "b3e7c9d1a5f2": {
+   "file": "b3e7c9d1a5f2_commercial_g2_free_quota.py",
+   "down_revision": "e9c4a1f7b3d2",
+   "create_tables": [
+    "enterprise_quota_subjects",
+    "enterprise_free_quota"
+   ],
+   "add_column_tables": []
   },
   "b4e8c1a7d2f6": {
    "file": "b4e8c1a7d2f6_p1_sop_schema.py",
