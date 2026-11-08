@@ -14,6 +14,17 @@
 - **接线上游并发**：批 A 开发窗口内 fork/main 并入 #197（本线 P0-0）/#198–201（V3.2 模拟训练场 G0–G7）——迁移链 rebase 挂 `e8b1d5f9a3c7`、test_migrations 注释行合并、known 数 44→45、extract 脚本 BLUEPRINTS 双登记（discovery/simulation 同窗）、测试库按外来戳配方全量重建（半迁移脏态：版本戳=head 而 simulation 表缺失——DROP 全表重建后 clean build 123 表）。**教训**：alembic_version 戳会被同 revision id 的新文件「骗过」upgrade——重建必须清全表而非只 downgrade。
 - 口径：pytest **2287 收集 = 2281 passed + 6 skipped**（本地全量 40:54 EXIT=0 实测；其中本轮 +14=test_discovery_extraction，其余增量=上游 #198–201 simulation 域测试未随其轮在根 CHANGELOG 报数，本轮现测一并落账；CI 终值以本 PR run 实测为准）/ vitest **951/951**（81 文件；基座 944 + 本轮批B +7）/ mypy 279 不变；**零桌面零 api_catalog**；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（新迁移）。
 
+## [未发布] — 文档基线与结构口径对齐轮（纯文档零代码，rebase 至 #203 / 2026-11-08）
+
+- **版本口径统一**：`VERSION`、README 版本徽标、`AGENTS.md` 首段 `v0.2.0` → **`0.3.0`**（与 `desktop/package.json` / `server/pyproject.toml` 发布列车一致）。README 升版说明里的 `v0.2.0` 是 tag 命名示例、非版本口径，保留原样。
+- **AGENTS 现行口径行**：状态段新增 `fork/main 92ca0bd` / PR #203 现测一行（122 业务表 / 45 迁移 head `c3d5e7f9a1b4` / 363 路由 / 45 蓝图 / `api_catalog` 94 ENTRIES / mypy 279）。**各历史轮 bullet 中的口径数字为该轮时点实测值，作历史记录保留、未改写**（尤其 V3.1 P0-0 轮的 `109 表/39 rev/323 路由`）——改它会篡改历史。
+- **CI 实测核销**：#203 把口径推进至 122 表 / 45 rev / 363 路由 / 45 蓝图（CI 实测 pytest **2287 收集 = 2281 passed + 6 skipped**、vitest **951/951（81 文件）**，见 #203 bullet；本 PR 仅刷新口径行与审计 CSV 基线标记，不引入新测试增量，CI 终值以本 PR rebase run 实测为准）。
+- **操作手册**：尝试 §3 标题与正文 12 → **13 个 tab**（依据 `routing/useHashRoute.ts` 的 `PROJECT_DETAIL_TABS`；补 §3.12「执行智能体」/ §3.13「评审会」两节），新增 §15「模拟训练场」（左侧独立导航 `#simulation`，5 分区；**训练场是全局页，不是第 14 个 tab**）——但因 `server/src/fde_api/control/bundled/help_manual.md` 孪生副本测试硬锁（12 tab：`test_docs_copy_of_manual_stays_identical_to_bundled` / `test_manual_and_ui_page_agree_on_key_facts`），于 `be564e0` 回退，维持 12 tab；落差登记于《同步说明》。
+- **配置样例**：`.env.example` / `server/.env.example` 补注释态 `FDE_BRIDGE_TOKEN` / `FDE_LOGIN_RATE_FAIL_CLOSED`（此前仅代码与 AGENTS 有语义）。真实令牌仍只放 `server/.env`，永不提交。
+- **审计清单**：`v3-route-inventory.csv` / `v3-database-inventory.csv` 首列 repository 标记 `0570384` → `92ca0bd`（rebase 至 #203，CSV 已由 #203 重生成至 route 363 / table 122 / rev 45 单头，(method,path) 集合随 #203 实际路由变化）；`test_route_inventory_sync.py` 同步钉对 (method,path) 集合负责，首列标记变更不触发其断言。
+- **诚实登记（本轮未改）**：生成脚本 `scripts/audit/extract_workbench_inventory.py` 两处仍硬编码 `fde-workbench@0570384`。本轮为纯文档轮，**未改 .py 以避免触发 pre-commit 的 python 钩子与并发全量 pytest 争抢 advisory lock**；下次重生成会把标记带回旧值 ⇒ 后续轮应把该常量改为动态 `git rev-parse --short HEAD`。
+- **零业务代码零迁移零路由零桌面** ⇒ 无需 rebuild / alembic / 重打包。文档中心侧同步见 `D:\test\FDE\蔡工FDE工作台_文档中心\00_文档总览.md` §12.6。
+
 ## [未发布] — V3.1 P0-0 基线审计轮（智能交付自动化升级路线图第一轮，纯文档零代码，2026-11-07）
 
 - **任务书入库**：`docs/蔡工_FDE_Workbench_V3.1_智能交付自动化升级路线图与Goal实施任务书.md`（自述基线提交 `7368094`）正式入库作为 V3.1 唯一权威任务书；审计基线取 fork/main `65db88c`（其后 1 提交=#196）。

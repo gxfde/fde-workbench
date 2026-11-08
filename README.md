@@ -3,7 +3,7 @@
   <h1>蔡工FDE智能交付系统</h1>
   <p>面向 Forward Deployed Engineer 团队的开源智能交付工作台</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v0.2.0-2d7dd2" alt="版本 v0.2.0" />
+    <img src="https://img.shields.io/badge/version-v0.3.0-2d7dd2" alt="版本 v0.3.0" />
     <img src="https://img.shields.io/badge/license-MIT-22a06b" alt="MIT 许可证" />
     <img src="https://img.shields.io/badge/desktop-Windows%20x64%20%7C%20macOS%20arm64-555b6e" alt="Windows x64 与 macOS arm64 构建配置" />
     <img src="https://img.shields.io/badge/release-source%20only-f59e0b" alt="仅源码发布" />
