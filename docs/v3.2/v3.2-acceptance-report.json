@@ -24,28 +24,29 @@
   },
   "totals": {
     "runs": 18,
-    "mean_score": 0.735,
+    "mean_score": 0.8314,
     "min_score": 0.735,
-    "max_score": 0.735,
+    "max_score": 0.925,
     "total_tool_calls": 195,
     "total_rounds": 90,
-    "total_findings": 36
+    "total_findings": 16
   },
   "verdicts": {
-    "conditional": 18
+    "pass": 15,
+    "conditional": 3
   },
   "by_split": {
     "blind": {
       "runs": 3,
-      "mean_score": 0.735
+      "mean_score": 0.8458
     },
     "regression": {
       "runs": 3,
-      "mean_score": 0.735
+      "mean_score": 0.849
     },
     "train": {
       "runs": 12,
-      "mean_score": 0.735
+      "mean_score": 0.8234
     }
   },
   "runs": [
@@ -54,42 +55,42 @@
       "variant": "complex",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8617,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-A-QUALITY-TRACE",
       "variant": "normal",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8617,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-A-QUALITY-TRACE",
       "variant": "vague",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.925,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-B-TRADE-LEADS",
@@ -138,50 +139,50 @@
       "variant": "complex",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8775,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-C-INVENTORY-PURCHASING",
       "variant": "normal",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8775,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-C-INVENTORY-PURCHASING",
       "variant": "vague",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8775,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-D-MAINTENANCE-KB",
       "variant": "complex",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.7983,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
@@ -194,8 +195,8 @@
       "variant": "normal",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.7983,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
@@ -208,8 +209,8 @@
       "variant": "vague",
       "split": "train",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.7983,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
@@ -222,50 +223,50 @@
       "variant": "complex",
       "split": "regression",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.849,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 10,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-E-SCHEDULING",
       "variant": "normal",
       "split": "regression",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.849,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 10,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-E-SCHEDULING",
       "variant": "vague",
       "split": "regression",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.849,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 10,
       "tool_failures": 0,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     },
     {
       "case": "CASE-F-AFTERSALES",
       "variant": "complex",
       "split": "blind",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.83,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
@@ -278,8 +279,8 @@
       "variant": "normal",
       "split": "blind",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.83,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
@@ -292,14 +293,14 @@
       "variant": "vague",
       "split": "blind",
       "status": "completed",
-      "score": 0.735,
-      "verdict": "conditional",
+      "score": 0.8775,
+      "verdict": "pass",
       "hard_failures": [],
       "rounds": 5,
       "tool_calls": 11,
       "tool_failures": 1,
-      "findings": 2,
-      "findings_new": 2
+      "findings": 0,
+      "findings_new": 0
     }
   ]
 }

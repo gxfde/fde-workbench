@@ -25,6 +25,7 @@ from sqlalchemy import select
 from fde_api.simulation.actors.customer_simulator import CustomerSimulator, CustomerState
 from fde_api.simulation.actors.role_manager import actor_ids, build_actor_set
 from fde_api.simulation.adapters import AdapterContext, build_adapter
+from fde_api.simulation.adapters.base import AdapterUnavailable
 from fde_api.simulation.environment import SimulationBoundaryViolation, SimulationEnvironment
 from fde_api.simulation.models import SimulationActor, SimulationRun, SimulationScenario
 from fde_api.simulation.scenarios.loader import load_view
@@ -214,7 +215,13 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         ctx = dataclasses.replace(base_ctx, disclosed=disclosed)
 
         # ---- 分析 / 方案 / 实施 -----------------------------------------
-        analysis = adapter.analyze(ctx)
+        try:
+            analysis = adapter.analyze(ctx)
+        except AdapterUnavailable as unavailable:
+            # 真实执行面不可用 ⇒ 运行**诚实失败**（不静默退回 mock）。
+            return _fail_unavailable(
+                session, run, trace, reason=str(unavailable.reason), phase="analysis"
+            )
         trace.record(
             phase="analysis",
             event_type="artifact",
@@ -225,7 +232,12 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         design_ctx = dataclasses.replace(
             ctx, config={**ctx.config, "requirements": analysis.get("requirements") or []}
         )
-        design = adapter.design(design_ctx)
+        try:
+            design = adapter.design(design_ctx)
+        except AdapterUnavailable as unavailable:
+            return _fail_unavailable(
+                session, run, trace, reason=str(unavailable.reason), phase="design"
+            )
         trace.record(
             phase="design",
             event_type="artifact",
@@ -237,6 +249,10 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         boundary_violation: SimulationBoundaryViolation | None = None
         try:
             implementation = adapter.implement(ctx)
+        except AdapterUnavailable as unavailable:
+            return _fail_unavailable(
+                session, run, trace, reason=str(unavailable.reason), phase="implementation"
+            )
         except SimulationBoundaryViolation as violation:
             # 越界调用：环境已落 Trace；这里**不吞**——直接把运行打成硬失败。
             boundary_violation = violation
@@ -258,7 +274,12 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         validation_ctx = dataclasses.replace(
             ctx, config={key: value for key, value in ctx.config.items() if key != "probe_questions"}
         )
-        validation = adapter.validate(validation_ctx, artifacts)
+        try:
+            validation = adapter.validate(validation_ctx, artifacts)
+        except AdapterUnavailable as unavailable:
+            return _fail_unavailable(
+                session, run, trace, reason=str(unavailable.reason), phase="validation"
+            )
         trace.record(
             phase="validation",
             event_type="artifact",
@@ -330,3 +351,30 @@ def _now_iso() -> str:
     from datetime import UTC, datetime
 
     return datetime.now(UTC).isoformat()
+
+
+def _fail_unavailable(
+    session: Any,
+    run: Any,
+    trace: TraceWriter,
+    *,
+    reason: str,
+    phase: str,
+) -> dict[str, Any]:
+    """真实执行面不可用 ⇒ 运行诚实失败（**不静默退回 mock**）。"""
+    run.status = "failed"
+    run.error_json = {"code": "adapter_unavailable", "phase": phase, "reason": reason[:400]}
+    run.finished_at = _now_iso()
+    trace.record(
+        phase=phase,
+        event_type="adapter_unavailable",
+        payload={"code": "adapter_unavailable", "phase": phase, "reason": reason[:400]},
+    )
+    session.commit()
+    return {
+        "run_id": run.id,
+        "status": run.status,
+        "disclosed": [],
+        "cost": {},
+        "adapter_unavailable": {"phase": phase, "reason": reason},
+    }

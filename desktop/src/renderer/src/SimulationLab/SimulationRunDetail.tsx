@@ -42,6 +42,13 @@ const PHASES = [
   "wrapup",
 ]
 
+function integrationStatus(trace: { payload: Record<string, unknown> }): string {
+  const artifact = trace.payload?.artifact
+  if (!artifact || typeof artifact !== "object") return ""
+  const value = (artifact as Record<string, unknown>).integration_status
+  return typeof value === "string" ? value : ""
+}
+
 function errorText(caught: unknown): string {
   if (caught instanceof ApiClientError) return caught.message
   if (caught instanceof Error) return caught.message
@@ -54,6 +61,7 @@ export function SimulationRunDetail(): ReactElement {
   const [scenarios, setScenarios] = useState<ScenarioDto[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [splitFilter, setSplitFilter] = useState("")
+  const [adapterMode, setAdapterMode] = useState<"mock" | "real">("mock")
   const [statusFilter, setStatusFilter] = useState("")
   const [traces, setTraces] = useState<TraceItemDto[]>([])
   const [phase, setPhase] = useState("")
@@ -131,7 +139,7 @@ export function SimulationRunDetail(): ReactElement {
     try {
       await createSimulationRun(apiRequest, {
         scenario_id: scenario.id,
-        adapter_mode: "mock",
+        adapter_mode: adapterMode,
         execute: true,
         config: { max_rounds: 6, probe_quality: 1.0 },
       })
@@ -204,6 +212,17 @@ export function SimulationRunDetail(): ReactElement {
         </header>
         <div className="simulation-filters" role="group" aria-label="运行筛选">
           <label>
+            <span>执行面</span>
+            <select
+              value={adapterMode}
+              onChange={(event) => setAdapterMode(event.target.value as "mock" | "real")}
+              aria-label="执行面"
+            >
+              <option value="mock">脚本化替身（mock）</option>
+              <option value="real">真实执行面（real）</option>
+            </select>
+          </label>
+          <label>
             <span>数据集</span>
             <select
               value={splitFilter}
@@ -255,6 +274,9 @@ export function SimulationRunDetail(): ReactElement {
                   {RUN_STATUS_LABEL[run.status]}
                 </span>
                 <span className="simulation-run-split">{SPLIT_LABEL[run.split]}</span>
+                <span className="simulation-run-adapter">
+                  {run.adapter_mode === "real" ? "真实执行面" : "脚本化替身"}
+                </span>
                 <span className="simulation-run-key">{run.run_key}</span>
               </button>
               <UiButton compact onClick={() => void handleCancel(run.id)}>
@@ -307,6 +329,11 @@ export function SimulationRunDetail(): ReactElement {
                           .map(([key, value]) => `${key}=${String(value).slice(0, 60)}`)
                           .join("；")}
                       </span>
+                      {integrationStatus(trace) ? (
+                        <span className="simulation-trace-integration">
+                          接线状态 {integrationStatus(trace)}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ol>

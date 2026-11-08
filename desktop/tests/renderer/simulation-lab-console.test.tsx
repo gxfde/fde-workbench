@@ -296,3 +296,20 @@ it("回归面板对过拟合风险给出明确告警", async () => {
   expect(screen.getByText(/不得进入发布审批/)).toBeInTheDocument()
   expect(screen.getByText(/退步维度：D6/)).toBeInTheDocument()
 })
+
+it("运行台可切换执行面并在 Trace 呈现接线状态", async () => {
+  routeApi()
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("执行面")).toBeInTheDocument()
+  })
+  // 默认是脚本化替身；可切到真实执行面
+  expect(screen.getByLabelText("执行面")).toHaveValue("mock")
+  await user.selectOptions(screen.getByLabelText("执行面"), "real")
+  expect(screen.getByLabelText("执行面")).toHaveValue("real")
+  // 运行列表标注执行面
+  expect(screen.getByText("脚本化替身")).toBeInTheDocument()
+})

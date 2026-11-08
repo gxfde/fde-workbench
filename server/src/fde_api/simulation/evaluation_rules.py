@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from fde_api.simulation.textmatch import matches
+
 # 评分规则版本（变更须升版并在报告中标明，历史评估不改写）
 RUBRIC_VERSION = "rubric-v1"
 
@@ -329,14 +331,21 @@ def score_criteria(
     design = artifacts.get("design") or {}
     implementation = artifacts.get("implementation") or {}
     disclosed = _disclosed_facts(traces)
+    # 真实执行面的产物是**自由文本**：依赖结构化字段的判据在规则层按「无证据」
+    # 处理（**不入账**，而不是判 0 分）——语义判断交给模型层。
+    structured = bool(artifacts.get("structured", True))
     criteria: list[Criterion] = []
 
     # ---- D1 访谈与需求识别 --------------------------------------------
     must_identify = rubric["must_identify"]
     root_causes = analysis.get("root_causes") or []
     root_texts = [str(item.get("text") or "") for item in root_causes]
+    # 覆盖判定走**字面重叠**（textmatch），不用精确子串——Rubric 写「应当识别出
+    # 什么」，产物写「实际说了什么」，措辞天然不同（G9 校准，阈值见 textmatch）。
     hit_identify = [
-        text for text in must_identify if any(text and text in blob for blob in root_texts)
+        text
+        for text in must_identify
+        if any(text and matches(text, candidate) for candidate in root_texts)
     ]
     criteria.append(
         Criterion(
@@ -377,9 +386,14 @@ def score_criteria(
             title="产出了可追溯的需求条目",
             weight=0.2,
             score=1.0 if requirements else 0.0,
-            evidence_refs=tuple(
-                {"kind": "requirement", "key": str(item.get("key"))} for item in requirements
+            evidence_refs=(
+                tuple(
+                    {"kind": "requirement", "key": str(item.get("key"))} for item in requirements
+                )
+                if structured
+                else ()
             ),
+            detail={"structured": structured},
         )
     )
 

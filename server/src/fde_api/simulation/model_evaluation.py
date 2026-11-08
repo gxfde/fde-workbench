@@ -152,9 +152,18 @@ class StubModelEvaluation:
 
 
 class ServerModelEvaluation:
-    """真模型评估的接线面（本轮未接线）。
+    """真模型评估（G9 接线轮）：走仓库既有 AI 栈。
 
-    缺 provider 配置时**明确**返回 ``unavailable``——不以 stub 冒充真模型。
+    继承的既有纪律（``ai/deepseek.py`` 内建，本层不重复实现）：
+    - **月度 token 预算闸**：预算用尽即拒发，且**不发起任何供应商请求**；
+    - **审计留痕**：每次调用落 ``ai_call_audits``（含 purpose）；
+    - **严格 JSON 契约**：输出经 ``evaluation_schema`` 校验，不合规即丢弃。
+
+    失败语义（**不冒充**）：
+    - provider 未配置 ⇒ ``unavailable``；
+    - 调用失败（认证/限流/超时/空响应）⇒ ``error``；
+    - 输出不合契约 ⇒ ``invalid_output``；
+    以上三种都**不产生分数**——模型层没有分数就不参与聚合。
     """
 
     mode = "server"
@@ -167,15 +176,113 @@ class ServerModelEvaluation:
         traces: list[dict[str, Any]],
         rubric_version: str = RUBRIC_VERSION,
     ) -> ModelEvaluation:
+        from fde_api.ai.deepseek import DeepSeekError
+        from fde_api.simulation.evaluation_prompt import build_evaluation_messages
+        from fde_api.simulation.evaluation_schema import (
+            EvaluationContractError,
+            parse_model_evaluation,
+        )
+
+        client = _simulation_client()
+        if client is None:
+            return ModelEvaluation(
+                layer="model",
+                mode=self.mode,
+                status="unavailable",
+                total_score=0.0,
+                verdict="unavailable",
+                criteria=(),
+                note="真模型评估面未配置 provider（缺 API Key）——本层不产生分数。",
+            )
+
+        messages = build_evaluation_messages(
+            judge_view=judge_view,
+            artifacts=artifacts,
+            traces=traces,
+            rubric_version=rubric_version,
+        )
+        try:
+            raw = client.complete_json(
+                messages=messages,
+                request_id="simulation-evaluation",
+                purpose="simulation_evaluation",
+            )
+        except DeepSeekError as error:
+            return ModelEvaluation(
+                layer="model",
+                mode=self.mode,
+                status="error",
+                total_score=0.0,
+                verdict="unavailable",
+                criteria=(),
+                note=f"模型调用失败（{error.code}）：{error.public_message}",
+            )
+
+        try:
+            parsed = parse_model_evaluation(raw)
+        except EvaluationContractError as error:
+            return ModelEvaluation(
+                layer="model",
+                mode=self.mode,
+                status="invalid_output",
+                total_score=0.0,
+                verdict="unavailable",
+                criteria=(),
+                note=f"模型输出不合契约（{error.code}）：{error.message}",
+            )
+
+        criteria = [
+            {
+                "key": item["key"],
+                "dimension": item["dimension"],
+                "title": item["title"],
+                "score": item["score"],
+                "verdict": item["verdict"],
+                "evidence_refs": item["evidence_refs"],
+                "reason": item["reason"],
+            }
+            for item in parsed["criteria"]
+        ]
+        total = round(
+            sum(item["score"] for item in criteria) / len(criteria) if criteria else 0.0, 4
+        )
+        verdict = "pass" if total >= 0.75 else ("conditional" if total >= 0.6 else "fail")
         return ModelEvaluation(
             layer="model",
             mode=self.mode,
-            status="unavailable",
-            total_score=0.0,
-            verdict="unavailable",
-            criteria=(),
-            note="真模型评估面未接线（需 AI provider 配置与出网授权）；本轮以 stub 模式运行。",
+            status="evaluated",
+            total_score=total,
+            verdict=verdict,
+            criteria=tuple(criteria),
+            note=(
+                "模型层为独立第二意见：**不判定终局、不判定硬性失败**——"
+                f"结论由规则层（L-A）负责。摘要：{parsed['summary']}"
+            ),
         )
+
+
+def _simulation_client():
+    """取模型客户端：优先注入（测试/替换），否则按 Settings 构造；无 Key ⇒ None。"""
+    from flask import current_app, has_app_context
+
+    if not has_app_context():
+        return None
+    injected = current_app.extensions.get("fde_api_simulation_deepseek")
+    if injected is not None:
+        return injected
+    settings = current_app.config["SETTINGS"]
+    api_key = getattr(settings, "deepseek_api_key", None)
+    if api_key is None or not getattr(api_key, "get_secret_value", lambda: "")():
+        return None
+    from fde_api.ai.deepseek import DeepSeekClient
+
+    return DeepSeekClient(
+        base_url=settings.deepseek_base_url,
+        api_key=api_key,
+        model=settings.deepseek_simulation_evaluation_model,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+        fallback_model=settings.deepseek_fallback_model,
+    )
 
 
 def build_model_evaluation(mode: str = "stub") -> ModelEvaluationAdapter:

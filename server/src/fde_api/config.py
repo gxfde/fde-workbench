@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     deepseek_ai_opportunity_model: str = "deepseek-v4-pro"
     deepseek_research_export_model: str = "deepseek-v4-pro"
     deepseek_document_generation_model: str = "deepseek-v4-pro"
+    # V3.2 G9：模拟训练场的**独立模型评估层**槽位（按用途独立，不与生产管道
+    # 换档互牵连）。缺 API Key 时该层返回 unavailable（不产生分数）。
+    deepseek_simulation_evaluation_model: str = "deepseek-v4-pro"
     # goal-d9：翻译器管道（文本 JSON 提炼）。goal-d13 拍板：provider 切 kimi
     # 槽位（kimi-k3，Moonshot OpenAI 兼容端点），客户端仍走通用文本 JSON 栈。
     # T6 高成本 run 前评审（goal-d11，总纲 §2.2 T6）：拟用 agent 的
