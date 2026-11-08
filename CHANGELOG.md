@@ -2,6 +2,12 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 技能按需调用路由定档 + AGENTS「当前状态」三连标题残渣热修（纯文档零代码零迁移零路由，2026-11-08）
+
+- **技能按需调用路由**：AGENTS「工作流与陷阱」新增每轮工作流技能挂点表——开工/交付=**fde-delivery-flow**、PR 前=**code-review**（权限/并发/资金敏感面）、权限·通道·契约改动=**intended-vs-implemented**、SQL/活库取证=**sql-queries**、桌面交付=**fde-gui-regression**→**fde-package-verify**、集成桥=**fde-bridge-capture**、客户线日常=**fde**、轮收尾=**neat-freak**、点名 workflow=**dynamic-workflows**（CreateWorkflow 强制）、架构图=**archify**（手动跑）。并声明四条机制事实：技能调用=Agent 按 description 自主判断非硬闸、点名 `/技能名` 恒可靠、archify 不在可调用技能列表须手动跑、技能正文调用才加载（每会话只预注入名字+description）。`fde-*` 四技能随仓版本化（`.agents/skills/`）。来源=2026-11-08 全仓技能描述逐一核对后的 top-10 评级（aws-messaging/WordPress 系/PM 简历系出局；dynamic-workflows 为备选第 11）。
+- **三连标题残渣热修（教训 49/50 家族，#202–#215 插队链引入）**：`## 当前状态（…）` 标题在 fork/main `58f7a26` 重复 3 次（三个分支各 prepend 各自轮次清单、rebase 全保留），且三变体均漏 P1-1/P1-2/P0-4——合并为单一标题：条目取并集按 PR 序 desc（#215>#211>#209>#207>#205>#204>#203；P2′① 编号由 git log `d797746` (#204) 钉死，序位随之无歧义），尾部自「T-Z1 宿主通道实施轮（裁定 A 落地…」起三变体逐字相同、原样保留。**顺带发现不代补**：「现行结构口径」行停在 #203 现测（363 路由/122 表/45 rev 单头 `c3d5e7f9a1b4`）已被 P1-1（384 路由/128 表/50 rev 单头 `e7c4a9d2f6b8`）超车——沿 P2′① 轮「由口径责任人统一补」先例，本轮不代改（口径现测纪律）。
+- 零代码零迁移零路由零桌面；pytest/vitest/mypy 口径全不动；无需 rebuild/alembic/重打包。
+
 ## [未发布] — V3.1 P1-1：ZCode 宿主执行通道·结构化落地（策略层+票据+扩列，通道保持关闭，2026-11-08）
 
 - **范围**：任务书 §9（P1-1）——00-gap-register 5.3/5.4/5.6/5.7 落地；**5.10 闸纪律：12 条安全前置未过前宿主通道保持关闭**（`agent_host_channel_enabled` 默认 False 零改动+两重静态钉），通道执行面（#195 宿主直连/宿主轮询）维持现状。5.2（adapter spawn 段重构）维持容器路径 `adapter_missing` 降级现状（宿主路径已是 T-Z1 实测契约，见 host_channel.py）；5.5（独立宿主代理进程）待分级开放拍板不预支。
