@@ -888,3 +888,17 @@ P3-8/P3-10 依赖 P1-2 后的行号锚点。
 于契约文档 §4-④，随「可扩前提 2」一起排期；②Redis 无守卫的三处（AI 确认密码计数 /
 AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不代拍板**；③`paused` 若将来要真启用，
 需先拍板并补暂停/恢复语义（写入方钉会先红）。
+
+---
+
+## V3.1 试点遗留登记（2026-11-09，somwyn E2E 试点复盘产出；复盘报告=`docs/v3.1/pilot-复盘-somwyn-2026-11-09.md`）
+
+> 试点本体 ✅ 达成（checklist #17 已回填）；本节登记试点暴露的真实缺陷与运维待办。
+> 全部 PROPOSED（登记≠排期≠实施授权）；D1 复核项属人工动作不占工程排期。
+
+| 项 | 事项 | 来源 | 优先级建议 | 落点/修复方向 |
+|---|---|---|---|---|
+| V31-P1 | **抽取腿推理模型输出预算**：MiniMax-M3.1-Flash（推理模型）reasoning_content 吃满 max_tokens=16384（实测 15,223 reasoning tokens）→ content JSON 截断 finish_reason=length → `ai_output_invalid` 两连败；大纪要（10K 字符）抽取该组合**必败**，65536 预算又撞 900s 超时 | somwyn 试点 Step 2（全文版抽取两败，人工整理稿缓解） | **P1（建议优先立项）** | `direct_provider_completion`/降级直连腿按模型类型探测或预留 reasoning 预算；抽取输入分段/压缩指引 |
+| V31-P2 | **批量分解 vs gunicorn timeout**：全量 9 任务单请求卡项目行锁 >120s 被 `--timeout 120` abort（零残留，重跑安全=幂等锚验证通过） | somwyn 试点 Step 6（分批 item_ids 缓解，9/9 成功） | P2 | runbook Step 6 增补「大方案 item_ids 分批」注记；服务端批量切片上限评估或 timeout 拍板 |
+| V31-P3 | **转写草稿卷属主**：容器 `/app/.fde-transcript-drafts` 属主 root → 首写 PermissionError | somwyn 试点 Step 1（`chown fde:fde` 已临时修复） | P3 | 镜像/entrypoint 以运行属主（fde）预建目录 |
+| V31-D1 | **审阅动作 admin 代执行复核**（人工项）：试点全程审阅动作（facts/reqs 接受、测试计划批准、执行登记）由 admin 代执行；本体 confirm 与 workflow 拍板已由 pilot.reviewer 决策分离完成 | somwyn 试点全程 | 人工复核 | 蔡工桌面端复核全部审阅动作（`operation_events` 逐条可回查） |

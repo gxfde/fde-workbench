@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 试点执行与复盘（somwyn E2E 十步全链走通，§17-17 达成；纯文档+活库数据，零代码零迁移零路由，2026-11-09）
+
+- **闸门**：蔡工 2026-11-08 确认 C1–C7 并给出执行数据（C1=代号 **somwyn**；C2=访谈素材取自本地文档中心既有脱敏实记录 `somwyn案例_FDE交付实记录_v1.1.md`〔全代号化，真实资料零入库〕；C3=分解目标自选交付段既有模块）；宿主通道全程关闭（C5）；§17-14 ZCode 联调未触碰（独立拍板项）。
+- **执行**：按 `docs/v3.1/pilot-runbook.md` 十步操作序 E2E 全链走通（部署=隔离 worktree compose 栈，alembic head `e9c4a1f7b3d2`）——纪要（全文版抽取两败后人工整理稿 `4b558dce`）→抽取 `02a680d7`（22 facts+7 reqs，review_required）→审阅（20+7 accepted、2 facts needs_clarification=推断/开放问题红线生效）→本体变更集 `ffa95ce0` submit(admin)→confirm(**pilot.reviewer**) 物化 20 术语（**决策分离成立**）→方案 `c0f1dc00` published（9 items）→分解 9 任务（全量 commit 卡项目行锁超 gunicorn `--timeout 120` 被 abort 零残留；**端点原生 item_ids 分批** 9/9 创建，幂等复跑 skipped=9 reason=已分解）→draft-from-plan `44ac0ea1`（`delivery-scope-documents@1`）validate 全绿→admin publish→run `21fc3fa9` **succeeded**（两处 human_approval 经 pilot.reviewer 拍板，审批时延中位数 1.43min）→测试计划 v1 废弃（执行脚本形状解析错，rejected=superseded 留痕）+ v2 `5b538ea5` approved（需求覆盖闸过）→execute dev **7/7 passed**（append-only，报告指针+指纹成对；原件 `somwyn/.fde/pilot-test-report-2026-11-09.md` sha256 `acf61043…`）→证据 `aa2b85a9`（kind=task）→指标 `sections.v31` **七指标全 ok 全有样本**（n=1/2/1/7/1/9/7，零 insufficient_data）。
+- **交付**：①NEW `docs/v3.1/pilot-复盘-somwyn-2026-11-09.md`（十步实测时序〔事件时间轴还原，全程 ≈6.1h〕+指标快照原文+事件链核对+五项偏离注记 P1–P4/D1+待办+结论）；②`final-acceptance-checklist.md` 第 17 项回填 ✅，结论改 **17 达成/1 待条件（#14）/0 未达成**；③`implementation-roadmap.md` 待业务闸节更新（试点项勾销）；④`v3-backlog.md` NEW「V3.1 试点遗留登记」四项（V31-P1 **抽取推理模型输出预算**〔真实产品缺陷：降级直连腿未按模型类型预留 reasoning 预算，MiniMax-M3.1-Flash 下大纪要抽取必败〕/V31-P2 批量分解 vs gunicorn timeout/V31-P3 草稿卷属主/V31-D1 审阅复核人工项）。
+- **偏差如实注记**：**D1=全部审阅动作（facts/reqs 接受、测试计划批准、执行登记）由 admin 代执行**（无人值守代执行先例；AI 不代拍板红线未破——本体 confirm 与 workflow 拍板均由第二账号 pilot.reviewer 完成）；**建议蔡工桌面端复核全部审阅动作**（operation_events 逐条可回查）。
+- **口径**：零代码零迁移零路由零测试增量（pytest 2354=2348+6s / 路由 391 / 蓝图 49 / 表 130 / 51 rev 单头 `e9c4a1f7b3d2` 全维持）；试点数据在活库（项目 `7042d7ab`，代号 somwyn），仓库零客户资料。
+
 ## [未发布] — 桌面侧栏账号区两行式压紧（纯桌面，2026-11-09）
 
 - **反馈**：侧栏滚动修复（#227）落地后，蔡工指出底部账号区四行（系统管理员 / 管理员 / v0.3.0 / 退出登录）占高过大、不协调。

@@ -14,15 +14,15 @@
 | P1-2 自动测试/证据 | #211 `9b5e030`（+#213 口径回填） | quality 三表（requirement_key 追溯/append-only 执行/production 硬闸）+需求覆盖闸+evidence/validate 五维只读校验 |
 | P1-1 宿主执行通道 | #215 `58f7a26` | execution_policy（根锚定/命令锚定/超时钳制/快照）+HMAC 短期票据+agent_runs/artifacts 扩列；**通道保持关闭**（默认 False+双静态钉） |
 | P1-3 指标/经验沉淀 | #221 `2d14d85` | metrics 报表 v31 节七指标（workflow 三+域速率四，insufficient_data 语义）；7.2 事件映射注记；7.4/7.5 暂缓 |
-| P2 试点 Runbook/验收勾稽 | #222+#223+#225 `acceb50` | pilot-runbook（前置 C1-C7+E2E 十步+复盘模板+就绪预检 18/18）+§17 十九项勾稽（16 达成/2 待业务闸/0 未达成） |
+| P2 试点 Runbook/验收勾稽 | #222+#223+#225 `acceb50` | pilot-runbook（前置 C1-C7+E2E 十步+复盘模板+就绪预检 18/18）+§17 十九项勾稽（试点后 **17 达成/1 待业务闸/0 未达成**；试点执行复盘=`pilot-复盘-somwyn-2026-11-09.md`） |
 
 ## 终态口径（实测）
 
 pytest **2354 收集 = 2348 passed + 6 skipped**（EXIT=0）/ vitest **951** / mypy 基线 **279** / 路由 **391** / 蓝图 **49** / 业务表 **130** / **51 rev 单头 `e9c4a1f7b3d2`**；各阶段均 CI 4 job 绿 + main run 收口 + 部署活体验证；四层账目（AGENTS 口径/CHANGELOG 节/AGENTS bullet/审计 CSV）齐备。
 
-## 待业务闸两项（非代码缺口，提请记录见 final-acceptance-checklist #14/#17）
+## 待业务闸（2026-11-09 更新：试点已完成，仅余一项）
 
-1. **§17-17 E2E 试点**：待真实脱敏项目数据闸（C1-C3）+ 蔡工拍板（C4-C7）——按 `pilot-runbook.md` 十步操作序执行并落盘复盘；
+1. ~~**§17-17 E2E 试点**~~ ✅ **已完成（2026-11-09）**：蔡工确认 C1-C7 后按 `pilot-runbook.md` 十步操作序执行 somwyn 试点全链并复盘——`pilot-复盘-somwyn-2026-11-09.md`；checklist 第 17 项已回填 ✅（**偏差注记：审阅动作 admin 代执行，建议蔡工桌面端复核**）；
 2. **§17-14 ZCode 真实联调**：待商用条款书面确认 + 12 条安全前置逐项通过——独立拍板；通道保持关闭（默认 False）直至该闸通过。
 
 ## 文档地图
