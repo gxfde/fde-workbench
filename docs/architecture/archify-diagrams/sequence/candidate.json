@@ -4,11 +4,12 @@
   "meta": {
     "title": "Workflow run 一次执行的完整调用链",
     "locale": "zh-CN",
-    "output": ".archify/sequence-run-20261104-091726/workflow-run-sequence.html",
+    "output": ".archify/sequence-run-20261108-191000/workflow-run-sequence.html",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
-      "revision": "9bc342e4f349ac88e3b88c000017b3e002099974",
+      "provider": "github",
+      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
       "link_mode": "local-only"
     },
     "views": [
@@ -54,7 +55,7 @@
           "store",
           "client"
         ],
-        "note": "断链 run failed；cancel 幂等；resume 仅 failed 可用"
+        "note": "断链 run failed；cancel 幂等；resume 仅 failed 可用（hops 熔断）"
       }
     ]
   },
@@ -67,13 +68,13 @@
       "sources": [
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 110,
-          "end_line": 140,
-          "label": "run 列表 / 详情 GET"
+          "line": 119,
+          "end_line": 125,
+          "label": "run 列表 GET"
         },
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 165,
+          "line": 170,
           "end_line": 179,
           "label": "cancel / resume POST"
         }
@@ -87,14 +88,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/routes.py",
-          "line": 78,
-          "end_line": 104,
+          "line": 80,
+          "end_line": 105,
           "label": "发起运行路由"
         },
         {
           "path": "server/src/fde_api/workflows/routes.py",
-          "line": 148,
-          "end_line": 159,
+          "line": 150,
+          "end_line": 160,
           "label": "cancel / resume 路由"
         }
       ]
@@ -107,13 +108,13 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 156,
-          "end_line": 255,
+          "line": 161,
+          "end_line": 250,
           "label": "start_run 服务层"
         },
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 301,
+          "line": 306,
           "end_line": 350,
           "label": "cancel_run / resume_run"
         }
@@ -128,7 +129,7 @@
         {
           "path": "server/src/fde_api/workflows/models.py",
           "line": 108,
-          "end_line": 201,
+          "end_line": 207,
           "label": "workflow_runs / workflow_node_runs"
         },
         {
@@ -153,7 +154,7 @@
       "sources": [
         {
           "path": "server/src/fde_api/jobs/worker.py",
-          "line": 56,
+          "line": 65,
           "end_line": 128,
           "label": "run_job 认领租约"
         },
@@ -179,20 +180,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 456,
-          "end_line": 507,
+          "line": 502,
+          "end_line": 557,
           "label": "run_workflow_run 调度主循环"
         },
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 597,
-          "end_line": 649,
+          "line": 646,
+          "end_line": 700,
           "label": "_execute_node 独立事务"
         },
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 800,
-          "end_line": 817,
+          "line": 942,
+          "end_line": 1010,
           "label": "_dispatch 分派入口"
         }
       ]
@@ -201,24 +202,24 @@
       "id": "dispatch",
       "type": "backend",
       "label": "节点分派",
-      "sublabel": "api_execute 等",
+      "sublabel": "execute_api 等",
       "sources": [
         {
           "path": "server/src/fde_api/control/api_actions.py",
-          "line": 110,
-          "end_line": 169,
-          "label": "api_execute 同一闸"
+          "line": 128,
+          "end_line": 189,
+          "label": "execute_api 同一闸"
         },
         {
           "path": "server/src/fde_api/control/ai_server_client.py",
-          "line": 135,
-          "end_line": 141,
+          "line": 186,
+          "end_line": 240,
           "label": "execute_ai_prompt"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 662,
-          "end_line": 844,
+          "line": 852,
+          "end_line": 1030,
           "label": "agents.start_run 同闸"
         }
       ]
@@ -231,20 +232,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 1030,
-          "end_line": 1123,
+          "line": 1192,
+          "end_line": 1290,
           "label": "_dispatch_human_approval"
         },
         {
           "path": "server/src/fde_api/control/service.py",
-          "line": 701,
-          "end_line": 787,
+          "line": 723,
+          "end_line": 800,
           "label": "decide_automation_approval"
         },
         {
           "path": "server/src/fde_api/control/routes.py",
-          "line": 265,
-          "end_line": 281,
+          "line": 289,
+          "end_line": 305,
           "label": "任务中心拍板路由"
         }
       ]
@@ -436,7 +437,7 @@
       "from": "exec",
       "to": "store",
       "y": 910,
-      "label": "tx B：节点 succeeded",
+      "label": "tx B：节点 succeeded（+挂证据候选）",
       "variant": "default"
     },
     {
@@ -564,7 +565,7 @@
       "from": "taskcenter",
       "to": "store",
       "y": 1646,
-      "label": "重投 workflow.run",
+      "label": "重投 workflow.run（hops+1）",
       "variant": "dashed"
     },
     {
@@ -628,7 +629,7 @@
       "from": "httpapi",
       "to": "wfsvc",
       "y": 2014,
-      "label": "resume_run（failed-only）",
+      "label": "resume_run（failed-only · hops≤8）",
       "variant": "emphasis"
     },
     {
@@ -684,17 +685,17 @@
         "事务性 outbox：workflow.run 事件与业务写同事务提交，业务回滚事件一并消失",
         "dispatch_pending 把它变成 background_jobs 行；ensure_background_job 单活守卫防重复投递",
         "worker 先提交认领（running + locked_until 租约）再跑 handler，handler 内不持长事务",
-        "调度循环按拓扑序取下一个 ready 节点；节点独立事务，产物先落表再前进，分派在事务外"
+        "可重试类型失败自动退避重投（30s 起步 ×2 封顶 900s），outbox 保持 dispatched；耗尽才终失败"
       ]
     },
     {
       "dot": "violet",
       "title": "④⑤⑥ call / skill / agent 三条服务分派",
       "items": [
-        "call：api_execute 同一闸，权限每节点实时校验（发起人 AI 档位 ∩ 项目 scope），run 级不冻结",
+        "call：execute_api 同一闸，权限每节点实时校验（发起人 AI 档位 ∩ 项目 scope），run 级不冻结",
         "写类 call 节点强制落节点级 sha256 幂等键（与 api_actions 同构），跨重试/恢复不二次外呼",
-        "skill：published 版本 instructions 作 system_prompt 的确定性调用，use_tools=False；计数走独立微事务",
-        "agent：agents.start_run 同闸全链（鉴权/预算/试点/T1/T6/沙箱/产物校验），幂等键 wfnode-{行id}:{attempt}"
+        "skill：published 版本 instructions 作 system_prompt 的确定性调用，use_tools=False；计数走独立微事务，计数失败仅告警不炸节点",
+        "agent：agents.start_run 同闸全链（鉴权/预算/试点/T1/T2/沙箱/产物校验），幂等键 wfnode-{行id}:{attempt}；宿主执行通道已接线，enabled=False 默认关闭"
       ]
     },
     {
@@ -704,7 +705,7 @@
         "human_approval 复用 automation_approvals：run_id 置空 + workflow_node_run_id 反链",
         "request_key = wfnode:{节点行id}；arguments sha256 指纹 + 敏感键扫描 + 64KB 上限 + risk_level=4",
         "审批期间节点 waiting、run = waiting_approval（事件 workflow_run_waiting_approval）",
-        "拍板走既有任务中心 decide_automation_approval：批准 → 节点 succeeded；拒绝/过期 → 节点 failed"
+        "拍板走既有任务中心 decide_automation_approval：批准 → 节点 succeeded 并重投（hops+1 继承）；拒绝/过期 → 节点 failed"
       ]
     },
     {
@@ -712,9 +713,9 @@
       "title": "⑨⑩ 终态、取消与恢复",
       "items": [
         "断链不静默 done：出现 failed 节点 → run failed，下游 skipped（FV-F1 执行侧）",
-        "POST …/cancel 幂等：重复取消 200 cancelled=false；run 已终态 409 already_terminal",
-        "POST …/resume 仅 failed 可用：failed/skipped 节点回 pending 并重投 workflow.run，其余 409 not_resumable",
-        "占位符缺键 → 节点 failed（placeholder_missing），绝不填空串；等待审批的 run 不可 resume"
+        "节点成功同事务挂门禁证据候选（产物自带 gate_evidence 四元组才挂，平台不派生指纹）",
+        "POST …/cancel 幂等：重复取消 200 cancelled=false；终态 409 already_terminal；取消后在途分派返回不静默丢弃（落 cancelled_after_dispatch 标记）",
+        "POST …/resume 仅 failed：重投 hops+1 继承，超 MAX_RUN_HOPS=8 → 409 hops_exceeded；其余 409 not_resumable"
       ]
     }
   ]

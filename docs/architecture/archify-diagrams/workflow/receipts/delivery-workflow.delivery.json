@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "aff50cff-6a5f-41fa-97d9-87bbbf55c640",
+  "receiptId": "bcc45f12-feae-417a-891e-fc7cdba5c0a7",
   "status": "current",
   "command": "deliver",
   "type": "workflow",
-  "input": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\candidate.json",
-  "output": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.html",
+  "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+  "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
   "specification": {
-    "sha256": "40fd9c9d596a4e35fbf270a47e40f492c26f4bb57b6bbab4386bebceab35a448",
-    "bytes": 15350
+    "sha256": "e82e707e04d5b4f97dc400e960900b33ffc2b7d0da0b570278b64473424b84d8",
+    "bytes": 18889
   },
   "artifact": {
-    "sha256": "d9026aecb5ed11ee60bf5b86b3d749d30183493541fe83af861e84b1b6b5e181",
-    "bytes": 784012
+    "sha256": "4581db8ec5aece72cf65b72bc8e28fb5be20f4b54587a70b7384cf9fd72f917d",
+    "bytes": 855470
   }
 }

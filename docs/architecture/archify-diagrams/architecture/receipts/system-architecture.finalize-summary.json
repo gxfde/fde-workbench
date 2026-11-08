@@ -6,14 +6,14 @@
   "type": "architecture",
   "quality": "showcase",
   "specification": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\candidate.json",
-    "sha256": "c0b0470145aa59893f8b938c55b54e38da38049ec1c9814b0054727a3d36f146",
-    "bytes": 10669
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+    "sha256": "fbb7cb6a4dd5a91510b6b5ff8f8db441190d3374fb9c4c80f397b27a7a3f8acd",
+    "bytes": 11547
   },
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
-    "sha256": "3ee1a177f962e8f6c9210ea33c683aa09ed1fc84e2365d2737772938c5f14e55",
-    "bytes": 783226
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+    "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+    "bytes": 845314
   },
   "gates": {
     "validate": "pass",
@@ -28,24 +28,26 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.finalize.json",
-    "summaryReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
   },
   "update": {
-    "status": "update_available",
-    "installedVersion": "3.0.1",
+    "status": "current",
+    "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
-    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
-    "severity": "normal",
-    "checkedAt": "2026-11-03T23:45:12.598Z",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-08T11:17:58.598Z",
     "source": "cache",
-    "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-03T23:45:12.598Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
-    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+    "noticeRequired": false,
+    "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 8077,
+  "durationMs": 11458,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
   "visualReviewRecommendation": {
     "action": "inspect-route-readability",
     "signals": {

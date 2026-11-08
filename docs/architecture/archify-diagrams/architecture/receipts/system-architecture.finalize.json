@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "architecture",
   "quality": "showcase",
-  "startedAt": "2026-11-04T00:19:38.767Z",
+  "startedAt": "2026-11-08T11:28:40.166Z",
   "specification": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\candidate.json",
-    "sha256": "c0b0470145aa59893f8b938c55b54e38da38049ec1c9814b0054727a3d36f146",
-    "bytes": 10669
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+    "sha256": "fbb7cb6a4dd5a91510b6b5ff8f8db441190d3374fb9c4c80f397b27a7a3f8acd",
+    "bytes": 11547
   },
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
-    "sha256": "3ee1a177f962e8f6c9210ea33c683aa09ed1fc84e2365d2737772938c5f14e55",
-    "bytes": 783226
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+    "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+    "bytes": 845314
   },
   "stages": {
     "validate": {
@@ -27,12 +27,12 @@
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "architecture",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\candidate.json",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-workbench",
+        "D:\\test\\fde-wt-arch",
         "--json"
       ],
       "receipt": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "c0b0470145aa59893f8b938c55b54e38da38049ec1c9814b0054727a3d36f146",
-          "bytes": 10669
+          "sha256": "fbb7cb6a4dd5a91510b6b5ff8f8db441190d3374fb9c4c80f397b27a7a3f8acd",
+          "bytes": 11547
         },
         "validation": {
           "checksPassed": 9,
@@ -56,35 +56,35 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 2921,
+      "durationMs": 1699,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "architecture",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\candidate.json",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-workbench",
+        "D:\\test\\fde-wt-arch",
         "--json"
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "892dd287-7e69-4e93-b07c-33e7909e432f",
+        "receiptId": "327a4107-9cb5-414f-a1a4-ea95277d1308",
         "ok": true,
         "command": "deliver",
         "type": "architecture",
-        "input": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\candidate.json",
-        "output": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+        "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "specification": {
-          "sha256": "c0b0470145aa59893f8b938c55b54e38da38049ec1c9814b0054727a3d36f146",
-          "bytes": 10669
+          "sha256": "fbb7cb6a4dd5a91510b6b5ff8f8db441190d3374fb9c4c80f397b27a7a3f8acd",
+          "bytes": 11547
         },
         "artifact": {
-          "sha256": "3ee1a177f962e8f6c9210ea33c683aa09ed1fc84e2365d2737772938c5f14e55",
-          "bytes": 783226
+          "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+          "bytes": 845314
         },
         "validation": {
           "checksPassed": 9,
@@ -97,8 +97,9 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/gxfde/fde-workbench",
-          "revision": "46dfd4f6c2d9f86cf40a1e6c1ef594ece0bf4a8c",
-          "references": 20
+          "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
+          "references": 22,
+          "linkMode": "local-only"
         },
         "update": {
           "status": "unavailable",
@@ -116,20 +117,20 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 450,
+      "durationMs": 329,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "check",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "--require-provenance"
       ],
       "receipt": {
         "ok": true,
-        "file": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "file": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "artifact": {
-          "sha256": "3ee1a177f962e8f6c9210ea33c683aa09ed1fc84e2365d2737772938c5f14e55",
-          "bytes": 783226
+          "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+          "bytes": 845314
         },
         "checks": [
           {
@@ -205,7 +206,7 @@
             "maxStretch": 1.213,
             "routesOverSuggestedStretch": 0,
             "minSegmentPx": 11,
-            "minInteriorSegmentPx": 37,
+            "minInteriorSegmentPx": 70,
             "shortSegmentCount": 1,
             "shortEndpointSegmentCount": 1,
             "shortInteriorSegmentCount": 0,
@@ -267,22 +268,22 @@
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "892dd287-7e69-4e93-b07c-33e7909e432f"
+        "deliveryReceiptId": "327a4107-9cb5-414f-a1a4-ea95277d1308"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 3139,
+      "durationMs": 8349,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "browser-check",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
         "--json",
         "--require-provenance",
         "--out-dir",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2"
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts"
       ],
       "execution": "in-process",
       "receipt": {
@@ -293,11 +294,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "892dd287-7e69-4e93-b07c-33e7909e432f",
+        "deliveryReceiptId": "327a4107-9cb5-414f-a1a4-ea95277d1308",
         "artifact": {
-          "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\system-architecture.html",
-          "sha256": "3ee1a177f962e8f6c9210ea33c683aa09ed1fc84e2365d2737772938c5f14e55",
-          "bytes": 783226
+          "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+          "sha256": "2f4293787af7cf44e4dd2f104f8f80f05fea5b50d6deef3dc54abe442a0e2498",
+          "bytes": 845314
         },
         "state": {
           "detail": "read",
@@ -319,7 +320,7 @@
               "innerWidth": 1440,
               "innerHeight": 900,
               "scrollWidth": 1440,
-              "scrollHeight": 1292,
+              "scrollHeight": 1346,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -328,20 +329,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -371,7 +372,7 @@
               "innerWidth": 1600,
               "innerHeight": 1000,
               "scrollWidth": 1600,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -380,20 +381,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -423,7 +424,7 @@
               "innerWidth": 1920,
               "innerHeight": 1080,
               "scrollWidth": 1920,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -432,20 +433,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -475,7 +476,7 @@
               "innerWidth": 2048,
               "innerHeight": 1320,
               "scrollWidth": 2048,
-              "scrollHeight": 1377,
+              "scrollHeight": 1430,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -484,20 +485,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1080,
-              "diagramWidth": 1030,
+              "readerWidth": 1128,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -580,7 +581,7 @@
               "innerWidth": 1440,
               "innerHeight": 900,
               "scrollWidth": 1440,
-              "scrollHeight": 1292,
+              "scrollHeight": 1346,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -589,20 +590,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -632,7 +633,7 @@
               "innerWidth": 1600,
               "innerHeight": 1000,
               "scrollWidth": 1600,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -641,20 +642,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -684,7 +685,7 @@
               "innerWidth": 1920,
               "innerHeight": 1080,
               "scrollWidth": 1920,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -693,20 +694,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -736,7 +737,7 @@
               "innerWidth": 2048,
               "innerHeight": 1320,
               "scrollWidth": 2048,
-              "scrollHeight": 1377,
+              "scrollHeight": 1430,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -745,20 +746,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1080,
-              "diagramWidth": 1030,
+              "readerWidth": 1128,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -793,7 +794,7 @@
               "innerWidth": 1440,
               "innerHeight": 900,
               "scrollWidth": 1440,
-              "scrollHeight": 1292,
+              "scrollHeight": 1346,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -802,20 +803,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -845,7 +846,7 @@
               "innerWidth": 1600,
               "innerHeight": 1000,
               "scrollWidth": 1600,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -854,20 +855,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -897,7 +898,7 @@
               "innerWidth": 1920,
               "innerHeight": 1080,
               "scrollWidth": 1920,
-              "scrollHeight": 1358,
+              "scrollHeight": 1412,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -906,20 +907,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1060,
-              "diagramWidth": 1030,
+              "readerWidth": 1108,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -949,7 +950,7 @@
               "innerWidth": 2048,
               "innerHeight": 1320,
               "scrollWidth": 2048,
-              "scrollHeight": 1377,
+              "scrollHeight": 1430,
               "overflowX": false,
               "overflowY": true,
               "verticalScrollAccepted": true,
@@ -958,20 +959,20 @@
               "readerOverflow": "authored",
               "readerFit": "intrinsic-height",
               "ok": true,
-              "readerWidth": 1080,
-              "diagramWidth": 1030,
+              "readerWidth": 1128,
+              "diagramWidth": 1078,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
-                "svgPx": 1150,
+                "svgPx": 1204,
                 "cardsPx": 0,
                 "viewBoxHeight": 1380
               },
               "viewBoxWidth": 1236,
-              "minimumProjectedNodeTextPx": 6.666666666666667,
-              "minimumProjectedNonEdgeTextPx": 7.5,
-              "minimumProjectedEdgeTextPx": 6.666666666666667,
+              "minimumProjectedNodeTextPx": 6.977346278317152,
+              "minimumProjectedNonEdgeTextPx": 7.500647249190938,
+              "minimumProjectedEdgeTextPx": 6.977346278317152,
               "minimumProjectedNodeText": "桌面端操作",
               "minimumProjectedNodeTextDetail": "edge",
               "minimumProjectedNodeTextOwner": {
@@ -1002,32 +1003,34 @@
           "contactSheet": null
         },
         "sidecars": {
-          "directory": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2",
+          "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts",
           "receipt": "system-architecture.browser-check.json",
           "files": []
         }
       }
     }
   },
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
   "diagnostics": [],
   "evidence": {
-    "receipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.finalize.json",
-    "summaryReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\architecture-system-20261104-074759\\review-2\\system-architecture.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-11-04T00:19:46.845Z",
-  "durationMs": 8077,
+  "finishedAt": "2026-11-08T11:28:51.625Z",
+  "durationMs": 11458,
   "update": {
-    "status": "update_available",
-    "installedVersion": "3.0.1",
+    "status": "current",
+    "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
-    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
-    "severity": "normal",
-    "checkedAt": "2026-11-03T23:45:12.598Z",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-08T11:17:58.598Z",
     "source": "cache",
-    "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-03T23:45:12.598Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
-    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+    "noticeRequired": false,
+    "noticeText": null
   }
 }

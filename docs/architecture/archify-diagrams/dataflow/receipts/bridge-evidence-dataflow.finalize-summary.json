@@ -6,14 +6,14 @@
   "type": "dataflow",
   "quality": "showcase",
   "specification": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-    "sha256": "fe86f82b46211a1bd4977a76a196ad8ad15a417bd4a66c5bde2ea4df5d942980",
-    "bytes": 9767
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+    "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
+    "bytes": 10376
   },
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
-    "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-    "bytes": 769260
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+    "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+    "bytes": 829693
   },
   "gates": {
     "validate": "pass",
@@ -28,22 +28,24 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.finalize.json",
-    "summaryReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
   },
   "update": {
-    "status": "update_available",
-    "installedVersion": "3.0.1",
+    "status": "current",
+    "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
-    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
-    "severity": "normal",
-    "checkedAt": "2026-11-03T23:45:12.598Z",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-08T11:17:58.598Z",
     "source": "cache",
-    "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-03T23:45:12.598Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
-    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+    "noticeRequired": false,
+    "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 16168
+  "durationMs": 9165,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
 }

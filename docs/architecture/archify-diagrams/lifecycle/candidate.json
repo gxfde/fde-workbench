@@ -1,56 +1,28 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "diagram_type": "lifecycle",
   "meta": {
     "title": "Workflow 运行生命周期状态机",
-    "subtitle": "workflow_runs 七值域（paused 无写入方）× workflow_node_runs 八态 —— 实测 server/src/fde_api/workflows",
     "locale": "zh-CN",
-    "output": ".archify/lifecycle-run-20261104-074053/run-lifecycle.html",
+    "output": ".archify/lifecycle-run-20261108-192000/run-lifecycle.html",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "46dfd4f6c2d9f86cf40a1e6c1ef594ece0bf4a8c"
-    },
-    "views": [
-      {
-        "id": "run-layer",
-        "label": "运行层 run",
-        "focus": ["r_queued", "r_running", "r_waiting", "r_succeeded", "r_failed", "r_cancelled"],
-        "note": "workflow_runs 七值域中可达的六态；paused 仅存于 CHECK 值域无写入方"
-      },
-      {
-        "id": "node-layer",
-        "label": "节点层 node",
-        "focus": ["n_pending", "n_ready", "n_running", "n_waiting", "n_succeeded", "n_failed", "n_skipped", "n_cancelled"],
-        "note": "workflow_node_runs 八态全貌：调度、重试退避、审批外挂与断链跳过"
-      },
-      {
-        "id": "approval",
-        "label": "审批链路",
-        "focus": ["n_running", "n_waiting", "n_succeeded", "n_failed", "r_waiting", "r_running"],
-        "note": "human_approval 建单到拍板重投的两层同事务联动"
-      }
-    ]
+      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b"
+    }
   },
-  "lanes": [
-    { "id": "main", "label": "运行层 workflow_runs" },
-    { "id": "run_out", "label": "运行终态" },
-    { "id": "node", "label": "节点层 workflow_node_runs" },
-    { "id": "terminal", "label": "节点重试与终态" }
-  ],
+  "mainPath": ["r_queued", "r_running", "r_succeeded"],
   "states": [
     {
       "id": "r_queued",
       "type": "start",
       "label": "queued",
       "sublabel": "已建 run，待 worker 接单",
-      "lane": "main",
-      "col": 0,
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 212, "end_line": 220, "label": "start_run 建 run" },
-        { "path": "server/src/fde_api/workflows/models.py", "line": 117, "end_line": 121, "label": "ck_workflow_runs_status" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 161, "end_line": 250, "label": "start_run 建 run" },
+        { "path": "server/src/fde_api/workflows/models.py", "line": 115, "end_line": 122, "label": "ck_workflow_runs_status" }
       ]
     },
     {
@@ -58,10 +30,8 @@
       "type": "active",
       "label": "running",
       "sublabel": "执行器主循环推进节点",
-      "lane": "main",
-      "col": 1,
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 510, "end_line": 528, "label": "_recover_interrupted" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 559, "end_line": 575, "label": "_recover_interrupted" }
       ]
     },
     {
@@ -69,33 +39,8 @@
       "type": "waiting",
       "label": "waiting_approval",
       "sublabel": "剩余节点全在等拍板",
-      "lane": "main",
-      "col": 3,
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 557, "end_line": 564, "label": "_finalize_pass 等拍板收敛" }
-      ]
-    },
-    {
-      "id": "r_failed",
-      "type": "failure",
-      "label": "failed",
-      "sublabel": "断链收敛 / worker 丢失",
-      "lane": "run_out",
-      "col": 2,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 539, "end_line": 543, "label": "_finalize_pass 终态收敛" },
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 437, "end_line": 453, "label": "worker 丢失兜底" }
-      ]
-    },
-    {
-      "id": "r_cancelled",
-      "type": "failure",
-      "label": "cancelled",
-      "sublabel": "人工取消（幂等）",
-      "lane": "run_out",
-      "col": 3,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 301, "end_line": 322, "label": "cancel_run" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 580, "end_line": 620, "label": "_finalize_pass 等拍板收敛" }
       ]
     },
     {
@@ -103,125 +48,129 @@
       "type": "success",
       "label": "succeeded",
       "sublabel": "全部节点 succeeded",
-      "lane": "run_out",
-      "col": 4,
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 539, "end_line": 543, "label": "_finalize_pass 终态收敛" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 580, "end_line": 600, "label": "_finalize_pass 终态收敛" }
+      ]
+    },
+    {
+      "id": "r_failed",
+      "type": "failure",
+      "label": "failed",
+      "sublabel": "断链 / worker 丢失",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 580, "end_line": 600, "label": "_finalize_pass 终态收敛" },
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 492, "end_line": 500, "label": "worker 丢失兜底" }
+      ]
+    },
+    {
+      "id": "r_cancelled",
+      "type": "failure",
+      "label": "cancelled",
+      "sublabel": "人工取消（幂等）",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 306, "end_line": 330, "label": "cancel_run" }
       ]
     },
     {
       "id": "n_pending",
-      "type": "start",
-      "label": "pending",
-      "sublabel": "待调度（初始 / resume 复位）",
-      "lane": "node",
-      "col": 0,
+      "type": "neutral",
+      "label": "节点 pending",
+      "sublabel": "待调度 / resume 复位",
       "sources": [
-        { "path": "server/src/fde_api/workflows/models.py", "line": 184, "end_line": 187, "label": "default pending" },
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 336, "end_line": 345, "label": "resume 复位" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 330, "end_line": 352, "label": "resume 复位" },
+        { "path": "server/src/fde_api/workflows/models.py", "line": 163, "end_line": 175, "label": "workflow_node_runs 默认" }
       ]
     },
     {
       "id": "n_running",
       "type": "active",
-      "label": "running",
-      "sublabel": "tx A 已占，分派在事务外",
-      "lane": "node",
-      "col": 1,
+      "label": "节点 running",
+      "sublabel": "tx A 已占",
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 685, "end_line": 700, "label": "_begin_node tx A" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 701, "end_line": 715, "label": "_begin_node tx A" }
       ]
     },
     {
       "id": "n_waiting",
       "type": "waiting",
-      "label": "waiting",
-      "sublabel": "审批外挂（等拍板）",
-      "lane": "node",
-      "col": 2,
+      "label": "节点 waiting",
+      "sublabel": "审批外挂",
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 1105, "end_line": 1116, "label": "_settle_node_waiting" }
-      ]
-    },
-    {
-      "id": "n_skipped",
-      "type": "neutral",
-      "label": "skipped",
-      "sublabel": "when 为假 / 上游断链",
-      "lane": "terminal",
-      "col": 0,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 757, "end_line": 768, "label": "_skip_node" }
-      ]
-    },
-    {
-      "id": "n_ready",
-      "type": "waiting",
-      "label": "ready",
-      "sublabel": "可重试退避，待重派",
-      "lane": "terminal",
-      "col": 1,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 730, "end_line": 747, "label": "_settle_node_failure 重试" }
-      ]
-    },
-    {
-      "id": "n_failed",
-      "type": "failure",
-      "label": "failed",
-      "sublabel": "终态失败（含缺占位符键）",
-      "lane": "terminal",
-      "col": 2,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 741, "end_line": 747, "label": "_settle_node_failure" },
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 685, "end_line": 691, "label": "缺占位符键即 failed" }
-      ]
-    },
-    {
-      "id": "n_cancelled",
-      "type": "failure",
-      "label": "cancelled",
-      "sublabel": "随 run 取消",
-      "lane": "terminal",
-      "col": 3,
-      "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 316, "end_line": 320, "label": "cancel_run 节点清理" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 1293, "end_line": 1310, "label": "_settle_node_waiting" }
       ]
     },
     {
       "id": "n_succeeded",
       "type": "success",
-      "label": "succeeded",
-      "sublabel": "产物落表，下游可引用",
-      "lane": "terminal",
-      "col": 4,
+      "label": "节点 succeeded",
+      "sublabel": "tx B 产物落表",
       "sources": [
-        { "path": "server/src/fde_api/workflows/executor.py", "line": 703, "end_line": 716, "label": "_settle_node_success" }
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 828, "end_line": 846, "label": "_settle_node_success" },
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 752, "end_line": 790, "label": "_attach_gate_evidence_marker" }
+      ]
+    },
+    {
+      "id": "n_ready",
+      "type": "waiting",
+      "label": "节点 ready",
+      "sublabel": "退避待重派",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 851, "end_line": 880, "label": "_settle_node_failure 重试" }
+      ]
+    },
+    {
+      "id": "n_failed",
+      "type": "failure",
+      "label": "节点 failed",
+      "sublabel": "终态失败 · 占位符",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 851, "end_line": 880, "label": "_settle_node_failure" },
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 704, "end_line": 745, "label": "缺占位符键即 failed" }
+      ]
+    },
+    {
+      "id": "n_skipped",
+      "type": "neutral",
+      "label": "节点 skipped",
+      "sublabel": "when 为假 / 上游断链",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 899, "end_line": 910, "label": "_skip_node" }
+      ]
+    },
+    {
+      "id": "n_cancelled",
+      "type": "failure",
+      "label": "节点 cancelled",
+      "sublabel": "随 run 取消",
+      "sources": [
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 306, "end_line": 330, "label": "cancel_run 节点清理" },
+        { "path": "server/src/fde_api/workflows/executor.py", "line": 807, "end_line": 845, "label": "cancelled_after_dispatch" }
       ]
     }
   ],
   "transitions": [
-    { "id": "t_queued_running", "from": "r_queued", "to": "r_running", "label": "worker 接单" },
-    { "id": "t_run_waiting", "from": "r_running", "to": "r_waiting", "label": "无 ready 剩 waiting" },
-    { "id": "t_waiting_running", "from": "r_waiting", "to": "r_running", "label": "拍板重投", "variant": "emphasis" },
-    { "id": "t_run_succeeded", "from": "r_running", "to": "r_succeeded", "label": "全节点终态无 failed", "variant": "emphasis" },
-    { "id": "t_run_failed", "from": "r_running", "to": "r_failed", "label": "有 failed 断链" },
-    { "id": "t_run_cancelled", "from": "r_running", "to": "r_cancelled", "label": "cancel", "variant": "security" },
-    { "id": "t_waiting_cancelled", "from": "r_waiting", "to": "r_cancelled", "label": "waiting 可取消", "variant": "security" },
-    { "id": "t_failed_resume", "from": "r_failed", "to": "r_running", "label": "resume", "variant": "dashed" },
-    { "id": "t_pending_running", "from": "n_pending", "to": "n_running", "label": "调度 tx A" },
-    { "id": "t_node_succeeded", "from": "n_running", "to": "n_succeeded", "label": "tx B 产物落表", "variant": "emphasis" },
-    { "id": "t_running_ready", "from": "n_running", "to": "n_ready", "label": "可重试退避" },
-    { "id": "t_ready_running", "from": "n_ready", "to": "n_running", "label": "退避重派" },
-    { "id": "t_node_failed", "from": "n_running", "to": "n_failed", "label": "不可重试/耗尽", "fromSide": "bottom", "toSide": "top" },
-    { "id": "t_node_waiting", "from": "n_running", "to": "n_waiting", "label": "建审批单" },
-    { "id": "t_waiting_succeeded", "from": "n_waiting", "to": "n_succeeded", "label": "拍板批准", "variant": "emphasis" },
-    { "id": "t_waiting_failed", "from": "n_waiting", "to": "n_failed", "label": "拒绝/过期" },
-    { "id": "t_pending_skipped", "from": "n_pending", "to": "n_skipped", "label": "when 假/断链" },
-    { "id": "t_waiting_cancelled_n", "from": "n_waiting", "to": "n_cancelled", "label": "一并取消", "variant": "security", "fromSide": "right", "toSide": "left" },
-    { "id": "t_running_pending", "from": "n_running", "to": "n_pending", "label": "崩溃恢复", "variant": "dashed" },
-    { "id": "t_failed_reset", "from": "n_failed", "to": "n_pending", "label": "resume 重投", "variant": "dashed" },
-    { "id": "t_skipped_reset", "from": "n_skipped", "to": "n_pending", "label": "resume 复位", "variant": "dashed" }
+    { "id": "t-queued-running", "from": "r_queued", "to": "r_running", "label": "worker 接单" },
+    { "id": "t-run-waiting", "from": "r_running", "to": "r_waiting", "label": "剩等拍板" },
+    { "id": "t-waiting-running", "from": "r_waiting", "to": "r_running", "label": "拍板重投", "variant": "emphasis" },
+    { "id": "t-run-succeeded", "from": "r_running", "to": "r_succeeded", "label": "全部节点成功", "variant": "emphasis" },
+    { "id": "t-run-failed", "from": "r_running", "to": "r_failed", "label": "有 failed 断链" },
+    { "id": "t-run-cancelled", "from": "r_running", "to": "r_cancelled", "label": "cancel", "variant": "security" },
+    { "id": "t-waiting-cancelled", "from": "r_waiting", "to": "r_cancelled", "label": "waiting 可取消", "variant": "security" },
+    { "id": "t-failed-resume", "from": "r_failed", "to": "r_running", "label": "resume · hops≤8", "variant": "dashed" },
+    { "id": "t-queued-np", "from": "r_queued", "to": "n_pending", "label": "建节点行 pending" },
+    { "id": "t-np-nr", "from": "n_pending", "to": "n_running", "label": "调度 tx A" },
+    { "id": "t-nr-nok", "from": "n_running", "to": "n_succeeded", "label": "tx B 产物落表", "variant": "emphasis" },
+    { "id": "t-nr-ready", "from": "n_running", "to": "n_ready", "label": "可重试退避" },
+    { "id": "t-ready-nr", "from": "n_ready", "to": "n_running", "label": "退避重派" },
+    { "id": "t-nr-nfail", "from": "n_running", "to": "n_failed", "label": "不可重试/耗尽" },
+    { "id": "t-nr-nwait", "from": "n_running", "to": "n_waiting", "label": "建审批单" },
+    { "id": "t-nwait-nok", "from": "n_waiting", "to": "n_succeeded", "label": "拍板批准", "variant": "emphasis" },
+    { "id": "t-nwait-nfail", "from": "n_waiting", "to": "n_failed", "label": "拒绝/过期" },
+    { "id": "t-np-nskip", "from": "n_pending", "to": "n_skipped", "label": "when 假/断链" },
+    { "id": "t-nwait-ncancel", "from": "n_waiting", "to": "n_cancelled", "label": "一并取消", "variant": "security" },
+    { "id": "t-nr-np", "from": "n_running", "to": "n_pending", "label": "崩溃恢复", "variant": "dashed" },
+    { "id": "t-nfail-np", "from": "n_failed", "to": "n_pending", "label": "resume 重投", "variant": "dashed" },
+    { "id": "t-nskip-np", "from": "n_skipped", "to": "n_pending", "label": "resume 复位", "variant": "dashed" }
   ],
   "cards": [
     {
@@ -229,10 +178,9 @@
       "title": "两层联动：审批拍板",
       "items": [
         "human_approval 节点复用 automation_approvals，拍板走既有任务中心 decide_automation_approval",
-        "拍板同事务：节点 waiting→succeeded/failed，run waiting_approval→running 并重投 workflow.run",
-        "事件 workflow_run_waiting_approval / workflow_run_approval_decided（_settle_run / settle_approval_node）",
-        "审批单 request_key=wfnode:{行id}、risk_level=4、默认 15 分钟过期；审批 id 挂节点幂等键",
-        "迟到拍板不驱动已取消节点：节点不在 waiting 或 run 已终态即落空"
+        "拍板同事务：节点 waiting→succeeded/failed，run waiting_approval→running 并重投 workflow.run（hops+1 继承）",
+        "审批单 request_key=wfnode:{行id}、risk_level=4；到期由 scheduler 定时清扫（无人触碰的过期 pending 不再永挂）",
+        "迟到拍板不驱动已取消节点；取消后在途分派返回落 cancelled_after_dispatch 标记，终态不复活"
       ]
     },
     {
@@ -241,9 +189,9 @@
       "items": [
         "_begin_node tx A：attempt+1、input_snapshot 落表；缺占位符键直接 failed，绝不填空串",
         "retryable 且 attempt ≤ max_retries 退避回 ready，总尝试 = 1 + max_retries，封顶 20s",
-        "_begin_node 对 pending/ready 同等调度；崩溃恢复 running→pending（attempt 保留，interrupted:recovered）",
-        "写类 call 节点分派前落 sha256 幂等键（与 api_actions 同构），跨重试不二次外呼",
-        "agent 节点幂等键 wfnode-{行id}:{attempt}，attempt 代际 = 显式重试"
+        "崩溃恢复 running→pending（attempt 保留，interrupted:recovered）；worker 层另有可重试类型退避重投（30s×2 封顶 900s）",
+        "写类 call 节点分派前落 sha256 幂等键（与 api_actions 同构），跨重试不二次外呼；agent 节点幂等键 wfnode-{行id}:{attempt}",
+        "resume/拍板重投 hops+1 继承不清零，入口超 MAX_RUN_HOPS=8 → run 诚实 failed（hops_exceeded）"
       ]
     },
     {
@@ -251,10 +199,10 @@
       "title": "取消、恢复与断链（FV-F1）",
       "items": [
         "cancel 幂等：重复取消 200 cancelled=false；终态 409 already_terminal；已执行外呼不回收",
-        "queued/running/waiting_approval 均可取消（运行层画后两条）；非终态节点（pending/ready/running/waiting）全部 cancelled，图中画 waiting 一条；pending 审批行不动",
+        "queued/running/waiting_approval 均可取消；非终态节点全部 cancelled；pending 审批行不动",
         "resume_run 仅 failed 可恢复（其余 409 not_resumable）：failed/skipped 回 pending、attempt 归零后重投",
         "断链：有 failed → run failed + 下游 skipped(upstream_not_succeeded)；waiting 节点永不 skip",
-        "run 级 paused 仅存于 CHECK 值域无写入方（设计用例已并入 failed+resume）；事件 workflow_run_{status}"
+        "run 级 paused 仅存于 CHECK 值域无写入方；事件 workflow_run_{status}"
       ]
     }
   ]

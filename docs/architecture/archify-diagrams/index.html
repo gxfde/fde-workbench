@@ -60,7 +60,8 @@
     <p class="sub">用 archify 从仓库真实代码取证生成：五个视角覆盖总体架构、交付流程、执行时序、证据数据流与运行状态机。</p>
     <div class="meta">
       <span class="pill ok">五张全部四闸通过</span>
-      <span class="pill">archify v3.0.1</span>
+      <span class="pill">archify v3.2.0</span>
+      <span class="pill ok">lifecycle schema v3</span>
       <span class="pill">证据模式 · 行号级 sources</span>
       <span class="pill">仓库只读 · 未改任何代码</span>
     </div>
@@ -71,8 +72,8 @@
       <div class="badge">archi<br>tecture</div>
       <div>
         <p class="t">系统总体架构</p>
-        <p class="d">桌面端（React 渲染层 → Preload → Electron 主进程）→ 本机回环 HTTP + JWT → Flask API 单体 36 蓝图；下挂 PostgreSQL / Redis 队列 / 异步 worker-scheduler；右侧 AI Server 与 MCP 工具面；右下 Windows 宿主集成桥与 openfde·fdeops 真相层（只读纪律）。</p>
-        <p class="k">14 节点 · 16 连接 · 4 边界 · 取证 46dfd4f</p>
+        <p class="d">桌面端（React 渲染层 → Preload → Electron 主进程）→ 本机回环 HTTP + JWT → Flask API 单体 47 蓝图；下挂 PostgreSQL / Redis 队列 / 异步 worker-scheduler；右侧 AI Server 与 MCP 工具面；右下 Windows 宿主集成桥与 openfde·fdeops 真相层（只读纪律）。</p>
+        <p class="k">14 节点 · 16 连接 · 4 边界 · 取证 58f7a26</p>
       </div>
       <div class="go">打开 →</div>
     </a>
@@ -81,8 +82,8 @@
       <div class="badge">work<br>flow</div>
       <div>
         <p class="t">交付主流程：从项目到回款</p>
-        <p class="d">立项 → 调研建档 → 门禁证据提交 → 门禁核验 → 报价 → 合同 → 方案 → AI 产物 run → 终审拍板 → 导出 SOW → 交付包 → 收款结算；含 fail 整改重提、人工免终审、L1 人工接管、409 终审闸拦截等异常分支。</p>
-        <p class="k">13 节点 · 15 边 · 6 车道 · 取证 46dfd4f</p>
+        <p class="d">立项 → 调研建档（含访谈转写草稿区）→ 门禁取证 → 核验（revision CAS）→ 报价 → 合同 → 交付方案（确定性生成+审查发布）→ 方案 → AI 产物 run → 终审拍板 → 导出 SOW → 交付包 → 收款结算 → 结项封包（seal/deliver）；含 fail 整改重提、人工免终审、L1 人工接管、409 终审闸拦截等异常分支。</p>
+        <p class="k">16 节点 · 19 边 · 6 车道 · 取证 58f7a26</p>
       </div>
       <div class="go">打开 →</div>
     </a>
@@ -91,8 +92,8 @@
       <div class="badge">sequ<br>ence</div>
       <div>
         <p class="t">Workflow run 一次执行的完整调用链</p>
-        <p class="d">发起 run（幂等键 + 版本快照）→ 入队与租约认领 → 调度循环 → 四类节点分派（api_execute / skill / agent / human_approval）→ 审批拍板回投 → 断链与取消恢复。</p>
-        <p class="k">8 参与者 · 42 消息 · 10 段 · 取证 9bc342e</p>
+        <p class="d">发起 run（幂等键 + 版本快照）→ 入队与租约认领 → 调度循环 → 四类节点分派（execute_api / skill / agent / human_approval）→ 审批拍板回投 → 断链与取消恢复。</p>
+        <p class="k">8 参与者 · 42 消息 · 10 段 · 取证 58f7a26</p>
       </div>
       <div class="go">打开 →</div>
     </a>
@@ -102,7 +103,7 @@
       <div>
         <p class="t">集成桥采集 → 服务端投影 → 一等证据登记簿</p>
         <p class="d">计划任务 / 立即采集 → bridge-poll.mjs（只读）→ POST /api/v1/bridge/snapshots → apply_snapshot 投影事务 → bridge_engagements + project_evidence → 门禁清单项 / 集成桥页消费；原件永远留在本地工作目录，链路只传指针 + sha256。</p>
-        <p class="k">12 节点 · 取证 05f3773</p>
+        <p class="k">12 节点 · 取证 58f7a26</p>
       </div>
       <div class="go">打开 →</div>
     </a>
@@ -111,8 +112,8 @@
       <div class="badge">life<br>cycle</div>
       <div>
         <p class="t">Workflow 运行生命周期状态机</p>
-        <p class="d">run 层七态（queued → running ⇄ waiting_approval → succeeded / failed / cancelled）与 node 层八态（pending / ready / running / waiting / succeeded / failed / skipped / cancelled）双层迁移，含幂等键、断链、取消幂等与 resume 复位语义。</p>
-        <p class="k">14 态 · 21 迁移 · 取证 46dfd4f</p>
+        <p class="d">run 层主链 queued → running → succeeded 与分支（waiting_approval / failed / cancelled）+ 节点层八态（pending / ready / running / waiting / succeeded / failed / skipped / cancelled），含 hops 熔断、cancelled_after_dispatch、断链与 resume 复位语义（archify lifecycle schema v3）。</p>
+        <p class="k">14 态 · 22 迁移 · 取证 58f7a26</p>
       </div>
       <div class="go">打开 →</div>
     </a>
@@ -121,7 +122,7 @@
   <footer>
     每张图均为独立 standalone HTML（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、可开路径与透镜视图）。<br>
     候选与取证回执在各图同级目录：<code>&lt;type&gt;/candidate.json</code> + <code>&lt;type&gt;/receipts/*.json</code> + <code>preview.png</code>，可复跑校验。<br>
-    取证版本说明：生成期间仓库被另一工作流推进，三张图钉 46dfd4f、sequence 钉 9bc342e、dataflow 钉 05f3773；经核对这些版本间被引用的源文件字节完全一致。
+    取证版本说明：2026-11-08 全量刷新，五张统一钉 fork/main <code>58f7a26</code>（V3.1 P1-1）；47 蓝图 / 384 路由 / 128 表 / 50 rev 与 AGENTS 口径行逐位一致。链接为 local-only 模式：fork/main 领先 upstream，web 链接会指向不存在的上游 revision，SRC 标记保留文件路径+行号+revision。
   </footer>
 </div>
 </body>

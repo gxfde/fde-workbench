@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "aff50cff-6a5f-41fa-97d9-87bbbf55c640",
+  "deliveryReceiptId": "bcc45f12-feae-417a-891e-fc7cdba5c0a7",
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.html",
-    "sha256": "d9026aecb5ed11ee60bf5b86b3d749d30183493541fe83af861e84b1b6b5e181",
-    "bytes": 784012
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+    "sha256": "4581db8ec5aece72cf65b72bc8e28fb5be20f4b54587a70b7384cf9fd72f917d",
+    "bytes": 855470
   },
   "state": {
     "detail": "read",
@@ -32,109 +32,112 @@
         "innerWidth": 1440,
         "innerHeight": 900,
         "scrollWidth": 1440,
-        "scrollHeight": 1534,
+        "scrollHeight": 2432,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1376,
+        "diagramWidth": 1346,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 68,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 1376,
+          "svgPx": 2290,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 595,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
+            "nodeSpanPx": 391,
+            "spaceAboveNodesPx": 198,
+            "spaceBelowNodesPx": 6
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 354,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
             "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "spaceAboveNodesPx": 154,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 314,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 232,
+            "spaceAboveNodesPx": 76,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 281,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 225,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 280,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 215,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 15
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 129,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 83,
+            "spaceAboveNodesPx": 42,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -157,109 +160,112 @@
         "innerWidth": 1600,
         "innerHeight": 1000,
         "scrollWidth": 1600,
-        "scrollHeight": 1600,
+        "scrollHeight": 2770,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1536,
+        "diagramWidth": 1506,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2562,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 666,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "nodeSpanPx": 437,
+            "spaceAboveNodesPx": 221,
+            "spaceBelowNodesPx": 7
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 396,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 219,
+            "spaceAboveNodesPx": 172,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 351,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 260,
+            "spaceAboveNodesPx": 85,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 314,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 251,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 313,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 241,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 16
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 145,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 93,
+            "spaceAboveNodesPx": 46,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -282,109 +288,112 @@
         "innerWidth": 1920,
         "innerHeight": 1080,
         "scrollWidth": 1920,
-        "scrollHeight": 1600,
+        "scrollHeight": 3021,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1856,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -407,109 +416,112 @@
         "innerWidth": 2048,
         "innerHeight": 1320,
         "scrollWidth": 2048,
-        "scrollHeight": 1618,
+        "scrollHeight": 3039,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 967,
-        "diagramWidth": 917,
+        "readerWidth": 1920,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 84,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -585,109 +597,112 @@
         "innerWidth": 1440,
         "innerHeight": 900,
         "scrollWidth": 1440,
-        "scrollHeight": 1534,
+        "scrollHeight": 2432,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1376,
+        "diagramWidth": 1346,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 68,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 1376,
+          "svgPx": 2290,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 595,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
+            "nodeSpanPx": 391,
+            "spaceAboveNodesPx": 198,
+            "spaceBelowNodesPx": 6
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 354,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
             "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "spaceAboveNodesPx": 154,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 314,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 232,
+            "spaceAboveNodesPx": 76,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 281,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 225,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 280,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 215,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 15
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 129,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 83,
+            "spaceAboveNodesPx": 42,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -710,109 +725,112 @@
         "innerWidth": 1600,
         "innerHeight": 1000,
         "scrollWidth": 1600,
-        "scrollHeight": 1600,
+        "scrollHeight": 2770,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1536,
+        "diagramWidth": 1506,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2562,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 666,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "nodeSpanPx": 437,
+            "spaceAboveNodesPx": 221,
+            "spaceBelowNodesPx": 7
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 396,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 219,
+            "spaceAboveNodesPx": 172,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 351,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 260,
+            "spaceAboveNodesPx": 85,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 314,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 251,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 313,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 241,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 16
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 145,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 93,
+            "spaceAboveNodesPx": 46,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -835,109 +853,112 @@
         "innerWidth": 1920,
         "innerHeight": 1080,
         "scrollWidth": 1920,
-        "scrollHeight": 1600,
+        "scrollHeight": 3021,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1856,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -960,109 +981,112 @@
         "innerWidth": 2048,
         "innerHeight": 1320,
         "scrollWidth": 2048,
-        "scrollHeight": 1618,
+        "scrollHeight": 3039,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 967,
-        "diagramWidth": 917,
+        "readerWidth": 1920,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 84,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -1090,109 +1114,112 @@
         "innerWidth": 1440,
         "innerHeight": 900,
         "scrollWidth": 1440,
-        "scrollHeight": 1534,
+        "scrollHeight": 2432,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1376,
+        "diagramWidth": 1346,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 68,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 1376,
+          "svgPx": 2290,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 595,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
+            "nodeSpanPx": 391,
+            "spaceAboveNodesPx": 198,
+            "spaceBelowNodesPx": 6
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 354,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
             "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "spaceAboveNodesPx": 154,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 314,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 232,
+            "spaceAboveNodesPx": 76,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 281,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 225,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 280,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 215,
+            "spaceAboveNodesPx": 50,
+            "spaceBelowNodesPx": 15
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 129,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 83,
+            "spaceAboveNodesPx": 42,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -1215,109 +1242,112 @@
         "innerWidth": 1600,
         "innerHeight": 1000,
         "scrollWidth": 1600,
-        "scrollHeight": 1600,
+        "scrollHeight": 2770,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1536,
+        "diagramWidth": 1506,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2562,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 666,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
+            "nodeSpanPx": 437,
+            "spaceAboveNodesPx": 221,
+            "spaceBelowNodesPx": 7
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 396,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 219,
+            "spaceAboveNodesPx": 172,
             "spaceBelowNodesPx": 5
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 351,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 260,
+            "spaceAboveNodesPx": 85,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 314,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 251,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 7
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 313,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 241,
+            "spaceAboveNodesPx": 56,
+            "spaceBelowNodesPx": 16
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 145,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 93,
+            "spaceAboveNodesPx": 46,
+            "spaceBelowNodesPx": 5
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -1340,109 +1370,112 @@
         "innerWidth": 1920,
         "innerHeight": 1080,
         "scrollWidth": 1920,
-        "scrollHeight": 1600,
+        "scrollHeight": 3021,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 960,
-        "diagramWidth": 917,
+        "readerWidth": 1856,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 76,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -1465,109 +1498,112 @@
         "innerWidth": 2048,
         "innerHeight": 1320,
         "scrollWidth": 2048,
-        "scrollHeight": 1618,
+        "scrollHeight": 3039,
         "overflowX": false,
         "overflowY": true,
         "verticalScrollAccepted": true,
         "overflowDisposition": "readable-vertical-scroll",
         "readerLayout": "adaptive",
         "readerOverflow": "authored",
-        "readerFit": "intrinsic-height",
+        "readerFit": "width-first",
         "ok": true,
-        "readerWidth": 967,
-        "diagramWidth": 917,
+        "readerWidth": 1920,
+        "diagramWidth": 1653,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 84,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1376,
+          "svgPx": 2813,
           "cardsPx": 0,
-          "viewBoxHeight": 1467
+          "viewBoxHeight": 1875
         },
-        "viewBoxWidth": 978,
+        "viewBoxWidth": 1102,
         "workflowLanes": [
           {
             "frameId": "lane-5",
-            "heightPx": 247,
-            "nodeCount": 2,
+            "heightPx": 731,
+            "nodeCount": 3,
             "nodeIds": [
+              "handover",
               "package",
               "payment_settle"
             ],
-            "nodeSpanPx": 195,
-            "spaceAboveNodesPx": 47,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 480,
+            "spaceAboveNodesPx": 243,
+            "spaceBelowNodesPx": 8
+          },
+          {
+            "frameId": "lane-0",
+            "heightPx": 435,
+            "nodeCount": 5,
+            "nodeIds": [
+              "create_project",
+              "research",
+              "transcripts",
+              "plans",
+              "solution"
+            ],
+            "nodeSpanPx": 240,
+            "spaceAboveNodesPx": 189,
+            "spaceBelowNodesPx": 6
           },
           {
             "frameId": "lane-4",
-            "heightPx": 241,
+            "heightPx": 386,
             "nodeCount": 3,
             "nodeIds": [
               "handoff",
               "signoff",
               "export_sow"
             ],
-            "nodeSpanPx": 178,
-            "spaceAboveNodesPx": 58,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 285,
+            "spaceAboveNodesPx": 93,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-1",
-            "heightPx": 216,
+            "heightPx": 345,
             "nodeCount": 2,
             "nodeIds": [
               "gate_decide",
               "gate_evidence"
             ],
-            "nodeSpanPx": 173,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 5
+            "nodeSpanPx": 276,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 8
           },
           {
             "frameId": "lane-2",
-            "heightPx": 215,
+            "heightPx": 344,
             "nodeCount": 2,
             "nodeIds": [
               "contract",
               "quote"
             ],
-            "nodeSpanPx": 165,
-            "spaceAboveNodesPx": 38,
-            "spaceBelowNodesPx": 11
-          },
-          {
-            "frameId": "lane-0",
-            "heightPx": 99,
-            "nodeCount": 3,
-            "nodeIds": [
-              "create_project",
-              "research",
-              "solution"
-            ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 264,
+            "spaceAboveNodesPx": 62,
+            "spaceBelowNodesPx": 18
           },
           {
             "frameId": "lane-3",
-            "heightPx": 99,
+            "heightPx": 159,
             "nodeCount": 1,
             "nodeIds": [
               "agent_run"
             ],
-            "nodeSpanPx": 64,
-            "spaceAboveNodesPx": 32,
-            "spaceBelowNodesPx": 4
+            "nodeSpanPx": 102,
+            "spaceAboveNodesPx": 51,
+            "spaceBelowNodesPx": 6
           }
         ],
-        "minimumProjectedNodeTextPx": 6.000817995910021,
-        "minimumProjectedNonEdgeTextPx": 6.000817995910021,
-        "minimumProjectedEdgeTextPx": 7.5010224948875255,
-        "minimumProjectedNodeText": "record_contract · signed_at · 指针+指纹",
+        "minimumProjectedNodeTextPx": 7.2,
+        "minimumProjectedNonEdgeTextPx": 7.2,
+        "minimumProjectedEdgeTextPx": 8,
+        "minimumProjectedNodeText": "create_project · 模板快照与任务排程",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "contract"
+          "id": "create_project"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -1591,6 +1627,7 @@
     "contactSheet": null
   },
   "sidecars": {
+    "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts",
     "receipt": "delivery-workflow.browser-check.json",
     "files": []
   }

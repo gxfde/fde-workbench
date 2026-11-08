@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "3dbf9445-1452-4f68-b246-fd58e93e3d31",
+  "deliveryReceiptId": "c2b846fa-4416-4dce-a16a-0dd8a1f3b8d0",
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\lifecycle-run-20261104-074053\\run-lifecycle.html",
-    "sha256": "2892acbe31f287eb7e8d870e51a41ed6ab79f691d76b10c174f2ce438b4785b6",
-    "bytes": 789616
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "49b78e2dddbdcd3ebcc06b87ed93fa4ed76a43b3d79b9e222d3146dc99371b96",
+    "bytes": 847850
   },
   "state": {
     "detail": "read",
@@ -41,25 +41,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1043,
-        "diagramWidth": 1013,
+        "readerWidth": 1049,
+        "diagramWidth": 1019,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 99,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 698,
+          "svgPx": 746,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.092818671454219,
-        "minimumProjectedNonEdgeTextPx": 7.092818671454219,
-        "minimumProjectedEdgeTextPx": 7.274685816876122,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.4439935064935066,
+        "minimumProjectedNonEdgeTextPx": 7.4439935064935066,
+        "minimumProjectedEdgeTextPx": 8.271103896103897,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -91,25 +91,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1093,
-        "diagramWidth": 1063,
+        "readerWidth": 1095,
+        "diagramWidth": 1065,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 107,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 733,
+          "svgPx": 780,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.442908438061041,
-        "minimumProjectedNonEdgeTextPx": 7.442908438061041,
-        "minimumProjectedEdgeTextPx": 7.63375224416517,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.780032467532468,
+        "minimumProjectedNonEdgeTextPx": 7.780032467532468,
+        "minimumProjectedEdgeTextPx": 8.64448051948052,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -141,25 +141,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1240,
-        "diagramWidth": 1210,
+        "readerWidth": 1205,
+        "diagramWidth": 1175,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 86,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 834,
+          "svgPx": 860,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 8.583603896103897,
+        "minimumProjectedNonEdgeTextPx": 8.583603896103897,
+        "minimumProjectedEdgeTextPx": 9.537337662337663,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -191,25 +191,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1582,
-        "diagramWidth": 1532,
+        "readerWidth": 1528,
+        "diagramWidth": 1478,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 94,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1056,
+          "svgPx": 1082,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 9,
+        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedEdgeTextPx": 10,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -294,25 +294,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1043,
-        "diagramWidth": 1013,
+        "readerWidth": 1049,
+        "diagramWidth": 1019,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 99,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 698,
+          "svgPx": 746,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.092818671454219,
-        "minimumProjectedNonEdgeTextPx": 7.092818671454219,
-        "minimumProjectedEdgeTextPx": 7.274685816876122,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.4439935064935066,
+        "minimumProjectedNonEdgeTextPx": 7.4439935064935066,
+        "minimumProjectedEdgeTextPx": 8.271103896103897,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -344,25 +344,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1093,
-        "diagramWidth": 1063,
+        "readerWidth": 1095,
+        "diagramWidth": 1065,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 107,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 733,
+          "svgPx": 780,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.442908438061041,
-        "minimumProjectedNonEdgeTextPx": 7.442908438061041,
-        "minimumProjectedEdgeTextPx": 7.63375224416517,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.780032467532468,
+        "minimumProjectedNonEdgeTextPx": 7.780032467532468,
+        "minimumProjectedEdgeTextPx": 8.64448051948052,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -394,25 +394,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1240,
-        "diagramWidth": 1210,
+        "readerWidth": 1205,
+        "diagramWidth": 1175,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 86,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 834,
+          "svgPx": 860,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 8.583603896103897,
+        "minimumProjectedNonEdgeTextPx": 8.583603896103897,
+        "minimumProjectedEdgeTextPx": 9.537337662337663,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -444,25 +444,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1582,
-        "diagramWidth": 1532,
+        "readerWidth": 1528,
+        "diagramWidth": 1478,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 94,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1056,
+          "svgPx": 1082,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 9,
+        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedEdgeTextPx": 10,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -499,25 +499,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1043,
-        "diagramWidth": 1013,
+        "readerWidth": 1049,
+        "diagramWidth": 1019,
         "pageComposition": {
           "bodyPaddingPx": 12,
-          "headerPx": 99,
+          "headerPx": 52,
           "diagramChromePx": 78,
-          "svgPx": 698,
+          "svgPx": 746,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.092818671454219,
-        "minimumProjectedNonEdgeTextPx": 7.092818671454219,
-        "minimumProjectedEdgeTextPx": 7.274685816876122,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.4439935064935066,
+        "minimumProjectedNonEdgeTextPx": 7.4439935064935066,
+        "minimumProjectedEdgeTextPx": 8.271103896103897,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -549,25 +549,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1093,
-        "diagramWidth": 1063,
+        "readerWidth": 1095,
+        "diagramWidth": 1065,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 107,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 733,
+          "svgPx": 780,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.442908438061041,
-        "minimumProjectedNonEdgeTextPx": 7.442908438061041,
-        "minimumProjectedEdgeTextPx": 7.63375224416517,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 7.780032467532468,
+        "minimumProjectedNonEdgeTextPx": 7.780032467532468,
+        "minimumProjectedEdgeTextPx": 8.64448051948052,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -599,25 +599,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1240,
-        "diagramWidth": 1210,
+        "readerWidth": 1205,
+        "diagramWidth": 1175,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 86,
+          "headerPx": 60,
           "diagramChromePx": 84,
-          "svgPx": 834,
+          "svgPx": 860,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 8.583603896103897,
+        "minimumProjectedNonEdgeTextPx": 8.583603896103897,
+        "minimumProjectedEdgeTextPx": 9.537337662337663,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -649,25 +649,25 @@
         "readerOverflow": null,
         "readerFit": "intrinsic-height",
         "ok": true,
-        "readerWidth": 1582,
-        "diagramWidth": 1532,
+        "readerWidth": 1528,
+        "diagramWidth": 1478,
         "pageComposition": {
           "bodyPaddingPx": 64,
-          "headerPx": 94,
+          "headerPx": 68,
           "diagramChromePx": 94,
-          "svgPx": 1056,
+          "svgPx": 1082,
           "cardsPx": 0,
-          "viewBoxHeight": 768
+          "viewBoxHeight": 902
         },
-        "viewBoxWidth": 1114,
-        "minimumProjectedNodeTextPx": 7.8,
-        "minimumProjectedNonEdgeTextPx": 7.8,
-        "minimumProjectedEdgeTextPx": 8,
-        "minimumProjectedNodeText": "待调度（初始 / resume 复位）",
+        "viewBoxWidth": 1232,
+        "minimumProjectedNodeTextPx": 9,
+        "minimumProjectedNonEdgeTextPx": 9,
+        "minimumProjectedEdgeTextPx": 10,
+        "minimumProjectedNodeText": "已建 run，待 worker 接单",
         "minimumProjectedNodeTextDetail": "context",
         "minimumProjectedNodeTextOwner": {
           "kind": "node",
-          "id": "n_pending"
+          "id": "r_queued"
         },
         "minimumRequiredNodeTextPx": 6,
         "readabilityOk": true,
@@ -691,7 +691,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\lifecycle-run-20261104-074053\\review-2",
+    "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts",
     "receipt": "run-lifecycle.browser-check.json",
     "files": []
   }

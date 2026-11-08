@@ -5,18 +5,18 @@
     "title": "蔡工FDE智能交付系统 · 交付主流程：从项目到回款",
     "locale": "zh-CN",
     "quality_profile": "showcase",
-    "output": ".archify/workflow-delivery-20261104-074141/delivery-workflow.html",
+    "output": ".archify/workflow-delivery-20261108-190500/delivery-workflow.html",
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
-      "link_mode": "web",
-      "revision": "46dfd4f6c2d9f86cf40a1e6c1ef594ece0bf4a8c"
+      "link_mode": "local-only",
+      "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b"
     }
   },
   "lanes": [
     {
       "id": "ops",
-      "label": "交付主线 · projects / research / solutions"
+      "label": "交付主线 · projects / research / plans / solutions"
     },
     {
       "id": "gates",
@@ -32,12 +32,12 @@
     },
     {
       "id": "review",
-      "label": "终审签出与人工接管 · signoff / export_sow",
+      "label": "终审签出与结项 · signoff / export_sow / handover",
       "variant": "exception"
     },
     {
       "id": "settle",
-      "label": "派单与回款 · dispatch / settlements"
+      "label": "派单回款与结项 · dispatch / settlements / handover"
     }
   ],
   "phases": [
@@ -123,7 +123,9 @@
       "create_project"
     ],
     "allowedTerminals": [
-      "payment_settle"
+      "payment_settle",
+      "plans",
+      "handover"
     ],
     "requiredEdges": [
       {
@@ -174,8 +176,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/research/subject_service.py",
-          "line": 498,
-          "end_line": 552,
+          "line": 825,
+          "end_line": 880,
           "label": "create_subject_in_transaction"
         },
         {
@@ -183,6 +185,67 @@
           "line": 132,
           "end_line": 140,
           "label": "initialize_subject_forms"
+        }
+      ]
+    },
+    {
+      "id": "transcripts",
+      "lane": "ops",
+      "col": 1,
+      "yOffset": 92,
+      "type": "backend",
+      "label": "访谈转写",
+      "sublabel": "草稿区 draft→promoted · T+7 清理",
+      "tag": "代号化不豁免",
+      "width": 150,
+      "sources": [
+        {
+          "path": "server/src/fde_api/transcripts/service.py",
+          "line": 248,
+          "end_line": 266,
+          "label": "create_draft"
+        },
+        {
+          "path": "server/src/fde_api/transcripts/service.py",
+          "line": 354,
+          "end_line": 380,
+          "label": "promote_draft"
+        },
+        {
+          "path": "server/src/fde_api/transcripts/service.py",
+          "line": 337,
+          "end_line": 352,
+          "label": "discard_draft"
+        }
+      ]
+    },
+    {
+      "id": "plans",
+      "lane": "ops",
+      "col": 3,
+      "type": "backend",
+      "label": "交付方案",
+      "sublabel": "确定性生成 → 审查发布 → 任务分解",
+      "tag": "至多一个 published",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/plans/service.py",
+          "line": 74,
+          "end_line": 90,
+          "label": "generate_plan"
+        },
+        {
+          "path": "server/src/fde_api/plans/service.py",
+          "line": 185,
+          "end_line": 200,
+          "label": "review_plan"
+        },
+        {
+          "path": "server/src/fde_api/plans/service.py",
+          "line": 224,
+          "end_line": 248,
+          "label": "publish_plan + supersede"
         }
       ]
     },
@@ -200,8 +263,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/projects/gate_service.py",
-          "line": 222,
-          "end_line": 292,
+          "line": 231,
+          "end_line": 310,
           "label": "submit_gate_evidence"
         }
       ]
@@ -214,20 +277,20 @@
       "type": "security",
       "icon": "person",
       "label": "门禁核验过门",
-      "sublabel": "pass · conditional_pass 仅G9 · fail",
-      "tag": "拍板人≠提交人",
+      "sublabel": "pass · conditional_pass · fail",
+      "tag": "拍板人≠提交人 · revision CAS",
       "width": 158,
       "sources": [
         {
           "path": "server/src/fde_api/projects/gate_service.py",
-          "line": 333,
-          "end_line": 407,
+          "line": 362,
+          "end_line": 430,
           "label": "decide_gate"
         },
         {
           "path": "server/src/fde_api/projects/gate_service.py",
-          "line": 505,
-          "end_line": 516,
+          "line": 430,
+          "end_line": 445,
           "label": "G8 收款联动"
         }
       ]
@@ -258,7 +321,7 @@
       "yOffset": 58,
       "type": "backend",
       "label": "合同台账",
-      "sublabel": "record_contract · signed_at · 指针+指纹",
+      "sublabel": "record_contract · signed_at",
       "width": 158,
       "sources": [
         {
@@ -304,20 +367,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 756,
-          "end_line": 763,
+          "line": 946,
+          "end_line": 954,
           "label": "T1 gate"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 430,
-          "end_line": 437,
+          "line": 842,
+          "end_line": 847,
           "label": "T2 gate"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 481,
-          "end_line": 488,
+          "line": 560,
+          "end_line": 570,
           "label": "自动开 pending"
         }
       ]
@@ -330,13 +393,13 @@
       "type": "security",
       "icon": "person",
       "label": "终审拍板",
-      "sublabel": "resolve_signoff · approved / rejected",
+      "sublabel": "resolve_signoff · approve/reject",
       "tag": "幂等 pending",
       "width": 158,
       "sources": [
         {
           "path": "server/src/fde_api/agents/signoff.py",
-          "line": 28,
+          "line": 30,
           "end_line": 51,
           "label": "ensure_pending_signoff"
         },
@@ -355,13 +418,13 @@
       "type": "security",
       "icon": "person",
       "label": "人工接管",
-      "sublabel": "handoff_run · 失败 / 超时 / L1 降级",
+      "sublabel": "handoff_run · 失败/超时/L1",
       "width": 158,
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 880,
-          "end_line": 913,
+          "line": 1121,
+          "end_line": 1160,
           "label": "handoff_run"
         }
       ],
@@ -379,15 +442,47 @@
       "sources": [
         {
           "path": "server/src/fde_api/solutions/service.py",
-          "line": 669,
-          "end_line": 686,
+          "line": 676,
+          "end_line": 693,
           "label": "export_sow"
         },
         {
           "path": "server/src/fde_api/solutions/service.py",
-          "line": 632,
-          "end_line": 664,
+          "line": 639,
+          "end_line": 660,
           "label": "_signoff_gate_detail"
+        }
+      ]
+    },
+    {
+      "id": "handover",
+      "lane": "settle",
+      "col": 5,
+      "yOffset": 190,
+      "type": "security",
+      "icon": "briefcase",
+      "label": "结项封包",
+      "sublabel": "seal 四闸 → deliver(admin)",
+      "tag": "draft→sealed→delivered",
+      "width": 158,
+      "sources": [
+        {
+          "path": "server/src/fde_api/handover/service.py",
+          "line": 286,
+          "end_line": 300,
+          "label": "seal_package"
+        },
+        {
+          "path": "server/src/fde_api/handover/service.py",
+          "line": 353,
+          "end_line": 366,
+          "label": "deliver_package"
+        },
+        {
+          "path": "server/src/fde_api/handover/service.py",
+          "line": 121,
+          "end_line": 150,
+          "label": "manifest 规范化哈希"
         }
       ]
     },
@@ -429,7 +524,7 @@
       "yOffset": 78,
       "type": "database",
       "label": "收款与结算",
-      "sublabel": "结算四态 draft → accrued → payable → paid",
+      "sublabel": "draft → accrued → payable → paid",
       "tag": "G8 验收联动 · 凭证只存指针",
       "width": 178,
       "sources": [
@@ -460,6 +555,30 @@
       "from": "create_project",
       "to": "research",
       "variant": "default"
+    },
+    {
+      "id": "e-research-transcripts",
+      "from": "research",
+      "to": "transcripts",
+      "label": "访谈录音转写",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-transcripts-research",
+      "from": "transcripts",
+      "to": "research",
+      "label": "纪要晋升入档",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-research-plans",
+      "from": "research",
+      "to": "plans",
+      "label": "accepted 需求事实",
+      "variant": "dashed",
+      "role": "branch"
     },
     {
       "id": "e-research-gate",
@@ -527,6 +646,14 @@
       "variant": "default"
     },
     {
+      "id": "e-payment-handover",
+      "from": "payment_settle",
+      "to": "handover",
+      "label": "回款后结项封包",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
       "id": "e-decide-resubmit",
       "from": "gate_decide",
       "to": "gate_evidence",
@@ -573,8 +700,8 @@
       "title": "门禁与证据纪律",
       "items": [
         "G1–G9 按 seeds/gates.json 首次访问懒实例化，九门齐建",
-        "证据只收 source_uri 指针 + sha256 指纹，同步登记一等证据表 project_evidence（同指纹幂等）",
-        "拍板人 ≠ 提交人（P0-5 gate_decider_conflict）；conditional_pass 仅限 G9 上线门"
+        "证据只收 source_uri 指针 + sha256 指纹，同步登记一等证据表 project_evidence（同指纹幂等）；任务/工作流产物另挂建议性候选，采纳唯一入口=人工提交闸",
+        "拍板人 ≠ 提交人（P0-5 gate_decider_conflict）；conditional_pass 仅限 G9 上线门；拍板带 expected_revision CAS（revision 冲突 409 如实呈现并刷新面板）"
       ]
     },
     {
@@ -593,6 +720,16 @@
         "收款实收回填钩子：update_payment 事务内为已发布/接单交付包落 settlement draft（基数=实收）",
         "G8 过门联动 mark_acceptance_passed：实收+验收双满足 → accrued 并计提预扣；G8 stop 尾款照收",
         "对应里程碑发票登记前置才可 payable；打款 paid 只存 paid_proof_source_uri 指针"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "交付方案与结项封包（V3.1 / T-B1）",
+      "items": [
+        "plans 生成器确定性拼装 accepted 需求 + needs_clarification 聚合风险条目；审查人流程与发布双闸，同一时刻至多一个 published（旧版自动 superseded）",
+        "任务分解走既有 create_project_task（不指派=待认领），幂等重放 created=0；workflows 提供 draft-from-plan 草稿 + validate 干跑",
+        "handover 封包逐项四闸（存在/本项目/已复核/指纹一致）+ manifest 规范化哈希复算；deliver 仅 admin、终态不可逆",
+        "访谈转写只入草稿区（不可引用、T+7 自动清理），客户确认后晋升纪要才进正式库"
       ]
     }
   ]

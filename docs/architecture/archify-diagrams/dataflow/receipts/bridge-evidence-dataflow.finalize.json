@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "dataflow",
   "quality": "showcase",
-  "startedAt": "2026-11-04T01:24:38.538Z",
+  "startedAt": "2026-11-08T11:35:27.177Z",
   "specification": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-    "sha256": "fe86f82b46211a1bd4977a76a196ad8ad15a417bd4a66c5bde2ea4df5d942980",
-    "bytes": 9767
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+    "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
+    "bytes": 10376
   },
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
-    "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-    "bytes": 769260
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+    "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+    "bytes": 829693
   },
   "stages": {
     "validate": {
@@ -27,12 +27,12 @@
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "dataflow",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-workbench",
+        "D:\\test\\fde-wt-arch",
         "--json"
       ],
       "receipt": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "fe86f82b46211a1bd4977a76a196ad8ad15a417bd4a66c5bde2ea4df5d942980",
-          "bytes": 9767
+          "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
+          "bytes": 10376
         },
         "validation": {
           "checksPassed": 9,
@@ -56,35 +56,35 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 4470,
+      "durationMs": 2159,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "dataflow",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-workbench",
+        "D:\\test\\fde-wt-arch",
         "--json"
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "f767b5ca-3f1c-47b3-848c-d99e4141991e",
+        "receiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1",
         "ok": true,
         "command": "deliver",
         "type": "dataflow",
-        "input": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-        "output": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+        "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "specification": {
-          "sha256": "fe86f82b46211a1bd4977a76a196ad8ad15a417bd4a66c5bde2ea4df5d942980",
-          "bytes": 9767
+          "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
+          "bytes": 10376
         },
         "artifact": {
-          "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-          "bytes": 769260
+          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "bytes": 829693
         },
         "validation": {
           "checksPassed": 9,
@@ -97,8 +97,8 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/gxfde/fde-workbench",
-          "revision": "05f3773283a67054bab230453cbff39cee474c65",
-          "references": 28,
+          "revision": "58f7a26abbfaae38b5081161840b3dda95c02f2b",
+          "references": 27,
           "linkMode": "local-only"
         },
         "update": {
@@ -117,20 +117,20 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 1554,
+      "durationMs": 734,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "check",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--require-provenance"
       ],
       "receipt": {
         "ok": true,
-        "file": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "file": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "artifact": {
-          "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-          "bytes": 769260
+          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "bytes": 829693
         },
         "checks": [
           {
@@ -200,7 +200,7 @@
             "minLabelRouteClearance": 13,
             "desktopReadabilityIssues": 0,
             "viewportHeightIssues": 0,
-            "minProjectedNodeTextPx": 6.027777777777779,
+            "minProjectedNodeTextPx": 6.095505617977528,
             "maxBends": 2,
             "routesOverSuggestedBends": 0,
             "maxStretch": 1.108,
@@ -241,26 +241,28 @@
               "id": "polltask"
             },
             "minimumSourceTextPx": 7,
-            "minimumProjectedTextPx": 6.027777777777779,
+            "minimumProjectedTextPx": 6.095505617977528,
             "semanticTextCount": 35
           },
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "f767b5ca-3f1c-47b3-848c-d99e4141991e"
+        "deliveryReceiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 6150,
+      "durationMs": 5198,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "browser-check",
-        "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
         "--json",
-        "--require-provenance"
+        "--require-provenance",
+        "--out-dir",
+        "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts"
       ],
       "execution": "in-process",
       "receipt": {
@@ -271,11 +273,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "f767b5ca-3f1c-47b3-848c-d99e4141991e",
+        "deliveryReceiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1",
         "artifact": {
-          "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
-          "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-          "bytes": 769260
+          "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+          "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+          "bytes": 829693
         },
         "state": {
           "detail": "read",
@@ -306,17 +308,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1251,
-              "diagramWidth": 1221,
+              "readerWidth": 1252,
+              "diagramWidth": 1222,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
                 "svgPx": 746,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -356,17 +358,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1306,
-              "diagramWidth": 1276,
+              "readerWidth": 1308,
+              "diagramWidth": 1278,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 780,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -406,17 +408,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1437,
-              "diagramWidth": 1407,
+              "readerWidth": 1439,
+              "diagramWidth": 1409,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 860,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -456,17 +458,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1821,
-              "diagramWidth": 1771,
+              "readerWidth": 1822,
+              "diagramWidth": 1772,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
                 "svgPx": 1082,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -559,17 +561,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1251,
-              "diagramWidth": 1221,
+              "readerWidth": 1252,
+              "diagramWidth": 1222,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
                 "svgPx": 746,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -609,17 +611,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1306,
-              "diagramWidth": 1276,
+              "readerWidth": 1308,
+              "diagramWidth": 1278,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 780,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -659,17 +661,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1437,
-              "diagramWidth": 1407,
+              "readerWidth": 1439,
+              "diagramWidth": 1409,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 860,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -709,17 +711,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1821,
-              "diagramWidth": 1771,
+              "readerWidth": 1822,
+              "diagramWidth": 1772,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
                 "svgPx": 1082,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -764,17 +766,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1251,
-              "diagramWidth": 1221,
+              "readerWidth": 1252,
+              "diagramWidth": 1222,
               "pageComposition": {
                 "bodyPaddingPx": 12,
                 "headerPx": 52,
                 "diagramChromePx": 78,
                 "svgPx": 746,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -814,17 +816,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1306,
-              "diagramWidth": 1276,
+              "readerWidth": 1308,
+              "diagramWidth": 1278,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 780,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -864,17 +866,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1437,
-              "diagramWidth": 1407,
+              "readerWidth": 1439,
+              "diagramWidth": 1409,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 60,
                 "diagramChromePx": 84,
                 "svgPx": 860,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -914,17 +916,17 @@
               "readerOverflow": null,
               "readerFit": null,
               "ok": true,
-              "readerWidth": 1821,
-              "diagramWidth": 1771,
+              "readerWidth": 1822,
+              "diagramWidth": 1772,
               "pageComposition": {
                 "bodyPaddingPx": 64,
                 "headerPx": 68,
                 "diagramChromePx": 94,
                 "svgPx": 1082,
                 "cardsPx": 0,
-                "viewBoxHeight": 660
+                "viewBoxHeight": 652
               },
-              "viewBoxWidth": 1080,
+              "viewBoxWidth": 1068,
               "minimumProjectedNodeTextPx": 7,
               "minimumProjectedNonEdgeTextPx": 7,
               "minimumProjectedEdgeTextPx": 8,
@@ -956,31 +958,34 @@
           "contactSheet": null
         },
         "sidecars": {
+          "directory": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts",
           "receipt": "bridge-evidence-dataflow.browser-check.json",
           "files": []
         }
       }
     }
   },
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
   "diagnostics": [],
   "evidence": {
-    "receipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.finalize.json",
-    "summaryReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\receipts\\bridge-evidence-dataflow.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-11-04T01:24:54.707Z",
-  "durationMs": 16168,
+  "finishedAt": "2026-11-08T11:35:36.342Z",
+  "durationMs": 9165,
   "update": {
-    "status": "update_available",
-    "installedVersion": "3.0.1",
+    "status": "current",
+    "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
-    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
-    "severity": "normal",
-    "checkedAt": "2026-11-03T23:45:12.598Z",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-08T11:17:58.598Z",
     "source": "cache",
-    "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-03T23:45:12.598Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
-    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+    "noticeRequired": false,
+    "noticeText": null
   }
 }

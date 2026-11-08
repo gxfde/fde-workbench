@@ -6,14 +6,14 @@
   "type": "workflow",
   "quality": "showcase",
   "specification": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\candidate.json",
-    "sha256": "40fd9c9d596a4e35fbf270a47e40f492c26f4bb57b6bbab4386bebceab35a448",
-    "bytes": 15350
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+    "sha256": "e82e707e04d5b4f97dc400e960900b33ffc2b7d0da0b570278b64473424b84d8",
+    "bytes": 18889
   },
   "artifact": {
-    "path": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.html",
-    "sha256": "d9026aecb5ed11ee60bf5b86b3d749d30183493541fe83af861e84b1b6b5e181",
-    "bytes": 784012
+    "path": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+    "sha256": "4581db8ec5aece72cf65b72bc8e28fb5be20f4b54587a70b7384cf9fd72f917d",
+    "bytes": 855470
   },
   "gates": {
     "validate": "pass",
@@ -28,117 +28,24 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.finalize.json",
-    "summaryReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\workflow-delivery-20261104-074141\\delivery-workflow.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.browser-check.json"
   },
   "update": {
-    "status": "update_available",
-    "installedVersion": "3.0.1",
+    "status": "current",
+    "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
-    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
-    "severity": "normal",
-    "checkedAt": "2026-11-03T23:45:12.598Z",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-08T11:17:58.598Z",
     "source": "cache",
-    "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-03T23:45:12.598Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
-    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+    "noticeRequired": false,
+    "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 14925,
-  "visualReviewRecommendation": {
-    "action": "inspect-route-readability",
-    "signals": {
-      "routesOverSuggestedBends": 3,
-      "routesOverSuggestedStretch": 3
-    },
-    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
-    "affectedRoutes": {
-      "crossings": [],
-      "detours": [
-        {
-          "relationship": {
-            "id": "e-agent-handoff",
-            "from": "agent_run",
-            "to": "handoff",
-            "label": "T1/T2 未过 · 失败/L1",
-            "collectionIndex": 0,
-            "artifactIndex": 1
-          },
-          "bends": 2,
-          "stretch": 2.474
-        },
-        {
-          "relationship": {
-            "id": "e-decide-quote",
-            "from": "gate_decide",
-            "to": "quote",
-            "label": "过门推进",
-            "collectionIndex": 2,
-            "artifactIndex": 3
-          },
-          "bends": 3,
-          "stretch": 1
-        },
-        {
-          "relationship": {
-            "id": "e-solution-agent",
-            "from": "solution",
-            "to": "agent_run",
-            "label": "generate-agent",
-            "collectionIndex": 10,
-            "artifactIndex": 11
-          },
-          "bends": 2,
-          "stretch": 1.639
-        },
-        {
-          "relationship": {
-            "id": "e-solution-sow",
-            "from": "solution",
-            "to": "export_sow",
-            "label": "人工免终审",
-            "collectionIndex": 11,
-            "artifactIndex": 12
-          },
-          "bends": 3,
-          "stretch": 1.129
-        },
-        {
-          "relationship": {
-            "id": "e-sow-package",
-            "from": "export_sow",
-            "to": "package",
-            "label": "交付要素齐备",
-            "collectionIndex": 13,
-            "artifactIndex": 14
-          },
-          "bends": 3,
-          "stretch": 1.119
-        },
-        {
-          "relationship": {
-            "id": "e-submit-decide",
-            "from": "gate_evidence",
-            "to": "gate_decide",
-            "label": "提交待核验",
-            "collectionIndex": 14,
-            "artifactIndex": 15
-          },
-          "bends": 2,
-          "stretch": 6.724
-        }
-      ],
-      "truncated": false
-    },
-    "hints": [
-      "agent_run → handoff needs 2 bends: move node agent_run or handoff so they share a row or column with matching centers, or sit diagonally with a clear corner.",
-      "gate_decide → quote needs 3 bends: move node gate_decide or quote so they share a row or column with matching centers, or sit diagonally with a clear corner.",
-      "solution → agent_run needs 2 bends: move node solution or agent_run so they share a row or column with matching centers, or sit diagonally with a clear corner.",
-      "solution → export_sow needs 3 bends: move node solution or export_sow so they share a row or column with matching centers, or sit diagonally with a clear corner.",
-      "export_sow → package needs 3 bends: move node export_sow or package so they share a row or column with matching centers, or sit diagonally with a clear corner.",
-      "gate_evidence → gate_decide needs 2 bends: move node gate_evidence or gate_decide so they share a row or column with matching centers, or sit diagonally with a clear corner."
-    ],
-    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  "durationMs": 9502,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
   }
 }

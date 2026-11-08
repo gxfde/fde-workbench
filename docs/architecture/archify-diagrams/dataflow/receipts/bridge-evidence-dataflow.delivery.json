@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "f767b5ca-3f1c-47b3-848c-d99e4141991e",
+  "receiptId": "bde35d5a-6e83-4d62-a6e2-bc00f68bbda1",
   "status": "current",
   "command": "deliver",
   "type": "dataflow",
-  "input": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\candidate.json",
-  "output": "C:\\Users\\P1\\.zcode\\v2\\visualizations\\ccfa5eed37343ee3db44a5e28adff274d60551ae54169618f7b5d6c9cf58466f\\.archify\\dataflow-bridge-20261104-092108\\bridge-evidence-dataflow.html",
+  "input": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+  "output": "D:\\test\\fde-wt-arch\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
   "specification": {
-    "sha256": "fe86f82b46211a1bd4977a76a196ad8ad15a417bd4a66c5bde2ea4df5d942980",
-    "bytes": 9767
+    "sha256": "2b66b76b683207c3630804f5121af2c3e65b5acc990cd80b727e852bc886a784",
+    "bytes": 10376
   },
   "artifact": {
-    "sha256": "3e18ddbc8a6dbada2e5c97756e87106280c71a78dfcb081dfc1168ee98fb9dc7",
-    "bytes": 769260
+    "sha256": "c8ca28b752b44c858240b934bf4517a5da18ef3520f906232c72f230f796305e",
+    "bytes": 829693
   }
 }
