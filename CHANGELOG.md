@@ -20,6 +20,13 @@
 - **技能按需调用路由**：AGENTS「工作流与陷阱」新增每轮工作流技能挂点表——开工/交付=**fde-delivery-flow**、PR 前=**code-review**（权限/并发/资金敏感面）、权限·通道·契约改动=**intended-vs-implemented**、SQL/活库取证=**sql-queries**、桌面交付=**fde-gui-regression**→**fde-package-verify**、集成桥=**fde-bridge-capture**、客户线日常=**fde**、轮收尾=**neat-freak**、点名 workflow=**dynamic-workflows**（CreateWorkflow 强制）、架构图=**archify**（手动跑）。并声明四条机制事实：技能调用=Agent 按 description 自主判断非硬闸、点名 `/技能名` 恒可靠、archify 不在可调用技能列表须手动跑、技能正文调用才加载（每会话只预注入名字+description）。`fde-*` 四技能随仓版本化（`.agents/skills/`）。来源=2026-11-08 全仓技能描述逐一核对后的 top-10 评级（aws-messaging/WordPress 系/PM 简历系出局；dynamic-workflows 为备选第 11）。
 - **三连标题残渣热修（教训 49/50 家族，#202–#215 插队链引入）**：`## 当前状态（…）` 标题在 fork/main `58f7a26` 重复 3 次（三个分支各 prepend 各自轮次清单、rebase 全保留），且三变体均漏 P1-1/P1-2/P0-4——合并为单一标题：条目取并集按 PR 序 desc（#215>#211>#209>#207>#205>#204>#203；P2′① 编号由 git log `d797746` (#204) 钉死，序位随之无歧义），尾部自「T-Z1 宿主通道实施轮（裁定 A 落地…」起三变体逐字相同、原样保留。**顺带发现不代补**：「现行结构口径」行停在 #203 现测（363 路由/122 表/45 rev 单头 `c3d5e7f9a1b4`）已被 P1-1（384 路由/128 表/50 rev 单头 `e7c4a9d2f6b8`）超车——沿 P2′① 轮「由口径责任人统一补」先例，本轮不代改（口径现测纪律）。
 - 零代码零迁移零路由零桌面；pytest/vitest/mypy 口径全不动；无需 rebuild/alembic/重打包。
+## [未发布] — V3.1 P2：试点 Runbook 与最终验收勾稽（纯文档零代码，2026-11-08）
+
+- **范围**：任务书 §14 最终阶段（P2）+§15/§16/§17——试点启动的业务闸（真实项目数据+拍板项）未过前，P2 代码面=「把试点的执行面与验收面落盘」。八阶段实施（P0-0~P0-4、P1-2、P1-1、P1-3，PR #197~#221）已全部收口。
+- **NEW `docs/v3.1/pilot-runbook.md`**：①闸门声明（runbook 不构成执行授权）；②前置条件清单 **C1-C7**（C1-C3=真实脱敏项目数据闸：项目选定/访谈素材/模块骨架；C4-C7=拍板项：执行角色、宿主通道保持关闭确认〔默认〕、可选真实联调〔商用条款+12 前置〕、试点窗口与复盘排期）；③E2E 十步操作序（访谈导入→抽取→审阅→本体候选→方案→分解→workflow 草稿→发布运行→测试计划/执行/证据→指标复盘——逐步引用八阶段已交付端点与证据/事件锚）；④验收对照与复盘模板（pilot-复盘-<代号>-<日期>.md 落盘口径）。
+- **NEW `docs/v3.1/final-acceptance-checklist.md`**：任务书 §17 十九项逐项勾稽——**16 项达成**（附 PR/代码锚：P0-0 四报告/P0-1 追溯与审阅/P0-2 候选与稳定 ID/P0-3 方案与幂等分解/P0-4 draft 与干跑与 admin 发布/Workflow 恢复取消重试/Gate 唯一入口/产物溯源与撤回/失败不可改写/通道关闭可接管/指标灰态语义/Skill 治理态/全量回归/安全线）/ **2 项待条件**（#14 ZCode 真实联调=商用条款书面确认+12 条安全前置逐项通过+#17 E2E 试点本体=真实项目数据闸）/ **0 项未达成**。
+- 口径：零代码零迁移零路由零桌面（pytest **2354=2348+6s EXIT=0** 维持/vitest 951/mypy 279/路由 391/蓝图 49/表 130/**51 rev 单头 `e9c4a1f7b3d2`** 不变）；审计 CSV 零变化；无部署义务（纯文档——镜像不含 docs 运行面）。
+
 ## [未发布] — V3.1 P1-3：指标与经验沉淀（metrics 报表 v31 节七指标，2026-11-08）
 
 - **范围**：任务书 §11（P1-3）+ 00-gap-register 7.1/7.3 落地；**7.4（delivery_metric_daily）/7.5（skill_improvement_proposals）维持暂缓**（现报表即席聚合足够+skill 消费量闸未过——活库零数据，建表须先证聚合不足）。**7.2 零代码**：裁决列的事件名与本仓等价名逐一映射成立——`requirement_approved/rejected`→`requirement_reviewed`（P0-1，changes.decision）、`ontology_change_approved/materialized`→`ontology_change_set_confirmed`（P0-2，逐项物化结果随事件）、`delivery_plan_approved`→`delivery_plan_reviewed`+`delivery_plan_published`（P0-3）、`artifact_accepted/rejected`→`agent_artifact_reviewed`（goal-tb tb2）；`task_rework`/`artifact_revoked` 挂账（首个真实数据需求出现时立项，不预支埋点）。
