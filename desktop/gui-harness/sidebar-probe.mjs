@@ -74,6 +74,61 @@ async function main() {
   record("scroll-reaches-last-item", lastVisible && bottomStillVisible,
     `lastVisible=${lastVisible} bottomStillVisible=${bottomStillVisible}`)
 
+  // 6) account block is TWO rows, not four stacked lines (2026-11-09 footer compaction):
+  //    identity row (display name + role) on top, foot row (version | logout) below.
+  const account = sidebar.locator(".sidebar-account")
+  const identity = account.locator(".account-identity")
+  const foot = account.locator(".account-foot")
+  const rows = await account.evaluate((el) => {
+    const id = el.querySelector(".account-identity")
+    const ft = el.querySelector(".account-foot")
+    if (!id || !ft) return null
+    const a = id.getBoundingClientRect()
+    const b = ft.getBoundingClientRect()
+    return {
+      identityBottom: a.bottom,
+      footTop: b.top,
+      footBottom: b.bottom,
+      identityHeight: a.height,
+      footHeight: b.height,
+      blockHeight: el.getBoundingClientRect().height,
+    }
+  })
+  const twoRows = rows !== null && rows.identityBottom <= rows.footTop + 1
+  record("account-two-rows", twoRows,
+    rows
+      ? `identityBottom=${rows.identityBottom.toFixed(1)} footTop=${rows.footTop.toFixed(1)} stacked=${twoRows}`
+      : "identity/foot rows not found")
+
+  // 7) footer block is compact (two rows, not four): height cap 64px
+  //    (measured 60.4px on this build; the 4-line layout measured ~100px)
+  const compact = rows !== null && rows.blockHeight > 0 && rows.blockHeight <= 64
+  record("account-footer-compact", compact,
+    rows ? `blockHeight=${rows.blockHeight.toFixed(1)} (cap 64) rows=${rows.identityHeight.toFixed(1)}+${rows.footHeight.toFixed(1)}` : "no block")
+
+  // 8) all four original facts survive the compaction, and version+logout share one row
+  const facts = await account.evaluate((el) => {
+    const ft = el.querySelector(".account-foot")
+    const version = el.querySelector(".app-version")
+    const button = el.querySelector(".text-button")
+    const name = el.querySelector(".account-name")
+    const role = el.querySelector(".account-role")
+    const v = version ? version.getBoundingClientRect() : null
+    const b = button ? button.getBoundingClientRect() : null
+    return {
+      hasName: Boolean(name && (name.textContent || "").trim()),
+      hasRole: Boolean(role && (role.textContent || "").trim()),
+      hasVersion: Boolean(version && (version.textContent || "").trim()),
+      hasLogout: Boolean(button && (button.textContent || "").trim()),
+      sameFootRow: v && b ? Math.abs(v.top - b.top) < 12 : false,
+      versionLeft: v && b ? v.left < b.left : false,
+    }
+  })
+  record("account-facts-kept", facts.hasName && facts.hasRole && facts.hasVersion && facts.hasLogout,
+    JSON.stringify(facts))
+  record("version-and-logout-share-row", facts.sameFootRow && facts.versionLeft,
+    `sameFootRow=${facts.sameFootRow} versionLeft=${facts.versionLeft}`)
+
   // Screenshots for eyeballing (short + tall viewport, hover state, collapsed)
   await page.screenshot({ path: "desktop/gui-harness/screenshots/sidebar-short-hover.png" })
   const navBox = await nav.boundingBox()
@@ -89,6 +144,13 @@ async function main() {
   await page.getByRole("button", { name: /\u6536\u8d77\u4fa7\u8fb9\u680f/ }).click()
   await page.waitForTimeout(350)
   await page.screenshot({ path: "desktop/gui-harness/screenshots/sidebar-collapsed.png" })
+
+  // 9) collapsed state hides the WHOLE account block (two rows, not a stray remnant)
+  const collapsedHidden = await sidebar.locator(".sidebar-account").evaluate(
+    (el) => getComputedStyle(el).display === "none" || el.getBoundingClientRect().width === 0,
+  )
+  record("collapsed-hides-account", collapsedHidden,
+    `display=${await sidebar.locator(".sidebar-account").evaluate((el) => getComputedStyle(el).display)}`)
 
   await browser.close()
   const failed = results.filter((item) => !item.pass)

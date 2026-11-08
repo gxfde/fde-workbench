@@ -107,11 +107,19 @@ function fdeBridgePlugin() {
     var data = payload.data || {};
     token = data.access_token || null;
     refreshToken = data.refresh_token || null;
-    user = data.user || null;
+    user = toRendererUser(data.user);
     sessionStorage.setItem("fde-harness-access", token || "");
     sessionStorage.setItem("fde-harness-refresh", refreshToken || "");
     sessionStorage.setItem("fde-harness-user", JSON.stringify(user));
     return envelope({ accessToken: token, accessExpiresAt: data.access_expires_at, refreshExpiresAt: data.refresh_expires_at, user: user }, null);
+  }
+
+  // 服务端 user 是 snake_case（display_name），渲染层要 camelCase
+  // （displayName）——桌面端由 main/auth-ipc.ts 做这次转换（见其 :377），
+  // harness 必须同尺，否则侧栏账号名等 displayName 消费点全渲染成空。
+  function toRendererUser(raw) {
+    if (!raw) return null;
+    return Object.assign({}, raw, { displayName: raw.display_name || raw.displayName || "" });
   }
 
   async function refreshTokens() {
@@ -135,7 +143,7 @@ function fdeBridgePlugin() {
     token = sessionStorage.getItem("fde-harness-access") || null;
     refreshToken = sessionStorage.getItem("fde-harness-refresh") || null;
     var raw = sessionStorage.getItem("fde-harness-user");
-    user = raw ? JSON.parse(raw) : null;
+    user = raw ? toRendererUser(JSON.parse(raw)) : null;
   }
   restore();
 

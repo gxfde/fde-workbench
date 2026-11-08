@@ -547,3 +547,40 @@ describe("侧栏导航滚动契约（2026-11-09 底部裁切修复）", () => {
     expect(active).toContain("rgba(232, 163, 61")
   })
 })
+
+describe("侧栏账号区两行式契约（2026-11-09 四行占高反馈）", () => {
+  // 蔡工反馈：账号名/角色/版本/退出各占一行，占高过大不协调。
+  // 改造为两行式：上行 .account-identity=显示名+角色同基线；
+  // 下行 .account-foot=版本 | 退出登录 分居两端。本钉守住结构不被改回。
+  it("上行 .account-identity 是同基线 flex（名字可收缩省略，角色恒不缩）", () => {
+    const identity = block(styles, ".account-identity {")
+    expect(identity).toContain("display: flex")
+    expect(identity).toContain("align-items: baseline")
+    const link = block(styles, ".sidebar-account .account-link {")
+    expect(link).toContain("min-width: 0")
+    expect(link).toContain("text-overflow: ellipsis")
+    expect(block(styles, ".sidebar-account .account-role {")).toContain("flex: 0 0 auto")
+  })
+
+  it("下行 .account-foot 两端对齐（版本贴左、退出贴右）", () => {
+    expect(block(styles, ".account-foot {")).toContain("justify-content: space-between")
+  })
+
+  it("折叠态账号区整体让位（不再逐元素隐藏后留孤儿细线）", () => {
+    expect(styles).toContain(".app-shell.sidebar-collapsed .sidebar-account { display: none; }")
+    expect(styles).not.toContain(".app-shell.sidebar-collapsed .sidebar-account .account-name")
+  })
+
+  it("C3 钉保持：深底版本号小字不回退 11px", () => {
+    expect(block(styles, ".sidebar-account .app-version {")).not.toMatch(/11px/)
+  })
+
+  it("页脚整体压紧：行间距 2px、上内边距 10px、退出按钮行高 22px", () => {
+    // 这三条一起把页脚总高钉在 ~60px 以内（两行式浏览器实测 60.4px，
+    // 四行式约 100px）——防止日后把行距/内边距悄悄放回去。
+    const account = block(styles, ".sidebar-account {")
+    expect(account).toContain("gap: 2px")
+    expect(account).toMatch(/padding: 10px/)
+    expect(block(styles, ".sidebar-account .text-button {")).toContain("min-height: 22px")
+  })
+})

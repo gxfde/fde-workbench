@@ -590,20 +590,27 @@ select[multiple] {
 .nav-icon svg { display: block; }
 .nav-label { white-space: nowrap; font-weight: var(--weight-medium); }
 .sidebar-bottom { display: grid; gap: var(--space-3); margin-top: auto; }
-/* G1：同行令牌与魔法数字混写已消除（10px → var(--space-3)） */
-.sidebar-account { display: grid; gap: 5px; padding: var(--space-4) var(--space-3) 0; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+/* 账号区两行式（2026-11-09 蔡工反馈「四行占高不协调」）：上行=显示名+角色同一
+   基线；下行（.account-foot）=版本 | 退出登录 分居两端。信息不减、高度减半，
+   底部不再把导航空间挤占成「又一列内容」。 */
+.sidebar-account { display: grid; gap: 2px; padding: 10px var(--space-3) 0; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .sidebar-account small { color: var(--on-dark-secondary); }
+.account-identity { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
 /* C3：11px 深底小字升到 12px 并改用中性阶令牌 */
-.sidebar-account .app-version { color: var(--on-dark-secondary); font-size: var(--font-caption); }
-/* 深色上下文里的文字按钮：浅色文字 + 半透明悬停底 */
+.sidebar-account .app-version { color: var(--on-dark-muted); font-size: var(--font-caption); }
+/* 下行：版本贴左、退出贴右（.account-foot 为全仓唯一名——AccountPage 的
+   .account-meta 是另一套全局网格规则，刻意不共用，防隐式耦合） */
+.account-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+/* 深色上下文里的文字按钮：浅色文字 + 半透明悬停底。
+   min-height 收到 22px（全局 26px 偏大，撑高页脚第二行；22px 仍是可点行高）。 */
 .sidebar-account .text-button {
   color: var(--on-dark-secondary);
-  padding: 3px 4px;
-  margin-left: -4px;
-  justify-self: start;
+  min-height: 22px;
+  padding: 2px 4px;
+  margin-right: -4px;
 }
 .sidebar-account .text-button:hover { background: rgba(255, 255, 255, 0.10); color: var(--on-dark-primary); }
-/* 账号名/角色：此前无任何规则，角色行与退出按钮视觉上糊在一起 */
+/* 账号名/角色：同一基线的两个元素；名字可收缩省略，角色恒短不缩 */
 .sidebar-account .account-link {
   color: var(--on-dark-primary);
   text-decoration: none;
@@ -612,16 +619,17 @@ select[multiple] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .sidebar-account .account-link:hover { color: var(--brand-gold-bright); }
 .sidebar-account .account-link:focus-visible { outline: 2px solid var(--brand-gold-bright); outline-offset: 2px; }
-.sidebar-account .account-role { color: var(--on-dark-secondary); }
+.sidebar-account .account-role { color: var(--on-dark-muted); flex: 0 0 auto; font-size: var(--font-caption); }
 .workspace { container: workspace / inline-size; min-width: 0; padding: var(--space-8) clamp(var(--space-6), 4vw, 52px) var(--space-10); }
 
 .app-shell.sidebar-collapsed .brand-text { display: none; }
-.app-shell.sidebar-collapsed .sidebar-account .account-name,
-.app-shell.sidebar-collapsed .sidebar-account small,
-.app-shell.sidebar-collapsed .sidebar-account .text-button { display: none; }
+/* 折叠态：账号区整体让位（此前逐元素隐藏后只剩一条孤儿细线），退出走账号页 */
+.app-shell.sidebar-collapsed .sidebar-account { display: none; }
 .app-shell.sidebar-collapsed .nav-label { display: none; }
 .app-shell.sidebar-collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
 

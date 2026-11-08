@@ -106,20 +106,26 @@ export function AppShell({
           >
             <CollapseIcon />
           </button>
+          {/* 账号区两行式（2026-11-09 蔡工反馈四行占高不协调）：上行=显示名+角色
+              同一基线；下行=版本 | 退出登录 分居两端。全部信息保留，高度减半。 */}
           <div className="sidebar-account">
-            <a className="account-name account-link" href={routeHash({ kind: "account" })}>{user?.displayName}</a>
-            <small className="account-role">{roleLabel(user?.role)}</small>
-            {appVersion ? <small className="app-version">v{appVersion}</small> : null}
-            <button className="text-button" type="button" onClick={() => {
-              if (!canLeaveDirtyWorkspace("logout")) return
-              void confirm({
-                title: "退出登录",
-                description: "确定退出当前账号吗？",
-                confirmLabel: "退出登录",
-              }).then((accepted) => { if (accepted) void logout() })
-            }}>
-              退出登录
-            </button>
+            <div className="account-identity">
+              <a className="account-name account-link" href={routeHash({ kind: "account" })}>{user?.displayName}</a>
+              <small className="account-role">{roleLabel(user?.role)}</small>
+            </div>
+            <div className="account-foot">
+              {appVersion ? <small className="app-version">v{appVersion}</small> : null}
+              <button className="text-button" type="button" onClick={() => {
+                if (!canLeaveDirtyWorkspace("logout")) return
+                void confirm({
+                  title: "退出登录",
+                  description: "确定退出当前账号吗？",
+                  confirmLabel: "退出登录",
+                }).then((accepted) => { if (accepted) void logout() })
+              }}>
+                退出登录
+              </button>
+            </div>
           </div>
         </div>
       </aside>
