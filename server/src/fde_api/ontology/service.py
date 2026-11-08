@@ -1474,7 +1474,13 @@ def generate_discovery_candidates(
                 BusinessFact.extraction_id == extraction.id,
                 BusinessFact.review_status == "accepted",
             )
-            .order_by(BusinessFact.created_at, BusinessFact.id)
+            .order_by(
+                BusinessFact.created_at,
+                BusinessFact.subject,
+                BusinessFact.predicate,
+                BusinessFact.fact_type,
+                BusinessFact.id,
+            )
         ).all()
         if not facts:
             raise OntologyServiceError(
@@ -1517,6 +1523,15 @@ def generate_discovery_candidates(
                 "term_type": _FACT_TYPE_TO_TERM_TYPE.get(first_type, "entity"),
             })
             occupied.add(subject)
+        # 组间顺序必须确定：grouped 的键序来自事实行遍历序，而 created_at
+        # 同事务内相同（now() 是事务级常量）、id 为 uuid4 随机，单靠
+        # ORDER BY(created_at, id) 无法稳定 tie-break ⇒ 候选条目顺序会随
+        # 随机 UUID 抖动（同输入不同输出，评审看到的条目次序不稳定）。
+        # 两层保证：①上面的查询已带 subject/predicate/fact_type 确定性
+        # tie-break（真正修复）；②此处按 term 字典序再兜一层，防止后续
+        # 改动弱化查询排序时重新引入不确定性。与上面 definition 取 min /
+        # first_type 用 sorted 的「同输入恒同输出」风格一致。
+        items.sort(key=lambda item: item["term"])
         if not items:
             raise OntologyServiceError(
                 "no_candidates",

@@ -94,7 +94,11 @@ def test_generate_candidates_happy_path(db_session, d4_client, d4_settings) -> N
     change_set = data["change_set"]
     assert change_set["status"] == "draft"
     terms = [item["term"] for item in change_set["proposed_json"]]
-    assert terms == ["生产排程", "询盘处理"], "仅 accepted 事实进候选、按主体聚组；组序=subject 字典序（#209 CI 实红修正：单事务 created_at 全同+uuid4 id 无序，插入序不可依赖）"
+    # 组序=subject 字典序（#209 定的口径）；本轮把该口径落到服务层实现，
+    # 使固定顺序断言首次真正成立（此前仅改断言、服务层仍随机 ⇒ 约 50% flaky）。
+    assert terms == ["生产排程", "询盘处理"], "仅 accepted 事实进候选、按主体聚组；组序=subject 字典序"
+    # 顺序稳定性：同输入必同序，不依赖随机 uuid4 id
+    assert terms == sorted(terms), "候选条目按 term 字典序稳定输出（同输入恒同输出）"
     by_term = {item["term"]: item for item in change_set["proposed_json"]}
     inquiry = by_term["询盘处理"]
     assert inquiry["action"] == "create_term" and inquiry["term_type"] == "entity"
@@ -103,6 +107,45 @@ def test_generate_candidates_happy_path(db_session, d4_client, d4_settings) -> N
     assert data["cross_project_conflicts"] == []
     row = db_session.get(OntologyChangeSet, change_set["id"])
     assert row.captured_from == f"discovery:{extraction.id}"
+
+
+def test_generate_candidate_order_is_deterministic(db_session, d4_client, d4_settings) -> None:
+    """候选条目顺序必须确定（回归：created_at 同事务相同 + id 为 uuid4 随机）。
+
+    背景：business_facts.created_at 默认 now()（PG 事务级常量，同事务内所有
+    行相同），id 为 uuid4 随机。原先 ORDER BY(created_at, id) 的 tie-break
+    落到随机 UUID ⇒ grouped 键序随机 ⇒ 候选条目顺序抖动。
+    修复：查询补确定性 tie-break，且 items 按 term 字典序输出。
+
+    本用例刻意用「每次重建抽取 ⇒ 事实行 UUID 全新」的多次生成，
+    断言多次之间顺序完全一致——若实现依赖随机 UUID，多次结果会不同。
+    """
+    # 三个主体，插入顺序与字典序刻意相反：Z 开头最后、Y 居中、X 最前
+    facts = [
+        {"subject": "Zulu流程", "predicate": "现状", "review_status": "accepted"},
+        {"subject": "Yulu流程", "predicate": "现状", "review_status": "accepted"},
+        {"subject": "Xulu流程", "predicate": "现状", "review_status": "accepted"},
+    ]
+    observed: list[list[str]] = []
+    for i in range(6):
+        leader, project = _member_leader(db_session, d4_client, d4_settings, f"客户确定性{i}")
+        extraction = _extraction_with_facts(db_session, project, leader.user, facts=facts)
+        response = leader.post(
+            f"/api/v1/projects/{project.id}/ontology/candidates/generate",
+            json={"extraction_id": extraction.id},
+        )
+        assert response.status_code == 201, response.get_json()
+        terms = [item["term"] for item in response.get_json()["data"]["change_set"]["proposed_json"]]
+        observed.append(terms)
+        # 同主体聚成一组（3 条事实 → 3 个主体）
+        assert len(terms) == 3, f"按 subject 聚组，实得 {terms}"
+    # 顺序确定：所有轮次完全一致（依赖随机 UUID 时必然出现差异）
+    assert all(terms == observed[0] for terms in observed), (
+        f"同一输入多次生成须完全同序，实得 {observed}"
+    )
+    # 且为 term 字典序（不随插入序变化）
+    assert observed[0] == sorted(observed[0]), f"候选顺序须为 term 字典序，实得 {observed[0]}"
+    assert observed[0] == ["Xulu流程", "Yulu流程", "Zulu流程"], f"实得 {observed[0]}"
 
 
 def test_generate_skips_existing_names_and_reports(db_session, d4_client, d4_settings) -> None:
