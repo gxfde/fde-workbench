@@ -475,13 +475,21 @@ select[multiple] {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-6);
   padding: var(--space-6) var(--space-3) var(--space-5);
   background: linear-gradient(180deg, var(--sidebar-a) 0%, var(--sidebar-b) 100%);
   color: var(--on-dark-primary);
   overflow: hidden;
 }
-.sidebar-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  /* 品牌区收尾细线：给「品牌 / 导航 / 账号」三段式一个清晰的结构边界 */
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
 .brand-lockup { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .brand-logo {
   width: 34px;
@@ -510,7 +518,34 @@ select[multiple] {
 .sidebar-toggle svg { display: block; transition: transform 0.2s ease; }
 .app-shell.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
 .sidebar-toggle:hover { background: rgba(255, 255, 255, 0.14); color: var(--on-dark-primary); }
-.sidebar nav { display: grid; gap: 3px; }
+/* 导航是 sidebar 三段中的**弹性滚动段**（min-height:0 + overflow-y）：
+   导航项一多（admin 17 项）时在此处滚动，底部账号区永远钉在可视区内——
+   此前 nav 不可滚 + .sidebar overflow:hidden，底部被静默裁掉（2026-11-09 用户报告）。 */
+.sidebar nav {
+  display: grid;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scroll-behavior: smooth;
+  /* 悬停才显形的细滚动条（悬停前完全隐形，不占视觉重量） */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar:hover nav,
+.sidebar nav:focus-within { scrollbar-color: rgba(255, 255, 255, 0.22) transparent; }
+.sidebar nav::-webkit-scrollbar { width: 6px; }
+.sidebar nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+.sidebar:hover nav::-webkit-scrollbar-thumb,
+.sidebar nav:focus-within::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); }
+.sidebar nav::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.38); }
+.sidebar nav::-webkit-scrollbar-corner { background: transparent; }
+/* 折叠态 72px：滚动条让位给图标（滚轮/键盘仍可滚），不留滚动条视觉 */
+.app-shell.sidebar-collapsed .sidebar nav { scrollbar-width: none; padding-right: 0; }
+.app-shell.sidebar-collapsed .sidebar nav::-webkit-scrollbar { width: 0; }
 .nav-item {
   position: relative;
   display: flex;
@@ -529,11 +564,27 @@ select[multiple] {
 .nav-item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); color: var(--on-dark-primary); }
 .nav-item:disabled { color: var(--on-dark-disabled); cursor: not-allowed; }
 .nav-item.active {
-  /* S0 · C2：状态不依赖填充亮度；inset 3px 左指示条零位移，折叠态 72px 仍可辨 */
-  background: rgba(255, 255, 255, 0.09);
+  /* S0 · C2：状态不依赖填充亮度；inset 3px 左指示条零位移，折叠态 72px 仍可辨。
+     激活底＝金轨同源的一道横向金晕（从指示条向右淡出），只做补充通道不改状态语义 */
+  background: linear-gradient(
+    90deg,
+    rgba(232, 163, 61, 0.18) 0%,
+    rgba(232, 163, 61, 0.07) 46%,
+    rgba(255, 255, 255, 0.07) 100%
+  );
   color: var(--on-dark-primary);
   font-weight: var(--weight-medium);
   box-shadow: var(--shadow-inset-gold-rail);
+}
+/* 悬停激活项不得把金晕洗回白底（.nav-item:hover 特异性高于 .nav-item.active） */
+.nav-item.active:hover:not(:disabled) {
+  background: linear-gradient(
+    90deg,
+    rgba(232, 163, 61, 0.22) 0%,
+    rgba(232, 163, 61, 0.09) 46%,
+    rgba(255, 255, 255, 0.09) 100%
+  );
+  color: var(--on-dark-primary);
 }
 .nav-icon { display: grid; width: 22px; height: 22px; flex: 0 0 auto; place-items: center; }
 .nav-icon svg { display: block; }

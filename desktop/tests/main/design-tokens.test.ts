@@ -516,3 +516,34 @@ describe("官网 site/index.html · 令牌与真源一致", () => {
     )
   })
 })
+
+describe("侧栏导航滚动契约（2026-11-09 底部裁切修复）", () => {
+  // 事故：.sidebar 是 100vh + overflow:hidden 的 flex 列，nav 不可滚——
+  // admin 可见 17 个导航项时底部账号区被静默裁掉。本钉守住「nav 是
+  // 弹性滚动段、底部钉住」的结构，防止后续改动把 overflow 抹掉。
+  it(".sidebar nav 是弹性滚动段（min-height:0 + overflow-y:auto）", () => {
+    const nav = block(styles, ".sidebar nav {")
+    expect(nav).toContain("min-height: 0")
+    expect(nav).toContain("overflow-y: auto")
+    expect(nav).toContain("flex: 1 1 auto")
+  })
+
+  it(".sidebar-bottom 钉底（margin-top:auto）且侧栏自身保持 overflow:hidden", () => {
+    expect(block(styles, ".sidebar-bottom {")).toContain("margin-top: auto")
+    expect(block(styles, ".sidebar {")).toContain("overflow: hidden")
+  })
+
+  it("滚动条悬停显形 + 折叠态让位（72px 不留滚动条视觉）", () => {
+    expect(styles).toContain(".sidebar:hover nav::-webkit-scrollbar-thumb")
+    expect(styles).toContain(
+      ".app-shell.sidebar-collapsed .sidebar nav { scrollbar-width: none; padding-right: 0; }",
+    )
+  })
+
+  it("激活态金晕是补充通道：金轨 box-shadow 仍在，且不用 brand-gradient", () => {
+    const active = block(styles, ".nav-item.active {")
+    expect(active).toContain("box-shadow: var(--shadow-inset-gold-rail)")
+    expect(active).not.toContain("brand-gradient")
+    expect(active).toContain("rgba(232, 163, 61")
+  })
+})
