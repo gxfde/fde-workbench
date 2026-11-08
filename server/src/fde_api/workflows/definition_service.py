@@ -42,6 +42,11 @@ PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
 DEFAULT_CONTEXT_KEYS = frozenset({"project_id", "run_id", "initiated_by_user_id"})
 MAX_RETRIES_LIMIT = 10
 APPROVAL_EXPIRES_RANGE = (1, 24 * 60)
+# V3.1 P0-4 节点契约扩展（00-gap-register 4.4）：草稿期字段校验先行，
+# 执行器消费（超时强杀/失败分类归一 error 码）随 P1 执行通道轮；
+# 补偿动作语义需设计轮拍板，本轮不建字段。
+MAX_NODE_TIMEOUT_SECONDS = 24 * 60 * 60
+NODE_FAILURE_CLASSES = frozenset({"retryable", "fatal", "needs_human"})
 # human_approval.capability 白名单 = 能力登记表（system.* 不开放给工作流审批门，
 # 与 create_automation_task 的 requested_capabilities 同规则）
 APPROVAL_CAPABILITIES = frozenset(
@@ -171,6 +176,9 @@ def validate_dag(
     allowed_node_fields = {
         "key", "type", "ref", "depends_on", "when", "output", "max_retries",
         "params", "max_cost_units", "capability", "expires_minutes", "effect",
+        # V3.1 P0-4 节点契约扩展（4.4）：timeout/输入输出 Schema/失败分类/方案关联——
+        # 本轮只做草稿期形状校验，执行器增强随 P1 执行通道轮
+        "timeout_seconds", "input_schema", "output_schema", "failure_class", "plan_ref",
     }
     outputs: dict[str, str] = {}
     deps_map: dict[str, list[str]] = {}
@@ -237,6 +245,40 @@ def validate_dag(
         effect = node.get("effect")
         if effect is not None and effect not in ("read", "external"):
             errors.append(DagIssue("invalid_effect", f"节点 {key} 的 effect 须为 read 或 external。", key))
+        # V3.1 P0-4 契约字段校验（草稿期；执行器消费随 P1 执行通道轮）
+        timeout_seconds = node.get("timeout_seconds")
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, int)
+            or not 1 <= timeout_seconds <= MAX_NODE_TIMEOUT_SECONDS
+        ):
+            errors.append(
+                DagIssue(
+                    "invalid_timeout_seconds",
+                    f"节点 {key} 的 timeout_seconds 须为 1–{MAX_NODE_TIMEOUT_SECONDS} 的整数。",
+                    key,
+                )
+            )
+        for schema_field in ("input_schema", "output_schema"):
+            schema = node.get(schema_field)
+            if schema is not None and not isinstance(schema, dict):
+                errors.append(
+                    DagIssue(f"invalid_{schema_field}", f"节点 {key} 的 {schema_field} 须为 JSON Schema 对象。", key)
+                )
+        failure_class = node.get("failure_class")
+        if failure_class is not None and failure_class not in NODE_FAILURE_CLASSES:
+            errors.append(
+                DagIssue(
+                    "invalid_failure_class",
+                    f"节点 {key} 的 failure_class 须为 {'/'.join(sorted(NODE_FAILURE_CLASSES))}。",
+                    key,
+                )
+            )
+        plan_ref = node.get("plan_ref")
+        if plan_ref is not None and (not isinstance(plan_ref, str) or not plan_ref.strip()):
+            errors.append(
+                DagIssue("invalid_plan_ref", f"节点 {key} 的 plan_ref 须为非空字符串（交付方案 id）。", key)
+            )
 
         ref = node.get("ref")
         if node_type == "call":

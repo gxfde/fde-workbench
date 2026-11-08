@@ -315,3 +315,134 @@ def compile_delivery_preview(
         "workflow_draft": {"name": workflow_name, "description": description, "dag_json": dag_json},
         "provenance": provenance,
     }
+
+
+# ---------------------------------------------------------------------------
+# V3.1 P0-4 draft-from-plan：已批准/已发布交付方案 → workflow 定义草稿
+# （00-gap-register 4.8；沿 compile_delivery_preview 先例：纯函数+白名单注入制，
+# 落库走既有 create_definition 通道，不建平行持久化路径）
+
+
+def compile_plan_workflow(
+    plan: Mapping[str, Any],
+    *,
+    implementation_skill_ref: str,
+    approval_capability: str = "workbench.write",
+) -> dict[str, Any]:
+    """交付方案（serialize_plan 形状）→ workflow 定义草稿 + provenance。
+
+    ``plan`` 须为 **approved/published**（草稿方案没有坐实口径，编译只对已审阅
+    的方案负责——语义对齐 compile_delivery_preview 只收 confirmed 变更集）；
+    ``implementation_skill_ref`` = 实施节点的 published skill 显式版本引用
+    （<key>@<版本号>，调用方从白名单取，纯函数不查库）。
+
+    三节点形状（四类节点可表达）：方案确认（human_approval，plan_ref 关联方案）
+    → 实施（skill，消费方案条目摘要，max_retries=1+timeout+failure_class 契约
+    字段首发）→ 验收确认（human_approval）。输出确定性：同一输入恒同输出
+    （标题剔除 ``{{``/``}}`` 防占位符误判，其余原样搬运）。
+    """
+    if not isinstance(plan, Mapping) or plan.get("status") not in ("approved", "published"):
+        raise DeliveryCompileError("plan_not_approved: 只接受 approved/published 交付方案。")
+    if not isinstance(implementation_skill_ref, str) or SKILL_REF_PATTERN.fullmatch(implementation_skill_ref) is None:
+        raise DeliveryCompileError(
+            "invalid_skill_ref: implementation_skill_ref 须为 <skill_key>@<版本号>（published 显式版本）。"
+        )
+    if approval_capability not in APPROVAL_CAPABILITIES:
+        raise DeliveryCompileError(
+            f"invalid_capability: capability 不在工作流审批白名单（system.* 不开放）：{approval_capability!r}。"
+        )
+    items = plan.get("items")
+    if not isinstance(items, list) or not all(isinstance(item, Mapping) for item in items):
+        raise DeliveryCompileError("invalid_plan_items: items 须为对象数组。")
+    plan_id = _clean(plan.get("id"))
+    if not plan_id:
+        raise DeliveryCompileError("invalid_plan_items: 缺方案 id。")
+    # 剔除花括号防占位符误判（标题进 params 文本时不得引入 {{...}} 形状）
+    title = _clean(plan.get("title")).replace("{{", "").replace("}}", "") or "未命名交付方案"
+    requirement_lines = [
+        f"- {(item.get('title') or '').strip() or '待补'}"
+        for item in items
+        if item.get("item_type") == "requirement"
+    ]
+    risk_lines = [
+        f"- {(item.get('title') or '').strip() or '待补'}"
+        for item in items
+        if item.get("item_type") == "risk"
+    ]
+    acceptance_lines = [
+        f"- {(item.get('title') or '').strip() or '待补'}"
+        for item in items
+        if item.get("item_type") in ("acceptance", "milestone")
+    ]
+
+    workflow_name = _truncate(f"交付执行：{title}", 120)
+    description = (
+        f"draft-from-plan 由交付方案《{title}》生成（方案 id={plan_id}；"
+        f"需求条目 {len(requirement_lines)} 项、风险 {len(risk_lines)} 项、"
+        f"验收/里程碑 {len(acceptance_lines)} 项）。"
+        "草稿：人工校验并发布后才可运行；实施节点由所选 published 技能执行。"
+    )
+    dag_json = {
+        "nodes": [
+            {
+                "key": "plan_review",
+                "type": "human_approval",
+                "depends_on": [],
+                "capability": approval_capability,
+                "expires_minutes": 60,
+                "plan_ref": plan_id,
+            },
+            {
+                "key": "implement",
+                "type": "skill",
+                "ref": implementation_skill_ref,
+                "depends_on": ["plan_review"],
+                "output": "implementation_brief",
+                "max_retries": 1,
+                "timeout_seconds": 3600,
+                "failure_class": "retryable",
+                "plan_ref": plan_id,
+                "params": {
+                    "project_id": "{{project_id}}",
+                    "objective": (
+                        f"按交付方案《{title}》执行实施段："
+                        + ("；".join(line.lstrip("- ") for line in requirement_lines) if requirement_lines else "方案无需求条目")
+                        + "。产物与证据候选按平台口径留痕，人工确认后才采纳。"
+                    ),
+                    "risk_notes": "\n".join(risk_lines) if risk_lines else "无已登记风险条目",
+                    "acceptance_notes": "\n".join(acceptance_lines) if acceptance_lines else "验收口径待人工补齐",
+                },
+            },
+            {
+                "key": "acceptance_review",
+                "type": "human_approval",
+                "depends_on": ["implement"],
+                "capability": approval_capability,
+                "expires_minutes": 1440,
+                "plan_ref": plan_id,
+            },
+        ]
+    }
+
+    provenance: list[dict[str, Any]] = [
+        {
+            "field": "workflow_draft",
+            "source": f"delivery_plan:{plan_id}",
+            "plan_status": plan.get("status"),
+            "plan_version": plan.get("version"),
+            "requirement_count": len(requirement_lines),
+            "risk_count": len(risk_lines),
+            "acceptance_count": len(acceptance_lines),
+        },
+        {
+            "field": "workflow_draft.implement",
+            "source": "draft-from-plan/v1",
+            "implementation_skill_ref": implementation_skill_ref,
+        },
+    ]
+    return {
+        "kind": "plan_workflow_draft",
+        "plan": {"id": plan_id, "title": title, "status": plan.get("status")},
+        "workflow_draft": {"name": workflow_name, "description": description, "dag_json": dag_json},
+        "provenance": provenance,
+    }

@@ -1,10 +1,10 @@
 # V3.1 阶段状态
 
-- 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）
-- 当前分支：`feat/v31-p0-1-discovery`（隔离 worktree `D:/test/fde-wt-v31p0`）
-- 当前阶段：P0-3 交付方案生成与任务分解（completed 待合并）；P0-2 已收口（PR #205 合并 `858e090`）
-- 状态：in_progress（P0-3 已交付）
-- 开始/完成时间：P0-0=2026-11-07 完成（PR #197 已合并 fork/main `14d2b62`）；P0-1 批A=2026-11-08 完成
+- 基线 SHA：P0-0 审计=`65db88c`；P0-1 批A 开发基线=fork/main `9aaa4ef`（含 #197 本线 P0-0 与 #198–201 V3.2 模拟训练场并发并入）；P0-4 开发基线=fork/main `889f964`
+- 当前分支：`feat/v31-p04-workflow-templates`（隔离 worktree `D:/test/fde-wt-v31p2`）
+- 当前阶段：P0-4 Workflow 模板与草稿生成（completed 本 PR）；P0-3 已收口（PR #207 合并 `889f964`）
+- 状态：in_progress（P0-4 已交付）
+- 开始/完成时间：P0-0=2026-11-07 完成（PR #197 已合并 fork/main `14d2b62`）；P0-1 批A=2026-11-08 完成；P0-3=2026-11-08 完成（PR #207 已合并 fork/main `889f964`）；P0-4=2026-11-08 交付
 
 ## P0-0（completed，已合并）
 
@@ -34,14 +34,22 @@
 - **交付**：ADR-002（decisions/）+ 候选桥（`generate_discovery_candidates`：accepted 事实→create_term 条目→既有 change-set 管线；幂等/确定性/占用跳过）+ 稳定 ID 试点（subjects+term_id 迁移 `d6f2a8b4c9e1`；confirmed 落定自动链接同名 subject=回填；合并不改写）+ D-1 只读告警。+2 路由 365/46 rev/表 122。
 - **ADR 摘要**：control/ontology.py=AI 阅读语义快照（MCP 契约冻结）；ontology/=唯一治理权威；业务表写面关联逐步走 term_id（试点：research subjects），读面/影响分析仍以名字域为权威。
 
-## P0-3（completed，本 PR）
+## P0-3（completed，已合并 PR #207 `889f964`）
 
 - **交付**：NEW plans/ 模块（models/service/routes）+ 迁移 `a9c1e5f7b3d8`（48 rev）+ 6 路由 + 5 例测试。生成器=确定性拼装（accepted 需求逐条成目/confirmed 术语范围/needs_clarification 风险聚合，无输入 409）；审阅流 approved/rejected+发布+旧 published 退位 superseded；任务分解 dry_run 预览+选择性创建+幂等（每条目至多一任务，待认领不指派）。
 - **实施修正**：风险素材双重过滤恒空（accepted×open）→独立查 needs_clarification；ProjectTask 无 project_id（经模块间接挂）。
 
+## P0-4（completed，本 PR）
+
+- **交付**（00-gap-register 4.4~4.10 全落地）：①种子通道——NEW `seeds/workflow-templates.json` 三套首批模板（任务书 §8：需求发现/方案实施/自动化交付，全部用既有四类节点表达）+ NEW `workflows/templates.py`（fail-fast 装载+`seed_workflow_templates` 幂等落库〔沿 seed_public_skills 先例：active admin actor、落库即 publish 锁版；幂等锚=平台定义 name，已存在绝不覆盖〕+`list_published_templates` 只读投影）+ CLI `seed-workflow-templates`（部署顺序：先 seed-public-skills）；②节点契约扩展——`validate_dag` 白名单 +5 草稿期字段（`timeout_seconds` 1..86400/`input_schema`/`output_schema`/`failure_class` 三值闭集/`plan_ref`），执行器消费随 P1 执行通道轮（补偿动作需设计轮拍板，不建字段）；③draft-from-plan——`compile_plan_workflow` 纯函数（只收 approved/published；三节点形 plan_review→implement〔skill 注入制+契约字段首发〕→acceptance_review；标题剔除 `{{}}` 防占位符误判）+ `POST /api/v1/projects/{id}/workflows/draft-from-plan`（落库走既有 create_definition 通道，不建平行入口）；④validate 干跑——`POST /api/v1/projects/{id}/workflows/{def_id}/validate`（can_view 零副作用，errors/warnings/order 明细）；⑤模板只读面——`GET /api/v1/workflow-templates`（已认证可见 published 平台模板，dag 全文携带）。**D-2 拍板执行**：发布权限维持 admin-only（零代码，publish 路由不动；留痕可推翻）。
+- **口径**：路由 374→**377**（+3，全不进 api_catalog）；蓝图 46 不变（新路由挂既有 workflows_blueprint，BLUEPRINTS 无需同步）；**零迁移**（48 rev 单头不变）；表 125 不变；pytest 2321→**2331**（+10 NEW `test_workflow_templates.py`：种子对账/fail-fast/字段校验/纯函数确定性/路由全闸/干跑/模板只读面）；mypy 279 不变；vitest 951 不变（零桌面）。
+- **测试纪律**：三变异验证全红→还原→绿（幂等跳过摘除/`failure_class` 校验摘除/plan 状态闸摘除）；种子↔DB 对账钉（行名+dag 逐字节一致）。
+- **顺带修复（#209 CI 实红）**：P0-2 候选组序非确定性（单事务 created_at 全同+uuid4 id 无序）→分组迭代改 subject 字典序；测试期望同步。
+- **Gate 纪律（4.11）**：现状维持——workflow 产物只能经 `output_json.gate_evidence` 挂候选，采纳唯一入口=真人提交闸；模板③证据段文案如实表述该边界。
+
 ## 是否允许进入下一阶段
 
-P0-3 合并并部署后 → **P0-4 Workflow 模板与草稿生成**（三套模板内容新建+种子通道+draft-from-plan 泛化 compiler.py；D-2 发布权限拍板项维持 admin-only 先行）。P0-2 部署义务已履行（三镜像+alembic d6f2a8b4c9e1+ready 活体绿）；P0-3 部署随本 PR 合并后执行。
+P0-4 合并并部署后（部署义务：三镜像 rebuild + `alembic upgrade head`〔幂等 no-op，零迁移〕+ **`seed-workflow-templates` 幂等落库** + `/api/v1/health/ready` 活体）→ **P1-2 自动测试与证据**（任务书 §13：测试计划→用例→执行→证据落证；复用 gate evidence 登记簿与任务产物候选挂接，00-gap-register §6 裁决待精读）。D-2 已按建议拍板执行（admin-only 维持）；D-1 已随 P0-2 以只读告警落地。
 
 ## 本阶段目标
 

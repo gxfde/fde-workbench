@@ -12,7 +12,9 @@ from flask import Blueprint, g, jsonify, request
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
 from fde_api.extensions import db
-from fde_api.workflows import definition_service, executor
+from fde_api.plans import service as plans_service
+from fde_api.plans.service import PlansServiceError
+from fde_api.workflows import compiler, definition_service, executor, templates as workflow_templates
 from fde_api.workflows.executor import WorkflowRunError
 
 workflows_blueprint = Blueprint("workflows", __name__)
@@ -164,3 +166,97 @@ def resume_workflow_run_route(project_id, run_id):
 def list_platform_workflows_route():
     """平台模板工作流（admin，project_id NULL）。"""
     return jsonify({"data": {"items": executor.list_platform_definitions(actor=g.current_user)}, "error": None})
+
+
+# ---------------------------------------------------------------------------
+# V3.1 P0-4：模板只读面 / draft-from-plan / validate 干跑（00-gap-register 4.7/4.8/4.9）
+# 发布权限维持 admin-only（拍板项 D-2 裁决：试点期由 admin 发布）——上方 publish 路由不动。
+
+
+@workflows_blueprint.errorhandler(PlansServiceError)
+def plans_error(error):
+    return error_response(error.code, error.message, error.status, error.detail or None)
+
+
+@workflows_blueprint.get("/api/v1/workflow-templates")
+@require_auth
+def list_workflow_templates_route():
+    """平台模板只读面（已认证；任务书 §8 GET /api/workflows/templates 语义）。
+
+    与上方 admin 平台列表面分工：本路由面向项目成员的模板浏览（published
+    才可见，dag 全文携带供「复制为项目草稿」），不含 draft/archived。
+    """
+    with db.session() as session:
+        data = {"items": workflow_templates.list_published_templates(session)}
+    return jsonify({"data": data, "error": None})
+
+
+@workflows_blueprint.post("/api/v1/projects/<project_id>/workflows/draft-from-plan")
+@require_auth
+def draft_workflow_from_plan_route(project_id):
+    """从已批准/已发布交付方案生成定义草稿（can_manage；P0-4 4.8）。
+
+    落库走既有 create_definition 通道（白名单全量复校），不建平行持久化路径；
+    输出确定性由 compile_plan_workflow 纯函数保证（标题含 {{}} 已剔除）。
+    """
+    payload = _payload()
+    plan_id = payload.get("plan_id")
+    skill_ref = payload.get("implementation_skill_ref")
+    if not isinstance(plan_id, str) or not plan_id.strip():
+        raise WorkflowRunError("invalid_request", "plan_id 必填且须为字符串。", 400)
+    if not isinstance(skill_ref, str) or not skill_ref.strip():
+        raise WorkflowRunError("invalid_request", "implementation_skill_ref 必填且须为字符串。", 400)
+    approval_capability = payload.get("approval_capability") or "workbench.write"
+    if not isinstance(approval_capability, str):
+        raise WorkflowRunError("invalid_request", "approval_capability 须为字符串。", 400)
+    with db.session() as session, session.begin():
+        executor.load_project(session, g.current_user, project_id, manage=True)
+        plan = plans_service.load_plan_in_project(
+            session, g.current_user, project_id, plan_id.strip(), manage=True
+        )
+        try:
+            compiled = compiler.compile_plan_workflow(
+                plans_service.serialize_plan(session, plan),
+                implementation_skill_ref=skill_ref.strip(),
+                approval_capability=approval_capability,
+            )
+        except compiler.DeliveryCompileError as error:
+            code = error.args[0].split(":", 1)[0] if error.args else "invalid_plan"
+            raise definition_service.WorkflowDefinitionError(code, str(error), 409) from error
+        definition = definition_service.create_definition(
+            session,
+            actor=g.current_user,
+            project_id=project_id,
+            name=compiled["workflow_draft"]["name"],
+            dag=compiled["workflow_draft"]["dag_json"],
+            description=compiled["workflow_draft"]["description"],
+        )
+        data = {
+            "definition": definition_service.serialize_definition(definition),
+            "provenance": compiled["provenance"],
+        }
+    return jsonify({"data": data, "error": None}), 201
+
+
+@workflows_blueprint.post("/api/v1/projects/<project_id>/workflows/<definition_id>/validate")
+@require_auth
+def validate_workflow_route(project_id, definition_id):
+    """定义干跑校验（can_view，零副作用；P0-4 4.9）：复用 validate_dag_against_registry。
+
+    与 create/update/publish 内联校验同尺，只是把明细面（含告警）独立暴露，
+    供发布前人工校验读。不落任何事件/行。
+    """
+    with db.session() as session:
+        _project, definition = executor.load_definition(
+            session, g.current_user, project_id, definition_id, manage=False
+        )
+        validation = definition_service.validate_dag_against_registry(session, definition.dag_json)
+        data = {
+            "valid": validation.ok,
+            "errors": [issue.as_dict() for issue in validation.errors],
+            "warnings": [issue.as_dict() for issue in validation.warnings],
+            "order": list(validation.order),
+            "version": definition.version,
+            "content_sha256": definition.content_sha256,
+        }
+    return jsonify({"data": data, "error": None})

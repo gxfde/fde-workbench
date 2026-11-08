@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.1 P0-4：Workflow 模板与草稿生成（种子通道+三套模板+draft-from-plan，2026-11-08）
+
+- **范围**：任务书 §8（P0-4）——平台模板底座补种子通道，三套首批模板用既有四类节点表达；方案→Workflow 草稿生成（draft-from-plan）；发布权限拍板项 D-2 维持 admin-only。设计裁决见 `docs/v3.1/00-gap-register.md` P0-4 节（4.5 底座在无种子通道/4.6 三套内容新建/4.4 契约字段分两步/4.8 泛化 compiler 先例/4.9 独立干跑端点）。
+- **种子通道（4.5+4.6）**：NEW `seeds/workflow-templates.json`（需求发现=访谈确认→调研技能→事实/需求人工审核；方案实施=方案确认→`solutions.create` 骨架→任务整理→计划发布确认；自动化交付=任务确认→执行完成人工确认→证据汇总→Gate 前确认——**执行段采用人工收口：宿主执行通道开放前不自动触发执行；证据只挂候选，采纳唯一入口=真人提交闸**）。NEW `workflows/templates.py`：fail-fast 装载（形状校验+进程级缓存，沿 `tool_groups.json` 先例）+ `seed_workflow_templates` 幂等落库（沿 `seed_public_skills` 先例：active admin 为 actor、落库即 `publish_definition` 锁版快照；**幂等锚=平台定义 name，已存在即跳过绝不覆盖人工改动**；种子 dag 落库前过 `validate_dag_against_registry` 全量校验，白名单缺引用 fail-fast——**部署顺序：先 `seed-public-skills` 再 `seed-workflow-templates`**）+ `list_published_templates` 只读投影。CLI +`seed-workflow-templates` 命令。
+- **节点契约扩展（4.4，草稿期先行）**：`validate_dag` 节点字段白名单 +5——`timeout_seconds`（1..86400 整数）、`input_schema`/`output_schema`（JSON Schema 对象形状）、`failure_class`（`retryable`/`fatal`/`needs_human` 闭集）、`plan_ref`（非空字符串，方案关联）；**执行器增强（超时强杀/失败分类归一 error 码）随 P1 执行通道轮；补偿动作语义需设计轮拍板，本轮不建字段**（未知字段仍被 `unknown_field` 拒绝）。
+- **draft-from-plan（4.8）**：`compile_plan_workflow` 纯函数（compiler.py，沿 `compile_delivery_preview` 先例：白名单注入制、确定性输出、provenance 溯源）——只收 **approved/published** 方案（草稿方案无坐实口径，语义对齐 confirmed-only）；三节点形 `plan_review`（human_approval，plan_ref 关联方案）→ `implement`（skill 显式版本注入制，params 携带方案条目摘要+契约字段首发）→ `acceptance_review`（human_approval）；**标题剔除 `{{}}` 防占位符误判**。路由 `POST /api/v1/projects/{id}/workflows/draft-from-plan`（can_manage）：**落库走既有 `create_definition` 通道（白名单全量复校），不建平行持久化路径**；跨项目方案 404 不泄露存在性；compile 错误映射 409（`plan_not_approved`/`invalid_skill_ref`/`invalid_capability`/`invalid_plan_items`）。
+- **validate 干跑端点（4.9）**：`POST /api/v1/projects/{id}/workflows/{def_id}/validate`（can_view，零副作用）——复用 `validate_dag_against_registry`（与创建/发布闸同尺），返回 `valid/errors/warnings/order/version/content_sha256` 明细；坏 dag 如实报 issue 码不静默。
+- **模板只读面（4.7）**：`GET /api/v1/workflow-templates`（require_auth 已认证可见）——只列 published 平台模板（draft/archived 不外泄），id/name/description/version/content_sha256/nodes 摘要+dag 全文（供「复制为项目草稿」消费）；既有 admin 平台列表 `GET /api/v1/workflows` 权限不变。
+- **D-2 拍板执行**：发布权限维持 admin-only（任务书要求「人工发布」未指定角色；放开到 can_manage 是权限面扩张——按审计建议拍板：试点期由 admin 发布，留痕可推翻，publish 路由零改动）。
+- **顺带修复（#209 CI 实红根因）**：P0-2 `generate_discovery_candidates` 组序非确定性——facts 查询 `order_by(created_at, id)` 在单事务插入时 created_at 全同（事务时间戳）而 id=uuid4 无内在序，组序实为抽签（本地插入序 vs CI 字典序翻转，test_generate_candidates_happy_path 红）。修法：分组迭代改 `sorted(grouped)`（subject 字典序，同「字典序最小」纪律），候选条目与 skipped 双列表同输入恒同序（变更集指纹跨环境稳定）；测试断言改字典序期望+按名定位条目。ontology 邻域 57 例绿+mypy 279 不变。
+- **API（+3 路由 374→377，全部挂既有 workflows 蓝图〔BLUEPRINTS 无需同步〕、全部不进 api_catalog）**；**零迁移**（48 rev 单头 `a9c1e5f7b3d8` 不变；模板落库复用既有 `workflow_definitions`/`workflow_definition_versions` 两表，零新表）。
+- **测试**：NEW `test_workflow_templates.py` 10 例（种子形状+真实白名单下 dag 全绿零告警/`seed_workflow_templates` 幂等二轮+种子↔DB 逐字节对账/缺 published 技能 fail-fast/契约字段校验九连+补偿动作 `unknown_field` 仍拒/纯函数确定性+输入四闸+花括号剔除/draft-from-plan 全闸族〔draft 409/未发布技能 422/201 落库/provenance/跨项目 404/member 403〕/干跑端点 valid+坏 dag 明细+viewer 可达+stranger 403+404/模板只读面 3 套+draft 不外泄+401+admin 面权限不变）；**三变异验证全红→还原→绿**（幂等跳过摘除/`failure_class` 校验摘除/plan 状态闸摘除）；邻域回归 workflows+plans 63 例全绿。
+- 口径：pytest **2331 收集 = 2325 passed + 6 skipped**（本地全量实测，本轮 +10；CI 终值以本 PR run 为准）/ vitest **951** 不变（桌面零改动）/ 路由 **377** / 蓝图 **46** / 表 **125** 不变 / **48 rev 单头 `a9c1e5f7b3d8`** / mypy 279 不变；审计 CSV 已重生成（377/46/125/48 逐位一致，route CSV 375→378 行 `wc -l` 核对，DB CSV 零变化）；server 变更 ⇒ 合并后 rebuild 三镜像 + `alembic upgrade head`（零迁移，幂等 no-op）+ **`seed-workflow-templates` 幂等落库**（顺序在 seed-public-skills 之后）。
+
 ## [未发布] — V3.1 P0-3：交付方案生成与任务分解（plans 三表+确定性生成器，2026-11-08）
 
 - **范围**：任务书 §7（P0-3）——从已批准需求/已接受事实/confirmed 术语生成可审核 Delivery Plan，映射到既有 project_tasks（不新建平行任务系统）。设计裁决见 `docs/v3.1/00-gap-register.md` P0-3 节（三表负结论核验=全仓 grep 零命中；任务唯一事实源=project_tasks 原文落地）。

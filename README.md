@@ -124,6 +124,8 @@ docker compose exec api alembic upgrade head
 docker compose exec api flask --app fde_api.wsgi:app bootstrap-open-source
 # 可选：灌入门禁清单 / 收款里程碑 / SOP 种子数据
 docker compose exec api python load_seeds.py
+# 可选：灌入平台工作流模板三套（V3.1 P0-4；幂等，依赖 bootstrap 已灌的公共技能）
+docker compose exec api flask --app fde_api.wsgi:app seed-workflow-templates
 ```
 
 初始化命令可重复执行，不会覆盖已有数据。全新数据库会创建一个必须首次改密的管理员：

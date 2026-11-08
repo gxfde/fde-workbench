@@ -398,6 +398,18 @@ def _owned_plan(session, actor, plan_id: str, *, manage: bool) -> DeliveryPlan:
     return plan
 
 
+def load_plan_in_project(session, actor, project_id: str, plan_id: str, *, manage: bool) -> DeliveryPlan:
+    """项目内方案装载（V3.1 P0-4 draft-from-plan 复用）：先验归属再验权限。
+
+    跨项目方案一律 404（不泄露存在性）；项目内无权限 403。
+    """
+    plan = session.get(DeliveryPlan, plan_id)
+    if plan is None or plan.project_id != project_id:
+        raise _error("plan_not_found", "交付方案不存在。", 404)
+    _require_project(session, actor, project_id, manage=manage)
+    return plan
+
+
 def serialize_plan(session, plan: DeliveryPlan) -> dict[str, Any]:
     items = session.scalars(
         select(DeliveryPlanItem).where(DeliveryPlanItem.plan_id == plan.id).order_by(DeliveryPlanItem.sort_order)

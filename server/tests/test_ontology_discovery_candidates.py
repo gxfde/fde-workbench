@@ -94,10 +94,11 @@ def test_generate_candidates_happy_path(db_session, d4_client, d4_settings) -> N
     change_set = data["change_set"]
     assert change_set["status"] == "draft"
     terms = [item["term"] for item in change_set["proposed_json"]]
-    assert terms == ["询盘处理", "生产排程"], "仅 accepted 事实进候选、按主体聚组"
-    first = change_set["proposed_json"][0]
-    assert first["action"] == "create_term" and first["term_type"] == "entity"
-    assert "当前步骤" in first["definition"]
+    assert terms == ["生产排程", "询盘处理"], "仅 accepted 事实进候选、按主体聚组；组序=subject 字典序（#209 CI 实红修正：单事务 created_at 全同+uuid4 id 无序，插入序不可依赖）"
+    by_term = {item["term"]: item for item in change_set["proposed_json"]}
+    inquiry = by_term["询盘处理"]
+    assert inquiry["action"] == "create_term" and inquiry["term_type"] == "entity"
+    assert "当前步骤" in inquiry["definition"]
     assert data["skipped"] == []
     assert data["cross_project_conflicts"] == []
     row = db_session.get(OntologyChangeSet, change_set["id"])

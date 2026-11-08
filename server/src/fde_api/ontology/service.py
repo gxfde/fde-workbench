@@ -1494,7 +1494,12 @@ def generate_discovery_candidates(
         occupied = _occupied_term_names(session, project_id=project.id)
         items: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
-        for subject, typed_summaries in grouped.items():
+        # 组序取 subject 字典序——facts 的 (created_at, id) 在单事务插入时
+        # created_at 全同（事务时间戳）而 id=uuid4 无内在序，组序是抽签
+        # （#209 CI 实红：本地插入序 vs CI 字典序翻转）；按字典序迭代使
+        # 候选条目与 skipped 双列表同输入恒同序（变更集指纹跨环境稳定）。
+        for subject in sorted(grouped):
+            typed_summaries = grouped[subject]
             if subject in occupied:
                 skipped.append({"term": subject, "reason": "同名术语或别名已存在"})
                 continue

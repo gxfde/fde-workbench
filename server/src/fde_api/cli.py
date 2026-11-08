@@ -68,6 +68,24 @@ def register_cli(app: Flask) -> None:
         from fde_api.control.builtin_skills import seed_public_skills
         click.echo(f"public_skills_created={seed_public_skills()}")
 
+    @app.cli.command("seed-workflow-templates")
+    def seed_workflow_templates_command() -> None:
+        """V3.1 P0-4：平台工作流模板幂等落库（先 seed-public-skills——模板引用 published 技能）。"""
+        from fde_api.workflows.templates import seed_workflow_templates
+        from fde_api.workflows.definition_service import WorkflowDefinitionError
+
+        session = db.session()
+        try:
+            with session.begin():
+                result = seed_workflow_templates(session)
+            click.echo(f"workflow_templates_created={result['created']} total={result['total']}")
+        except WorkflowDefinitionError as error:
+            raise click.ClickException(
+                f"{error.code}: {error.message}（部署顺序：先 seed-public-skills 再 seed-workflow-templates）"
+            ) from None
+        finally:
+            session.close()
+
     @app.cli.command("seed-default-models")
     def seed_default_models_command() -> None:
         from fde_api.control.builtin_skills import seed_default_models
