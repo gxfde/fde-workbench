@@ -32,7 +32,6 @@ source_refs）→ run failed + 产物 ``reviewed=False`` 永不进终审。
 from __future__ import annotations
 
 import json
-import mimetypes
 import os
 import re
 from base64 import urlsafe_b64encode
@@ -54,10 +53,13 @@ from fde_api.agents.adapter import (
     RunEventProvider,
     ZcodeAdapter,
 )
+from fde_api.agents.artifact_persistence import persist_completed_run_artifacts
 from fde_api.agents.context import (
     SanitizationError,
     render_masked_context,
 )
+from fde_api.agents.execution_authorization import ExecutionGrantError
+from fde_api.agents.execution_grants import authorize_host_run
 from fde_api.agents.execution_policy import normalize_workspace_under_root, policy_snapshot
 from fde_api.agents.workspace_files import (
     _CONTEXT_FILE,
@@ -105,20 +107,6 @@ from fde_api.solutions.models import ProjectSolution
 from fde_api.workbench.models import Project, new_uuid
 
 ARTIFACT_KINDS = frozenset({"code", "doc", "diff", "config", "test_results"})  # T-B1（goal-tb tb2）+test_results
-
-
-def _derive_summary(kind: str, content: bytes, exit_code: int | None) -> dict[str, int] | None:
-    """T-B1：入库时从原件内容派生结构化摘要（可重建，B#6 纪律）。
-
-    计数来自原件解析；exit_code 来自 run 结果（非原件内容）合入同一摘要。
-    非 diff/test_results 种类零派生（None）——不发明数字。
-    """
-    from fde_api.agents.artifact_summary import derive_artifact_summary
-
-    summary = derive_artifact_summary(kind, content)
-    if summary is None:
-        return None
-    return {**summary, "exit_code": exit_code if exit_code is not None else -1}
 
 FAILED_STATUSES = frozenset({"failed", "timeout", "budget_exceeded"})
 IN_FLIGHT_STATUSES = frozenset({"queued", "running", "host_running"})
@@ -528,26 +516,18 @@ def _finalize(
                 )
             )
         # 超时/熔断产物不入库（B-1）；completed 的产物含校验失败者一律留痕
-        # reviewed=False（C-1：拒绝进终审但不丢证据）；T2 门开着时产物同样
-        # 留痕但不挂 solution（不进终审通道，review_gate_open 收口后重试）；
-        # L1 降级产物恒不挂 solution（强制人工终审，handoff 后人工收口）
+        # reviewed=False（C-1：拒绝进终审但不丢证据）；挂 solution 语义与
+        # G-07 候选登记细节见 agents/artifact_persistence.py（拆分去处）。
         if result.status == "completed":
-            for artifact, digest, content in prepared:
-                session.add(
-                    AgentArtifact(
-                        run_id=run.id,
-                        kind=artifact.kind,
-                        storage_ref=f"{run.id}/output/{artifact.path}"[:255],
-                        sha256=digest,
-                        reviewed=False,
-                        linked_solution_id=None if (gate_open or l1_path) else solution_id,
-                        # T-B1：可重建派生摘要（exit_code 来自 run 结果，计数来自原件解析）
-                        derived_summary=_derive_summary(artifact.kind, content, result.exit_code),
-                        # V3.1 P1-1（5.7）：原件大小 + MIME 推断（guess_type 纯形状，不读内容）
-                        size_bytes=len(content),
-                        mime_type=mimetypes.guess_type(file_path.name)[0],
-                    )
-                )
+            persist_completed_run_artifacts(
+                session,
+                run=run,
+                prepared=prepared,
+                result_exit_code=result.exit_code,
+                solution_id=solution_id,
+                gate_open=gate_open,
+                l1_path=l1_path,
+            )
         # V3 T-P0-1（WB-DEF-1 signoff 死锁）：非降级 completed 且绑定 solution 的
         # run = 产物进入终审通道，pending signoff 在此即时开出（幂等，见
         # agents/signoff.py）。此前唯一开闸点是 handoff_run，而它只收失败 / L1
@@ -669,6 +649,33 @@ def _execute_run(
         # agent_workspace_root 内——防 .. 与符号链接逃逸）；拒绝清单校验在
         # run_host_channel 内继续兜底。
         normalized_workspace = normalize_workspace_under_root(settings.agent_workspace_root, workspace)
+        # V3.1 任务书 §9 前置 3（短期授权票据）：**发行 + 校验双接线**。
+        # 票据绑定 用户/项目/Run/工作目录/动作集合，TTL 15min；**spawn 之前**
+        # 必须校验通过——不通过则拒绝执行（不 spawn、不计费、落 L2）。
+        # 授权点仍是 start_run 本身（人工发起，已过权限与能力闸）；票据提供
+        # 的是绑定约束与短 TTL，**不代拍板**、不新增自动放行路径。
+        # （发行/校验/落指纹三步合一在 execution_grants.authorize_host_run。）
+        try:
+            authorize_host_run(
+                jwt_secret=settings.jwt_secret,
+                user_id=actor.id,
+                project_id=project.id,
+                run_id=run_id,
+                workspace=str(normalized_workspace),
+                session_factory=db.session,
+            )
+        except ExecutionGrantError as error:
+            _mark_l2(db.session(), run_id, f"execution_grant_rejected:{error.code}")
+            raise _error(
+                "execution_authorization_failed",
+                f"执行授权票据校验失败（{error.code}）：已转 L2 模板填空，本次不计费。",
+                503,
+                detail={
+                    "run_id": run_id,
+                    "fallback_level": "L2",
+                    "reason": f"execution_grant_rejected:{error.code}",
+                },
+            ) from error
         host_ctx = AgentRunContext(
             run_id=run_id,
             project_code=project.project_code,
