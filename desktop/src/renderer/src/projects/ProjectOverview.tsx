@@ -161,6 +161,7 @@ export function ProjectOverview({ project, canManage, onProjectChange, onRefresh
 
   const allowed = transitions[project.status]
   return (
+    <div className="overview-stack">
     <div className="overview-three-column">
       <section className="panel progress-panel" aria-labelledby="project-progress-title">
         <div className="progress-summary">
@@ -245,6 +246,7 @@ export function ProjectOverview({ project, canManage, onProjectChange, onRefresh
           </dl>
         )}
       </section>
+    </div>
       {guidanceSlot}
     </div>
   )

@@ -1151,6 +1151,11 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
   box-shadow: var(--shadow-inset-gold);
 }
 .detail-section-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 0.8fr); gap: 18px; }
+/* 总览竖向堆叠容器：两列 grid（进度+企业信息）与 guidanceSlot（转写草稿/访谈事实
+   面板）分层——guidanceSlot 若留在 grid 内部，auto-placement 会把两块面板并排塞进
+   两列（行高不同=交错重叠），宽表格还会撑爆列把操作按钮挤出视口（r28 实测）。 */
+.overview-stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.overview-stack > * { min-width: 0; }
 .overview-three-column { display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 60fr); gap: 18px; align-items: stretch; }
 .overview-three-column > .panel { min-width: 0; }
 .overview-three-column > .enterprise-overview-panel { align-self: start; }

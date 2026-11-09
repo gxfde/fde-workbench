@@ -137,12 +137,12 @@ it("重跑按钮仅 failed 行显示", async () => {
 })
 
 it("事实审阅三动作 PATCH 形状（澄清走 needs_clarification）", async () => {
-  const patches: Array<{ url: string; body: unknown }> = []
-  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+  const patches: Array<{ url: string; body: unknown; retry: boolean | undefined }> = []
+  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; retryAfterAuthRefresh?: boolean; body?: string }) => {
     const method = init?.method ?? "GET"
     if (method === "GET") return Promise.resolve(mockGet(url))
     if (method === "PATCH") {
-      patches.push({ url, body: JSON.parse(init?.body ?? "{}") })
+      patches.push({ url, body: JSON.parse(init?.body ?? "{}"), retry: init?.retryAfterAuthRefresh })
       return Promise.resolve({ data: {}, error: null })
     }
     return Promise.resolve({ data: {}, error: null })
@@ -153,6 +153,8 @@ it("事实审阅三动作 PATCH 形状（澄清走 needs_clarification）", asyn
   await waitFor(() => expect(patches).toHaveLength(1))
   expect(patches[0].url).toBe("/api/v1/business-facts/fact-1/review")
   expect(patches[0].body).toEqual({ review_status: "needs_clarification" })
+  // 幂等审阅写：token 刷新后允许自动重发（client.ts canRetryAfterRefresh）。
+  expect(patches[0].retry).toBe(true)
 })
 
 it("批量接受只打 pending 行且逐条 PATCH", async () => {
@@ -171,6 +173,44 @@ it("批量接受只打 pending 行且逐条 PATCH", async () => {
   await waitFor(() => expect(patchedUrls).toHaveLength(1))
   expect(patchedUrls[0]).toBe("/api/v1/business-facts/fact-1/review")
   expect(await screen.findByText("已批量接受 1 条待审事实。")).toBeInTheDocument()
+})
+
+it("批量接受：PATCH 携带 retryAfterAuthRefresh 且按钮/提示显示进度", async () => {
+  const pendingB = { ...factPending, id: "fact-b1", subject: "批量主体B" }
+  const pendingC = { ...factPending, id: "fact-c1", subject: "批量主体C" }
+  const patchFlags: Array<boolean | undefined> = []
+  let releaseFirst!: () => void
+  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+  let firstPatchSeen = false
+  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; retryAfterAuthRefresh?: boolean; body?: string }) => {
+    const method = init?.method ?? "GET"
+    if (method === "GET") {
+      if (url.includes("/business-facts?")) return Promise.resolve({ items: [factPending, pendingB, pendingC] })
+      if (url.startsWith("/api/v1/interview-minutes?")) return Promise.resolve({ items: [minutes] })
+      if (url.startsWith("/api/v1/interview-minutes/")) return Promise.resolve(minutesDetail)
+      if (url.includes("/discovery/extractions?")) return Promise.resolve({ items: [] })
+      if (url.includes("/requirements?")) return Promise.resolve({ items: [] })
+      throw new Error(`unexpected GET ${url}`)
+    }
+    if (method === "PATCH" && url.includes("/business-facts/")) {
+      patchFlags.push(init?.retryAfterAuthRefresh)
+      if (!firstPatchSeen) {
+        firstPatchSeen = true
+        return firstGate.then(() => ({ data: {}, error: null }))
+      }
+      return Promise.resolve({ data: {}, error: null })
+    }
+    return Promise.resolve({ data: {}, error: null })
+  })
+  renderPanel()
+  fireEvent.click(await screen.findByRole("button", { name: "批量接受已加载待审" }))
+  // 第一条 PATCH 挂起期间：按钮显示进度、顶部提示逐条更新（r28 前的"没反应"表象根因之一）。
+  expect(screen.getByRole("button", { name: "接受中 0/3…" })).toBeInTheDocument()
+  expect(await screen.findByText("正在接受 1/3…")).toBeInTheDocument()
+  releaseFirst()
+  expect(await screen.findByText("已批量接受 3 条待审事实。")).toBeInTheDocument()
+  expect(patchFlags).toHaveLength(3)
+  expect(patchFlags.every((flag) => flag === true)).toBe(true)
 })
 
 it("viewer 无写操作：发起/审阅/批量按钮全部隐藏", async () => {

@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 桌面总览布局分层修复轮（批量接受「没反应」破案 + 排版重叠真根因修复 + 审阅写幂等重发；纯桌面零服务端，2026-11-10）
+
+- **起因（蔡工实测 r28 便携版）**：①「点击批量接受没有反应」——重登后仍不行、单条接受也无反应、Console 仅一行 CSP 提示（非错误）；②「排版并没有改善，还是一样重叠，位置也不对」。
+- **破案（截图对账）**：r28 已修的 `.data-table` 表格样式并非重叠真根因——真根因是 `ProjectOverview.tsx` 把 guidanceSlot（转写草稿/访谈事实/需求审阅等面板）留在 `.overview-three-column` 两列 grid **内部**：grid auto-placement 把面板并排塞进两列，行高不同＝交错重叠；DiscoveryPanel 根类 `.panel-stack` 无样式且不受 `> .panel { min-width: 0 }` 保护 ⇒ 8 列宽表格撑爆 grid 列 ⇒ 「批量接受」按钮被挤出视口右缘，**点击从未触发**——与「Console 零报错 / 重登无效 / 单条无反应」全部表象唯一自洽的解释（宿主 PATCH 0.2s 200 实测 + IPC 通道精读＝服务端/网络/通道全程健康）。
+- **三改**：①**布局分层**＝guidanceSlot 移出两列 grid，外层 NEW `.overview-stack` 竖向堆叠容器（flex column，子项 `min-width:0` 兜底）——总览两列区（完成度+企业信息）与审阅面板区分层，重叠与按钮挤出双根因同修；②**幂等写自动重发**＝reviewFact / reviewRequirement / acceptPendingFacts 三处 PATCH 带 `retryAfterAuthRefresh: true`——token 刷新后自动重发，不再被 mutation_resubmit_required 中断审阅操作；③**批量进度反馈**＝按钮「接受中 i/N…」+ notice「正在接受 i/N…」逐条更新（240 条级批量约几十秒，不再像没反应）。
+- **测试**：`discovery-panel.test.tsx` 11→12（NEW：首条 PATCH 挂起期间断言按钮「接受中 0/3…」+ 提示「正在接受 1/3…」，终态逐条 PATCH 均携带 `retryAfterAuthRefresh` 标志；既有三动作用例扩断言 retry 标志）；桌面全量本地实测 **984 passed（83 文件）**；typecheck 双 tsconfig 绿。
+- **口径**：vitest **984**（983 基线〔PR #261 CI run 42643019937 实测〕+ 本轮 +1，PR CI 复核）；纯桌面 ⇒ 不 rebuild 服务端镜像；**便携版 r29**（r28 含本根因未修，必须换包）。
+
 ## [未发布] — 桌面 DiscoveryPanel 审阅体验轮（排版修复 + 锚点核验 A/B/C 分级进面板 + 大纪要分页；纯桌面零服务端，2026-11-09）
 
 - **起因（蔡工实测）**：审阅 somwyn 大纪要抽取（240 事实 + 74 需求）时——①面板**文字重叠、排版乱**（根因＝`.data-table` 全仓 5 个面板共用该 class 却从未定义样式：8 列长中文在浏览器默认 auto layout 下挤压叠字）；②锚点核验 A/B/C 分级只在本地清单文件（`somwyn\.fde\调研表锚点核验清单`），界面看不到。

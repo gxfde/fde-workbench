@@ -186,6 +186,8 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
+  // 批量接受进度（按钮级呈现——面板顶部的 notice 可能随长表滚出视口）。
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
   const [loaded, setLoaded] = useState(false)
   const minutesContentRef = useRef<Map<string, string>>(new Map())
   const factsRef = useRef<FactDto[]>([])
@@ -298,6 +300,8 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     try {
       await apiRequest(`/api/v1/business-facts/${factId}/review`, {
         method: "PATCH",
+        // 幂等审阅写：token 刷新后允许自动重发（否则 mutation_resubmit_required 中断操作）。
+        retryAfterAuthRefresh: true,
         body: JSON.stringify({ review_status: reviewStatus }),
       })
       setFacts((prev) => prev.map((fact) => (fact.id === factId ? { ...fact, review_status: reviewStatus } : fact)))
@@ -313,6 +317,8 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     try {
       await apiRequest(`/api/v1/requirements/${requirementId}/review`, {
         method: "PATCH",
+        // 幂等审阅写：token 刷新后允许自动重发。
+        retryAfterAuthRefresh: true,
         body: JSON.stringify({ status }),
       })
       setRequirements((prev) => prev.map((req) => (req.id === requirementId ? { ...req, status } : req)))
@@ -330,9 +336,14 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     const accepted: string[] = []
     let failed = 0
     for (const fact of pending) {
+      // 进度反馈：240 条级别的批量会跑几十秒，按钮与提示逐条更新避免像"没反应"。
+      setBatchProgress({ done: accepted.length + failed, total: pending.length })
+      setNotice(`正在接受 ${accepted.length + failed + 1}/${pending.length}…`)
       try {
         await apiRequest(`/api/v1/business-facts/${fact.id}/review`, {
           method: "PATCH",
+          // 幂等审阅写：token 刷新后允许自动重发。
+          retryAfterAuthRefresh: true,
           body: JSON.stringify({ review_status: "accepted" }),
         })
         accepted.push(fact.id)
@@ -341,6 +352,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
       }
     }
     setFacts((prev) => prev.map((fact) => (accepted.includes(fact.id) ? { ...fact, review_status: "accepted" } : fact)))
+    setBatchProgress(null)
     setNotice(failed ? `批量接受完成，${failed} 条失败（已终态或并发变动）。` : `已批量接受 ${accepted.length} 条待审事实。`)
     setBusy(false)
   }
@@ -451,7 +463,9 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           锚点核验：A {anchorSummary.a} · B {anchorSummary.b} · C {anchorSummary.c}
         </span>
         {canManage && facts.some((fact) => fact.review_status === "pending")
-          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>批量接受已加载待审</button>
+          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>
+              {batchProgress ? `接受中 ${batchProgress.done}/${batchProgress.total}…` : "批量接受已加载待审"}
+            </button>
           : null}
         {!factsExhausted
           ? <button type="button" disabled={busy} onClick={() => { void loadMoreFacts() }}>加载更多事实</button>
