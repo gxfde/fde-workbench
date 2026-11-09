@@ -86,7 +86,7 @@ export function RegressionDashboard(): ReactElement {
       const result = await runRegression(apiRequest, suiteId)
       setNotice(
         result.overfit_risk
-          ? "回归完成——**检出过拟合风险**，不得进入发布审批。"
+          ? "回归完成——检出过拟合风险，不得进入发布审批。"
           : `回归完成：${VERDICT_LABEL[result.verdict]}。`,
       )
       await load()
@@ -113,7 +113,7 @@ export function RegressionDashboard(): ReactElement {
       </header>
       <p className="simulation-hint">
         数据集三分：训练集（可提改进）／回归集（检退化）／盲测集（最终检验）。
-        改进**只许用训练集**的失败——用盲测集调参会让回归失去意义。
+        改进只许用训练集的失败——用盲测集调参会让回归失去意义。
       </p>
 
       {notice ? (
@@ -170,7 +170,7 @@ export function RegressionDashboard(): ReactElement {
               </header>
               {result.overfit_risk ? (
                 <p className="simulation-warning" role="alert">
-                  **过拟合风险**：泛化差 {result.generalization_gap}（训练集增益显著高于盲测集）
+                  过拟合风险：泛化差 {result.generalization_gap}（训练集增益显著高于盲测集）
                   ⇒ 该提案不得进入发布审批。
                 </p>
               ) : null}

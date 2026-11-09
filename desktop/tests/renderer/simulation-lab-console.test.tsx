@@ -22,6 +22,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  mocks.user.role = "fde_engineer"
 })
 
 const run = {
@@ -113,6 +114,36 @@ const report = {
     adapter_mode: "mock",
     disclaimer: "本评分为模拟环境的合成结果（假设 × 引擎），不冒充真实项目交付质量。",
   },
+}
+
+const humanLayer = {
+  id: "ev-human",
+  run_id: "run-1",
+  layer: "human",
+  evaluator_id: "human:fde-1",
+  mode: "manual",
+  rubric_version: "rubric-v1",
+  total_score: 0.55,
+  verdict: "conditional",
+  unverified_ratio: 0,
+  scores: { criteria: [] },
+  hard_failures: [],
+  note: "人工复核：以交付物原文为准，取中间结论。",
+  created_at: "2026-11-09T09:00:00",
+}
+
+const reportNeedingReview = {
+  ...report,
+  disagreement: 0.2518,
+  human_review_required: true,
+}
+
+const reportWithHumanVerdict = {
+  ...report,
+  layers: [...report.layers, humanLayer],
+  human: [humanLayer],
+  final: humanLayer,
+  human_review_required: false,
 }
 
 function routeApi(overrides: Record<string, unknown> = {}) {
@@ -312,4 +343,115 @@ it("运行台可切换执行面并在 Trace 呈现接线状态", async () => {
   expect(screen.getByLabelText("执行面")).toHaveValue("real")
   // 运行列表标注执行面
   expect(screen.getByText("脚本化替身")).toBeInTheDocument()
+})
+
+it("admin 可见 L-C 终裁表单并 POST /evaluation/human，提交后重拉报告", async () => {
+  mocks.user.role = "admin"
+  mocks.apiRequest.mockImplementation((path: string, options: { method?: string } = {}) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [trace], total: 1, truncated: false, next_seq: 1 })
+    }
+    if (path.includes("/runs/run-1/evaluation/human") && options.method === "POST") {
+      return Promise.resolve(humanLayer)
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(reportNeedingReview)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs") && options.method === "GET") {
+      return Promise.resolve({ items: [run], total: 1, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+
+  expect(await screen.findByText(/模型层分歧 0.25/)).toBeInTheDocument()
+  expect(screen.getByText(/人工抽检结论（L-C 终裁）/)).toBeInTheDocument()
+
+  await user.type(screen.getByLabelText("理由（必填）"), "人工复核：以交付物原文为准。")
+  await user.click(screen.getByRole("button", { name: "提交人工终裁" }))
+
+  await waitFor(() => {
+    const post = mocks.apiRequest.mock.calls.find(
+      ([path]) => String(path).includes("/evaluation/human"),
+    )
+    expect(post).toBeTruthy()
+    const [, options] = post as [string, { method: string; body?: Record<string, unknown> }]
+    expect(options.method).toBe("POST")
+    expect(options.body?.verdict).toBe("conditional")
+    expect(options.body?.total_score).toBe(0.5)
+    expect(String(options.body?.note)).toContain("人工复核")
+  })
+  await waitFor(() => {
+    expect(screen.getByText(/人工终裁已落库/)).toBeInTheDocument()
+  })
+  // 终裁后重拉报告（evaluation GET 再次被调用）
+  const evaluationGets = mocks.apiRequest.mock.calls.filter(
+    ([path, options]) =>
+      String(path).includes("/runs/run-1/evaluation") &&
+      !String(path).includes("/human") &&
+      (options as { method?: string } | undefined)?.method === "GET",
+  )
+  expect(evaluationGets.length).toBeGreaterThanOrEqual(2)
+})
+
+it("fde_engineer 不见终裁表单，告警指向有权限的角色", async () => {
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [trace], total: 1, truncated: false, next_seq: 1 })
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(reportNeedingReview)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs")) {
+      return Promise.resolve({ items: [run], total: 1, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+
+  render(<SimulationRunDetail />)
+
+  expect(await screen.findByText(/模型层分歧 0.25/)).toBeInTheDocument()
+  expect(screen.queryByText(/人工抽检结论（L-C 终裁）/)).not.toBeInTheDocument()
+  expect(screen.getByText(/终裁须由项目负责人或管理员/)).toBeInTheDocument()
+})
+
+it("已终裁的报告醒目回显人工结论（final=human）", async () => {
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [trace], total: 1, truncated: false, next_seq: 1 })
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(reportWithHumanVerdict)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs")) {
+      return Promise.resolve({ items: [run], total: 1, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+
+  render(<SimulationRunDetail />)
+
+  expect(await screen.findByText(/人工终裁已记录/)).toBeInTheDocument()
+  expect(screen.getByText(/机器原行保留并列/)).toBeInTheDocument()
+  expect(screen.getAllByText(/人工层/).length).toBeGreaterThan(0)
 })

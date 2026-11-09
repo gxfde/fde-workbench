@@ -5,6 +5,7 @@
 
 import { Fragment, type ReactElement } from "react"
 
+import { UiButton } from "../components/ui"
 import {
   LAYER_LABEL,
   VERDICT_LABEL,
@@ -99,8 +100,17 @@ export function EvaluationReport({
 
       {report.human_review_required ? (
         <p className="simulation-warning" role="status">
-          需人工复核：两层分歧 {report.disagreement.toFixed(2)}
-          {onRecordHuman ? "；请在人工层给出终裁结论。" : ""}
+          {onRecordHuman
+            ? `需人工终裁：规则层与模型层分歧 ${report.disagreement.toFixed(2)}（阈值 0.2）——请在下方「人工抽检结论」给出终裁；两行机器结论会保留并列，不会被改写。`
+            : `需人工终裁：规则层与模型层分歧 ${report.disagreement.toFixed(2)}（阈值 0.2）——终裁须由项目负责人或管理员在「运行台 → 评估报告 → 人工抽检结论」提交。`}
+        </p>
+      ) : null}
+
+      {report.final?.layer === "human" ? (
+        <p className="simulation-notice" role="status">
+          人工终裁已记录：
+          {VERDICT_LABEL[report.final.verdict] ?? report.final.verdict} ·{" "}
+          {Math.round(report.final.total_score * 100)}%（机器原行保留并列，未改写。）
         </p>
       ) : null}
 
@@ -153,7 +163,11 @@ function HumanReviewForm({
         void onSubmit({ verdict, total_score: score, note })
       }}
     >
-      <h4>人工抽检结论（终裁）</h4>
+      <h4>人工抽检结论（L-C 终裁）</h4>
+      <p className="simulation-hint">
+        这是三层评估的最后一层：提交后落一条人工层评估行，规则层/模型层的机器结论原样保留并列。
+        理由必填——终裁必须留痕可追溯。
+      </p>
       <label>
         <span>结论</span>
         <select name="verdict" defaultValue="conditional">
@@ -172,7 +186,9 @@ function HumanReviewForm({
         <span>理由（必填）</span>
         <textarea name="note" rows={2} />
       </label>
-      <button type="submit">提交人工结论</button>
+      <UiButton variant="primary" type="submit">
+        提交人工终裁
+      </UiButton>
     </form>
   )
 }

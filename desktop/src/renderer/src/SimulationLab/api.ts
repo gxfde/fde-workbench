@@ -227,6 +227,26 @@ export async function getEvaluationReport(
   return data as import("./types").EvaluationReportDto
 }
 
+export interface HumanEvaluationPayload {
+  verdict: string
+  total_score: number
+  note: string
+}
+
+/** 人工抽检结论（L-C 终裁）：服务端落一条 human 层评估行，机器原行保留并列。 */
+export async function recordHumanEvaluation(
+  apiRequest: SimulationApiRequest,
+  runId: string,
+  payload: HumanEvaluationPayload,
+): Promise<import("./types").EvaluationLayerDto> {
+  const data = await apiRequest(
+    `${BASE}/runs/${encodeURIComponent(runId)}/evaluation/human`,
+    { method: "POST", body: payload },
+  )
+  if (!data || typeof data !== "object") throw new Error("人工结论数据格式异常")
+  return data as import("./types").EvaluationLayerDto
+}
+
 export async function listFindings(
   apiRequest: SimulationApiRequest,
   runId?: string,

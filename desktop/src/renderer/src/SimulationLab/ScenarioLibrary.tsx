@@ -164,7 +164,7 @@ export function ScenarioLibrary(): ReactElement {
         <div>
           <h2>案例库</h2>
           <p className="simulation-hint">
-            共 {total} 个案例分支（6 个案例 × 3 种客户行为）。编辑场景会**追加新版本**，历史版本保持不可变。
+            共 {total} 个案例分支（6 个案例 × 3 种客户行为）。编辑场景会追加新版本，历史版本保持不可变。
           </p>
         </div>
         <div className="simulation-actions">

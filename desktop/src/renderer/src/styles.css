@@ -2238,3 +2238,96 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 .presurvey-gate-hint-caption { margin: 8px 0 0; color: var(--muted); font-size: var(--font-caption); }
 
 .presurvey-gate-hint-link { color: var(--brand-blue); font-size: var(--font-label); }
+
+/* ============================================================
+   V3.2 G7b 训练场弹层收口轮（2026-11-09）：只新增类，不改既有类契约。
+   背景：.dialog 基类无 max-height/overflow，高表单弹层超出视口且不可滚，
+   底部操作钮（取消/保存）被裁在视口外——与 .task-dialog 等既有先例同解：
+   调用方按页加类；此处另给 Modal 可选 × 关闭钮（dismissable）。
+   ============================================================ */
+.ui-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+.ui-modal-heading h2 { margin: 0; }
+
+.ui-modal-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--font-body);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ui-modal-close:hover { color: var(--text); background: var(--surface-3); }
+
+.dialog.simulation-scenario-dialog {
+  width: min(960px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.simulation-scenario-dialog .dialog-actions {
+  position: sticky;
+  bottom: 0;
+  margin: 16px -24px -24px;
+  padding: 12px 24px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.simulation-scenario-dialog .simulation-section { margin-top: 20px; }
+
+.simulation-scenario-dialog .simulation-section > h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: var(--font-body);
+}
+
+.simulation-scenario-dialog .simulation-section > p { margin: 0 0 10px; color: var(--muted); font-size: var(--font-label); }
+
+/* 训练场四类状态行此前零样式（裸文本，观感混乱）——按既有令牌补齐，只新增不改旧类。 */
+.simulation-warning {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius);
+  background: var(--brand-blue-soft);
+  color: var(--warning-ink);
+  font-size: var(--font-label);
+}
+
+.simulation-notice {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: var(--font-label);
+}
+
+.simulation-error {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+  color: var(--danger-ink);
+  font-size: var(--font-label);
+}
+
+.simulation-hint { margin: 6px 0; color: var(--muted); font-size: var(--font-caption); }
+
+.simulation-human-form {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  max-width: 480px;
+}
+
+.simulation-human-form h4 { margin: 0; color: var(--text); }

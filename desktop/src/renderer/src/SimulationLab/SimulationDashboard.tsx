@@ -87,8 +87,9 @@ export function SimulationDashboard(): ReactElement {
       <header>
         <h2>模拟训练场</h2>
         <p className="simulation-hint">
-          FDE 交付模拟训练场：让既有 FDE Agent 与 Workflow 在**隔离的虚拟环境**里完成一次模拟交付，
-          再由独立评估与失败分析给出可追溯的改进方向。
+          FDE 交付模拟训练场：让既有 FDE Agent 与 Workflow 在隔离的虚拟环境里完成一次模拟交付，
+          再由独立评估与失败分析给出可追溯的改进方向。评估与人工终裁入口在「运行台」：
+          选中一次运行 → 「评估该运行」→ 在评估报告底部的「人工抽检结论（L-C 终裁）」提交终裁。
         </p>
       </header>
 

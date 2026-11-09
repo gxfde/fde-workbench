@@ -158,8 +158,10 @@ export function ScenarioEditor({
   return (
     <Modal
       title={scenario ? `编辑场景 · ${scenario.scenario_key}` : "新建场景"}
-      description="编辑会追加新版本，历史版本保持不可变。"
+      description="编辑会追加新版本，历史版本保持不可变。表单按视角分区，自上而下依次是：基本资料 → 客户可见面 → 隐藏事实 → 评分侧（仅判卷）。"
       onClose={onCancel}
+      className="simulation-scenario-dialog"
+      dismissable
       footer={
         <>
           <UiButton onClick={onCancel}>取消</UiButton>
@@ -181,77 +183,89 @@ export function ScenarioEditor({
         </p>
       ) : null}
 
-      <div className="simulation-form">
-        <label>
-          <span>案例名称</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} />
-        </label>
-        <label>
-          <span>行业分类</span>
-          <input value={industry} onChange={(event) => setIndustry(event.target.value)} />
-        </label>
-        <label>
-          <span>客户行为</span>
-          <select
-            value={variant}
-            onChange={(event) => setVariant(event.target.value as typeof variant)}
-          >
-            {SCENARIO_VARIANTS.map((value) => (
-              <option key={value} value={value}>
-                {VARIANT_LABEL[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>数据集</span>
-          <select
-            value={split}
-            onChange={(event) => setSplit(event.target.value as typeof split)}
-          >
-            {SCENARIO_SPLITS.map((value) => (
-              <option key={value} value={value}>
-                {SPLIT_LABEL[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>标签（顿号或换行分隔）</span>
-          <input value={tags} onChange={(event) => setTags(event.target.value)} />
-        </label>
-        <label>
-          <span>客户初始简报（每行一条）</span>
-          <textarea value={brief} onChange={(event) => setBrief(event.target.value)} rows={3} />
-        </label>
-        <label>
-          <span>客户自述的已知系统（每行一条）</span>
-          <textarea
-            value={knownSystems}
-            onChange={(event) => setKnownSystems(event.target.value)}
-            rows={2}
-          />
-        </label>
-        <label>
-          <span>预算约束</span>
-          <input value={budget} onChange={(event) => setBudget(event.target.value)} />
-        </label>
-        <label>
-          <span>工期约束</span>
-          <input value={timeline} onChange={(event) => setTimeline(event.target.value)} />
-        </label>
-        <label>
-          <span>客户初始诉求（通常是误导面）</span>
-          <textarea
-            value={misleading}
-            onChange={(event) => setMisleading(event.target.value)}
-            rows={2}
-          />
-        </label>
-      </div>
+      <section className="simulation-section" aria-label="基本资料">
+        <h3>① 基本资料</h3>
+        <p>案例的身份信息与训练场归属（数据集切分决定它进训练/回归/盲测哪一桶）。</p>
+        <div className="simulation-form">
+          <label>
+            <span>案例名称</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label>
+            <span>行业分类</span>
+            <input value={industry} onChange={(event) => setIndustry(event.target.value)} />
+          </label>
+          <label>
+            <span>客户行为</span>
+            <select
+              value={variant}
+              onChange={(event) => setVariant(event.target.value as typeof variant)}
+            >
+              {SCENARIO_VARIANTS.map((value) => (
+                <option key={value} value={value}>
+                  {VARIANT_LABEL[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>数据集</span>
+            <select
+              value={split}
+              onChange={(event) => setSplit(event.target.value as typeof split)}
+            >
+              {SCENARIO_SPLITS.map((value) => (
+                <option key={value} value={value}>
+                  {SPLIT_LABEL[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>标签（顿号或换行分隔）</span>
+            <input value={tags} onChange={(event) => setTags(event.target.value)} />
+          </label>
+        </div>
+      </section>
 
-      <section aria-label="隐藏事实">
-        <h3>隐藏事实（按条件逐步披露）</h3>
+      <section className="simulation-section" aria-label="客户可见面">
+        <h3>② 客户可见面（Tester / Customer 视角）</h3>
+        <p>这一区的字段会进入客户模拟器与被测 FDE 的可见上下文——写客户「会说、自述、要求」的内容。</p>
+        <div className="simulation-form">
+          <label>
+            <span>客户初始简报（每行一条）</span>
+            <textarea value={brief} onChange={(event) => setBrief(event.target.value)} rows={3} />
+          </label>
+          <label>
+            <span>客户自述的已知系统（每行一条）</span>
+            <textarea
+              value={knownSystems}
+              onChange={(event) => setKnownSystems(event.target.value)}
+              rows={2}
+            />
+          </label>
+          <label>
+            <span>预算约束</span>
+            <input value={budget} onChange={(event) => setBudget(event.target.value)} />
+          </label>
+          <label>
+            <span>工期约束</span>
+            <input value={timeline} onChange={(event) => setTimeline(event.target.value)} />
+          </label>
+          <label>
+            <span>客户初始诉求（通常是误导面）</span>
+            <textarea
+              value={misleading}
+              onChange={(event) => setMisleading(event.target.value)}
+              rows={2}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="simulation-section" aria-label="隐藏事实">
+        <h3>③ 隐藏事实（按条件逐步披露 · Customer / Judge 视角）</h3>
+        <p>开局不说的真实情况，按披露阶段在访谈/分析/实施中逐步放出——探针关键词决定 FDE 问到什么才会触发披露。</p>
         <ul className="simulation-fact-list">
           {facts.map((fact, index) => (
             <li key={`${fact.fact_id}-${index}`}>
@@ -321,8 +335,9 @@ export function ScenarioEditor({
         </UiButton>
       </section>
 
-      <section aria-label="评分侧">
-        <h3>评分侧（仅 Judge View 可见，不暴露给被测方）</h3>
+      <section className="simulation-section" aria-label="评分侧">
+        <h3>④ 评分侧（仅 Judge View 可见，不暴露给被测方）</h3>
+        <p>参考答案与判卷标准——只进判卷视图，评估引擎按这里的标准给分。</p>
         <div className="simulation-form">
           <label>
             <span>预期结果（每行一条）</span>

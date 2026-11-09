@@ -10,6 +10,10 @@ export interface ModalProps {
   tone?: ModalTone
   /** 提交/校验进行中时锁住 Esc，避免用户误以为已取消。 */
   busy?: boolean
+  /** 附加到 dialog 根元素的类（宽高/滚动由调用方按页定制，见 .dialog.<name> 先例）。 */
+  className?: string
+  /** 显示右上角 × 关闭钮（Esc 关闭一直可用；busy 时同样锁闭）。 */
+  dismissable?: boolean
   onClose(): void
   children?: ReactNode
   footer?: ReactNode
@@ -28,28 +32,46 @@ export function Modal({
   description,
   tone = "default",
   busy = false,
+  className,
+  dismissable = false,
   onClose,
   children,
   footer,
 }: ModalProps): ReactElement {
-  const dialogRef = useDialogA11y<HTMLDivElement>(() => {
+  const requestClose = () => {
     if (!busy) onClose()
-  })
+  }
+  const dialogRef = useDialogA11y<HTMLDivElement>(requestClose)
   const titleId = useId()
   const descriptionId = useId()
   const toneClass = tone === "default" ? "" : ` ui-modal-${tone}`
+  const extraClass = className ? ` ${className}` : ""
 
   return (
     <div className="dialog-backdrop">
       <div
         ref={dialogRef}
-        className={`dialog ui-modal${toneClass}`}
+        className={`dialog ui-modal${toneClass}${extraClass}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
       >
-        <h2 id={titleId}>{title}</h2>
+        {dismissable ? (
+          <div className="ui-modal-heading">
+            <h2 id={titleId}>{title}</h2>
+            <button
+              type="button"
+              className="ui-modal-close"
+              aria-label="关闭弹窗"
+              onClick={requestClose}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <h2 id={titleId}>{title}</h2>
+        )}
         {description ? (
           <p id={descriptionId} className="supporting-copy">{description}</p>
         ) : null}

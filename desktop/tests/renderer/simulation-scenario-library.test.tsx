@@ -148,3 +148,26 @@ it("总览按客户行为与数据集给出盘点", async () => {
     expect(screen.getAllByText("回归集").length).toBeGreaterThan(0)
   })
 })
+
+it("场景编辑弹层：分区标题 + × 关闭钮可关 + 可滚弹层类", async () => {
+  mocks.apiRequest.mockResolvedValue(listDto([scenario()]))
+  const user = userEvent.setup()
+
+  render(<ScenarioLibrary />)
+  await screen.findByRole("table")
+  await user.click(screen.getByRole("button", { name: "编辑" }))
+
+  const dialog = await screen.findByRole("dialog")
+  // 弹层类：宽弹层 + 内部滚动（否则高表单超出视口且无法下滚）
+  expect(dialog.className).toContain("simulation-scenario-dialog")
+  // 四分区标题在文档里按 ①→④ 顺序出现
+  expect(screen.getByText("① 基本资料")).toBeInTheDocument()
+  expect(screen.getByText("② 客户可见面（Tester / Customer 视角）")).toBeInTheDocument()
+  expect(screen.getByText(/③ 隐藏事实/)).toBeInTheDocument()
+  expect(screen.getByText(/④ 评分侧/)).toBeInTheDocument()
+  // × 关闭钮（Esc 之外始终可见的关闭出口）
+  await user.click(within(dialog).getByRole("button", { name: "关闭弹窗" }))
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+})

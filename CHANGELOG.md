@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.2 G7b 训练场界面收口轮（案例编辑弹层可滚可关 + 三视角分区重排 + L-C 人工终裁桌面接线；纯桌面零服务端，2026-11-09）
+
+- **起因（蔡工实测反馈）**：①训练场里找不到给 L-A/L-B 分歧拍板的地方；②案例库点「编辑」后弹层**不能下滚、也没有关闭按钮**——`.dialog` 基类（`styles.css`）只有 `width/padding`，**无 `max-height`/`overflow`**，高表单弹层超出视口即被裁剪且不可滚，底部操作钮（取消/保存）落在视口外（仓库既有解法是各页加类：`.task-dialog`/`.file-version-dialog` 等，训练场漏配）；③表单「一头雾水」——顶层字段无分组无标题，且多处 JSX 文案把 `**加粗**` 星号直出给用户。
+- **拍板入口缺失的真因**：L-C 终裁**服务端早就在位**（`POST /api/v1/simulation/runs/<id>/evaluation/human`，`evaluator.record_human_evaluation`：verdict 五值闭集+总分 0–1+理由必填，落 `layer="human"` 评估行，机器原行并列保留不覆盖）——G7 桌面组件里 `HumanReviewForm` 也写好了，但 `SimulationRunDetail` 渲染 `<EvaluationReport>` 时**从未传 `onRecordHuman`** ⇒ 表单从未渲染过。纯接线缺口，非功能缺口。
+- **修复（全部 additive，零既有类改动）**：①`Modal` 加可选 `className`/`dismissable`（×关闭钮 + busy 锁闭与 Esc 同规；不传行为零变化，既有调用方零波及）；②`styles.css` 末尾新增块：`simulation-scenario-dialog`（960px 宽 + `max-height: calc(100vh-48px)` + `overflow-y:auto` + sticky 底部操作条）、`.ui-modal-heading/.ui-modal-close`、训练场四类状态行（`simulation-warning/notice/error/hint` 此前**零样式裸文本**）与 `simulation-human-form`；③`ScenarioEditor` 按**三视角**分区重排：①基本资料 → ②客户可见面（Tester/Customer 视角）→ ③隐藏事实（按阶段披露）→ ④评分侧（仅 Judge View），每区一句话说明；④**L-C 接线**：`api.recordHumanEvaluation` + RunDetail `admin/project_lead` 门控（与服务端 403 同尺，其他角色只隐表单）传 `onRecordHuman`，提交后**重拉评估报告**（human 层行并列出现、`human_review_required` 随之解除）+「人工终裁已落库——机器结论与人工结论并列留痕」回执；⑤`EvaluationReport` 分歧告警按有无终裁权限分措辞（无权限者指路「项目负责人或管理员」）+ `final=human` 时醒目回显「人工终裁已记录：<结论> · <分数>%（机器原行保留并列）」+ 终裁表单加「终裁必须留痕可追溯」说明与 UiButton 化；⑥总览页 hint 写明拍板路径 + JSX 星号清理七处（六组件）。
+- **测试**：NEW 4 例——console 3 例（admin 可见终裁表单并 POST `/evaluation/human` 且提交后重拉报告≥2 次／fde_engineer 不见表单且告警指向有权限角色／`final=human` 醒目回显终裁结论）+ library 1 例（弹层类 + 四分区标题 + × 关闭钮可关）。**测试基建两课**：①`routeApi` 帮手对 evaluation 路径硬编码返回基础夹具、无视 overrides 参数——需自定义响应的用例必须自带 `mockImplementation`；②终裁表单在 `emptyReport()` 初始渲染即出现，告警行要等评估 GET 落地——断言必须 `findByText` 等待式否则全量跑时序竞态假红（单跑绿/全量红各复现一次后修正）。
+- **教训（流程事故如实登记）**：脚本化补丁一轮以相对路径执行（shell cwd 每命令后被重置回主树）⇒ 六文件改动**误落主树**（属并发会话的地盘）——发现后逐文件 diff 核验「只含本轮 hunks」→ 存补丁 → `git checkout --` 精确还原六文件（主树 styles.css 的既有脏文件属品牌会话，未触碰）→ 同一补丁落回 V3.2 工作树重验。**教训入档：批量脚本补丁必须先 `cd` 到目标工作树或全部用绝对路径；shell 工具的 cwd 重置是每次命令后的常态不是异常。**
+- **口径**：纯桌面零服务端零迁移零路由 ⇒ 结构口径不变（**427 路由 / 49 蓝图 / 139 表 / 55 rev 单头 `e7b2c4d9f1a3`**，官方脚本现测吻合 + 审计清单重生成零 diff）；vitest 本地全量实测 **970 passed（82 文件）**＝fork/main 基线现测 966 + 本轮 +4（typecheck 双 tsconfig 绿；终值以本 PR CI 为准）；mypy 279 不涉；server 零改动 ⇒ 无 rebuild/无 alembic；桌面变更 ⇒ 便携版 **r23** 重打包随轮交付（asar 中文 marker 字节验证）。
+- **随轮记档（V3.2 全线收口，与桌面修复同一 PR 落地，不另立独立节——台账占比钉所限）**：V3.2 G0–G9b 九轮全部 CI 4 绿 squash 合入 fork/main（#198→#199→#200→#201→#231→#239→#243→#244，PR 一览见 AGENTS「当前状态」V3.2 收口 bullet）；诚实边界（两层分歧 0.2518 待人工终裁、模拟分数不冒充真实质量、AI 不代拍板）与家族教训沉淀、挂账清单均以 **AGENTS bullet + `docs/v3.2/` 十份实施记录**为唯一权威，此处不重复正文。
+
 ## [未发布] — AI 原生化 N1 首跑补码轮（短期授权票据发行+校验双接线＝安全前置③／G-07 产物→建议性证据候选自动登记／通道开关说明行；零迁移零新路由零桌面，2026-11-09）
 
 - **动机**：D-1 拍板开闸后（PR #242），任务书 §6.1 逐条核验指出**首跑前必清四项**，本轮消解其中两项（③票据接线、G-07 补码）＋一项配置登记（DoD① 通道开关说明行）。**本轮只做代码与配置面，尚未起真实订单首跑**——首跑在合并部署后执行，G-01/G-07 的 CLOSED 判据待首跑复测后回写。

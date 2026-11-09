@@ -17,7 +17,9 @@ import {
   listRunTraces,
   listScenarios,
   listSimulationRuns,
+  recordHumanEvaluation,
   analyzeRun,
+  type HumanEvaluationPayload,
 } from "./api"
 import { EvaluationReport } from "./EvaluationReport"
 import { FailureAnalysis } from "./FailureAnalysis"
@@ -56,7 +58,9 @@ function errorText(caught: unknown): string {
 }
 
 export function SimulationRunDetail(): ReactElement {
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
+  // L-C 终裁与改进提案审批同尺：admin / project_lead（服务端 403 兜底，这里只管显隐）。
+  const canAdjudicate = user?.role === "admin" || user?.role === "project_lead"
   const [runs, setRuns] = useState<SimulationRunDto[]>([])
   const [scenarios, setScenarios] = useState<ScenarioDto[]>([])
   const [selectedId, setSelectedId] = useState("")
@@ -188,6 +192,22 @@ export function SimulationRunDetail(): ReactElement {
       const analysis = await analyzeRun(apiRequest, selectedId)
       setFindings(analysis.items)
       setNotice(`失败分析完成：新增 ${analysis.created} 条发现。`)
+    } catch (caught) {
+      setNotice(errorText(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRecordHuman(payload: HumanEvaluationPayload): Promise<void> {
+    if (!selectedId) return
+    setBusy(true)
+    try {
+      await recordHumanEvaluation(apiRequest, selectedId, payload)
+      // 终裁后重拉报告：human 层行并列出现，human_review_required 随之解除。
+      const fresh = await getEvaluationReport(apiRequest, selectedId)
+      setReport(fresh)
+      setNotice("人工终裁已落库——机器结论与人工结论并列留痕，未改写任何机器行。")
     } catch (caught) {
       setNotice(errorText(caught))
     } finally {
@@ -340,7 +360,16 @@ export function SimulationRunDetail(): ReactElement {
               )}
             </section>
 
-            <EvaluationReport report={report ?? emptyReport()} />
+            <EvaluationReport
+              report={report ?? emptyReport()}
+              onRecordHuman={
+                canAdjudicate
+                  ? async (payload) => {
+                      await handleRecordHuman(payload)
+                    }
+                  : undefined
+              }
+            />
 
             <FailureAnalysis
               findings={findings}

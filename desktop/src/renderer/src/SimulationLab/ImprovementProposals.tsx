@@ -63,7 +63,7 @@ export function ImprovementProposals(): ReactElement {
     setBusy(true)
     try {
       await decideProposal(apiRequest, proposal.id, { approve, password, note })
-      setNotice(approve ? "已批准（**未发布**——落地由人工在治理面执行）。" : "已驳回。")
+      setNotice(approve ? "已批准（未发布——落地由人工在治理面执行）。" : "已驳回。")
       setPassword("")
       setNote("")
       await load()
@@ -83,7 +83,7 @@ export function ImprovementProposals(): ReactElement {
       <header className="simulation-section-header">
         <h3>改进提案</h3>
         <span className="simulation-hint">
-          提案**只记录改进方向**，不自动修改任何生产 Prompt / Skill / Workflow / 本体；
+          提案只记录改进方向，不自动修改任何生产 Prompt / Skill / Workflow / 本体；
           审批通过后仍需人工在治理面落地。
         </span>
       </header>
