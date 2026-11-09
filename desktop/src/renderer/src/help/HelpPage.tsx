@@ -191,7 +191,7 @@ const SECTIONS: HelpSection[] = [
         <Steps
           items={[
             <>
-              桌面端默认连接本地 API：<code>http://127.0.0.1:8010</code>。
+              连接地址由发行形态决定：桌面端使用打包时配置的 API 地址，浏览器版走同源 <code>/api</code>，均无需手动填写。
             </>,
             <>
               在 WSL 里执行 <code>docker compose up -d api worker scheduler</code> 启动全部三个服务。

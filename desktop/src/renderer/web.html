@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Web 发行形态：/api 与页面同源，由 Nginx 反向代理转发到回环 8010。
+         frame-ancestors 在 meta CSP 中会被浏览器忽略，生产环境必须由 Nginx
+         响应头下发完整 CSP（见对外受控试用部署-实施任务书-v2.md 的 T2-2）。 -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/src/assets/logo-caigong-fde.svg" />
+    <!-- 红线①：产品名不在此硬编码。首帧占位，main.tsx 载入后经 shared/brand.ts
+         的 PRODUCT_NAME 运行时设置 document.title。 -->
+    <title>工作台</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/web-main.tsx"></script>
+  </body>
+</html>

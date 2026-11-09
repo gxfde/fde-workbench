@@ -19,6 +19,7 @@ service-account*.json
 node_modules/
 desktop/node_modules/
 desktop/out/
+desktop/web-dist/
 release/
 test-results/
 .artifacts/

@@ -8,6 +8,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "build": "electron-vite build",
+    "build:web": "vite build --config vite.web.config.ts && node scripts/web-dist-entry.mjs",
     "dev": "electron-vite dev",
     "icon:mac": "bash scripts/generate-icon.sh",
     "package:mac": "npm run build && npm run icon:mac && electron-builder --mac dmg --arm64",
