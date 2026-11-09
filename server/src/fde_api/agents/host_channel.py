@@ -57,7 +57,11 @@ from fde_api.agents.sandbox import FORBIDDEN_MOUNT_MARKERS
 # zcode CLI 契约（T-Z1 实测 0.17.1 §1.1）：Electron 壳 + cjs 入口；
 # ELECTRON_RUN_AS_NODE=1 把壳转成 node 运行时（裸调会拉起 GUI）。
 ZCODE_CJS_ENV = "ELECTRON_RUN_AS_NODE"
-PROMPT_MODE = "build"
+# 无人值守档位（G9 接线真机实测 2026-11-09）：``build`` 档遇写文件动作会等
+# 权限确认——stdin=DEVNULL 的单发进程永远等不到 ⇒ 300s 超时（实测复现）；
+# ``yolo``（CLI 缺省档，tb3 实测同款）无提示自动放行，14–90s 完成同类任务。
+# 边界不靠档位承载：--cwd 工作区锚定 + 任务书工具边界 + 拒绝清单校验照旧。
+PROMPT_MODE = "yolo"
 
 
 class HostChannelError(RuntimeError):
@@ -114,7 +118,12 @@ def _default_spawner(
         stdout=stdout,
         stderr=stderr,
         stdin=stdin,
-        text=True,  # communicate 返回 str（--json 文本解析面；与 HostProcess 协议对齐）
+        # 显式 UTF-8（G9 真机实测 2026-11-09）：text=True 落到 Windows 宿主
+        # 会按 GBK locale 解码 zcode 的 UTF-8 输出 ⇒ 读线程 UnicodeDecodeError
+        # 崩溃（stdout 变 None）。``--json`` 载荷恒为 UTF-8，与 locale 无关。
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 

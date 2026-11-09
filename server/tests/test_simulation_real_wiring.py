@@ -566,3 +566,182 @@ def test_model_layer_cannot_override_hard_failures(engineer):
     assert "HF-01" in codes
     assert StubModelEvaluation().mode == "stub"
     assert ServerModelEvaluation().mode == "server"
+
+
+def test_model_evaluation_retries_once_on_contract_violation(app):
+    """G9b 真机实测补充：模型回显 Rubric 桶键 ⇒ 契约纠偏重试一次 ⇒ evaluated。
+
+    （沿 discovery 管线「契约失败一次自动重试」先例；重试调用带违约反馈。）
+    """
+    from flask import current_app
+
+    calls: list[dict[str, object]] = []
+
+    class _FakeClient:
+        def complete_json(self, *, messages, request_id, purpose=None, **_kwargs):
+            calls.append({"request_id": request_id, "messages": messages})
+            if len(calls) == 1:
+                # 首发违约：把 Rubric 桶当顶层键回显（真机实测的实际形状）
+                return {
+                    "must_identify": ["主键缺失"],
+                    "must_avoid": [],
+                    "must_produce": ["主键映射方案"],
+                }
+            return {
+                "criteria": [
+                    {
+                        "key": "MI-1",
+                        "dimension": "D1",
+                        "title": "主键缺失",
+                        "score": 0.6,
+                        "verdict": "partial",
+                        "evidence_refs": [{"kind": "quote", "text": "两边对不上，没有共同主键"}],
+                        "reason": "命中",
+                    }
+                ],
+                "summary": "重试后合规",
+            }
+
+    current_app.extensions["fde_api_simulation_deepseek"] = _FakeClient()
+    try:
+        result = ServerModelEvaluation().evaluate(
+            judge_view={
+                "reference": {
+                    "rubric": {"must_identify": ["主键缺失"], "must_avoid": [], "must_produce": []}
+                }
+            },
+            artifacts={"artifacts": [{"name": "a.md", "text": "没有共同主键"}]},
+            traces=[],
+        )
+    finally:
+        current_app.extensions.pop("fde_api_simulation_deepseek", None)
+
+    assert result.status == "evaluated"
+    assert "含一次契约纠偏重试" in (result.note or "")
+    assert len(calls) == 2
+    assert calls[0]["request_id"] == "simulation-evaluation"
+    assert calls[1]["request_id"] == "simulation-evaluation-retry"
+    retry_messages = calls[1]["messages"]
+    assert retry_messages[-1]["role"] == "user"
+    assert "不合契约" in retry_messages[-1]["content"]
+
+
+def test_model_evaluation_invalid_after_retry_stays_invalid(app):
+    """纠偏后仍违约 ⇒ 落 invalid_output，不产生分数（不冒充）。"""
+    from flask import current_app
+
+    class _AlwaysBadClient:
+        def complete_json(self, *, messages, request_id, purpose=None, **_kwargs):
+            return {"must_identify": ["还是桶"]} if request_id == "simulation-evaluation" else {"bad": 1}
+
+    current_app.extensions["fde_api_simulation_deepseek"] = _AlwaysBadClient()
+    try:
+        result = ServerModelEvaluation().evaluate(
+            judge_view={
+                "reference": {
+                    "rubric": {"must_identify": ["主键缺失"], "must_avoid": [], "must_produce": []}
+                }
+            },
+            artifacts={"artifacts": []},
+            traces=[],
+        )
+    finally:
+        current_app.extensions.pop("fde_api_simulation_deepseek", None)
+
+    assert result.status == "invalid_output"
+    assert result.total_score == 0.0
+    assert result.criteria == ()
+
+
+def test_model_evaluation_passes_elevated_max_tokens_on_every_call(app):
+    """G9b 真机实测（2026-11-09）：评估调用必须显式抬高 max_tokens。
+
+    根因：评估模型是推理模型，reasoning token 与正文**共用 max_tokens 预算**；
+    客户端默认 8192 被思考整段烧掉 ⇒ finish_reason=length ⇒ content 为空
+    （ai_empty_response）或正文被截断成非法 JSON（ai_output_invalid）。
+    本测试钉住三层重试链路（首发 → 瞬时重试 → 契约纠偏重试）的**每一次**
+    complete_json 调用都带 EVALUATION_MAX_TOKENS。
+    """
+    from flask import current_app
+
+    from fde_api.ai.deepseek import DeepSeekError
+    from fde_api.simulation.model_evaluation import EVALUATION_MAX_TOKENS
+
+    calls: list[dict[str, object]] = []
+
+    class _FakeClient:
+        def complete_json(self, *, messages, request_id, purpose=None, **kwargs):
+            calls.append({"request_id": request_id, "kwargs": kwargs})
+            if len(calls) == 1:
+                # 首发：retryable 瞬时失败（真机形态：空流/坏 JSON/超时）
+                raise DeepSeekError("ai_empty_response", "空响应", retryable=True)
+            if len(calls) == 2:
+                # 瞬时重试：回显 Rubric 桶键（契约违约，真机实测的实际形状）
+                return {"must_identify": ["主键缺失"], "must_avoid": [], "must_produce": []}
+            # 契约纠偏重试：合规输出
+            return {
+                "criteria": [
+                    {
+                        "key": "MI-1",
+                        "dimension": "D1",
+                        "title": "主键缺失",
+                        "score": 0.6,
+                        "verdict": "partial",
+                        "evidence_refs": [{"kind": "quote", "text": "没有共同主键"}],
+                        "reason": "命中",
+                    }
+                ],
+                "summary": "重试后合规",
+            }
+
+    current_app.extensions["fde_api_simulation_deepseek"] = _FakeClient()
+    try:
+        result = ServerModelEvaluation().evaluate(
+            judge_view={
+                "reference": {
+                    "rubric": {"must_identify": ["主键缺失"], "must_avoid": [], "must_produce": []}
+                }
+            },
+            artifacts={"artifacts": [{"name": "a.md", "text": "没有共同主键"}]},
+            traces=[],
+        )
+    finally:
+        current_app.extensions.pop("fde_api_simulation_deepseek", None)
+
+    assert result.status == "evaluated"
+    assert len(calls) == 3
+    assert [c["request_id"] for c in calls] == [
+        "simulation-evaluation",
+        "simulation-evaluation-retry",
+        "simulation-evaluation-retry",
+    ]
+    for call in calls:
+        assert call["kwargs"].get("max_tokens") == EVALUATION_MAX_TOKENS == 16384
+
+
+def test_evaluation_prompt_carries_phase_keyed_artifact_bodies():
+    """G9b 真机实测修正：评估器传的是相位键控产物集合，提示词必须带正文。
+
+    （此前只认顶层 artifacts 列表 ⇒ 真实/mock 相位体全部丢失 ⇒ 模型层
+    「没有产物正文可评」——E2E 实测暴露，单测注入形态反而对齐掩盖了它。）
+    """
+    from fde_api.simulation.evaluation_prompt import build_evaluation_messages
+
+    messages = build_evaluation_messages(
+        judge_view={
+            "reference": {"rubric": {"must_identify": ["主键缺失"], "must_avoid": [], "must_produce": []}}
+        },
+        artifacts={
+            "analysis": {
+                "structured": False,
+                "artifacts": [{"name": "a.md", "pointer": "x", "text": "MES 批次与质量库无共同主键"}],
+            },
+            "design": {"structured": True, "root_causes": [{"text": "R-1"}]},
+        },
+        traces=[],
+    )
+    user = messages[1]["content"]
+    assert "analysis/a.md" in user
+    assert "无共同主键" in user
+    assert "design（结构化交付）" in user
+    assert "R-1" in user

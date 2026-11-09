@@ -22,6 +22,16 @@ from fde_api.simulation.evaluation_rules import DIMENSIONS, RUBRIC_VERSION
 # 分歧阈值：|L-A 总分 − L-B 总分| 超过即触发人工复核
 DISAGREEMENT_THRESHOLD = 0.2
 
+# 评估调用的 completion 上限（G9b 真机实测 2026-11-09）：当前评估模型
+# MiniMax-M3.1-Flash 是**推理模型**，reasoning token 与正文内容**共用同一
+# max_tokens 预算**；真实评估载荷约 7.2 万字符 ⇒ prompt_tokens 约 3.4 万，
+# 客户端默认 max_tokens=8192 会被思考整段烧掉（实测 reasoning_tokens=8189）
+# ⇒ finish_reason=length ⇒ content 为空 → ai_empty_response，或正文开头后
+# 被截断 → 非法 JSON → ai_output_invalid。此前呈「瞬时失败」的评估失败
+# 实为该确定性机制，与载荷大小正相关。显式抬高到 16384 后（真机 5 组
+# 预算×max_tokens 组合全过，52–158s），评估稳定产出契约合格 JSON。
+EVALUATION_MAX_TOKENS = 16384
+
 
 @dataclass(frozen=True)
 class ModelEvaluation:
@@ -206,30 +216,95 @@ class ServerModelEvaluation:
                 messages=messages,
                 request_id="simulation-evaluation",
                 purpose="simulation_evaluation",
+                max_tokens=EVALUATION_MAX_TOKENS,
             )
         except DeepSeekError as error:
-            return ModelEvaluation(
-                layer="model",
-                mode=self.mode,
-                status="error",
-                total_score=0.0,
-                verdict="unavailable",
-                criteria=(),
-                note=f"模型调用失败（{error.code}）：{error.public_message}",
-            )
+            if not getattr(error, "retryable", False):
+                return ModelEvaluation(
+                    layer="model",
+                    mode=self.mode,
+                    status="error",
+                    total_score=0.0,
+                    verdict="unavailable",
+                    criteria=(),
+                    note=f"模型调用失败（{error.code}）：{error.public_message}",
+                )
+            # 瞬时失败（坏 JSON / 空流 / 超时 / 限流）⇒ 同消息重试一次。客户端
+            # 对 retryable 错误会切备用模型，而单模型 provider 端点没有备用 ⇒
+            # 在本层消化这一次瞬时失败（G9b 真机实测：flash 模型长载荷偶发
+            # ReadTimeout / 空流 / 坏 JSON，三种轮流出现）。
+            try:
+                raw = client.complete_json(
+                    messages=messages,
+                    request_id="simulation-evaluation-retry",
+                    purpose="simulation_evaluation",
+                    max_tokens=EVALUATION_MAX_TOKENS,
+                )
+            except DeepSeekError as retry_error:
+                return ModelEvaluation(
+                    layer="model",
+                    mode=self.mode,
+                    status="error",
+                    total_score=0.0,
+                    verdict="unavailable",
+                    criteria=(),
+                    note=f"模型调用失败（{retry_error.code}）：{retry_error.public_message}",
+                )
 
+        retried = False
         try:
             parsed = parse_model_evaluation(raw)
-        except EvaluationContractError as error:
-            return ModelEvaluation(
-                layer="model",
-                mode=self.mode,
-                status="invalid_output",
-                total_score=0.0,
-                verdict="unavailable",
-                criteria=(),
-                note=f"模型输出不合契约（{error.code}）：{error.message}",
-            )
+        except EvaluationContractError as first_error:
+            # 契约纠偏重试一次（沿 discovery 管线「契约失败一次自动重试」先例）：
+            # 把违约事实回喂给模型，附上契约要求；仍违约才落 invalid_output。
+            import json as _json
+
+            messages = [
+                *messages,
+                {
+                    "role": "assistant",
+                    "content": _json.dumps(raw, ensure_ascii=False)[:2000],
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"你的上一份输出不合契约（{first_error.code}）：{first_error.message}。"
+                        "请严格按系统提示的输出格式重新输出：单个 JSON 对象，"
+                        "顶层键只有 criteria 与 summary；禁止 must_identify / must_avoid / "
+                        "must_produce 等其他顶层键。"
+                    ),
+                },
+            ]
+            retried = True
+            try:
+                raw = client.complete_json(
+                    messages=messages,
+                    request_id="simulation-evaluation-retry",
+                    purpose="simulation_evaluation",
+                    max_tokens=EVALUATION_MAX_TOKENS,
+                )
+            except DeepSeekError as error:
+                return ModelEvaluation(
+                    layer="model",
+                    mode=self.mode,
+                    status="error",
+                    total_score=0.0,
+                    verdict="unavailable",
+                    criteria=(),
+                    note=f"模型调用失败（{error.code}）：{error.public_message}",
+                )
+            try:
+                parsed = parse_model_evaluation(raw)
+            except EvaluationContractError as error:
+                return ModelEvaluation(
+                    layer="model",
+                    mode=self.mode,
+                    status="invalid_output",
+                    total_score=0.0,
+                    verdict="unavailable",
+                    criteria=(),
+                    note=f"模型输出不合契约（{error.code}）：{error.message}",
+                )
 
         criteria = [
             {
@@ -247,6 +322,7 @@ class ServerModelEvaluation:
             sum(item["score"] for item in criteria) / len(criteria) if criteria else 0.0, 4
         )
         verdict = "pass" if total >= 0.75 else ("conditional" if total >= 0.6 else "fail")
+        retry_note = "含一次契约纠偏重试；" if retried else ""
         return ModelEvaluation(
             layer="model",
             mode=self.mode,
@@ -256,7 +332,7 @@ class ServerModelEvaluation:
             criteria=tuple(criteria),
             note=(
                 "模型层为独立第二意见：**不判定终局、不判定硬性失败**——"
-                f"结论由规则层（L-A）负责。摘要：{parsed['summary']}"
+                f"结论由规则层（L-A）负责。{retry_note}摘要：{parsed['summary']}"
             ),
         )
 
@@ -281,7 +357,11 @@ def _simulation_client():
         api_key=api_key,
         model=settings.deepseek_simulation_evaluation_model,
         timeout_seconds=settings.deepseek_timeout_seconds,
-        fallback_model=settings.deepseek_fallback_model,
+        # **不配备用模型**（G9b 真机实测 2026-11-09）：评估层管理自己的瞬时
+        # 重试（一次）。若沿用全局备用槽（deepseek-v4），单模型 provider 端点
+        # 会把 retryable 错误在客户端内部转成 ai_manual_handoff（备用 400），
+        # 本层的瞬时重试永远没有机会触发。
+        fallback_model=None,
     )
 
 

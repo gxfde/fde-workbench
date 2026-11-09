@@ -55,11 +55,16 @@ from fde_api.agents.adapter import (
     ZcodeAdapter,
 )
 from fde_api.agents.context import (
-    SANDBOX_AGENT_DISCIPLINE,
     SanitizationError,
     render_masked_context,
 )
 from fde_api.agents.execution_policy import normalize_workspace_under_root, policy_snapshot
+from fde_api.agents.workspace_files import (
+    _CONTEXT_FILE,
+    _MANIFEST_FILE,
+    _OUTPUT_DIR,
+    _write_workspace,
+)
 from fde_api.agents.host_channel import (
     HostChannelError,
     HostChannelSettings,
@@ -119,13 +124,7 @@ FAILED_STATUSES = frozenset({"failed", "timeout", "budget_exceeded"})
 IN_FLIGHT_STATUSES = frozenset({"queued", "running", "host_running"})
 AGENT_MAX_RETRIES = 2  # 循环提示词硬性：重试上限 2 次（家族 = 3 个 run）
 
-_CONTEXT_FILE = "context.md"
-_TASK_FILE = "task.md"
-_DISCIPLINE_FILE = "AGENTS.md"
-_OUTPUT_DIR = "output"
 _EVENTS_FILE = "events.ndjson"
-_MANIFEST_FILE = "manifest.json"
-_RUN_HEADER_LIMIT = 200  # 任务书正文上限（上下文本体在 context.md）
 
 
 class AgentsServiceError(Exception):
@@ -402,15 +401,6 @@ def _render_context(
         # fail-closed：禁区词/非法条目拦截在落盘与发起之前（绝不 500 裸抛）
         raise _error(error.code, error.message, 422) from error
     return rendered.text, rendered.problem_refs
-
-
-def _write_workspace(workspace: Path, *, context_text: str, project_code: str, capability: str) -> None:
-    """渲染产物落 workspace（挂进沙箱的唯一目录；红线段三文件）。"""
-    (workspace / _OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-    (workspace / _CONTEXT_FILE).write_text(context_text, encoding="utf-8")
-    header = "\n".join(("# 任务书", "", f"- 项目代号: {project_code}", f"- 能力: {capability}", "请阅读 context.md 与 AGENTS.md 后执行；产物写入 output/ 并附 manifest.json。", ""))
-    (workspace / _TASK_FILE).write_text(header[:_RUN_HEADER_LIMIT], encoding="utf-8")
-    (workspace / _DISCIPLINE_FILE).write_text(SANDBOX_AGENT_DISCIPLINE, encoding="utf-8")
 
 
 def _mark_l2(session: Any, run_id: str, reason: str) -> None:

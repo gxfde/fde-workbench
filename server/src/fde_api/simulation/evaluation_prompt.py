@@ -12,7 +12,8 @@
 """
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, Iterator
 
 SYSTEM_PROMPT = """你是 FDE 交付质量的独立评估员。
 
@@ -23,11 +24,32 @@ SYSTEM_PROMPT = """你是 FDE 交付质量的独立评估员。
 2. 每条评分必须引用交付正文里的原文片段作为证据；无法引用原文的条目不要给分。
 3. 你不判定最终通过与否，也不判定硬性失败——那些由确定性规则层负责。
 4. 只依据提供的材料判断；材料没写的，就是没有。不要推测交付方「可能做了什么」。
-5. 输出必须是 JSON，键集严格按给定结构，不得增删顶层键。"""
 
-# 交付正文最多带入的字符数（超长截断，避免超上下文与烧 token）
-MAX_ARTIFACT_CHARS = 6000
-MAX_TRACE_ITEMS = 40
+输出格式（唯一允许的形状，G9 真机实测补充：不给形状模型会回显 Rubric 桶键）——
+单个 JSON 对象，顶层键**只有** `criteria` 与 `summary`：
+```json
+{"criteria": [
+    {"key": "MI-1", "dimension": "D1", "title": "<判据短名>", "score": 0.7,
+     "verdict": "pass",
+     "evidence_refs": [{"kind": "quote", "text": "<交付正文原文片段，≤600 字>"}],
+     "reason": "<一句话理由>"}
+  ],
+ "summary": "<一句话总评>"}
+```
+- `key`：自拟唯一短名（must_identify 第 n 条建议 `MI-n`、must_avoid → `MA-n`、must_produce → `MP-n`）；
+- `dimension`：只准取 D1–D7——D1 访谈与需求识别 / D2 业务流程与本体建模 /
+  D3 解决方案质量 / D4 任务拆解与 Workflow 设计 / D5 实施质量 /
+  D6 测试、验收与证据 / D7 成本、风险与沟通；
+- `verdict`：只准 `pass` / `partial` / `fail`；`score` 在 0–1；
+- **禁止**把 `must_identify` / `must_avoid` / `must_produce` 作为输出键——
+  它们是输入材料（Rubric 桶），不是输出格式；
+- 没有原文证据的判据**不要输出**（会被整条丢弃）。"""
+
+# 交付正文最多带入的字符数（超长截断，避免超上下文与烧 token）。
+# G9b 真机实测：真实面一次运行有 5–7 份产物，全量 6000 字/份会让 provider
+# 读超时——模型层是**咨询性第二意见**（不判终局），3000 字摘录足够定性。
+MAX_ARTIFACT_CHARS = 3000
+MAX_TRACE_ITEMS = 24
 
 
 def _clip(text: str, limit: int = MAX_ARTIFACT_CHARS) -> str:
@@ -35,6 +57,45 @@ def _clip(text: str, limit: int = MAX_ARTIFACT_CHARS) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + "\n…（已截断）"
+
+
+def _iter_artifact_blocks(artifacts: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    """遍历产物正文块（G9b 真机实测修正：评估器实际传入**相位键控**集合）。
+
+    - 相位键控（``{"analysis": {...}, "design": {...}, ...}``）：真实面相位体内
+      ``artifacts`` 是产物条目列表（含 ``text`` 摘录）；mock 面相位体是结构化
+      字段——同样序列化进正文（模型评估的就是交付内容本身）。
+    - 顶层 ``artifacts`` 列表：测试注入形态，向后兼容。
+    """
+    top = artifacts.get("artifacts") if isinstance(artifacts, dict) else None
+    if isinstance(top, list):
+        for index, entry in enumerate(top, start=1):
+            if isinstance(entry, dict):
+                yield (
+                    str(entry.get("name") or f"artifact-{index}"),
+                    str(entry.get("text") or ""),
+                )
+    for phase in ("analysis", "design", "implementation", "validation"):
+        body = artifacts.get(phase)
+        if not isinstance(body, dict):
+            continue
+        entries = body.get("artifacts")
+        if isinstance(entries, list) and entries:
+            for entry in entries:
+                if isinstance(entry, dict):
+                    name = str(entry.get("name") or entry.get("pointer") or phase)
+                    yield (f"{phase}/{name}", str(entry.get("text") or ""))
+            continue
+        rest = {
+            key: value
+            for key, value in body.items()
+            if key not in ("artifacts", "tool_calls", "evidence_count")
+        }
+        if rest:
+            yield (
+                f"{phase}（结构化交付）",
+                json.dumps(rest, ensure_ascii=False)[:MAX_ARTIFACT_CHARS],
+            )
 
 
 def build_evaluation_messages(
@@ -78,17 +139,12 @@ def build_evaluation_messages(
         blocks.extend(f"- {item}" for item in criteria)
 
     blocks.append("## 交付正文（按产物逐条）")
-    artifact_items = artifacts.get("artifacts") if isinstance(artifacts, dict) else None
-    artifact_items = artifact_items if isinstance(artifact_items, list) else []
-    if artifact_items:
-        for index, artifact in enumerate(artifact_items, start=1):
-            if not isinstance(artifact, dict):
-                continue
-            name = str(artifact.get("name") or artifact.get("tool") or f"artifact-{index}")
-            text = str(artifact.get("text") or "")
-            blocks.append(f"### 产物 {index}：{name}")
-            blocks.append(_clip(text) if text else "（无正文）")
-    else:
+    wrote_any = False
+    for index, (name, text) in enumerate(_iter_artifact_blocks(artifacts), start=1):
+        wrote_any = True
+        blocks.append(f"### 产物 {index}：{name}")
+        blocks.append(_clip(text) if text else "（无正文）")
+    if not wrote_any:
         blocks.append("（本次交付没有产物正文）")
 
     if traces:
