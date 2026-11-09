@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — V3.2 G7b 追加轮二：L-C 终裁提交回执就地呈现（蔡工实测「提交后无任何反应」；纯桌面零服务端，2026-11-09）
+
+- **起因（蔡工实操，活库取证）**：蔡工对 run `91d00a0f` 提交人工终裁（结论不可靠/inconclusive、0.55、理由已留痕）后**看不到任何成功或失败提示**——查实落库**已成功**（human 行 14:22:35 UTC 在库），回执失败原因是 UI：成功/失败的 notice 只渲染在**左栏顶部**（运行列表上方），而用户盯着右栏表单 ⇒ 「报喜报忧都跑错栏」，且有诱发重复提交的风险（`record_human_evaluation` 每次调用落新行、无幂等，重复提交=多一条人工行）。
+- **修复**：①终裁表单内建提交状态机（idle/busy/ok/error），回执**就地呈现**——成功绿条「提交成功——人工终裁已落库…」/失败红条带服务端错误文案，紧贴表单；②提交按钮 busy 态（「提交中…」防双击）；③**父组件错误不再吞没**：`handleRecordHuman` 对 POST 失败改为**穿透给表单**（原来 catch 后只喂左栏 notice，表单永远只见成功）；④「POST 成功但报告刷新失败」单列——明确提示「已落库，重新选中运行可看回显」，**不得谎报为提交失败**（防误重提）。
+- **测试**：NEW 1 例（POST 拒绝 ⇒ 表单旁内联报错 + 按钮恢复可再提交）＋成功用例追加就地回执断言；桌面全量实测 **973 passed（82 文件）**＝上轮 972 + 1；typecheck 双 tsconfig 绿。
+- **新挂账（蔡工 inconclusive 理由直接指出的缺口）**：训练场评估报告缺少「**交付原文核对入口**」——从报告/发现面无法打开四份交付物原文，人工终裁核不到原文 ⇒ 本次终裁只能记 inconclusive。待后续轮加「从评估报告打开交付物原文（只读）」入口，届时蔡工可复核后改判。
+- **口径**：纯桌面 ⇒ 自身零结构增量（合并态结构口径以 fork/main 现测为准）；桌面变更 ⇒ 便携版 **r27**（r26 为上轮交付，现测顺延）。
+
 ## [未发布] — AI 原生化 N1 重跑二与 C-1 空引用集死锁修复轮（exit 0 真实执行／验证层语义缺口修复；零迁移零路由零桌面，2026-11-09）
 
 - **起因（重跑二实测，run `a5773e26`／幂等键 `n1-somwyn-host-002`）**：蔡工拍板「确认重跑」后重跑——GLM Token Plan 配额已恢复（起跑前最小直连探针 EXIT=0），**zcode exit 0 真实执行**（221.8s／`token_cost=769055` 真实计费／前置③票据二次行使＝新 `authorization_id` 指纹）＋**5 产物落库**（presales-brief／assumptions／discovery-questions／README 四 doc＋manifest.json config；sha256+size+mime 逐行正确＝#247 MIME 修复活体验证）。**但 5 产物全部被 C-1 拦截**（`ai_output_intercepted`＋422＋run failed/degraded_reason=artifact_validation_failed）：somwyn 无 confirmed 引导分析 ⇒ `problem_refs=∅`（known_refs 空集），任务书又明令「source_refs 只能取已确认业务问题的值、不要自创引用」⇒ 智能体如实写空数组 ⇒ `_finalize` 对空 `source_refs` **无条件**记 `missing_source_refs`——**智能体行为完全正确，这是验证层的结构性死锁**：known_refs=∅ 时任何产物都不可能过闸，而「暂无已确认业务问题」正是售前发现期的合法态（discovery-questions 本就是用来确认问题的）。

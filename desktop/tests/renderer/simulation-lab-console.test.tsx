@@ -388,8 +388,12 @@ it("admin 可见 L-C 终裁表单并 POST /evaluation/human，提交后重拉报
     expect(String(options.body?.note)).toContain("人工复核")
   })
   await waitFor(() => {
-    expect(screen.getByText(/人工终裁已落库/)).toBeInTheDocument()
+    expect(screen.getByText(/人工终裁已落库——机器结论与人工结论并列留痕/)).toBeInTheDocument()
   })
+  // 就地回执（G7b 追加：表单旁必须能看到提交结果，不能只靠左栏 notice）
+  expect(
+    screen.getByText(/提交成功——人工终裁已落库/),
+  ).toBeInTheDocument()
   // 终裁后重拉报告（evaluation GET 再次被调用）
   const evaluationGets = mocks.apiRequest.mock.calls.filter(
     ([path, options]) =>
@@ -533,4 +537,42 @@ it("执行面过滤无命中时给指路空态而非空白", async () => {
 
   await user.selectOptions(screen.getByLabelText("执行面"), "real")
   expect(screen.getByText(/当前过滤条件下没有运行/)).toBeInTheDocument()
+})
+
+it("终裁提交失败时在表单旁就地报错而非静默", async () => {
+  mocks.user.role = "admin"
+  mocks.apiRequest.mockImplementation((path: string, options: { method?: string } = {}) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [trace], total: 1, truncated: false, next_seq: 1 })
+    }
+    if (path.includes("/runs/run-1/evaluation/human") && options.method === "POST") {
+      return Promise.reject(new Error("forbidden: 人工抽检结论需项目负责人或管理员。"))
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(reportNeedingReview)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs") && options.method === "GET") {
+      return Promise.resolve({ items: [run], total: 1, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+
+  expect(await screen.findByText(/人工抽检结论（L-C 终裁）/)).toBeInTheDocument()
+  await user.type(screen.getByLabelText("理由（必填）"), "核对后再裁。")
+  await user.click(screen.getByRole("button", { name: "提交人工终裁" }))
+
+  await waitFor(() => {
+    expect(screen.getByText(/提交失败：forbidden/)).toBeInTheDocument()
+  })
+  // 失败后按钮恢复可再提交
+  expect(screen.getByRole("button", { name: "提交人工终裁" })).toBeEnabled()
 })

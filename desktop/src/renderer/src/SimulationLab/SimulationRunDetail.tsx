@@ -206,12 +206,20 @@ export function SimulationRunDetail(): ReactElement {
     setBusy(true)
     try {
       await recordHumanEvaluation(apiRequest, selectedId, payload)
+    } catch (caught) {
+      // POST 失败必须穿透给表单就地报错（只喂左栏 notice 会让用户误以为没提交）。
+      setBusy(false)
+      setNotice(errorText(caught))
+      throw caught
+    }
+    try {
       // 终裁后重拉报告：human 层行并列出现，human_review_required 随之解除。
       const fresh = await getEvaluationReport(apiRequest, selectedId)
       setReport(fresh)
       setNotice("人工终裁已落库——机器结论与人工结论并列留痕，未改写任何机器行。")
     } catch (caught) {
-      setNotice(errorText(caught))
+      // 落库已成功、仅刷新失败：不得谎报为提交失败（防用户重复提交）。
+      setNotice(`人工终裁已落库，但刷新报告失败：${errorText(caught)}——重新选中运行即可看到回显。`)
     } finally {
       setBusy(false)
     }

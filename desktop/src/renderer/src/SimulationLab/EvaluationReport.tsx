@@ -3,8 +3,9 @@
 // 三层**并列呈现不合并**：规则层 / 模型层 / 人工层各自一行，硬性失败单独成块。
 // 每个得分可下钻到证据引用；模型层显式标注模式（stub ≠ 真模型）。
 
-import { Fragment, type ReactElement } from "react"
+import { Fragment, useState, type ReactElement } from "react"
 
+import { ApiClientError } from "../api/client"
 import { UiButton } from "../components/ui"
 import {
   LAYER_LABEL,
@@ -151,16 +152,35 @@ function HumanReviewForm({
 }: {
   onSubmit(payload: { verdict: string; total_score: number; note: string }): Promise<void>
 }): ReactElement {
+  // 提交回执必须**就地呈现**（表单旁边）——G7b 追加轮实测：只靠左栏全局 notice，
+  // 用户在右栏点提交后看不到任何反应，甚至不确定是否落库（可能诱发重复提交）。
+  const [state, setState] = useState<"idle" | "busy" | "ok" | "error">("idle")
+  const [errorMessage, setErrorMessage] = useState("")
+
+  function errorText(caught: unknown): string {
+    if (caught instanceof ApiClientError) return caught.message
+    if (caught instanceof Error) return caught.message
+    return "提交失败，请稍后重试。"
+  }
+
   return (
     <form
       className="simulation-human-form"
       onSubmit={(event) => {
         event.preventDefault()
+        if (state === "busy") return
         const form = event.currentTarget
         const verdict = (form.elements.namedItem("verdict") as HTMLSelectElement).value
         const score = Number((form.elements.namedItem("score") as HTMLInputElement).value)
         const note = (form.elements.namedItem("note") as HTMLTextAreaElement).value
-        void onSubmit({ verdict, total_score: score, note })
+        setState("busy")
+        setErrorMessage("")
+        onSubmit({ verdict, total_score: score, note })
+          .then(() => setState("ok"))
+          .catch((caught: unknown) => {
+            setState("error")
+            setErrorMessage(errorText(caught))
+          })
       }}
     >
       <h4>人工抽检结论（L-C 终裁）</h4>
@@ -186,9 +206,19 @@ function HumanReviewForm({
         <span>理由（必填）</span>
         <textarea name="note" rows={2} />
       </label>
-      <UiButton variant="primary" type="submit">
+      <UiButton variant="primary" type="submit" busy={state === "busy"} busyLabel="提交中…">
         提交人工终裁
       </UiButton>
+      {state === "ok" ? (
+        <p className="simulation-notice" role="status">
+          提交成功——人工终裁已落库，机器结论与人工结论并列留痕；重新选中本运行可看到终裁回显。
+        </p>
+      ) : null}
+      {state === "error" ? (
+        <p className="simulation-error" role="alert">
+          提交失败：{errorMessage}
+        </p>
+      ) : null}
     </form>
   )
 }
