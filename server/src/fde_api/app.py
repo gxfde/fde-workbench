@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from importlib import import_module
 
 from flask import Blueprint, Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from fde_api.config import Settings
 from fde_api.errors import register_error_handlers
@@ -120,5 +121,15 @@ def create_app(settings: Settings | None = None) -> Flask:
     from fde_api.cli import register_cli
 
     register_cli(app)
+
+    # 反向代理拓扑：外部客户端 -> Nginx(宿主) -> 127.0.0.1:8010 -> Gunicorn。
+    # 8010 只绑回环且公网不可达，X-Forwarded-For 只能由本机 Nginx 覆盖写入
+    # （客户端自带值已被丢弃），因此只信任一跳是安全的。ProxyFix 改写
+    # REMOTE_ADDR 后，auth 的「用户名 + 来源 IP」限流键能取到真实客户端 IP；
+    # 宿主回环直连的请求无 XFF，仍按 Docker 网桥网关计数，运维接口不受影响。
+    # 只开 x_for，不动 scheme/host/port，缩小对 URL 生成与其它中间件的影响面。
+    # Flask 的类型存根把 wsgi_app 声明为方法，赋值必然触发 method-assign；
+    # 这是存局限定，不是运行时错误，故只在该行豁免，不扩进 mypy 基线。
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)  # type: ignore[method-assign]
 
     return app

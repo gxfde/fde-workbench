@@ -80,11 +80,19 @@ def login_user_row(db_session):
     return create
 
 
-def _post_login(client, username: str, ip: str, password: str = "wrong-password"):
+def _post_login(
+    client,
+    username: str,
+    ip: str,
+    password: str = "wrong-password",
+    xff: str | None = None,
+):
+    headers = {"X-Forwarded-For": xff} if xff else {}
     return client.post(
         "/api/v1/auth/login",
         json={"username": username, "password": password, "device_label": "pytest"},
         environ_base={"REMOTE_ADDR": ip},
+        headers=headers,
     )
 
 
@@ -174,3 +182,40 @@ def test_redis_down_fail_closed_when_configured(app, db_session, settings, login
     assert response.status_code == 429
     assert response.json["error"]["code"] == "login_rate_limited"
     assert any("rate limiter" in record.message.lower() for record in caplog.records)
+
+
+def test_proxyfix_uses_forwarded_client_ip(app, db_session, limited_client, login_user_row):
+    """反代后限流键取 XFF 的真实客户端 IP，不再退化为 Docker 网桥网关固定值。"""
+    login_user_row("rate.victim")
+    redis = app.extensions["fde_api_redis"]
+
+    response = _post_login(limited_client, "rate.victim", "172.21.0.1", xff="203.0.113.7")
+
+    assert response.status_code == 401
+    assert "auth:login_fail:rate.victim:203.0.113.7" in redis.counters
+    assert "auth:login_fail:rate.victim:172.21.0.1" not in redis.counters
+
+
+def test_proxyfix_takes_last_hop_of_forwarded_chain(app, db_session, limited_client, login_user_row):
+    """多段 XFF 只取最后一个可信跳，防止用伪造前缀绕过限流。"""
+    login_user_row("rate.victim")
+    redis = app.extensions["fde_api_redis"]
+
+    response = _post_login(
+        limited_client, "rate.victim", "172.21.0.1", xff="198.51.100.1, 203.0.113.7"
+    )
+
+    assert response.status_code == 401
+    assert "auth:login_fail:rate.victim:203.0.113.7" in redis.counters
+    assert "auth:login_fail:rate.victim:198.51.100.1" not in redis.counters
+
+
+def test_no_forwarded_header_falls_back_to_remote_addr(app, db_session, limited_client, login_user_row):
+    """宿主回环运维请求无 XFF：仍按 REMOTE_ADDR 计数，值守/复位链路不受影响。"""
+    login_user_row("rate.victim")
+    redis = app.extensions["fde_api_redis"]
+
+    response = _post_login(limited_client, "rate.victim", "172.21.0.1")
+
+    assert response.status_code == 401
+    assert "auth:login_fail:rate.victim:172.21.0.1" in redis.counters
