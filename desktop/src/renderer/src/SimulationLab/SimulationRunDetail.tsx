@@ -65,7 +65,9 @@ export function SimulationRunDetail(): ReactElement {
   const [scenarios, setScenarios] = useState<ScenarioDto[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [splitFilter, setSplitFilter] = useState("")
-  const [adapterMode, setAdapterMode] = useState<"mock" | "real">("mock")
+  // 「执行面」下拉双重职责：过滤下方运行列表 + 作为新运行的默认执行面。
+  // 空串 = 全部执行面（列表不按执行面收窄；发起新运行时回落 mock）。
+  const [adapterMode, setAdapterMode] = useState<"" | "mock" | "real">("")
   const [statusFilter, setStatusFilter] = useState("")
   const [traces, setTraces] = useState<TraceItemDto[]>([])
   const [phase, setPhase] = useState("")
@@ -143,7 +145,7 @@ export function SimulationRunDetail(): ReactElement {
     try {
       await createSimulationRun(apiRequest, {
         scenario_id: scenario.id,
-        adapter_mode: adapterMode,
+        adapter_mode: adapterMode || "mock",
         execute: true,
         config: { max_rounds: 6, probe_quality: 1.0 },
       })
@@ -215,6 +217,9 @@ export function SimulationRunDetail(): ReactElement {
     }
   }
 
+  // 执行面过滤（客户端收窄 ≤200 行的列表；服务端列表无 adapter_mode 参数）。
+  const visibleRuns = adapterMode ? runs.filter((run) => run.adapter_mode === adapterMode) : runs
+
   return (
     <section className="simulation-runs" aria-label="模拟运行台">
       <div className="simulation-run-list-panel">
@@ -232,12 +237,13 @@ export function SimulationRunDetail(): ReactElement {
         </header>
         <div className="simulation-filters" role="group" aria-label="运行筛选">
           <label>
-            <span>执行面</span>
+            <span>执行面（过滤列表；发起新运行也用它）</span>
             <select
               value={adapterMode}
-              onChange={(event) => setAdapterMode(event.target.value as "mock" | "real")}
+              onChange={(event) => setAdapterMode(event.target.value as "" | "mock" | "real")}
               aria-label="执行面"
             >
+              <option value="">全部执行面</option>
               <option value="mock">脚本化替身（mock）</option>
               <option value="real">真实执行面（real）</option>
             </select>
@@ -283,13 +289,27 @@ export function SimulationRunDetail(): ReactElement {
         {!loading && runs.length === 0 ? (
           <EmptyState title="尚无运行" description="点击「发起模拟运行」跑一次。" />
         ) : null}
+        {!loading && runs.length > 0 && visibleRuns.length === 0 ? (
+          <p className="simulation-empty">
+            当前过滤条件下没有运行——「执行面」选「全部执行面」可看全部 {runs.length} 条。
+          </p>
+        ) : null}
+        {!loading && visibleRuns.length > 0 ? (
+          <p className="simulation-hint">
+            {visibleRuns.length === runs.length
+              ? `共 ${runs.length} 条运行`
+              : `过滤后 ${visibleRuns.length} / ${runs.length} 条运行`}
+            ；要找某一次运行，认每行开头的短编号（#开头 8 位）。
+          </p>
+        ) : null}
         <ul className="simulation-run-list">
-          {runs.map((run) => (
+          {visibleRuns.map((run) => (
             <li
               key={run.id}
               className={`simulation-run-item${run.id === selectedId ? " active" : ""}`}
             >
               <button type="button" onClick={() => setSelectedId(run.id)}>
+                <code className="simulation-run-id">#{run.id.slice(0, 8)}</code>
                 <span className={`simulation-status simulation-status-${run.status}`}>
                   {RUN_STATUS_LABEL[run.status]}
                 </span>

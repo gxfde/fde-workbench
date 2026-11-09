@@ -2331,3 +2331,53 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 }
 
 .simulation-human-form h4 { margin: 0; color: var(--text); }
+
+/* G7b 追加：运行台两栏布局与运行列表此前零样式（.simulation-runs / -list / -item
+   全部裸排）——按页补齐，只新增不改既有类。 */
+.simulation-runs {
+  display: grid;
+  grid-template-columns: minmax(300px, 2fr) 3fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.simulation-run-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.simulation-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: var(--surface);
+}
+
+.simulation-run-item.active { border-color: var(--brand-blue); background: var(--brand-blue-soft); }
+
+.simulation-run-item > button {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.simulation-run-id { color: var(--brand-blue); font-size: var(--font-caption); font-weight: var(--weight-medium); }
+
+.simulation-run-key { color: var(--muted); font-size: var(--font-caption); word-break: break-all; }
+
+.simulation-run-adapter,
+.simulation-run-split { font-size: var(--font-caption); color: var(--text); }

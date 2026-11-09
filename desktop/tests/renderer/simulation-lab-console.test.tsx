@@ -337,10 +337,8 @@ it("运行台可切换执行面并在 Trace 呈现接线状态", async () => {
   await waitFor(() => {
     expect(screen.getByLabelText("执行面")).toBeInTheDocument()
   })
-  // 默认是脚本化替身；可切到真实执行面
-  expect(screen.getByLabelText("执行面")).toHaveValue("mock")
-  await user.selectOptions(screen.getByLabelText("执行面"), "real")
-  expect(screen.getByLabelText("执行面")).toHaveValue("real")
+  // 默认「全部执行面」——列表不按执行面收窄
+  expect(screen.getByLabelText("执行面")).toHaveValue("")
   // 运行列表标注执行面
   expect(screen.getByText("脚本化替身")).toBeInTheDocument()
 })
@@ -454,4 +452,85 @@ it("已终裁的报告醒目回显人工结论（final=human）", async () => {
   expect(await screen.findByText(/人工终裁已记录/)).toBeInTheDocument()
   expect(screen.getByText(/机器原行保留并列/)).toBeInTheDocument()
   expect(screen.getAllByText(/人工层/).length).toBeGreaterThan(0)
+})
+
+const realRun = {
+  ...run,
+  id: "91d00a0f-a966-4a54-9271-752a8ab3bb28",
+  run_key: "CASE-A-QUALITY-TRACE:normal:v1:seed0:a1:cfgreal99",
+  adapter_mode: "real",
+}
+
+it("执行面下拉真正过滤列表：选「真实执行面」只剩 real 那条，行首带短编号", async () => {
+  routeApi()
+  // 注入两条运行（mock + real）
+  mocks.apiRequest.mockImplementation((path: string, options: { method?: string } = {}) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [trace], total: 1, truncated: false, next_seq: 1 })
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(report)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs") && options.method === "GET") {
+      return Promise.resolve({ items: [run, realRun], total: 2, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText("#91d00a0f")).toBeInTheDocument()
+  })
+  expect(screen.getByText(/共 2 条运行/)).toBeInTheDocument()
+
+  await user.selectOptions(screen.getByLabelText("执行面"), "real")
+  expect(screen.getByText("#91d00a0f")).toBeInTheDocument()
+  expect(screen.getByText(/过滤后 1 \/ 2 条运行/)).toBeInTheDocument()
+  expect(screen.queryByText("#run-1")).not.toBeInTheDocument()
+
+  await user.selectOptions(screen.getByLabelText("执行面"), "mock")
+  expect(screen.getByText("#run-1")).toBeInTheDocument()
+  expect(screen.queryByText("#91d00a0f")).not.toBeInTheDocument()
+
+  await user.selectOptions(screen.getByLabelText("执行面"), "")
+  expect(screen.getByText("#91d00a0f")).toBeInTheDocument()
+  expect(screen.getByText("#run-1")).toBeInTheDocument()
+})
+
+it("执行面过滤无命中时给指路空态而非空白", async () => {
+  mocks.apiRequest.mockImplementation((path: string, options: { method?: string } = {}) => {
+    if (path.includes("/runs/run-1/trace")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false, next_seq: 0 })
+    }
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(report)
+    }
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path.includes("/simulation/runs") && options.method === "GET") {
+      return Promise.resolve({ items: [run], total: 1, truncated: false })
+    }
+    if (path.includes("/simulation/scenarios")) {
+      return Promise.resolve({ items: [], total: 0, truncated: false })
+    }
+    return Promise.resolve({})
+  })
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+  await waitFor(() => {
+    expect(screen.getByText("#run-1")).toBeInTheDocument()
+  })
+
+  await user.selectOptions(screen.getByLabelText("执行面"), "real")
+  expect(screen.getByText(/当前过滤条件下没有运行/)).toBeInTheDocument()
 })
