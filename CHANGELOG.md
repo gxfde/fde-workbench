@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 桌面写操作 body 双重编码修复轮（单条/批量审阅「仍无反应」真根因；纯桌面零服务端，2026-11-10）
+
+- **起因（蔡工实测 r29）**：重新登录 r29 后「点击接受没有任何反应，批量更不行了」——r29 已修布局（按钮在屏内可点），仍无反应 ⇒ 另有真根因。
+- **破案（DB 取证，不再靠表象推断）**：用户测试窗口内 `business_facts.reviewed_at` **零新行**、`operation_events` **零新事件**＝请求从未到达服务端（此前宿主 PATCH 0.2s 200 只证明了服务端健康，从未证明桌面 IPC PATCH 链路真实跑通过）。精读链条 renderer→preload（body 原样透传）→主进程 `api-ipc.serializeBody`（**统一 JSON.stringify 一次**）→服务器，实锤：**7 处调用点**（DiscoveryPanel 4＋AgentsConsole 1＋TranscriptDraftsPanel 2＋HandoverPackagesPanel 1）传 `body: JSON.stringify(...)` 预序列化字符串 ⇒ 主进程**二次编码** ⇒ 服务端 `request.json` 收到「JSON 字符串」而非对象 ⇒ 每条写操作立即 4xx **零落库**。全仓其余 134 处健康调用点均传对象——对象才是契约。表象闭环：失败快+红字在面板顶部而人滚在百行长表中＝「没有反应」；批量逐条快速失败按钮闪一下进度＝「更不行了」；Console 零报错（HTTP 4xx 不打 console）。
+- **三改**：①7 处调用点改回**对象 body**（retryAfterAuthRefresh 标志保留）；②NEW `desktop/tests/main/api-body-contract.test.ts` **静态回归闸**——扫 `src/renderer` 禁 `body: JSON.stringify`（唯一例外 `fde-web-bridge.ts` 真 fetch 自序列化传输；main 自持 fetch 层 auth-ipc 不在扫描面），变异验证红→还原绿；③5 处既有测试断言（discovery 2＋transcript 3 处形状断言＋agents/handover 各 1）从 `JSON.parse(init.body)` 改回对象形状——**此前 mock apiRequest 把错误形状钉进断言＝测试 cement bug**（12+8 例全绿的假绿教训）。
+- **测试**：vitest **985**（85 文件；984 基线 +1 静态闸）；typecheck 双 tsconfig 绿。**口径**：纯桌面 ⇒ 不 rebuild 服务端镜像；便携版 **r30**（r29 含本根因未修）。
+
 ## [未发布] — 商业化 §16 最终验收清单核对（收尾核查轮；纯文档零代码零迁移零路由零桌面，2026-11-10）
 
 - **范围**：任务书 §16 十八条验收条款逐项对照 G0–G6 已交付证据勾稽，结论回填 `docs/commercialization/phase-status.md` 新节「§16 最终验收清单核对」——**18/18 全过**（#6 体验上限两档／#16 G0 采纳率与接管频次实测两条款附诚实注记：挂账项均为任务书 §17 外部输入或显式架构边界〔V3.2 simulation 接线、GAP-15 埋点〕，非验收缺口）。**商业化 G1–G6 Goal 循环全部收口**。

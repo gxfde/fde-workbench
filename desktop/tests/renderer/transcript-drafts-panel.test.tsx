@@ -63,7 +63,7 @@ function mockGet(url: string): unknown {
   throw new Error(`unexpected GET ${url}`)
 }
 
-type ApiCall = [string, { method?: string; body?: string } | undefined]
+type ApiCall = [string, { method?: string; body?: unknown } | undefined]
 
 function postCalls(): ApiCall[] {
   return (mocks.apiRequest.mock.calls as ApiCall[]).filter((call) => call[1]?.method === "POST")
@@ -118,7 +118,8 @@ it("新建草稿：manual 不带 engine、asr 带引擎标注", async () => {
       expect.objectContaining({ method: "POST" }),
     )
   })
-  const body = JSON.parse(postCalls()[0]![1]!.body as string)
+  // body 契约＝对象（api-ipc serializeBody 统一 stringify；预 stringify 会二次编码）。
+  const body = postCalls()[0]![1]!.body as Record<string, unknown>
   expect(body.source_kind).toBe("manual")
   expect(body.engine).toBeUndefined()
 
@@ -128,7 +129,7 @@ it("新建草稿：manual 不带 engine、asr 带引擎标注", async () => {
   fireEvent.change(screen.getByLabelText("转写文本"), { target: { value: "引擎转写文本" } })
   fireEvent.click(screen.getByText("保存草稿"))
   await waitFor(() => expect(postCalls().length).toBe(2))
-  const asrBody = JSON.parse(postCalls()[1]![1]!.body as string)
+  const asrBody = postCalls()[1]![1]!.body as Record<string, unknown>
   expect(asrBody.source_kind).toBe("asr")
   expect(asrBody.engine).toBe("faster-whisper:base")
 })
@@ -178,7 +179,7 @@ it("晋升：canManage 才有入口，POST 带客户确认三要素", async () =
       expect.objectContaining({ method: "POST" }),
     )
   })
-  const body = JSON.parse(postCalls().at(-1)![1]!.body as string)
+  const body = postCalls().at(-1)![1]!.body as Record<string, unknown>
   expect(body.client_confirmed_by).toBe("客户方信息化负责人")
   expect(body.client_confirmation_method).toBe("verbal")
   expect(body.client_confirmed_at).toBeTruthy()

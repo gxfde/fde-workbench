@@ -192,7 +192,7 @@ it("canManage 时产物行可标记复核并回拉详情（PATCH reviewed:true�
       }))
     }
     if (path === "/api/v1/agents/runs/run-abcdef1234567890/artifacts/art-1" && options?.method === "PATCH") {
-      expect(JSON.parse(options.body as string)).toEqual({ reviewed: true })
+      expect(options.body).toEqual({ reviewed: true })
       return Promise.resolve({ reviewed: true })
     }
     if (path === "/api/v1/agents/runs/run-abcdef1234567890/tool-calls" && options?.method === "GET") {

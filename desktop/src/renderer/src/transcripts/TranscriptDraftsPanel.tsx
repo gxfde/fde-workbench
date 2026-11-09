@@ -173,13 +173,14 @@ export function TranscriptDraftsPanel({ projectId, canManage }: TranscriptDrafts
     try {
       await apiRequest<TranscriptDraftDetailDto>("/api/v1/transcript-drafts", {
         method: "POST",
-        body: JSON.stringify({
+        // body 契约＝对象：主进程 serializeBody 统一 stringify（预 stringify 会二次编码 → 服务端 4xx）。
+        body: {
           project_id: projectId,
           title: title || undefined,
           content,
           source_kind: sourceKind,
           ...(sourceKind === "asr" ? { engine } : {}),
-        }),
+        },
       })
       setNotice("草稿已创建（企业名代号化已执行，复核条目见详情）。T+7 未晋升将自动清理。")
       setTitle(""); setContent(""); setEngine(""); setSourceKind("manual"); setFormOpen(false)
@@ -240,13 +241,13 @@ export function TranscriptDraftsPanel({ projectId, canManage }: TranscriptDrafts
     try {
       await apiRequest(`/api/v1/transcript-drafts/${encodeURIComponent(promoteDraftId)}/promote`, {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           title: promoteTitle,
           content: promoteContent,
           client_confirmed_by: confirmedBy,
           client_confirmed_at: confirmedAt,
           client_confirmation_method: confirmMethod,
-        }),
+        },
       })
       setNotice("已晋升为访谈纪要（正式库）。草稿正文随晋升抹除。")
       setPromoteDraftId(null); setExpandedDraftId(null); setDraftDetail(null)

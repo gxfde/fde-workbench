@@ -159,11 +159,12 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
     try {
       await apiRequest<PackageDetailDto>("/api/v1/handover-packages", {
         method: "POST",
-        body: JSON.stringify({
+        // body 契约＝对象：主进程 serializeBody 统一 stringify（预 stringify 会二次编码 → 服务端 4xx）。
+        body: {
           project_id: projectId,
           label: label || undefined,
           items: artifactIds.map((artifactId) => ({ artifact_id: artifactId, display_name: selected[artifactId] || undefined })),
-        }),
+        },
       })
       setNotice("草稿交付包已创建（清单为指针+指纹快照）。")
       setLabel(""); setSelected({}); setFormOpen(false)

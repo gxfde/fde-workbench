@@ -113,11 +113,12 @@ it("锚点三形态呈现：行号/时间段/字符区间", async () => {
 })
 
 it("发起抽取 POST 形状与幂等提示", async () => {
-  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; body?: unknown }) => {
     const method = init?.method ?? "GET"
     if (method === "GET") return Promise.resolve(mockGet(url))
     if (method === "POST" && url.endsWith("/discovery/extractions")) {
-      expect(JSON.parse(init?.body ?? "{}")).toEqual({ source_type: "interview_minutes", source_id: "min-1" })
+      // body 契约＝对象（主进程 serializeBody 统一 stringify；预 stringify 会二次编码）。
+      expect(init?.body).toEqual({ source_type: "interview_minutes", source_id: "min-1" })
       return Promise.resolve({ ...extractionReady, created: true })
     }
     return Promise.resolve({ data: {}, error: null })
@@ -138,11 +139,11 @@ it("重跑按钮仅 failed 行显示", async () => {
 
 it("事实审阅三动作 PATCH 形状（澄清走 needs_clarification）", async () => {
   const patches: Array<{ url: string; body: unknown; retry: boolean | undefined }> = []
-  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; retryAfterAuthRefresh?: boolean; body?: string }) => {
+  mocks.apiRequest.mockImplementation((url: string, init?: { method?: string; retryAfterAuthRefresh?: boolean; body?: unknown }) => {
     const method = init?.method ?? "GET"
     if (method === "GET") return Promise.resolve(mockGet(url))
     if (method === "PATCH") {
-      patches.push({ url, body: JSON.parse(init?.body ?? "{}"), retry: init?.retryAfterAuthRefresh })
+      patches.push({ url, body: init?.body, retry: init?.retryAfterAuthRefresh })
       return Promise.resolve({ data: {}, error: null })
     }
     return Promise.resolve({ data: {}, error: null })

@@ -161,7 +161,8 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
     try {
       await apiRequest(
         `/api/v1/agents/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`,
-        { method: "PATCH", body: JSON.stringify({ reviewed }) },
+        // body 契约＝对象：主进程 serializeBody 统一 stringify（预 stringify 会二次编码 → 服务端 4xx）。
+        { method: "PATCH", body: { reviewed } },
       )
       setArtifactNotice(reviewed ? "已标记复核。" : "已撤回复核。")
       const refreshed = await apiRequest<AgentRunDetailDto>(

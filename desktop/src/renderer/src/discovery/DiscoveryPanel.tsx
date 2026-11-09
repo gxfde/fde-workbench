@@ -270,7 +270,8 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     try {
       const data = await apiRequest<ExtractionDto & { created: boolean }>(
         `/api/v1/projects/${projectId}/discovery/extractions`,
-        { method: "POST", body: JSON.stringify({ source_type: "interview_minutes", source_id: selectedMinutesId }) },
+        // body 契约＝对象：主进程 serializeBody 统一 stringify 一次（预 stringify 会被二次编码 → 服务端收到字符串 → 4xx 零落库）。
+        { method: "POST", body: { source_type: "interview_minutes", source_id: selectedMinutesId } },
       )
       setNotice(data.created ? "抽取任务已入队，完成后回到「待审阅」状态。" : "该来源已有抽取记录（同源同版本幂等），未重复创建。")
       await loadAll()
@@ -302,7 +303,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         method: "PATCH",
         // 幂等审阅写：token 刷新后允许自动重发（否则 mutation_resubmit_required 中断操作）。
         retryAfterAuthRefresh: true,
-        body: JSON.stringify({ review_status: reviewStatus }),
+        body: { review_status: reviewStatus },
       })
       setFacts((prev) => prev.map((fact) => (fact.id === factId ? { ...fact, review_status: reviewStatus } : fact)))
     } catch (caught) {
@@ -319,7 +320,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         method: "PATCH",
         // 幂等审阅写：token 刷新后允许自动重发。
         retryAfterAuthRefresh: true,
-        body: JSON.stringify({ status }),
+        body: { status },
       })
       setRequirements((prev) => prev.map((req) => (req.id === requirementId ? { ...req, status } : req)))
     } catch (caught) {
@@ -344,7 +345,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           method: "PATCH",
           // 幂等审阅写：token 刷新后允许自动重发。
           retryAfterAuthRefresh: true,
-          body: JSON.stringify({ review_status: "accepted" }),
+          body: { review_status: "accepted" },
         })
         accepted.push(fact.id)
       } catch {

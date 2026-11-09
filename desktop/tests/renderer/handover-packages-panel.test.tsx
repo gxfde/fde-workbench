@@ -111,7 +111,8 @@ it("创建草稿包：勾选产物→POST items 快照形状", async () => {
     )
   })
   const call = mocks.apiRequest.mock.calls.find((c) => c[0] === "/api/v1/handover-packages" && c[1]?.method === "POST")!
-  const body = JSON.parse(call[1].body as string)
+  // body 契约＝对象（api-ipc serializeBody 统一 stringify；预 stringify 会二次编码）。
+  const body = call[1].body as Record<string, unknown>
   expect(body.label).toBe("结项包")
   expect(body.items).toEqual([{ artifact_id: "art-1", display_name: "change.diff" }])
 })
