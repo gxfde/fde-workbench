@@ -10,6 +10,12 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
+from fde_api.commercial.attribution_service import (
+    get_opportunity,
+    list_opportunities,
+    submit_opportunity,
+    withdraw_opportunity,
+)
 from fde_api.commercial.billing_service import (
     elect_deduction_method,
     get_active_election,
@@ -186,5 +192,66 @@ def certification_records_route(user_id: str):
     with db.session() as session:
         data = list_certification_records(
             session, actor=g.current_user, user_id=user_id
+        )
+        return jsonify({"data": data, "error": None})
+
+
+# ── 商业化 G4：商机归属与渠道保护（读面 + 当事人自证面）──
+
+
+@commercial_blueprint.post("/opportunities")
+@require_auth
+def submit_opportunity_route():
+    """① 报备（**当事人自证动作**：R2 创业者提交自己的企业线索）。
+
+    非 admin 治理写（报备不是关键流转）；证据只存指针 + sha256 指纹。
+    """
+    payload = request.get_json(silent=True)
+    payload = payload if isinstance(payload, dict) else {}
+    with db.session() as session, session.begin():
+        data = submit_opportunity(
+            session,
+            actor=g.current_user,
+            enterprise_code=payload.get("enterprise_code"),
+            title=payload.get("title"),
+            note=payload.get("note"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/opportunities")
+@require_auth
+def list_opportunities_route():
+    """商机列表（admin 全量；本人只见自己报备/归属/售前的）。"""
+    with db.session() as session:
+        data = list_opportunities(
+            session,
+            actor=g.current_user,
+            status=request.args.get("status"),
+            enterprise_code=request.args.get("enterprise_code"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/opportunities/<opportunity_id>")
+@require_auth
+def get_opportunity_route(opportunity_id: str):
+    """商机详情（含保护期**派生**状态与「企业是否已自助注册」派生事实）。"""
+    with db.session() as session:
+        data = get_opportunity(
+            session, actor=g.current_user, opportunity_id=opportunity_id
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.post("/opportunities/<opportunity_id>/withdraw")
+@require_auth
+def withdraw_opportunity_route(opportunity_id: str):
+    """撤回商机（**报备人自证动作**；他人 403；撤回不动归属事实）。"""
+    with db.session() as session, session.begin():
+        data = withdraw_opportunity(
+            session, actor=g.current_user, opportunity_id=opportunity_id
         )
         return jsonify({"data": data, "error": None})

@@ -737,3 +737,209 @@ class CommercialCertificationRecord(Base, TimestampMixin):
     decided_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 商业化 G4：商机归属与渠道保护（任务书 §8；ADR-009）
+# ══════════════════════════════════════════════════════════════════════════
+
+# 七步链路状态机（成文规则 §2）
+OPPORTUNITY_STATUSES = (
+    "submitted",  # ① 报备（创业者提交企业线索）
+    "enterprise_confirmed",  # ② 企业确认有真实需求
+    "attribution_confirmed",  # ③ 平台确认商机归属
+    "presales",  # ④ 创业者负责售前与客户关系
+    "matched",  # ⑤ 平台撮合交付者
+    "settled",  # ⑥ 按既定分成规则结算
+    "disputed",  # 争议中（规则位未配置则不可发起）
+    "withdrawn",  # 报备人撤回
+)
+
+# 保护期三态（**可区分**：未配置 ≠ 永久保护 ≠ 立即失效；ADR-009 §2.3）
+OPPORTUNITY_PROTECTION_STATUSES = (
+    "unconfigured",  # 规则位未配置 ⇒ 既非永久保护，也非立即失效
+    "active",  # 保护中（**必有到期时刻**——结构上不可能永久锁定）
+    "expired",  # 已到期（直签立即恢复放行）
+    "revoked",  # 已撤销（人工显式撤销）
+)
+
+# 规则位（**成文规则 ↔ 代码配置位一一对应**；本期全部 unset，ADR-009 §2.2）
+OPPORTUNITY_RULE_KEYS = (
+    "protection_period_days",  # 保护期长度（数值）
+    "renewal_conditions",  # 续期条件
+    "customer_choice",  # 客户自主选择权
+    "dispute_handling",  # 争议处理机制
+    "attribution_criteria",  # 归属判定
+)
+OPPORTUNITY_RULE_VALUE_KINDS = {
+    "protection_period_days": "days",
+    "renewal_conditions": "criteria",
+    "customer_choice": "criteria",
+    "dispute_handling": "criteria",
+    "attribution_criteria": "criteria",
+}
+OPPORTUNITY_RULE_STATUSES = ("unset", "configured")
+
+
+class CommercialOpportunity(Base, TimestampMixin):
+    """商机（报备→确认→保护→售前→撮合→结算；ADR-009）。
+
+    **只登企业代号与业务描述**——真实企业名/联系人/凭证一律不入库（AGENTS 红线）；
+    线索、企业答复、归属判据、争议材料**只存指针 + sha256 指纹**。
+
+    归属（``attribution_owner_user_id``）是本域事实：**企业侧立项路径没有任何
+    写路径可触碰本行**——「企业后续自行注册不自动易主」是结构性保证（ADR-009
+    §2.5），并由反例用例钉死。
+    """
+
+    __tablename__ = "commercial_opportunities"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {OPPORTUNITY_STATUSES!r}",
+            name="ck_commercial_opportunities_status",
+        ),
+        CheckConstraint(
+            f"protection_status IN {OPPORTUNITY_PROTECTION_STATUSES!r}",
+            name="ck_commercial_opportunities_protection_status",
+        ),
+        # 归属人非空 ⇒ 必有确认时刻（归属必须是「确认过的事实」）
+        CheckConstraint(
+            "attribution_owner_user_id IS NULL OR attribution_confirmed_at IS NOT NULL",
+            name="ck_commercial_opportunities_attribution_shape",
+        ),
+        # 进入售前/撮合/结算 ⇒ 必有归属人（链路不可跳过归属确认）
+        CheckConstraint(
+            "status NOT IN ('presales', 'matched', 'settled') "
+            "OR attribution_owner_user_id IS NOT NULL",
+            name="ck_commercial_opportunities_stage_requires_owner",
+        ),
+        # **保护中必有起止时刻**——结构上不可能出现永久保护（任务书 §8）
+        CheckConstraint(
+            "protection_status <> 'active' OR "
+            "(protection_started_at IS NOT NULL AND protection_expires_at IS NOT NULL)",
+            name="ck_commercial_opportunities_protection_window",
+        ),
+        CheckConstraint(
+            "protection_status <> 'active' OR protection_expires_at > protection_started_at",
+            name="ck_commercial_opportunities_protection_order",
+        ),
+        Index("ix_commercial_opportunities_enterprise", "enterprise_code"),
+        Index("ix_commercial_opportunities_reporter", "reported_by_user_id"),
+        Index("ix_commercial_opportunities_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # 企业代号（三段式，与 projects.enterprise_code 同口径；**不是真实企业名**）
+    enterprise_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="submitted", server_default="submitted"
+    )
+    # ── ① 报备（当事人自证）──
+    reported_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    reported_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    source_uri: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # ── ② 企业确认有真实需求（平台代录企业书面答复）──
+    enterprise_confirmed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    enterprise_confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    enterprise_confirmation_uri: Mapped[str | None] = mapped_column(String(500))
+    enterprise_confirmation_hash: Mapped[str | None] = mapped_column(String(64))
+    # ── ③ 平台确认商机归属（关键流转：admin 门 + 密码确认）──
+    attribution_owner_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    attribution_confirmed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    attribution_confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    attribution_uri: Mapped[str | None] = mapped_column(String(500))
+    attribution_hash: Mapped[str | None] = mapped_column(String(64))
+    # ── ④ 保护期（规则位未配置 ⇒ unconfigured；active 必有到期）──
+    protection_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unconfigured", server_default="unconfigured"
+    )
+    protection_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    protection_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    protection_renewal_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    protection_renewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # ── ⑤ 售前与客户关系 ──
+    presales_owner_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    # ── ⑥ 撮合交付者（引用既有 dispatch 交付包，不建第二套撮合）──
+    matched_delivery_package_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("delivery_packages.id", ondelete="RESTRICT")
+    )
+    customer_choice_package_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("delivery_packages.id", ondelete="RESTRICT")
+    )
+    # ── ⑦ 按既定分成规则结算（引用 G3 科目层的 project_share 行）──
+    settled_ledger_entry_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("commercial_revenue_ledger.id", ondelete="RESTRICT")
+    )
+    # 规则位状态快照（最近一次规则相关流转时；成文规则未定数的事实留痕）
+    rule_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # ── 旁支：撤回 / 争议 ──
+    withdrawn_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    disputed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    dispute_uri: Mapped[str | None] = mapped_column(String(500))
+    dispute_hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class CommercialOpportunityRule(Base, TimestampMixin):
+    """商机规则位（成文规则 ↔ 代码配置位**一一对应**；本期**全部 unset**）。
+
+    「规则先立框架、数值后填」（任务书 §1.2-6）：配置位缺省即 ``unset``，
+    **任何路径都不得预写业务数值**——未配置的相关动作一律 fail-closed
+    （409 ``rule_not_configured``），而不是回落到某个硬编码默认值。
+    """
+
+    __tablename__ = "commercial_opportunity_rules"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {OPPORTUNITY_RULE_STATUSES!r}",
+            name="ck_commercial_opportunity_rules_status",
+        ),
+        CheckConstraint(
+            "value_kind IN ('days', 'criteria')",
+            name="ck_commercial_opportunity_rules_value_kind",
+        ),
+        CheckConstraint(
+            "status <> 'unset' OR (days IS NULL AND criteria IS NULL)",
+            name="ck_commercial_opportunity_rules_unset_has_no_value",
+        ),
+        CheckConstraint(
+            "status <> 'configured' OR ("
+            "(value_kind = 'days' AND days IS NOT NULL AND days > 0 AND criteria IS NULL) OR "
+            "(value_kind = 'criteria' AND criteria IS NOT NULL AND days IS NULL))",
+            name="ck_commercial_opportunity_rules_configured_shape",
+        ),
+        CheckConstraint(
+            "status <> 'configured' OR (source_uri IS NOT NULL AND content_hash IS NOT NULL)",
+            name="ck_commercial_opportunity_rules_configured_has_evidence",
+        ),
+    )
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="unset", server_default="unset"
+    )
+    days: Mapped[int | None] = mapped_column(Integer)
+    criteria: Mapped[str | None] = mapped_column(String(500))
+    source_uri: Mapped[str | None] = mapped_column(String(500))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    configured_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    configured_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

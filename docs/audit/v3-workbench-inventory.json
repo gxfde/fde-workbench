@@ -1,10 +1,10 @@
 {
- "route_count": 411,
+ "route_count": 427,
  "blueprint_count": 49,
- "table_count": 137,
- "revision_count": 54,
+ "table_count": 139,
+ "revision_count": 55,
  "heads": [
-  "c4f7a2d9e1b6"
+  "e7b2c4d9f1a3"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -398,6 +398,15 @@
    "create_tables": [
     "handover_packages",
     "handover_package_items"
+   ],
+   "add_column_tables": []
+  },
+  "e7b2c4d9f1a3": {
+   "file": "e7b2c4d9f1a3_commercial_g4_opportunity_attribution.py",
+   "down_revision": "c4f7a2d9e1b6",
+   "create_tables": [
+    "commercial_opportunity_rules",
+    "commercial_opportunities"
    ],
    "add_column_tables": []
   },

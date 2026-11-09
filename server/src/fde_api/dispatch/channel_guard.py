@@ -15,6 +15,11 @@
 变更拍板项（轮次报告留注），不是配置项。封堵发生时写 OperationEvent 留痕
 （target=actor/project）；留痕走独立事务——被封堵的主事务必然回滚，留痕
 必须独立存活。留痕失败只降级（不阻断封堵本身）。
+
+**G4 附加判定（商业化 ADR-009 §2.4）**：商机报备保护期内，该企业**直签
+立项**亦被封堵（``opportunity_protection_active``，422）。该判定**惰性**
+（无商机即 no-op，既有三条钩子语义不变）且**失败放行**（查询异常不阻断
+立项）——保护是渠道秩序诉求，不是资金安全闸。
 """
 
 from __future__ import annotations
@@ -118,6 +123,41 @@ def ensure_dispatch_entry(actor: User) -> None:
     )
 
 
+def _opportunity_protection_guard(
+    session: Session, enterprise_code: str
+) -> ChannelGuardError | None:
+    """G4 商机保护期附加判定（商业化 ADR-009 §2.4）。
+
+    报备保护期内，该企业的**直签立项**被封堵（提示走归属渠道）——这是商机保护
+    的商业含义落点；**派单线放行**。
+
+    - **惰性**：无商机即 no-op——既有三条钩子语义不变（无商机时行为逐位相同）；
+    - **失败放行**：查询异常不阻断立项（保护是**渠道秩序**诉求，不是资金安全
+      闸，不得因查询故障挡住客户立项）；
+    - **只认「存储态 active 且未到期」**：未配置（unconfigured）与已到期
+      （expired）都**不封堵**——「未配置」不是永久保护，过期即放行。
+    """
+    if not enterprise_code:
+        return None
+    try:
+        from fde_api.commercial.attribution_service import (  # noqa: PLC0415
+            active_protection_for_enterprise,
+        )
+
+        row = active_protection_for_enterprise(session, enterprise_code)
+    except Exception:  # noqa: BLE001 - 失败放行（docstring 已述取舍）
+        return None
+    if row is None:
+        return None
+    expires = row.protection_expires_at.isoformat() if row.protection_expires_at else ""
+    return ChannelGuardError(
+        "opportunity_protection_active",
+        "该企业的商机处于报备保护期内（至 {}）：直签立项已封堵，"
+        "请走归属渠道或等待保护期结束。".format(expires),
+        422,
+    )
+
+
 def ensure_enterprise_channel(
     session: Session,
     *,
@@ -128,9 +168,26 @@ def ensure_enterprise_channel(
     """H2 池内企业直签封堵：直签线 × 池内企业 → 422（复购走池）。
 
     派单线放行——同企业复购走池正是判据口径（§3.3）。
+
+    另附 G4 商机保护期判定（报备保护期内直签封堵，ADR-009 §2.4）——该判定
+    **先于**池内判定：它在**成交前**的报备窗口生效，池内判定在成交后生效，
+    两者互补不重叠。
     """
     if business_line != DIRECT_LINE:
         return
+    protection = _opportunity_protection_guard(session, enterprise_code)
+    if protection is not None:
+        _audit_block(
+            actor.id,
+            event_type="opportunity_protection_blocked",
+            target=None,
+            payload={
+                "business_line": business_line,
+                "enterprise_code": enterprise_code,
+                "hook": "G4_opportunity_protection",
+            },
+        )
+        raise protection
     if not enterprise_in_pool(session, enterprise_code):
         return
     _audit_block(

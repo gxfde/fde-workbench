@@ -1,9 +1,120 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／**G3 合并 `f65f874`（#234）**
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／**G4 在途（`feat/commercial-g4-opportunity-attribution`，基线 `9497b2c`，合并前已 rebase 融合 AI 原生化 N2 迁移 `c4f7a2d9e1b6` 与 #240）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G3 订阅、培训与科目结算（T-10/T-11/T-13，任务书 §7）— 已完成**
+- 当前阶段：**G4 商机归属与渠道保护（T-09，任务书 §8）— 实施完成，PR→CI→合并→部署闭环进行中**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
+
+---
+
+## G4：商机归属与渠道保护（T-09）— 实施完成（闭环收口中）
+
+- 分支：`feat/commercial-g4-opportunity-attribution`（工作树 `D:\test\fde-wt-g1`）
+- 基线 SHA：fork/main `9497b2c`（开工时）；合并前**两轮 rebase** 融合上游三笔——#240（AI 原生化 N2，迁移 `c4f7a2d9e1b6` 53→54 rev，+10 测试）、#239（V3.2 G9b 真机两闸轮，+4 测试）、#235（V31-P1b 大纪要分段抽取，+52 测试，零迁移零路由）⇒ 本轮迁移改挂 `c4f7a2d9e1b6` 之后，**55 rev 单链单头 `e7b2c4d9f1a3`**
+- 状态：**implemented**（本节终值——PR 编号／CI run／部署活体断言——在合并收口 PR 回填）
+
+### 目标
+
+任务书 §8：立「报备→确认→保护→撮合→结算」七步链路，**规则数值本期不定数**（可配置结构＋缺省「未配置」，不留硬编码默认值）；已确认归属的商机企业后续直接注册**不得简单转移**；保护期**不得变成永久锁定企业**。
+
+### 设计决策及理由（含 ADR 编号）
+
+- **ADR-009**（`decisions/ADR-009-opportunity-attribution-and-channel-protection.md`，G4 成文）十项裁决：①七步状态机**引用既有** dispatch 交付包（⑥撮合）与 G3 科目层 `project_share` 行（⑦结算），不建第二套撮合/结算；②五个规则配置位（保护期长度／续期条件／客户自主选择权／争议处理机制／归属判定）迁移播种 **unset**＋机器闸（成文规则文件机器可读槽位块 ↔ 代码常量双向相等）；③保护期**三态可区分**（`unconfigured`/`active`/`expired`）且 `active` 必有到期时刻（CHECK 结构性排除永久锁定）；④保护期直签封堵＝**既有 `channel_guard` H1–H3 的扩展钩子**（惰性：无商机即 no-op／失败放行：查询异常不阻断立项／只认存储态 active 且未到期）；⑤归属不因企业自行注册而转移＝**结构性保证**（企业侧立项路径无商机行写路径）＋反例用例；⑥归属确认＝admin＋密码（关键流转），报备/撤回＝当事人自证（R2），企业确认＝admin＋线下书面依据（指针＋指纹）；⑦规则未配置 ⇒ **fail-closed**（409 `rule_not_configured`，不回落任何默认值）；⑧客户自主选择**不改归属**；⑨争议期间链路冻结（撮合/售前/结算 409 `opportunity_disputed`），争议处理机制未成文不可发起；⑩真实资料零入库（只登企业代号，材料只存指针＋sha256 指纹）。
+- 成文规则唯一处：`docs/commercialization/rules/opportunity-attribution-rules.md`（§2 七步链路／§3 保护期三态／§8 配置位对照表＋机器可读槽位块）；承接 **ADR-007**（双闸与自证动作）与 G1 角色分层（报备人＝R2 创业者）。
+
+### 修改文件
+
+```text
+新增：
+  docs/commercialization/rules/opportunity-attribution-rules.md            （NEW：成文规则唯一处＋机器可读槽位块）
+  docs/commercialization/decisions/ADR-009-opportunity-attribution-and-channel-protection.md
+  server/src/fde_api/commercial/attribution_service.py                     （NEW：规则位＋七步链路写原语＋保护期读时派生）
+  server/migrations/versions/e7b2c4d9f1a3_commercial_g4_opportunity_attribution.py
+  server/tests/test_commercial_opportunity_attribution.py                  （NEW：23 例）
+修改：
+  server/src/fde_api/commercial/models.py                                  （+2 表 + 闭集常量）
+  server/src/fde_api/commercial/routes.py                                  （+4 读/自证路由）
+  server/src/fde_api/commercial/admin_routes.py                            （+12 治理写路由）
+  server/src/fde_api/dispatch/channel_guard.py                             （+商机保护期直签封堵钩子，H1–H3 语义不变）
+  server/tests/conftest.py                                                 （清理序：G4 两表先于 G3 五表/派单簇/users）
+  server/tests/test_migrations.py                                          （HEAD_REVISION + 全集断言 54→55）
+  docs/audit/v3-{route,database}-inventory.csv + v3-workbench-inventory.json（重生成）
+  docs/architecture/archify-diagrams/architecture/*                        （口径数字同步 + preview 重出）
+  AGENTS.md / CHANGELOG.md / docs/commercialization/phase-status.md（本节）
+```
+
+### 数据库迁移
+
+迁移 `e7b2c4d9f1a3`（54→55 rev，additive 两表，单链单头）：`commercial_opportunity_rules`（五配置位：`protection_period_days`/`renewal_conditions`/`customer_choice`/`dispute_handling`/`attribution_criteria`；**迁移播种为 unset**，status ∈ unset/configured，days 与 criteria 互斥形状 CHECK）、`commercial_opportunities`（商机主体：status 八态闭集＋归属三戳（owner/by/at＋uri/hash）＋保护期五列（status/started/expires/renewal_count/renewed_at）＋撮合/客户选择/结算三引用（FK delivery_packages / commercial_revenue_ledger）＋争议/撤回留痕；**六条 CHECK**：状态闭集／保护期闭集／归属形状（owner⇔confirmed_at）／阶段需归属（presales·matched·settled ⇒ owner）／保护期窗口（active ⇒ started AND expires）／到期晚于起算）。rules 表先行（opportunities 的 rule 快照虽为 JSON 不引用，但 down 线 child-first 可逆）。
+
+### API / 权限 / API Catalog
+
+- 读/自证面（4）：`POST /api/v1/commercial/opportunities`（报备＝**R2 当事人自证**）、`GET /api/v1/commercial/opportunities`（admin 全量／本人只见报备·归属·售前相关）、`GET /api/v1/commercial/opportunities/<id>`（含保护期**派生态**与「企业是否已自助注册」**派生事实**）、`POST /api/v1/commercial/opportunities/<id>/withdraw`（报备人自证，settled 不可撤回）。
+- 治理写面（12，admin＋`confirm_password` 双闸）：`GET/POST /api/v1/admin/commercial/opportunity-rules[/<key>]`（规则位读＋配置/清空，须书面依据）、`POST …/opportunities/<id>/enterprise-confirm`（企业确认，代录线下书面答复）、`/attribution`（归属确认）、`/attribution/reassign`（改派，**被 `attribution_criteria` 闸 fail-closed**）、`/protection`（设定保护期，长度取 `protection_period_days` 配置位）、`/protection/renew`（续期，被 `renewal_conditions` 闸）、`/presales`（售前，默认归属人）、`/match`（撮合，交付包须同企业代号）、`/customer-choice`（客户自主选择，被 `customer_choice` 闸、**不改归属**）、`/settlement`（结算，须引用 `project_share` 科目行且未作废）、`/dispute`（发起争议，被 `dispute_handling` 闸、争议中链路冻结）。
+- **全部不进 api_catalog**（商业治理面，AI 不可调用）——ENTRIES **94** 不变。
+
+### 前端变化
+
+无（纯服务端轮，桌面便携版不重打包；商业化桌面呈现面挂后续轮）。
+
+### 测试命令与结果
+
+- `pytest tests/test_commercial_opportunity_attribution.py -q` → **23 passed**。
+- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2543 收集 = 2537 passed + 6 skipped，0 failed**（EXIT=0 / 8m39s；G3 轮基线 2454 收集 + AI 原生化 N2 +10 + #239 +4 + #235 +52 + 本轮 +23 ＝ 2543）。
+- **PR CI server-tests 实测 PR 在途——合并后由收口 PR 回填（终值以本 PR CI server-tests 实测为准）**（**终值以本 PR CI server-tests 实测为准**）。
+- `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（实施期补一处测试断言形状〔re.search Optional 收窄〕后归零，无新增）。
+- `ruff check`（全部改动文件）→ All checks passed。
+- **变异五连全转红→还原→绿**（字节级备份还原，sha256 终验一致）：M1 归属不自动易主失效（企业注册派生事实恒 False→反例用例红）／M2 保护期未配置也封堵（守卫放宽为任意非 revoked 态＋绕过到期派生→反例用例红）／M3 规则未配置仍放行（`require_rule_configured` 直通→规则闸用例红）／M4 争议不冻结（`_reject_when_disputed` 摘除→争议冻结用例红）／M5 归属可静默改写（`attribution_already_confirmed` 摘除→防改写用例红）。
+
+### 安全检查
+
+- 关键流转（企业确认/归属确认/改派/保护期/续期/售前/撮合/客户选择/结算/争议/规则配置）＝admin 门＋`confirm_password` 双闸（ADR-007 §2.1）；逐动作 `operation_events` 留痕（带 request_id，**密码不落事件**）。
+- 报备/撤回＝当事人自证（ADR-007 §2.4；报备仅 R2）；撤回**不动归属事实**（审计可回查）。
+- 证据只存 `source_uri` 指针＋`content_hash` sha256 指纹；真实企业名/联系人/凭证零入库（只登企业代号）。
+- 归属改写无旁路：再确认 409 `attribution_already_confirmed`；转移唯一路径 `reassign` 且被 `attribution_criteria` 规则闸 fail-closed（本期不可用＝**本期无转移路径**）。
+- 企业侧立项路径**无商机行写路径**（结构性保证）；保护期直签封堵**失败放行**（渠道秩序诉求，不是资金安全闸）；派单线（H1–H3）语义零变化。
+- 未读取无关密钥；`server/.env` 未入库；本轮零生产变更。
+
+### 数据兼容与回滚
+
+- additive 两表，**零既有表改列**（`delivery_settlements` 列集合逐位比对，结构钉）。
+- 回滚＝`alembic downgrade c4f7a2d9e1b6`（子表先行：opportunities → rules）＋回滚镜像。
+- 保护期判定惰性（库内无商机行时行为逐位不变）；G1–G3 商业面与派单回归绿（commercial+dispatch+projects 组合 154 例通过）。
+
+### 验收证据（任务书 §8 逐条）
+
+| 验收项 | 证据 |
+|---|---|
+| 七步链路完整（§2 七步） | `test_seven_step_chain_completes`（报备→企业确认→归属→保护期→售前→撮合→结算全链 200）＋ `test_step_order_is_enforced`（跳步 409 `invalid_opportunity_state`） |
+| 「归属确认后企业自行注册，商机不自动易主」反例 ≥1 | `test_attribution_not_transferred_when_enterprise_registers_directly`（保护期未配置 ⇒ 企业可直签立项；归属人/确认戳/状态/保护期逐项不变＋`enterprise_registered` 派生事实可见）；变异 M1/M2 转红 |
+| 保护期为空＝「未配置」且三态可区分 | `test_protection_three_states_are_distinguishable`（unconfigured→直签放行／active→封堵／backdate 到期→读时派生 expired→放行）＋ `test_protection_status_values_are_closed` |
+| 保护期 active 封堵直签立项（渠道保护落点） | `test_active_protection_blocks_direct_project_creation`（422 `opportunity_protection_active`＋审计事件 `opportunity_protection_blocked`）；直签封堵不得变永久锁定（CHECK active⇒expires） |
+| 规则文件与代码配置位一一对应 | `test_rule_document_slots_match_code_bidirectionally`（机器可读槽位块 ↔ `OPPORTUNITY_RULE_KEYS`/`VALUE_KINDS` 双向相等＋库行全 unset）＋ `test_rule_slots_are_unset_by_default` |
+| 规则数值不定数、无硬编码默认值 | 五配置位迁移播种 unset＋`test_actions_gated_by_unconfigured_rules`（续期/客户选择/争议/改派 409 `rule_not_configured`）；变异 M3 转红 |
+| 规则配置须书面依据 | `test_rule_configuration_requires_evidence`（缺 URI/指纹 400；配置后动作放行见 `test_actions_enabled_after_rules_configured`） |
+| 客户自主选择不改归属 | `test_actions_enabled_after_rules_configured`（选择生效且归属人不变；另证续期计数＋改派显式留痕） |
+| 撮合不张冠李戴／结算引用既有分账 | `test_match_requires_same_enterprise_package`（409 `package_enterprise_mismatch`）＋ `test_settlement_requires_project_share_entry`（409 `ledger_subject_mismatch`） |
+| 争议期间链路冻结 | `test_dispute_freezes_downstream_steps`（409 `opportunity_disputed`）；变异 M4 转红 |
+| 归属人工确认、不得静默改写 | `test_attribution_cannot_be_silently_overwritten`（409 `attribution_already_confirmed`）；变异 M5 转红 |
+| 报备＝R2；治理写双闸；事件无密码 | `test_report_requires_r2_role`＋`test_admin_actions_require_admin_and_password`＋`test_attribution_event_recorded_without_password` |
+| 读面权限 | `test_read_scope_and_permissions`（本人／admin 全量／他人 403／未认证 401）＋ `test_withdraw_only_by_reporter` |
+| 治理面不进 api_catalog | `test_governance_face_not_in_api_catalog`＋路由审计 CSV（ENTRIES 94 不变） |
+| 新增服务端逻辑有测试 | NEW `test_commercial_opportunity_attribution.py` **23 例**＋变异五连全红→还原→绿 |
+
+### 遗留问题
+
+1. 五个规则位**数值仍待业务拍板**（任务书 §17 数值类）：保护期长度／续期条件／客户自主选择权／争议处理机制／归属判定——配置结构＋成文规则文件已就位，附书面依据配置即生效，无需改结构。
+2. 商机保护期封堵提示文案与派单池内判定的先后语序，随数值拍板一并复核。
+3. GAP-15（AI 草稿采纳率埋点）仍开放；ADR-004 §1.4 多子公司集团归并仍待法务。
+
+### 部署活体验证（合并后）
+
+（收口 PR 回填：三镜像 rebuild 自本工作树＋alembic upgrade head → e7b2c4d9f1a3＋活体断言）
+
+### 是否允许进入下一阶段
+
+**允许进入 G5（区域合作商能力建设 T-12a，**不含 T-12b**，任务书 §9）**——前置回填：PR 四绿＋合并态 main run 四绿＋部署活体绿。
+T-12b（对外收费签约）本期不做：售卖能力默认关闭、开关绑定合规条件清单（《商业特许经营管理条例》七/八/十二/二十一条＋披露办法第四条四项）；「两直营店经营满 1 年」为客观时间门槛不可提前。
 
 ---
 

@@ -13,6 +13,21 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
+from fde_api.commercial.attribution_service import (
+    assign_presales,
+    configure_rule,
+    confirm_attribution,
+    confirm_enterprise_demand,
+    list_rules,
+    mark_disputed,
+    record_customer_choice,
+    record_match,
+    record_settlement,
+    reassign_attribution,
+    renew_protection,
+    serialize_rule,
+    set_protection,
+)
 from fde_api.commercial.billing_service import (
     charge_first_order_seat_fee,
     record_certification_evaluation,
@@ -325,6 +340,205 @@ def record_certification_route():
             simulation_evaluation_id=payload.get("simulation_evaluation_id"),
             source_uri=payload.get("source_uri"),
             content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+# ── 商业化 G4：商机归属与渠道保护（治理写：admin + 密码确认，ADR-007）──
+
+
+@admin_commercial_blueprint.get("/opportunity-rules")
+@require_auth
+def list_opportunity_rules_route():
+    """规则位读面（admin）——本期五个槽位**全部 unset**（规则数值未定数）。"""
+    with db.session() as session:
+        rows = list_rules(session)
+        return jsonify(
+            {
+                "data": {"rules": [serialize_rule(row) for row in rows]},
+                "error": None,
+            }
+        )
+
+
+@admin_commercial_blueprint.post("/opportunity-rules/<key>")
+@require_auth
+def configure_opportunity_rule_route(key: str):
+    """配置/清空规则位（admin + 密码确认；书面依据指针 + sha256 指纹）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = configure_rule(
+            session,
+            actor=g.current_user,
+            key=key,
+            value=payload.get("value"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/enterprise-confirm")
+@require_auth
+def confirm_enterprise_demand_route(opportunity_id: str):
+    """② 企业确认有真实需求（平台代录企业书面答复：admin + 密码确认）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = confirm_enterprise_demand(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            confirmation_uri=payload.get("confirmation_uri"),
+            confirmation_hash=payload.get("confirmation_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/attribution")
+@require_auth
+def confirm_attribution_route(opportunity_id: str):
+    """③ 平台确认商机归属（**关键流转**：admin + 密码确认）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = confirm_attribution(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            owner_user_id=payload.get("owner_user_id"),
+            attribution_uri=payload.get("attribution_uri"),
+            attribution_hash=payload.get("attribution_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/attribution/reassign")
+@require_auth
+def reassign_attribution_route(opportunity_id: str):
+    """改派归属（**判据规则未成文 ⇒ 不可用**，409 ``rule_not_configured``）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = reassign_attribution(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            owner_user_id=payload.get("owner_user_id"),
+            reason_uri=payload.get("reason_uri"),
+            reason_hash=payload.get("reason_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/protection")
+@require_auth
+def set_protection_route(opportunity_id: str):
+    """④ 设定保护期（长度取配置位；未配置 ⇒ 409 ``rule_not_configured``）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = set_protection(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/protection/renew")
+@require_auth
+def renew_protection_route(opportunity_id: str):
+    """续期保护期（**续期条件规则未成文 ⇒ 不可用**）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = renew_protection(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/presales")
+@require_auth
+def assign_presales_route(opportunity_id: str):
+    """⑤ 创业者负责售前与客户关系（默认＝归属人，可显式改派）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = assign_presales(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            owner_user_id=payload.get("owner_user_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/match")
+@require_auth
+def record_match_route(opportunity_id: str):
+    """⑥ 平台撮合交付者（引用既有 dispatch 交付包）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_match(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            delivery_package_id=payload.get("delivery_package_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/customer-choice")
+@require_auth
+def record_customer_choice_route(opportunity_id: str):
+    """客户自主选择交付包（**选择权规则未成文 ⇒ 不可用**；不改归属）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_customer_choice(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            delivery_package_id=payload.get("delivery_package_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/settlement")
+@require_auth
+def record_settlement_route(opportunity_id: str):
+    """⑦ 按既定分成规则结算（引用 G3 科目层的 project_share 行）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_settlement(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            ledger_entry_id=payload.get("ledger_entry_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/opportunities/<opportunity_id>/dispute")
+@require_auth
+def mark_disputed_route(opportunity_id: str):
+    """发起争议（**争议处理机制未成文 ⇒ 不可用**）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = mark_disputed(
+            session,
+            actor=g.current_user,
+            opportunity_id=opportunity_id,
+            dispute_uri=payload.get("dispute_uri"),
+            dispute_hash=payload.get("dispute_hash"),
             confirm_password=payload.get("confirm_password"),
         )
         return jsonify({"data": data, "error": None})

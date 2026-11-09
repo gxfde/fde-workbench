@@ -459,6 +459,14 @@ def db_session(app) -> Session:
 
     cleanup_models = (
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
+        # 商业化 G4：商机两表。商机行引用派单交付包、G3 科目层与 users
+        # （**FK RESTRICT**）——必须先于派单簇、科目层与 users 清理。
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialOpportunity"]
+        ).CommercialOpportunity,
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialOpportunityRule"]
+        ).CommercialOpportunityRule,
         # 商业化 G3：收入科目层五表。科目行引用派单分账/交付包、报价/收款/合同、
         # 培训权益与分成配置（**FK RESTRICT**）——必须先于派单簇与 users 清理；
         # 内部子先父后：ledger（引 split_rules）→ split_rules。
