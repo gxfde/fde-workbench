@@ -188,6 +188,7 @@ cd server
 | `FDE_DESKTOP_API_URL` | 开发态桌面端连接的 API 地址 |
 | `FDE_PRODUCT_NAME` | 服务端侧产品名（默认与桌面 `desktop/src/shared/brand.ts` 同值，改名双侧同步）；chat 等服务端界面文案取值处 |
 | `FDE_AI_MONTHLY_TOKEN_BUDGET` | AI 调用月度 token 预算（按用户核算），超限拒绝新调用并留审计记录；`0` = 不限额 |
+| `FDE_AI_REASONING_MODEL_PATTERN` | 可选：推理模型额外特征（Python 正则）。直连腿对命中推理特征的模型把输出预算 ×2（reasoning 与正文共享 max_tokens，不预留时正文被思考挤到截断）；留空只用内置特征（MiniMax-M 系列/DeepSeek reasoner·R1/QwQ/通用 reasoner·thinking/OpenAI o1·o3·o4），本项为**额外**分支，误配只放宽不收窄 |
 | `FDE_AGENT_MONTHLY_BUDGET` | 平台月度 agent 预算（token 单位）；`0` = 不限额 |
 | `FDE_ENTERPRISE_DICT` | 可选：售前企业名脱敏的现场真实词典文件路径；缺省用仓库内种子词典（仅合成示例），真实词典文件永不进 git，文件缺失时 fail-closed 阻断入库 |
 | `FDE_TRANSCRIPT_DRAFT_ROOT` / `FDE_TRANSCRIPT_DRAFT_RETENTION_DAYS` | T-A9 转写草稿区：独立文件根（默认 `.fde-transcript-drafts`，与对象存储分卷物理隔离）与 T+7 自动清理保留天数（≥1）。草稿只收文本——录音原件永不进平台 |

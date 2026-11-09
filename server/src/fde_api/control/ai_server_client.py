@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from contextvars import ContextVar
 from typing import Any
@@ -31,6 +32,88 @@ DEGRADABLE_DSH_CODES = frozenset({
     "dsh_authentication_failed",
     "dsh_timeout",
 })
+
+# V31-P1（somwyn 试点偏离）——实测定案（2026-11-09，MiniMax-M3.1-Flash）：
+#
+# 1. 推理模型的 ``reasoning_content`` 与 ``content`` **共享** max_tokens，
+#    且**思考长度随授予预算增长**：授予 16,384 时思考 ~11–15k tokens；授予
+#    32,768 时思考同步变长，同一篇 10K 字符纪要 **>900s 未返回**（超时）。
+# 2. 供应商 completion 有**硬顶**（MiniMax-M3.1-Flash = 16,384 tokens）：
+#    请求超过硬顶换不来更多正文——输出到顶即被截断（JSON 断在半路）。
+#
+# 结论：「给推理模型 ×2 预留预算」是**错的**（V31-P1 初版即此错，实弹证伪：
+# 预留后既没成功还更快超时）。正确解法是把活拆小——大纪要**分段抽取**
+# （``discovery/chunking.py``），单批输出落在硬顶内再合并。
+#
+# 本模块保留推理模型识别，只用于**截断诊断措辞**与部署扩展
+# （``FDE_AI_REASONING_MODEL_PATTERN``（Python 正则）作为**额外**分支并入）：
+# 命中推理特征 → 提示「思考吃掉了预算」（处置=精简输入/换非推理模型/分段）；
+# 未命中 → 提示「输出触达预算上限」（处置=精简输入/分段）。
+REASONING_MODEL_PATTERN = re.compile(
+    r"(?i)(minimax-m\d|deepseek-(?:reasoner|r\d)|qwq|reasoner|-thinking|\bo[134](?![\w.]))"
+)
+
+
+def _reasoning_extra_pattern() -> str | None:
+    """读部署扩展的推理模型特征（无 app 上下文/未配置返回 None，误配忽略）。"""
+    try:
+        extra = str(current_app.config["SETTINGS"].ai_reasoning_model_pattern or "")
+    except RuntimeError:  # 无 Flask app 上下文（单元测试直调等）
+        return None
+    return extra or None
+
+
+def is_reasoning_model(model_name: str, extra_pattern: str | None = None) -> bool:
+    """模型名是否命中推理特征（内置特征 ∪ 部署扩展正则，坏正则忽略并告警）。"""
+    if not model_name:
+        return False
+    patterns: list[re.Pattern[str]] = [REASONING_MODEL_PATTERN]
+    if extra_pattern:
+        try:
+            patterns.append(re.compile(extra_pattern, re.IGNORECASE))
+        except re.error:
+            logger.warning("invalid ai_reasoning_model_pattern, ignored: %r", extra_pattern)
+    return any(pattern.search(model_name) for pattern in patterns)
+
+
+def effective_max_tokens(model_name: str, requested: int, extra_pattern: str | None = None) -> int:
+    """直连腿输出预算：**原样使用调用方给的预算，不对推理模型加码**。
+
+    V31-P1 初版在此对推理模型 ×2 预留——实弹证伪（见文件头注释）：思考长度
+    随授予预算增长，×2 只让模型想更久（32,768 预算实测 >900s 超时），
+    供应商 completion 硬顶（16,384）也不会因请求更大而放宽。
+    保留本函数（而非直接删）为的是把「不加码」这条实证结论钉在代码里，
+    防止后人照旧例加回预留；``model_name``/``extra_pattern`` 形参保留只为
+    未来出现**有依据**的预算策略时不必改调用点。
+    """
+    return requested
+
+
+def _reasoning_tokens_from_usage(payload: dict[str, Any]) -> int | None:
+    """从 OpenAI 兼容 usage 块提取 reasoning tokens（无该明细返回 None，不发明数字）。"""
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    details = usage.get("completion_tokens_details")
+    if not isinstance(details, dict):
+        return None
+    try:
+        value = int(details.get("reasoning_tokens") or 0)
+    except (TypeError, ValueError):
+        return None
+    return value or None
+
+
+def _completion_tokens_from_usage(payload: dict[str, Any]) -> int | None:
+    """从 OpenAI 兼容 usage 块提取 completion tokens（无该块返回 None）。"""
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    try:
+        value = int(usage.get("completion_tokens") or 0)
+    except (TypeError, ValueError):
+        return None
+    return value
 
 
 def _provider_usage_from_response(payload: dict[str, Any], model_name: str) -> dict[str, Any]:
@@ -124,6 +207,12 @@ def direct_provider_completion(
     descriptor must carry base_url / api_key / model — every producer of
     that dict (model preferences, system default, structured overrides)
     already does.
+
+    V31-P1：截断识别与诚实报错。截断有两条证据——供应商回报
+    ``finish_reason == "length"``，或输出 token 数**触达请求预算**（模型
+    自然收尾时必小于预算：实测正常样本 15,834 < 16,384）。命中且正文缺失
+    时报 ``ai_output_truncated``（含处置指引）而非笼统 ``ai_output_invalid``；
+    正文非空但被截断时把证据写进 usage 供消费方判读。
     """
     base_url = str(model.get("base_url") or "").rstrip("/")
     model_name = str(model.get("model") or "")
@@ -132,6 +221,9 @@ def direct_provider_completion(
         raise DSHRuntimeError("ai_model_not_configured", "尚未配置可直连的模型。", retryable=False)
     if not api_key:
         raise DSHRuntimeError("ai_model_not_configured", "尚未配置可直连的模型 API Key。", retryable=False)
+
+    # 预算原样使用（推理模型不加码——实证见文件头注释）。
+    max_tokens = effective_max_tokens(model_name, max_tokens, _reasoning_extra_pattern())
 
     messages: list[dict[str, str]] = []
     if system_prompt:
@@ -165,13 +257,48 @@ def direct_provider_completion(
         raise DSHRuntimeError("ai_output_invalid", "AI 服务未返回有效结果。", retryable=True) from error
     if not isinstance(payload, dict):
         raise DSHRuntimeError("ai_output_invalid", "AI 服务未返回有效结果。", retryable=True)
-    try:
-        text = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as error:
-        raise DSHRuntimeError("ai_output_invalid", "AI 服务未返回有效结果。", retryable=True) from error
-    if not isinstance(text, str) or not text.strip():
+    choices = payload.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices else None
+    message = choice.get("message") if isinstance(choice, dict) else None
+    if not isinstance(message, dict):
         raise DSHRuntimeError("ai_output_invalid", "AI 服务未返回有效结果。", retryable=True)
-    return text, _provider_usage_from_response(payload, model_name)
+    # content 键缺失与显式 null 同视（截断场景部分供应商省略键）
+    text = message.get("content")
+    finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
+    reasoning_tokens = _reasoning_tokens_from_usage(payload)
+    completion_tokens = _completion_tokens_from_usage(payload)
+    # 截断证据：供应商明说 length，或输出 token 触达请求预算（到顶即被截断）。
+    truncated = finish_reason == "length" or (
+        completion_tokens is not None and max_tokens > 0 and completion_tokens >= max_tokens
+    )
+    if not isinstance(text, str) or not text.strip():
+        if truncated:
+            # V31-P1：输出预算被思考吃满、正文零产出——诚实报错并给处置指引，
+            # 不再伪装成「格式不正确」的 ai_output_invalid（试点的真实痛点：
+            # 两次重试同样必败，白烧两轮推理费用）。不可重试：同输入重放同败。
+            if is_reasoning_model(model_name, _reasoning_extra_pattern()):
+                detail = f"（模型报告 reasoning {reasoning_tokens} tokens）" if reasoning_tokens else ""
+                advice = "推理模型把输出预算用在了思考上，正文未产出" + detail
+                remedy = "请把长纪要分段抽取（或先人工整理精简）或更换非推理模型后重试"
+            else:
+                advice = "输出触达预算上限被截断，正文未产出"
+                remedy = "请把输入分段抽取（或先人工整理精简）后重试"
+            raise DSHRuntimeError(
+                "ai_output_truncated",
+                advice + "。" + remedy + "。",
+                retryable=False)
+        raise DSHRuntimeError("ai_output_invalid", "AI 服务未返回有效结果。", retryable=True)
+    usage = _provider_usage_from_response(payload, model_name)
+    if truncated:
+        # 正文非空但被截断：返回内容（对话场景可用），但把截断证据写进
+        # usage（结构化消费方解析失败时可据此给出同款诊断，审计可查）。
+        for call in usage.get("calls", []) if isinstance(usage, dict) else []:
+            call["truncated"] = True
+            if finish_reason is not None:
+                call["finish_reason"] = finish_reason
+            if reasoning_tokens is not None:
+                call["reasoning_tokens"] = reasoning_tokens
+    return text, usage
 
 
 ai_actor_id: ContextVar[str | None] = ContextVar("ai_actor_id", default=None)

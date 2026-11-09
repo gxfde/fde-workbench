@@ -40,8 +40,12 @@ REQUIREMENT_PRIORITIES = ("high", "medium", "low")
 # 需求状态机：与事实审阅同构（任务书 status+approved_* 字段名照用）
 REQUIREMENT_STATUSES = ("pending", "accepted", "rejected", "needs_clarification")
 
-EXTRACTOR_VERSION = "discovery-extractor-v1"
-PROMPT_VERSION = "discovery-prompt-v1"
+# V31-P1b：抽取器与提示词版本随「分段抽取」升级（v1＝整篇一次成抽 + 原提示词；
+# v2＝按行切片分批抽取 + 片级限定提示词 + 行号回基合并）。两者都进幂等键
+# （project, source_type, source_id, extractor_version, prompt_version）——版本
+# 升级后同源再抽生成新行（产出确实不同），试点期的 v1 行保留为历史事实。
+EXTRACTOR_VERSION = "discovery-extractor-v2"
+PROMPT_VERSION = "discovery-prompt-v2"
 
 REDACTION_EVENT_TYPE = "discovery.redaction_review"
 

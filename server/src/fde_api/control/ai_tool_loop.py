@@ -188,9 +188,14 @@ def direct_tool_completion(
     """Call the provider with tools and run the tool loop locally.
 
     Returns (text, provider_usage, tool_trace). The trace records which tools
-    ran so the caller can show the user what was actually looked up — the
+    ran so the caller can show the user what actually looked up — the
     direct path has no DSH execution timeline to borrow.
+
+    V31-P1：输出预算**不加码**（与 ``direct_provider_completion`` 同款）——
+    实测推理模型的思考长度随授予预算增长，加码只会更慢更易触顶（见
+    ``ai_server_client`` 文件头注释）。
     """
+    from fde_api.control.ai_server_client import effective_max_tokens, _reasoning_extra_pattern
     from fde_api.control.dsh_runtime import DSHRuntimeError
 
     base_url = str(model.get("base_url") or "").rstrip("/")
@@ -198,6 +203,8 @@ def direct_tool_completion(
     api_key = model.get("api_key")
     if not base_url or not model_name or not api_key:
         raise DSHRuntimeError("ai_model_not_configured", "尚未配置可直连的模型。", retryable=False)
+
+    max_tokens = effective_max_tokens(model_name, max_tokens, _reasoning_extra_pattern())
 
     level, _ = effective_ai_access(user)
     allowed = capabilities_for_level(level)

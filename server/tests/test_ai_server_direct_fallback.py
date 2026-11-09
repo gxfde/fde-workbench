@@ -83,6 +83,7 @@ def test_direct_completion_calls_openai_compatible_endpoint_with_expected_body()
     assert kwargs["headers"]["Content-Type"] == "application/json"
     body = kwargs["json"]
     assert body["model"] == "MiniMax-M3.1-Flash"
+    # V31-P1b：预算不加码（×2 预留被实弹证伪——加码只让推理模型思考更久更易触顶）
     assert body["max_tokens"] == 1024
     assert [message["role"] for message in body["messages"]] == ["system", "user"]
     assert body["messages"][1]["content"] == "你好"

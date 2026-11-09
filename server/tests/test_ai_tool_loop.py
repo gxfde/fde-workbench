@@ -442,3 +442,21 @@ def test_quote_tool_is_registered_and_readable(app, db_session, ai_user):
     assert description
     # T-R2：结构化元数据——报价卡读取 = 纯只读零风险
     assert effect == "read" and risk == 0
+
+
+def test_tool_loop_does_not_inflate_reasoning_budget(app, db_session, ai_user):
+    """V31-P1→P1b 更正：预算**不加码**——×2 预留被实弹证伪（供应商 completion
+    有硬顶，加码只让推理模型思考更久更易触顶）；正解是把活拆小（分段抽取）。
+    推理与非推理模型都原样透传调用方请求的预算。"""
+    session = FakeSession([final_response("直接回答。")])
+
+    direct_tool_completion(
+        model=provider_model(), prompt="你好", user=ai_user, project_id=None,
+        execution_id="exec-keep", session=session, max_tokens=2048)
+    assert session.calls[0][1]["json"]["max_tokens"] == 2048  # MiniMax-M3.1-Flash 不加码
+
+    session2 = FakeSession([final_response("直接回答。")])
+    direct_tool_completion(
+        model=provider_model(model="deepseek-v4"), prompt="你好", user=ai_user,
+        project_id=None, execution_id="exec-keep2", session=session2, max_tokens=2048)
+    assert session2.calls[0][1]["json"]["max_tokens"] == 2048

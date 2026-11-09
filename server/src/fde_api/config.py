@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # E7 月度 token 预算（按用户、自然月，审计表汇总核算）。0 = 不限额——
     # 默认配置不锁死现有用户；设置正数后超限调用被拒且不发起供应商请求。
     ai_monthly_token_budget: int = Field(default=0, ge=0)
+    # V31-P1（somwyn 试点偏离）：推理模型先产出 reasoning_content 再产出
+    # content，两者共享 max_tokens——不预留时 content 被 reasoning 挤到截断
+    # （实测 MiniMax-M3.1-Flash：16,384 预算被 reasoning 吃掉 15,223，正文
+    # JSON 截断 finish_reason=length）。直连腿对命中推理特征的模型把输出
+    # 预算 ×2（多出份额供 reasoning 消耗，content 份额不缩水）。留空=只用
+    # 内置特征识别；配置 Python 正则会作为**额外**分支并入（不替换内置，
+    # 误配只放宽不收窄）。
+    ai_reasoning_model_pattern: str = ""
     kimi_base_url: str = "https://api.moonshot.cn/v1"
     kimi_project_presurvey_api_key: SecretStr | None = Field(default=None, repr=False)
     kimi_project_presurvey_model: str = "kimi-k3"

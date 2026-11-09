@@ -39,7 +39,9 @@ _ALLOWED_CALL_NAMES = {"_workbench_system_prompt"}
 # 允许的提示词权威常量名（白名单①「内部权威常量」的具名形态）：
 # - DISCOVERY_SYSTEM_PROMPT：V3.1 P0-1 discovery 抽取（discovery/prompt.py
 #   模块级常量，jobs.py 直传——2026-11-08 登记）。
-_ALLOWED_PROMPT_CONSTANTS = {"DISCOVERY_SYSTEM_PROMPT"}
+# - DISCOVERY_CHUNK_SYSTEM_PROMPT：V31-P1b discovery 分段抽取的片级提示词
+#   （discovery/prompt.py 模块级常量，仍是内部权威常量形态——2026-11-09 登记）。
+_ALLOWED_PROMPT_CONSTANTS = {"DISCOVERY_SYSTEM_PROMPT", "DISCOVERY_CHUNK_SYSTEM_PROMPT"}
 
 
 def _iter_gated_calls():

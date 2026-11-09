@@ -20,6 +20,8 @@ from fde_api.workbench.models import OperationEvent, Project
 from fde_api.discovery.models import (
     BusinessFact,
     DiscoveryExtraction,
+    EXTRACTOR_VERSION,
+    PROMPT_VERSION,
     Requirement,
     RequirementSource,
 )
@@ -89,11 +91,15 @@ def create_extraction(actor, project_id: str, payload: dict[str, Any]) -> dict[s
         if not isinstance(source_type, str) or not isinstance(source_id, str) or not source_id:
             raise _error("invalid_request", "source_type 与 source_id 必填。", 400)
         _, source_sha = _load_source(session, project_id, source_type, source_id)
+        # 幂等键含版本（与唯一约束同形）：版本升级（v1→v2）后同源再抽生成**新行**，
+        # 旧版本行保留为历史事实。漏掉版本过滤会让 rerun 永远拿回陈旧代际的行。
         existing = session.scalar(
             select(DiscoveryExtraction).where(
                 DiscoveryExtraction.project_id == project_id,
                 DiscoveryExtraction.source_type == source_type,
                 DiscoveryExtraction.source_id == source_id,
+                DiscoveryExtraction.extractor_version == EXTRACTOR_VERSION,
+                DiscoveryExtraction.prompt_version == PROMPT_VERSION,
             )
         )
         if existing is not None:
@@ -133,6 +139,28 @@ def rerun_extraction(actor, extraction_id: str) -> dict[str, Any]:
                 "只有失败的抽取可以重跑；已完成抽取的审阅痕迹不可被覆盖。",
                 409,
             )
+        # 版本升代：重跑由**当前代**的抽取器与提示词执行，行标签必须如实换代
+        # （幂等键的语义＝「同代同果」）；同源已有当前版本行时拒绝（唯一约束
+        # 会撞），指路新行，旧失败行保留为历史。
+        if (extraction.extractor_version, extraction.prompt_version) != (EXTRACTOR_VERSION, PROMPT_VERSION):
+            clash = session.scalar(
+                select(DiscoveryExtraction.id).where(
+                    DiscoveryExtraction.project_id == extraction.project_id,
+                    DiscoveryExtraction.source_type == extraction.source_type,
+                    DiscoveryExtraction.source_id == extraction.source_id,
+                    DiscoveryExtraction.extractor_version == EXTRACTOR_VERSION,
+                    DiscoveryExtraction.prompt_version == PROMPT_VERSION,
+                    DiscoveryExtraction.id != extraction.id,
+                )
+            )
+            if clash is not None:
+                raise _error(
+                    "extraction_version_conflict",
+                    "同源已存在当前版本的抽取行（%s）；请在新行上操作，本行保留为历史。" % clash,
+                    409,
+                )
+            extraction.extractor_version = EXTRACTOR_VERSION
+            extraction.prompt_version = PROMPT_VERSION
         # 清除旧失败痕迹（若此前写入过部分行——按管线设计失败零写入，此处防御）
         # 子表先清：sources → requirements → facts（FK 顺序）
         session.query(RequirementSource).filter(

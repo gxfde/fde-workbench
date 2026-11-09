@@ -288,6 +288,110 @@ def test_rerun_only_failed(db_session, d4_client, d4_settings) -> None:
     assert response.get_json()["data"]["status"] == "queued"
 
 
+def test_create_extraction_version_bump_creates_new_row(db_session, d4_client, d4_settings) -> None:
+    """幂等键含版本（V31-P1b 实弹抓到的缺陷：查找漏版本过滤 → rerun 永远
+    拿回旧代际的行）：旧版本失败行保留为历史，同源再抽生成当前版本**新行**。"""
+    from fde_api.discovery.models import EXTRACTOR_VERSION, PROMPT_VERSION
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户L")
+    minutes = _minutes(db_session, project, leader.user)
+    legacy = DiscoveryExtraction(
+        project_id=project.id,
+        created_by_user_id=leader.user.id,
+        source_type="interview_minutes",
+        source_id=minutes.id,
+        source_sha256=minutes.content_sha256,
+        status="failed",
+        failure_code="ai_output_invalid",
+        failure_message="v1 整篇成抽必截断",
+        extractor_version="discovery-extractor-v1",
+        prompt_version="discovery-prompt-v1",
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    response = leader.post(
+        "/api/v1/projects/{}/discovery/extractions".format(project.id),
+        json={"source_type": "interview_minutes", "source_id": minutes.id},
+    )
+    assert response.status_code == 201, response.get_json()
+    data = response.get_json()["data"]
+    assert data["created"] is True
+    assert data["id"] != legacy.id
+    assert data["extractor_version"] == EXTRACTOR_VERSION == "discovery-extractor-v2"
+    assert data["prompt_version"] == PROMPT_VERSION == "discovery-prompt-v2"
+
+    # 同版本再 POST → 幂等返回当前版本行；旧 v1 行原样保留
+    again = leader.post(
+        "/api/v1/projects/{}/discovery/extractions".format(project.id),
+        json={"source_type": "interview_minutes", "source_id": minutes.id},
+    )
+    assert again.status_code == 200
+    assert again.get_json()["data"]["id"] == data["id"] and again.get_json()["data"]["created"] is False
+    db_session.expire_all()
+    assert db_session.get(DiscoveryExtraction, legacy.id).extractor_version == "discovery-extractor-v1"
+
+
+def test_rerun_failed_extraction_bumps_versions_with_conflict_guard(db_session, d4_client, d4_settings) -> None:
+    """重跑由当前代代码执行 → 行版本标签如实换代；同源已有当前版本行时 409
+    指路新行（唯一约束会撞），旧失败行保留为历史。"""
+    from fde_api.discovery.models import EXTRACTOR_VERSION, PROMPT_VERSION
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户M")
+    minutes = _minutes(db_session, project, leader.user)
+    legacy = DiscoveryExtraction(
+        project_id=project.id,
+        created_by_user_id=leader.user.id,
+        source_type="interview_minutes",
+        source_id=minutes.id,
+        source_sha256=minutes.content_sha256,
+        status="failed",
+        failure_code="ai_output_truncated",
+        failure_message="截断",
+        extractor_version="discovery-extractor-v1",
+        prompt_version="discovery-prompt-v1",
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    response = leader.post(f"/api/v1/discovery/extractions/{legacy.id}/run")
+    assert response.status_code == 200, response.get_json()
+    db_session.expire_all()
+    row = db_session.get(DiscoveryExtraction, legacy.id)
+    assert row.status == "queued"
+    assert row.extractor_version == EXTRACTOR_VERSION and row.prompt_version == PROMPT_VERSION
+
+    # 同源已存在另一条当前版本行（如已完成的 v2）→ 重跑旧失败行 409 指路
+    other = _minutes(db_session, project, leader.user, content="另一篇")
+    stale = DiscoveryExtraction(
+        project_id=project.id,
+        created_by_user_id=leader.user.id,
+        source_type="interview_minutes",
+        source_id=other.id,
+        source_sha256=other.content_sha256,
+        status="failed",
+        failure_code="ai_output_invalid",
+        failure_message="旧失败",
+        extractor_version="discovery-extractor-v1",
+        prompt_version="discovery-prompt-v1",
+    )
+    current = DiscoveryExtraction(
+        project_id=project.id,
+        created_by_user_id=leader.user.id,
+        source_type="interview_minutes",
+        source_id=other.id,
+        source_sha256=other.content_sha256,
+        status="review_required",
+    )
+    db_session.add_all([stale, current])
+    db_session.commit()
+    response = leader.post(f"/api/v1/discovery/extractions/{stale.id}/run")
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "extraction_version_conflict"
+
+
 # ---------------------------------------------------------------------------
 # 抽取管线（handler 直调）
 
@@ -569,3 +673,253 @@ def test_list_endpoints_filters_and_cross_project(db_session, d4_client, d4_sett
     stranger = api_client(d4_client, db_session, d4_settings, "project_lead")
     assert stranger.get(f"/api/v1/projects/{project.id}/business-facts").status_code == 403
     assert stranger.get(f"/api/v1/discovery/extractions/{extraction.id}").status_code == 403
+
+
+def test_extraction_output_truncated_fail_fast_no_retry(app, db_session, d4_client, d4_settings) -> None:
+    """V31-P1→P1b：截断检测第二腿（``finish_reason=length``）→
+    可分的片自适应降片长再抽（**不同输**，非同输必败重放）；
+    两行片二分后首个单行半片不可再分 → 整批诚实失败零写入。"""
+    import fde_api.discovery.jobs as jobs_module
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户H")
+    minutes = _minutes(db_session, project, leader.user)
+    extraction = DiscoveryExtraction(
+        project_id=project.id, created_by_user_id=leader.user.id,
+        source_type="interview_minutes", source_id=minutes.id,
+        source_sha256=minutes.content_sha256, status="queued",
+    )
+    db_session.add(extraction)
+    db_session.commit()
+
+    calls: list[str] = []
+    truncated_usage = {
+        "complete": True,
+        "calls": [{"finish_reason": "length", "reasoning_tokens": 16383, "truncated": True}],
+    }
+
+    def _fake_execute(**kwargs):
+        calls.append(str(kwargs.get("execution_id")))
+        return {
+            "text": '{"facts": [{"sub',
+            "model": {"provider": "test", "name": "MiniMax-M3.1-Flash"},
+            "provider_usage": truncated_usage,
+        }
+
+    original = jobs_module.execute_ai_prompt
+    jobs_module.execute_ai_prompt = _fake_execute
+    job = SimpleNamespace(target_id=extraction.id)
+    try:
+        with app.app_context():
+            jobs_module.handle_discovery_extraction(job)
+    finally:
+        jobs_module.execute_ai_prompt = original
+    db_session.expire_all()
+
+    row = db_session.get(DiscoveryExtraction, extraction.id)
+    assert row.status == "failed" and row.failure_code == "ai_output_truncated"
+    assert "截断" in (row.failure_message or "")
+    # 2 次调用：原片（2 行）+ 二分后的半片（1 行，execution_id 不同=不同输重抽）；
+    # 半片不可再分 → 诚实失败。绝不第二次重放同一输入。
+    assert len(calls) == 2
+    assert calls[0] != calls[1]
+    assert db_session.query(BusinessFact).filter_by(extraction_id=row.id).count() == 0
+    assert db_session.query(Requirement).filter_by(extraction_id=row.id).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# V31-P1b：分段抽取（长纪要按行切片 → 分批抽取 → 行号回基合并）
+
+
+def test_extraction_chunked_flow_rebases_and_merges(app, db_session, d4_client, d4_settings) -> None:
+    """长纪要切成多片分批抽取：片内行号回基成全文绝对行号，跨片事实去重。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户I")
+    content = "\n".join(f"第{i}行内容" for i in range(1, 61))
+    minutes = _minutes(db_session, project, leader.user, content=content)
+    extraction = DiscoveryExtraction(
+        project_id=project.id, created_by_user_id=leader.user.id,
+        source_type="interview_minutes", source_id=minutes.id,
+        source_sha256=minutes.content_sha256, status="queued",
+    )
+    db_session.add(extraction)
+    db_session.commit()
+
+    import json as _json
+
+    def _payload(subject: str, line: int) -> dict:
+        return {
+            "facts": [{
+                "fact_type": "process",
+                "subject": subject,
+                "predicate": "当前步骤",
+                "object_value": {"步骤": subject},
+                "source_locator": {"type": "line", "line": line},
+                "confidence": 0.9,
+            }],
+            "requirements": [{
+                "title": "统一入口",
+                "requirement_type": "functional",
+                "priority": "high",
+                "acceptance_criteria": ["单一入口可查"],
+                "source_fact_indexes": [0],
+            }],
+        }
+
+    # 三片（60 行 → 25/25/10）：片 2、片 3 重复片 1 的事实身份 → 应被去重
+    outputs = [
+        _json.dumps(_payload("片一事实", 1), ensure_ascii=False),
+        _json.dumps(_payload("片一事实", 2), ensure_ascii=False),
+        _json.dumps(_payload("片一事实", 3), ensure_ascii=False),
+    ]
+    prompts: list[str] = []
+
+    def _fake_execute(**kwargs):
+        prompts.append(str(kwargs.get("prompt") or ""))
+        item = outputs.pop(0)
+        return {"text": item, "model": {"provider": "test", "name": "test-model"}, "provider_usage": {}}
+
+    import fde_api.discovery.jobs as jobs_module
+
+    original = jobs_module.execute_ai_prompt
+    jobs_module.execute_ai_prompt = _fake_execute
+    job = SimpleNamespace(target_id=extraction.id)
+    try:
+        with app.app_context():
+            jobs_module.handle_discovery_extraction(job)
+    finally:
+        jobs_module.execute_ai_prompt = original
+    db_session.expire_all()
+
+    row = db_session.get(DiscoveryExtraction, extraction.id)
+    assert row.status == "review_required", row.failure_message
+    assert len(prompts) == 3  # 60 行 → 25 行/片 → 3 片
+    # 每片拿到的是本片正文（不是全文）
+    assert all("第61行内容" not in p for p in prompts)
+
+    facts = db_session.query(BusinessFact).filter_by(extraction_id=row.id).all()
+    assert len(facts) == 1  # 跨片重复身份被去重
+    locators = {f.subject: f.source_locator["line"] for f in facts}
+    assert locators["片一事实"] == 1          # 首次出现（片 1 第 1 行）
+    # 需求：两片标题重复 → 只留一条，引用指向合并后的事实表
+    requirements = db_session.query(Requirement).filter_by(extraction_id=row.id).all()
+    assert len(requirements) == 1
+    sources = db_session.query(RequirementSource).filter_by(
+        requirement_id=requirements[0].id).all()
+    assert len(sources) == 1
+
+
+def test_extraction_chunk_truncation_splits_and_retries(app, db_session, d4_client, d4_settings) -> None:
+    """V31-P1b：被截断的片**自适应一分为二再抽**（模型思考长度有方差，
+    固定片长无法保证不触顶）；单行片仍截断 → 整批诚实失败（不部分写入）。"""
+    import json as _json
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户J")
+    content = "\n".join(f"第{i}行内容" for i in range(1, 4))
+    minutes = _minutes(db_session, project, leader.user, content=content)
+    extraction = DiscoveryExtraction(
+        project_id=project.id, created_by_user_id=leader.user.id,
+        source_type="interview_minutes", source_id=minutes.id,
+        source_sha256=minutes.content_sha256, status="queued",
+    )
+    db_session.add(extraction)
+    db_session.commit()
+
+    prompts: list[str] = []
+    truncated = {"count": 0}
+
+    def _fake_execute(**kwargs):
+        prompts.append(str(kwargs.get("prompt") or ""))
+        # 前 3 次（3 行的片 + 二分后的两片）都截断，验证会继续往下分
+        truncated["count"] += 1
+        return {
+            "text": '{"facts": [{"sub',
+            "model": {"provider": "test", "name": "MiniMax-M3.1-Flash"},
+            "provider_usage": {"complete": True, "calls": [{"truncated": True}]},
+        }
+
+    import fde_api.discovery.jobs as jobs_module
+
+    original = jobs_module.execute_ai_prompt
+    jobs_module.execute_ai_prompt = _fake_execute
+    job = SimpleNamespace(target_id=extraction.id)
+    try:
+        with app.app_context():
+            jobs_module.handle_discovery_extraction(job)
+    finally:
+        jobs_module.execute_ai_prompt = original
+    db_session.expire_all()
+
+    row = db_session.get(DiscoveryExtraction, extraction.id)
+    assert row.status == "failed" and row.failure_code == "ai_output_truncated"
+    # 3 行片 → 二分（2+1）→ 2 行片再二分（1+1）→ 单行片仍截断 → 诚实失败
+    assert len(prompts) > 1, "被截断的片必须自适应降片长再抽"
+    assert db_session.query(BusinessFact).filter_by(extraction_id=row.id).count() == 0
+    assert db_session.query(Requirement).filter_by(extraction_id=row.id).count() == 0
+
+
+def test_extraction_chunk_truncation_splits_then_succeeds(app, db_session, d4_client, d4_settings) -> None:
+    """被截断的片二分后再抽成功 → 整批照常完成（行号按二分后的片回基）。"""
+    import json as _json
+
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _new_project(db_session, leader.user, "客户K")
+    content = "\n".join(f"第{i}行内容" for i in range(1, 4))
+    minutes = _minutes(db_session, project, leader.user, content=content)
+    extraction = DiscoveryExtraction(
+        project_id=project.id, created_by_user_id=leader.user.id,
+        source_type="interview_minutes", source_id=minutes.id,
+        source_sha256=minutes.content_sha256, status="queued",
+    )
+    db_session.add(extraction)
+    db_session.commit()
+
+    calls = {"n": 0}
+    prompts: list[str] = []
+
+    def _fake_execute(**kwargs):
+        calls["n"] += 1
+        prompts.append(str(kwargs.get("prompt") or ""))
+        if calls["n"] == 1:
+            # 首片（3 行）被截断
+            return {
+                "text": '{"facts": [{"sub',
+                "model": {"provider": "test", "name": "MiniMax-M3.1-Flash"},
+                "provider_usage": {"complete": True, "calls": [{"truncated": True}]},
+            }
+        payload = {
+            "facts": [{
+                "fact_type": "process",
+                "subject": f"事实{calls['n']}",
+                "predicate": "当前步骤",
+                "object_value": {"步骤": "x"},
+                "source_locator": {"type": "line", "line": 1},
+                "confidence": 0.9,
+            }],
+            "requirements": [],
+        }
+        return {
+            "text": _json.dumps(payload, ensure_ascii=False),
+            "model": {"provider": "test", "name": "test-model"},
+            "provider_usage": {},
+        }
+
+    import fde_api.discovery.jobs as jobs_module
+
+    original = jobs_module.execute_ai_prompt
+    jobs_module.execute_ai_prompt = _fake_execute
+    job = SimpleNamespace(target_id=extraction.id)
+    try:
+        with app.app_context():
+            jobs_module.handle_discovery_extraction(job)
+    finally:
+        jobs_module.execute_ai_prompt = original
+    db_session.expire_all()
+
+    row = db_session.get(DiscoveryExtraction, extraction.id)
+    assert row.status == "review_required", row.failure_message
+    facts = db_session.query(BusinessFact).filter_by(extraction_id=row.id).all()
+    assert len(facts) == 2  # 二分后的两片各一条
+    # 行号按二分后的片回基：左片首行=1，右片首行=2
+    assert sorted(f.source_locator["line"] for f in facts) == [1, 2]

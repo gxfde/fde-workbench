@@ -13,13 +13,16 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 
 from fde_api.control.ai_server_client import DSHRuntimeError, execute_ai_prompt
+from fde_api.discovery.chunking import TranscriptChunk, plan_chunks, split_chunk
 from fde_api.discovery.contract import DiscoveryContractError, validate_extraction_output
+from fde_api.discovery.merge import merge_chunk_drafts
 from fde_api.discovery.models import (
     BusinessFact,
     DiscoveryExtraction,
@@ -28,7 +31,7 @@ from fde_api.discovery.models import (
     RequirementSource,
     REDACTION_EVENT_TYPE,
 )
-from fde_api.discovery.prompt import DISCOVERY_SYSTEM_PROMPT
+from fde_api.discovery.prompt import DISCOVERY_CHUNK_SYSTEM_PROMPT
 from fde_api.extensions import db
 from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
 from fde_api.guidance.redaction import redact_text_detailed
@@ -44,6 +47,12 @@ RETRY_BACKOFF_SECONDS = 1.0
 UNEXPECTED_FAILURE_CODE = "discovery_unexpected_error"
 WORKER_LOST_CODE = "discovery_worker_lost"
 OUTPUT_INVALID_CODE = "ai_output_invalid"
+# V31-P1：推理模型把输出预算花在 reasoning 上、正文被截断（finish_reason=length）。
+# 与 ai_output_invalid 分开记账——处置动作不同（整理纪要/换模型 vs 重跑）。
+OUTPUT_TRUNCATED_CODE = "ai_output_truncated"
+# 自适应降片长的最大深度（25 行 → 12 → 6 → 3 → 1 行）：模型思考长度有方差，
+# 固定片长无法保证不触顶；被截断的片自动一分为二再抽（深度上限防病态递归）。
+MAX_SPLIT_DEPTH = 4
 
 
 def _redact_out(value: str, *, project_code: str, sink: list[dict[str, Any]]) -> str:
@@ -82,6 +91,153 @@ def _source_content(session, extraction: DiscoveryExtraction) -> str:
     return row.content
 
 
+@dataclass
+class _ChunkOutcome:
+    """单片抽取的终态：草稿（成功）或失败码 + 失败说明。"""
+
+    draft: dict[str, Any] | None = None
+    model_name: str | None = None
+    failure_code: str | None = None
+    failure_message: str | None = None
+
+
+class _ChunkFailed(Exception):
+    """单片抽取的不可恢复失败（整批终止）。"""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+@dataclass
+class _ChunkBatch:
+    """一次（可能经自适应二分展开的）抽取产出：片-草稿对 + 模型名。"""
+
+    pairs: list[tuple[TranscriptChunk, dict[str, Any]]] = field(default_factory=list)
+    model_name: str | None = None
+
+
+def _usage_shows_truncation(answer: Any) -> bool:
+    """usage 是否带截断证据（``truncated`` 标记 / ``finish_reason == "length"``）。"""
+    if not isinstance(answer, dict):
+        return False
+    usage = answer.get("provider_usage")
+    if not isinstance(usage, dict):
+        return False
+    for call in usage.get("calls") or []:
+        if not isinstance(call, dict):
+            continue
+        if call.get("truncated") is True or call.get("finish_reason") == "length":
+            return True
+    return False
+
+
+def _extract_chunk(
+    extraction: DiscoveryExtraction,
+    chunk: TranscriptChunk,
+    depth: int = 0,
+) -> _ChunkBatch:
+    """抽取一片（含契约重试与瞬时退避）——成功返回片-草稿对。
+
+    **自适应降片长**：被截断的片自动一分为二再抽（模型思考长度有方差——
+    实测同片两次分别用掉 13,105 与 16,384 额度，固定片长无法保证不触顶）。
+    不能再分（单行片）时诚实失败，不切碎单行（行号口径不能破）。
+    """
+    outcome = _extract_chunk_once(extraction, chunk, depth)
+    if outcome.failure_code != OUTPUT_TRUNCATED_CODE:
+        if outcome.failure_code is not None or outcome.draft is None:
+            raise _ChunkFailed(outcome.failure_code or OUTPUT_INVALID_CODE,
+                               outcome.failure_message or "AI 未返回抽取结果，请重跑。")
+        return _ChunkBatch(pairs=[(chunk, outcome.draft)], model_name=outcome.model_name)
+    halves = split_chunk(chunk)
+    if halves is None or depth >= MAX_SPLIT_DEPTH:
+        raise _ChunkFailed(
+            OUTPUT_TRUNCATED_CODE,
+            f"第 {chunk.start_line}-{chunk.end_line} 行的抽取输出被截断"
+            "（输出预算被模型思考吃满），再分片仍必败；"
+            "请缩小单次抽取范围或更换非推理模型后重跑。",
+        )
+    logger.warning(
+        "discovery chunk truncated, splitting (extraction=%s lines=%s-%s depth=%s)",
+        extraction.id, chunk.start_line, chunk.end_line, depth,
+    )
+    left, right = halves
+    batch = _ChunkBatch()
+    for piece in (left, right):
+        sub = _extract_chunk(extraction, piece, depth + 1)
+        batch.pairs.extend(sub.pairs)
+        batch.model_name = sub.model_name or batch.model_name
+    return batch
+
+
+def _extract_chunk_once(
+    extraction: DiscoveryExtraction,
+    chunk: TranscriptChunk,
+    depth: int = 0,
+) -> _ChunkOutcome:
+    """抽取单片一次（含契约重试与瞬时退避）——失败返回终态，成功返回规范化草稿。"""
+    attempts = 0
+    while True:
+        attempts += 1
+        answer: Any = None
+        try:
+            answer = execute_ai_prompt(
+                user_id=extraction.created_by_user_id,
+                prompt=chunk.text,
+                system_prompt=DISCOVERY_CHUNK_SYSTEM_PROMPT,
+                use_tools=False,
+                project_id=extraction.project_id,
+                execution_id=f"discovery:{extraction.id}:c{chunk.index}d{depth}:{attempts}",
+                purpose="discovery_extract",
+                prompt_version=PROMPT_VERSION,
+                return_metadata=True,
+            )
+            if not isinstance(answer, dict):
+                answer = dict(text=answer, model={})
+            text = answer["text"]
+            payload = json.loads(text) if isinstance(text, str) else text
+            draft = validate_extraction_output(payload)
+            model_name = str(((answer.get("model") or {}).get("name") or "")) or None
+            return _ChunkOutcome(draft=draft, model_name=model_name)
+        except (json.JSONDecodeError, DiscoveryContractError) as error:
+            # V31-P1：正文被思考挤到截断（usage 带截断证据）时同片重试同样必败——
+            # 交给上层**自适应降片长**（分片重抽），不白烧同输重放。
+            if _usage_shows_truncation(answer):
+                logger.warning(
+                    "discovery chunk output truncated (extraction=%s chunk=%s lines=%s-%s)",
+                    extraction.id, chunk.index, chunk.start_line, chunk.end_line,
+                )
+                return _ChunkOutcome(
+                    failure_code=OUTPUT_TRUNCATED_CODE,
+                    failure_message=(
+                        f"第 {chunk.start_line}-{chunk.end_line} 行的抽取输出被截断"
+                        "（输出预算被模型思考吃满）。"
+                    ),
+                )
+            code = getattr(error, "code", None)
+            path = getattr(error, "path", "")
+            if attempts > CONTRACT_RETRY_LIMIT:
+                logger.warning(
+                    "discovery contract violation not recovered (%s at %s)", code, path)
+                return _ChunkOutcome(
+                    failure_code=OUTPUT_INVALID_CODE,
+                    failure_message="AI 返回的抽取结果格式不正确（已自动重试仍失败），请重跑或更换模型。",
+                )
+            # 概率性契约失败：立即重试（不退避——guidance 同裁）
+        except DSHRuntimeError as error:
+            if error.code == OUTPUT_TRUNCATED_CODE:
+                return _ChunkOutcome(failure_code=error.code, failure_message=error.public_message)
+            if error.code not in TRANSIENT_RETRY_CODES or attempts > CONTRACT_RETRY_LIMIT:
+                return _ChunkOutcome(failure_code=error.code, failure_message=error.public_message)
+            time.sleep(RETRY_BACKOFF_SECONDS)
+        except RedactionConfigError:
+            return _ChunkOutcome(
+                failure_code=DICT_FAILURE_CODE,
+                failure_message="企业名词典不可用，为守住「客户名不入库」红线已阻断本次抽取，请联系管理员修复词典配置。",
+            )
+
+
 def handle_discovery_extraction(job) -> None:
     session = db.session()
     try:
@@ -102,53 +258,38 @@ def handle_discovery_extraction(job) -> None:
         project_code = _project_code(session, extraction.project_id)
         redaction_entries: list[dict[str, Any]] = []
         model_name: str | None = None
-        attempts = 0
-        while True:
-            attempts += 1
+        # V31-P1b：大纪要分段抽取——供应商 completion 硬顶（MiniMax-M3.1-Flash
+        # = 16,384 tokens）下，10K 字符纪要一次成抽必被思考挤爆（实测
+        # reasoning 16,383/16,384、正文零产出，finish_reason=length）。
+        # 正确解法是把活拆小：按行切片分批抽，再按行号回基合并成整批。
+        chunks = plan_chunks(content)
+        if not chunks:
+            _fail(session, extraction, "source_missing", "抽取源正文为空。")
+            return
+        pairs: list[tuple[TranscriptChunk, dict[str, Any]]] = []
+        for chunk in chunks:
             try:
-                answer = execute_ai_prompt(
-                    user_id=extraction.created_by_user_id,
-                    prompt=content,
-                    system_prompt=DISCOVERY_SYSTEM_PROMPT,
-                    use_tools=False,
-                    project_id=extraction.project_id,
-                    execution_id=f"discovery:{extraction.id}:{attempts}",
-                    purpose="discovery_extract",
-                    prompt_version=PROMPT_VERSION,
-                    return_metadata=True,
-                )
-                if not isinstance(answer, dict):
-                    answer = dict(text=answer, model={})
-                model_name = str(((answer.get("model") or {}).get("name") or "")) or None
-                text = answer["text"]
-                payload = json.loads(text) if isinstance(text, str) else text
-                draft = validate_extraction_output(payload)
-                break
-            except (json.JSONDecodeError, DiscoveryContractError) as error:
-                code = getattr(error, "code", None)
-                path = getattr(error, "path", "")
-                if attempts > CONTRACT_RETRY_LIMIT:
-                    logger.warning(
-                        "discovery contract violation not recovered (%s at %s)",
-                        code, path,
-                    )
-                    _fail(
-                        session, extraction, OUTPUT_INVALID_CODE,
-                        "AI 返回的抽取结果格式不正确（已自动重试仍失败），请重跑或更换模型。",
-                    )
-                    return
-                # 概率性契约失败：立即重试（不退避——guidance 同裁）
-            except DSHRuntimeError as error:
-                if error.code not in TRANSIENT_RETRY_CODES or attempts > CONTRACT_RETRY_LIMIT:
-                    _fail(session, extraction, error.code, error.public_message)
-                    return
-                time.sleep(RETRY_BACKOFF_SECONDS)
-            except RedactionConfigError:
-                _fail(
-                    session, extraction, DICT_FAILURE_CODE,
-                    "企业名词典不可用，为守住「客户名不入库」红线已阻断本次抽取，请联系管理员修复词典配置。",
-                )
+                extracted = _extract_chunk(extraction, chunk)
+            except _ChunkFailed as failure:
+                _fail(session, extraction, failure.code, failure.message)
+
                 return
+            for piece, draft in extracted.pairs:
+                pairs.append((piece, draft))
+            model_name = extracted.model_name or model_name
+        merged = merge_chunk_drafts(pairs)
+        try:
+            draft = validate_extraction_output(merged)
+        except DiscoveryContractError as error:
+            logger.warning(
+                "discovery merged output rejected (%s at %s)",
+                getattr(error, "code", None), getattr(error, "path", ""),
+            )
+            _fail(
+                session, extraction, OUTPUT_INVALID_CODE,
+                "AI 返回的抽取结果格式不正确（分段合并后越界），请重跑或更换模型。",
+            )
+            return
         # 输出端逐字符串兜底脱敏（subject/predicate/object_value 内所有字符串）
         facts = []
         for item in draft["facts"]:
