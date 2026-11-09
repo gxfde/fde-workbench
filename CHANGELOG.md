@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — AI 原生化 N1 真实订单首跑（机械面全链通过；业务面被 GLM Token Plan 配额阻断；台账 v1.5＋复盘落盘；零迁移零路由零桌面，2026-11-09）
+
+- **事实**：#247 合并部署后，宿主裸跑态起首跑——run `fa6ec37f`／somwyn／幂等键 `n1-somwyn-host-001`（**非 `sim:`/`rehearsal:` 前缀** ✓ G-01 形态面）／售前智能体 `4410538c-…`（`agent.module.presales`）／发起=admin／运维脚本 `scripts/agents/real_order_host_channel_run.py`（拒绝 sim 前缀幂等键；只发起 run，接受与拍板留给人）。
+- **机械面全链通过**：`execution_provider=host_channel` 落库；**前置③票据真实行使**——`authorize_host_run` 发行+spawn 前校验通过，`authorization_id` 落 `717cf5e0…293`（64 hex 指纹，非票据本体）＋`workspace_ref` 归一化工作区；**fail-closed 合同活体验证**——zcode `exit 1` ⇒ `failed`＋L2＋`token_cost=0` **零计费**＋G-07 零候选登记（「仅 completed 登记」语义在真实 run 上成立）；上下文全代号化（`context.md` 零客户真实资料）；事件 `agent_run_created` 留痕。
+- **业务面被外部配额阻断**：zcode 316.9s 后 exit 1、`output/` 空——通道内 stderr 无留痕（边界⑨）⇒ T-Z1 同款最小直连诊断：**「已达到 Token Plan 用量上限…(2056)」**（`AI_APICallError`，traceId `40318c2e-…`）；与 #235 自报 429 同族、**与 #248 独立互证**（两线同日撞同一堵供应商配额墙）——外部依赖非代码缺陷，fail-closed 把失败拦在零计费侧。
+- **落盘**：台账 **v1.5**（G-01/G-07 维持 OPEN，阻塞三段演进「闸未开」→「前置未清」→「**首跑已执行，业务面待供应商配额恢复后重跑**」；`agent_runs` 现状锚 9→**10**〔1 条真实订单〕）；NEW `docs/architecture/AI原生化N1首跑复盘-v1.md`（执行事实/机械面验证表/根因取证/12 前置口径/遗留）；任务书 §13 记录 **#8**＋§14 N1 行同步＋#7 随轮注记。**重跑决策＝蔡工**（H4 不代重试：配额恢复后可 `retry_run` 或新幂等键；判据「至 G9」待 completed run＋`pilot.reviewer` 人工拍板链）。前置③升级「真实订单行使面已验证」；**①商用条款/⑦网络限制面维持未过不声称**。
+- **顺带修复＋挂账**：运维脚本 docstring 改 raw 字符串（消除 `SyntaxWarning: invalid escape sequence`）；**容器栈 rebuild 挂账**——`fde-wt-v31p2` 部署基待归属方 rebuild+recreate（本次起跑面为宿主裸跑态不依赖容器栈；活库 alembic 头已在 `e7b2c4d9f1a3`，本轮零迁移）。
+- **口径**：零迁移零路由零新表零桌面（结构沿现行：427 路由／49 蓝图／139 表／55 rev 单头 `e7b2c4d9f1a3`）；本轮纯文档＋脚本一行注释面修复＋1 个非测试脚本，pytest/mypy/vitest 全不动（最近 main CI 实测 **2556 passed + 6 skipped**〔#247 run 42607195716 server-tests；2544+12=2556〕/ mypy 279）；无需 rebuild/alembic（除挂账项归部署归属方）。
+
 ## [未发布] — V3.2 G7b 训练场界面收口轮（案例编辑弹层可滚可关 + 三视角分区重排 + L-C 人工终裁桌面接线；纯桌面零服务端，2026-11-09）
 
 - **起因（蔡工实测反馈）**：①训练场里找不到给 L-A/L-B 分歧拍板的地方；②案例库点「编辑」后弹层**不能下滚、也没有关闭按钮**——`.dialog` 基类（`styles.css`）只有 `width/padding`，**无 `max-height`/`overflow`**，高表单弹层超出视口即被裁剪且不可滚，底部操作钮（取消/保存）落在视口外（仓库既有解法是各页加类：`.task-dialog`/`.file-version-dialog` 等，训练场漏配）；③表单「一头雾水」——顶层字段无分组无标题，且多处 JSX 文案把 `**加粗**` 星号直出给用户。
