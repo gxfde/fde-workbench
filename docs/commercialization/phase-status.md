@@ -1,17 +1,17 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）；G3 开工基线 `e06ae8d`
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／**G3 合并 `f65f874`（#234）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G3 订阅、培训与科目结算（T-10/T-11/T-13，任务书 §7）**
+- 当前阶段：**G3 订阅、培训与科目结算（T-10/T-11/T-13，任务书 §7）— 已完成**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
 
 ---
 
-## G3：订阅、培训与科目结算（T-10 / T-11 / T-13）— 当前阶段
+## G3：订阅、培训与科目结算（T-10 / T-11 / T-13）— 已完成
 
 - 分支：`feat/commercial-g3-revenue-ledger`（工作树 `D:\test\fde-wt-g1`）
 - 基线 SHA：fork/main `e06ae8d`（开工时）；合并前融合上游 #231／#232／AI 原生化差距评估 v1.1（冲突仅 AGENTS.md 与 CHANGELOG.md，两边全留；融合后结构口径逐位不变）
-- 状态：**in_progress**（实现与自测完成；待 PR CI 四绿 → 合并 → main run 收口 → 部署活体绿——收口证据由本节的后续修订回写）
+- 状态：**completed**（PR #234 squash 合并 `f65f874`；PR run 42543224303 四绿 + **main run 42544563159 四绿**；**部署活体绿**——三镜像 rebuild 自本工作树 + `alembic upgrade head` `b3e7c9d1a5f2`→`d5f9a3c7e1b4`）
 
 ### 目标
 
@@ -61,7 +61,9 @@
 ### 测试命令与结果
 
 - `PYTHONPATH=src ./.venv/Scripts/python.exe -m pytest tests/test_commercial_revenue_ledger.py -q` → **26 passed**。
-- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2454 收集 = 2448 passed + 6 skipped，0 failed**（EXIT=0，8m16s；G2 轮基线 2402 收集 + 本轮 +26 + 融合上游 #231 的 26 ＝ 2454）——**终值以本 PR CI server-tests 实测为权威**。
+- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2454 收集 = 2448 passed + 6 skipped，0 failed**（EXIT=0，8m16s；G2 轮基线 2402 收集 + 本轮 +26 + 融合上游 #231 的 26 ＝ 2454）。
+- **PR #234 CI run 42543224303 server-tests 实测 2448 passed + 6 skipped**（569.95s）——与本地同值。
+- **合并态 main run 42544563159 四绿**（合并态权威）：server-tests 实测 **2448 passed + 6 skipped**（359.40s）／desktop 2m10s／secrets-scan 12s／pseudonymization 53s。
 - `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（无新增）。
 - `ruff check`（改动文件）→ All checks passed。
 - **变异十连全转红→还原→绿**（任务书 §12.10）：M1 不重复收判定整体失效／M2 未选定方案仍扣费／M3 验收前仍扣费／M4 项目分成按比例重算（不引用分账）／M5 名目归属校验失效／M6 关联对象必填失效／M7 通过线未设也判通过／M8 书面证据指纹闸失效／M9 认证费缺省可收款／M10 陪跑期限未配置也落默认天数。
@@ -102,10 +104,21 @@
 3. 商机归属与渠道保护本体 → 归 G4。
 4. GAP-15（AI 草稿采纳率埋点）仍开放——ADR-007 §2.5 的复审触发器依赖它。
 
+### 部署活体验证（合并后）
+
+- 三镜像（api/worker/scheduler）自本工作树 `D:/test/fde-wt-g1` 重建；构建树与 `fork/main` `f65f874` **逐位一致**（`git diff fork/main <branch>` 为空）⇒ 部署的就是合并态代码。
+- `docker compose -p fde-workbench up -d` 后三容器 **healthy**（api/worker/scheduler）。
+- `alembic upgrade head`：`b3e7c9d1a5f2` → **`d5f9a3c7e1b4` (head)**；`alembic current` ＝ `d5f9a3c7e1b4 (head)`。
+- 活体断言：`url_map` **412** 条（审计口径 411，+1 恒定差）；**commercial 27 条**（G1 七 ＋ G2 六 ＋ G3 十四，含 G3 新增的 `packages`／`revenue-ledger`×3／`deduction-election`×2／`certification-records`×2／`fee-configs`×2／`split-rules`×2／`first-order-fee`）。
+- G3 五表齐备：`commercial_revenue_ledger` 28 列／`commercial_split_rules` 11 列／`commercial_fee_configs` 12 列／`commercial_deduction_elections` 10 列／`commercial_certification_records` 13 列；**CHECK 全在**（科目层 9 条、配置位 5 条、分成结构 4 条、选定 2 条、认证记录 2 条）。
+- **五表零行**（`commercial_fee_configs` 3 行为迁移播种的 **unset** 配置位；其余四表 0 行——无客户数据）；`commercial_split_rules` **零行**（本期比例不定数）。
+- **结构钉活体复核**：`delivery_settlements` 列集合仍为原 **20 列**（`acceptance_passed_at`／`base_amount`／`city_amount`／`created_at`／`delivery_amount`／`id`／`package_id`／`paid_at`／`paid_proof_source_uri`／`platform_amount`／`region_amount`／`seat_*`×4／`settlement_key`／`snapshot_hash`／`status`／`updated_at`／`withholding_tax`）——**零加列**。
+- `/api/v1/health/ready` 与 `/api/v1/health/live` 均 **200**。
+
 ### 是否允许进入下一阶段
 
-**待定**——须先完成 PR 四绿 → 合并 → main run 收口 → 部署活体绿（任务书 §14 收口条件）。
-ADR-005（区域商业化闸）仍归 G5，不预支。
+**允许进入 G4（商机归属与渠道保护，T-09，任务书 §8）**——前置已全部满足：PR 四绿 ＋ 合并态 main run 四绿 ＋ 部署活体绿。
+ADR-005（区域商业化闸）仍归 G5，不预支；GAP-15（AI 草稿采纳率埋点）仍开放——ADR-007 §2.5 的复审触发器依赖它。
 
 ---
 
