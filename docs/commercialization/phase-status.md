@@ -1,17 +1,17 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 在途（`feat/commercial-g5-regional-partners`，基线 `2538a02`）**
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 合并 `28285e5`（#251，基线 `5294a6e`，合并前两度 rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G5 区域合作商能力建设（T-12a，任务书 §9）— 实施完成，PR→CI→合并→部署闭环进行中**
+- 当前阶段：**G5 区域合作商能力建设（T-12a，任务书 §9）— 已完成（闭环收口）；下一阶段 G6 企业空间与企业自助交付（T-06/T-08，任务书 §10）**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
 
 ---
 
-## G5：区域合作商能力建设（T-12a，不含 T-12b）— 实施完成（闭环收口中）
+## G5：区域合作商能力建设（T-12a，不含 T-12b）— 已完成
 
 - 分支：`feat/commercial-g5-regional-partners`（工作树 `D:\test\fde-wt-g1`）
 - 基线 SHA：fork/main `2538a02`（G4 收口态）
-- 状态：**implemented**（本节终值——PR 编号／CI run／部署活体断言——在合并收口 PR 回填）
+- 状态：**completed**（PR #251 squash 合并 `28285e5`；PR run 42620729944／main run 42622618241 server-tests 实测同值 2590 passed + 6 skipped（593.29s／406.34s），四 job 全绿；部署活体三项复验全绿，见下）
 
 ### 目标
 
@@ -60,7 +60,7 @@
 
 - `pytest tests/test_commercial_regional_partners.py -q` → **31 passed**。
 - 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2596 收集 = 2590 passed + 6 skipped，0 failed**（EXIT=0 / 16m13s；rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔（pytest 增量仅前三笔 +7／+12／+3，余四笔纯桌面或纯文档零 pytest 增量）；G4 基线 2543 收集 + V31-P1c +7 + N1 首跑补码 +12 + #250 +3 + 本轮 +31 ＝ 2596）。
-- **PR CI server-tests 实测在途——合并后由收口 PR 回填（终值以本 PR CI server-tests 实测为准）**。
+- **PR CI server-tests 实测（run 42620729944）：2590 passed + 6 skipped（593.29s）；main run 42622618241 同值（406.34s）——与本地实测（16m13s）三轮一致**。
 - `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（本轮回退零新增；实施期两处 Optional 收窄当场归零）。
 - `ruff check`（全部改动文件）→ All checks passed。
 - **变异五连全转红→还原→绿**（字节级备份还原，sha256 终验一致）：M1 售卖闸直通（`require_sale_gate_open` 摘 closed 判定→正式档反例红）／M2 缺件开门（`open_sale_gate` 摘四项齐备校验→缺件用例红）／M3 区域代理放行（摘显式拒绝→不可进入用例红）／M4 前两阶段独家放行（摘 `exclusive_not_allowed`→独家拒绝用例红）／M5 结算张冠李戴放行（摘 `ledger_project_mismatch`→跨项目结算用例红；**首版变异 `False and X or Y` 运算符优先级让判定意外存活——加括号全判失效后转红**〔变异本身也要验真〕）。
@@ -102,13 +102,17 @@
 2. 试运营升级指标与首期金额**待业务拍板**（任务书 §17 数值类）——配置槽显式 unset，成文后填实无需改结构。
 3. 区域商业化桌面呈现面（伙伴列表/开关面板）挂后续桌面轮；GAP-15（AI 草稿采纳率埋点）与 ADR-004 §1.4 多子公司集团归并仍开放。
 
-### 部署活体验证（合并后）
+### 部署活体验证（合并后，2026-11-09 实测）
 
-（收口 PR 回填：三镜像 rebuild 自本工作树＋alembic upgrade head → b3e8a6c2d4f7＋活体断言）
+- 三镜像 rebuild 自本工作树（合并态 `28285e5` 干净树）＋`docker compose up -d --force-recreate`＋容器内 `alembic upgrade head`：**e7b2c4d9f1a3 → b3e8a6c2d4f7（head）** 活体落库。
+- **复验①（活体路由与本轮口径一致）**：url_map＝**437 条**（436 口径路由＋1 静态；G4 同构 427→428）——regional 域 8 条规则串（9 路由中 POST/GET 共串）全数在位；`/api/v1/health/live` 200、`/api/v1/health/ready` 200（database ok／redis ok），四容器 healthy。
+- **复验②（容器内 alembic current ＝ 本轮 head）**：`b3e8a6c2d4f7 (head)`。
+- **复验③（容器镜像 ID ＝ 本工作树构建产物）**：api `1700cc82d4d8`／worker `697392faa3ac`／scheduler `87ce05aae023` 逐枚一致（同一构建时戳 2026-11-09 21:18:55）。
+- 活库断言：`regional_partner_tiers` **3 行**（T1 29800.00/15 席/转赠 7、T2 59800.00/30 席/转赠 15、T3 98000.00/50 席/转赠 25，basis_reference＝「BP v4.0 附录 C（v4.0 终版，经蔡工拍板）」——与 `REGIONAL_TIER_SEED` 逐位一致）；`regional_sale_gate` **单行 closed**、四条件槽全空（登记 ≠ 开启）；`regional_partners` **0 行**／`regional_service_settlements` **0 行**；试运营指标零落库。
 
 ### 是否允许进入下一阶段
 
-**允许进入 G6（企业空间与企业自助交付 T-06/T-08，任务书 §10）**——前置回填：PR 四绿＋合并态 main run 四绿＋部署活体绿。
+**允许进入 G6（企业空间与企业自助交付 T-06/T-08，任务书 §10）——前置已满足：PR #251 四绿（run 42620729944）＋合并态 main run 四绿（42622618241）＋部署活体绿（三项复验＋活库断言，见上）。**
 
 ---
 
