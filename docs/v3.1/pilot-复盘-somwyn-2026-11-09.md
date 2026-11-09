@@ -61,14 +61,14 @@
 | P2 | Step 6 全量 commit（9 任务单请求）卡项目行锁 >120s，gunicorn `--timeout 120` abort worker（HTTP 500；事务回滚零残留） | 部署配置与长事务分解冲突；create_project_task 对项目行 FOR UPDATE 串行 | 端点原生 `item_ids` 选择性创建分批（本次缓解，9 次调用全成）；runbook 增补分批操作注记；服务端批量切片/timeout 调整留拍板 | 部署配置，进 backlog |
 | P3 | 转写草稿卷 `/app/.fde-transcript-drafts` 首写 PermissionError（属主 root） | 镜像/entrypoint 以 root 预建目录 | `chown fde:fde` 修复（已解决）；镜像侧以运行属主预建 | 部署缺陷，进 backlog |
 | P4 | Step 9 v1 测试计划因执行脚本响应形状解析错（嵌套 `data.plan` 未取到 id，review URL 带 None → 404）而重复生成；另有一次 generate 404 未复现 | 执行脚本瑕疵（AI 代执行的操作性失误） | v1 走 rejected=superseded 显式留痕，v2 正常批准执行；非平台缺陷 | 如实注记 |
-| D1 | **审阅动作由 admin 代执行**（facts/reqs 接受、测试计划批准、测试执行登记） | 试点无人值守代执行先例（依赖真实审阅人到位）；AI 不代拍板红线未破——本体 confirm 与 workflow 拍板均由第二账号 `pilot.reviewer` 完成 | **建议蔡工在桌面端复核全部审阅动作**（事后人工确认）；后续试点按 runbook C4 配置 project_lead 执行 | 流程偏差，需人工复核 |
+| D1 | **审阅动作由 admin 代执行**（facts/reqs 接受、测试计划批准、测试执行登记） | 试点无人值守代执行先例（依赖真实审阅人到位）；AI 不代拍板红线未破——本体 confirm 与 workflow 拍板均由第二账号 `pilot.reviewer` 完成 | ~~建议蔡工在桌面端复核全部审阅动作~~ → **复核完成（2026-11-09）**：AI 技术核验稿先行（22 事实锚点 21/22 精确命中，#10 内容正确行号锚滑一位留档注记；7 需求↔事实溯源映射齐；测试账 v1 superseded/v2 approved/7×passed dev 逐项吻合；★1/★2 澄清材料实证在案）→ **蔡工交互拍板四项**（29 项全部认可／两 ★ 澄清后接受／★ 流转仍由 admin 代执行留痕授权链／测试定性认可）→ 两 ★ 已流转 accepted（审阅 comment 标注蔡工授权链）。清单与核验稿留档 `.fde/pilot-D1复核清单-2026-11-09.md`；后续试点按 runbook C4 配置 project_lead 执行 | 流程偏差，**已复核销号（2026-11-09 蔡工拍板）** |
 
 ## 5. 待办（进 `docs/implementation/v3-backlog.md` backlog——本轮已登记，见该文件「V3.1 试点遗留」节）
 
 1. ~~**抽取推理模型输出预算**（P1，P0-1 域缺陷）~~ → **已实施且根因已更正**（2026-11-09 实弹定案，见 §4-P1′ 与 backlog V31-P1）：实施内容＝**大纪要分段抽取**（按行切片 25 行/片 + 自适应降片长兜方差 + 片级限定提示词 + 分批抽取 + 行号回基合并）＋**截断诚实报错**（`ai_output_truncated`，判定不依赖供应商措辞）；初版「预算 ×2 预留」被实弹证伪后删除。**遗留口径**：切片参数按本部署模型标定，换模型需重标；跨片成立的需求可能漏（如实登记）。**V31-P1c 追加（2026-11-09）**：分段修复部署后全量 rerun 抓到第三弹——合并产物撞穿固定全批闸（详见 §4-P1″），同日以守恒预算修复（PR #246），修复部署后 rerun 补证。
 2. **批量分解与 gunicorn timeout**（P2）：runbook Step 6 增补「大方案用 item_ids 分批」操作注记；服务端批量分解切片上限评估或 timeout 拍板。
 3. **草稿卷属主**（P3）：镜像/entrypoint 以 fde 运行属主预建 `/app/.fde-transcript-drafts`。
-4. **D1 审阅复核**：蔡工桌面端复核本轮全部 admin 代执行审阅动作（操作事件可逐条回查 `operation_events`）。
+4. ~~**D1 审阅复核**~~ → **已复核销号（2026-11-09）**：AI 技术核验稿（锚点 21/22 精确 + 内容零失真 + 测试账/澄清材料取证）先行，**蔡工交互拍板**（29 项全部认可／两 ★ 澄清后接受〔已流转 accepted、comment 留痕蔡工授权〕／测试定性认可），清单 §三/§四 已回填（`.fde/pilot-D1复核清单-2026-11-09.md`）；backlog V31-D1 销号。
 5. 维持挂账：approval latency 口径细化（P1-3 已挂）；FOR UPDATE 挂起根因观察（P1-3 已挂——本轮 P2 的行锁等待为部署侧 timeout 表现，与该观察同域不同因）。
 
 ## 6. 结论
