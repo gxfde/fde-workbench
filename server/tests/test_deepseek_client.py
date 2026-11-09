@@ -70,7 +70,8 @@ def test_complete_json_parses_content_and_sets_json_mode():
     )
 
     result = make_client(session).complete_json(
-        messages=[{"role": "user", "content": "hello"}], request_id="req-1"
+        messages=[{"role": "user", "content": "hello"}], request_id="req-1",
+        purpose="unit_test"
     )
 
     assert result == {"status": "ready"}
@@ -88,7 +89,7 @@ def test_complete_json_accepts_a_fenced_json_object():
         )
     )
 
-    result = make_client(session).complete_json(messages=[], request_id="req-fenced")
+    result = make_client(session).complete_json(messages=[], request_id="req-fenced", purpose="unit_test")
 
     assert result == {"status": "ready"}
 
@@ -107,6 +108,7 @@ def test_complete_json_streams_reasoning_and_content_before_parsing_result():
         messages=[{"role": "user", "content": "hello"}],
         request_id="req-stream",
         on_event=events.append,
+        purpose="unit_test"
     )
 
     assert result == {"status": "ready"}
@@ -132,7 +134,7 @@ def test_provider_errors_are_mapped_without_leaking_body(status, code, retryable
     session = FakeSession(FakeResponse(status, {"error": {"message": "private provider detail"}}))
 
     with pytest.raises(DeepSeekError) as caught:
-        make_client(session).complete_json(messages=[], request_id="req-2")
+        make_client(session).complete_json(messages=[], request_id="req-2", purpose="unit_test")
 
     assert caught.value.code == code
     assert caught.value.retryable is retryable
@@ -143,7 +145,7 @@ def test_empty_or_invalid_content_is_a_stable_public_error():
     session = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": ""}}]}))
 
     with pytest.raises(DeepSeekError) as caught:
-        make_client(session).complete_json(messages=[], request_id="req-3")
+        make_client(session).complete_json(messages=[], request_id="req-3", purpose="unit_test")
 
     assert caught.value.code == "ai_empty_response"
 
@@ -152,7 +154,7 @@ def test_missing_key_is_rejected_before_network_call():
     session = FakeSession(FakeResponse(200, {}))
 
     with pytest.raises(DeepSeekError) as caught:
-        make_client(session, api_key=None).complete_json(messages=[], request_id="req-4")
+        make_client(session, api_key=None).complete_json(messages=[], request_id="req-4", purpose="unit_test")
 
     assert caught.value.code == "ai_service_not_configured"
     assert session.calls == []
@@ -169,7 +171,7 @@ def test_transient_connection_error_is_retried_once():
         ]
     )
 
-    result = make_client(session).complete_json(messages=[], request_id="req-retry")
+    result = make_client(session).complete_json(messages=[], request_id="req-retry", purpose="unit_test")
 
     assert result == {"ok": True}
     assert len(session.calls) == 2
@@ -185,7 +187,7 @@ def test_connection_error_is_retried_with_a_strict_limit():
     )
 
     with pytest.raises(DeepSeekError) as caught:
-        make_client(session).complete_json(messages=[], request_id="req-retry-failed")
+        make_client(session).complete_json(messages=[], request_id="req-retry-failed", purpose="unit_test")
 
     assert caught.value.code == "ai_service_unavailable"
     assert len(session.calls) == 3

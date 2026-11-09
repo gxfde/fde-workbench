@@ -180,6 +180,13 @@ def execute_chat_turn(turn_id):
             AIChatTurn.status == "completed").order_by(AIChatTurn.created_at.desc()).limit(12)).all()
         context = "\n\n".join(f"用户：{t.prompt}\n助手：{t.response}" for t in reversed(history))[-60000:]
         prompt = ("以下是当前会话历史：\n" + context + "\n\n当前用户消息：\n" if context else "") + turn.prompt
+        # G-08：人工接受信号回流——项目内被人工接受的产物（仅元数据与指纹
+        # 指针）作为 user 角色上下文进入本轮问答；取不到信号不阻塞问答。
+        from fde_api.agents.review_signals import project_review_signal_block
+
+        signal_block = project_review_signal_block(session, conversation.project_id)
+        if signal_block:
+            prompt = f"{signal_block}\n\n{prompt}"
         actor_id, project_id, preference_id = user.id, conversation.project_id, turn.model_preference_id
         depth = turn.deep_thinking
         turn.status = "running"
@@ -187,7 +194,8 @@ def execute_chat_turn(turn_id):
         output = execute_ai_prompt(user_id=actor_id, prompt=prompt, execution_id=turn_id,
                                    project_id=project_id, preference_id=preference_id, deep_thinking=depth,
                                    system_prompt=_workbench_system_prompt(),
-                                   all_projects=True, return_metadata=True)
+                                   all_projects=True, return_metadata=True,
+                                   purpose="chat_assistant")
         answer = output["text"] if isinstance(output, dict) else output
         metrics = {"model": output.get("model", {}), "provider_usage": output.get("provider_usage", {})} if isinstance(output, dict) else {}
         if isinstance(output, dict) and output.get("degraded"):

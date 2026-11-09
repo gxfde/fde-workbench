@@ -250,7 +250,8 @@ def _form_context(form: ProjectResearchForm) -> dict[str, Any]:
 def _ai_summary(project: Project, subject: ProjectResearchSubject, forms: list[dict[str, Any]]) -> dict[str, Any]:
     messages = [{"role": "system", "content": "你是 FDE 调研报告助手。仅依据提供的答案生成 JSON，字段 executive_summary、key_findings、recommendations；后两项为字符串数组。信息不足要明确写待确认，不得编造。"}, {"role": "user", "content": json.dumps({"enterprise": project.enterprise_code, "subject": subject.name, "forms": forms}, ensure_ascii=False)}]
     try:
-        raw = _client().complete_json(messages=messages, request_id=f"research-export-{uuid4()}", max_tokens=4096)
+        raw = _client().complete_json(messages=messages, request_id=f"research-export-{uuid4()}",
+                                      max_tokens=4096, purpose="research_export")
     except DeepSeekError as error:
         status = {"ai_timeout": 504, "ai_output_invalid": 502}.get(error.code, 503)
         raise ResearchExportError(error.code, error.public_message, status) from error

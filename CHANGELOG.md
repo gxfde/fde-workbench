@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — AI 原生化 N2 归因仪表化轮（Path 2a：purpose 四层强制 + 提示词指纹 + 人工接受信号消费面；迁移 `c4f7a2d9e1b6` 53→54 rev，2026-11-09）
+
+- **动机与认领**：任务书 §4/N2（Path 2a 仪表化，无业务闸依赖）。D-1（真实订单/通道/审阅人三连拍板）**未获答复 ⇒ 按任务书 §6 默认执行：N1 挂起、不擅自开真实订单通道**，先做 N2——「无归因仪表的决策位 AI 不可审计、不可进化」。本轮认领台账 **G-09（提示词无指纹）/G-16（审计匿名行）/G-08（reviewed 只写不读）** 三条；顺带登记 **G-17**（宿主通道 zcode 内部 AI 调用不经工作台 AI 入口、不进归因台账——Path 2a/4，体量 M，依赖 G-09）。
+- **DB（迁移 `c4f7a2d9e1b6`，53→54 rev，additive）**：`ai_call_audits` +`prompt_version`(String 60 可空) +`prompt_fingerprint`(String 64 可空)；`purpose` 置 `NOT NULL` + CHECK `ck_ai_call_audits_purpose`（非空且 ≥1 字符）；**存量 NULL purpose 回填 `legacy_unattributed`**（与运行时兜底 `unattributed` 有意区分＝可辨的存量代际；第三轮探针实测 NULL 2 行）；新列存量行留 NULL＝如实（归因从本轮起算，不伪造历史）；downgrade 全量可逆（roundtrip 已测）。
+- **G-16 purpose 归因强制四层**：①入口机械强制——`execute_ai_prompt`/`complete_json` 的 `purpose` 为必填形参，漏传即 TypeError（不靠自觉）；②DB 层 NOT NULL + CHECK；③**AST 静态钉** `test_every_ai_entry_call_declares_purpose`——全仓扫描两入口的全部调用点，必须显式传「字面量或 Name」的 purpose，漏传/非字面量即红（防新增调用点漏传）；④兜底落 `unattributed` 可见匿名行 + warning（审计写入不因缺 purpose 整条丢失，宁可留可见匿名行不留无账调用）。**全部 15 个 AI 入口调用点补齐 purpose 字面量**（chat_assistant／discovery_extract／dsh_runtime_execute／workflow_skill／memo_merge／opportunity_discovery／opportunity_adjustment／research_form_generate／research_export／document_ai_content／industry_template_generate／solution_organize／translator_translation／simulation_evaluation／kimi_docx）。
+- **G-09 提示词指纹**：NEW `ai/auditing.py::compute_prompt_fingerprint`——sha256，指令源优先级 `system_prompt` → `messages` system 角色 → `messages` JSON → `prompt`；**指纹＝模板身份而非输入**（同模板不同输入同指纹；提示词正文绝不落库）；两条直连腿（`deepseek.complete_json`/`execute_ai_prompt`）计算并落账；`prompt_version` 标签仅 discovery 具备（`discovery-prompt-v1`），其余调用点如实留空（**留空 ≠ 归因失败**，是「该模板尚无版本名」的诚实态）。
+- **G-08 人工接受信号消费面**：NEW `agents/review_signals.py`——`build_review_signals` 纯聚合（只认 reviewed=True，按 kind 计数+最近接受时间）+ `accepted_artifact_context`（纯元数据块：kind／sha256 前 12 位／run 指针／接受时间；**绝不复制产物正文**、不自动改任何提示词——自动进化是 G-11 受控发布通道的职责）+ `project_review_signal_block` fail-open 包装（信号是增益项，取不到不阻塞问答）。**消费点＝chat 助手**：历史组装后把「人工已接受产物」注入 user 角色上下文（最小真消费点，闭合台账 G-08「至少一个 AI 面消费点」判据）；**撤回即撤销认可**（reviewed=False 不进清单）。
+- **测试**：NEW `server/tests/test_ai_call_audit_attribution.py` **10 例**——指纹语义 3（同模板不同输入同指纹／messages system 优先／落账三样齐全）／purpose 强制 4（入口 TypeError／DB CHECK 拒空／兜底可见标记／AST 静态钉）／信号消费 3（聚合只认 accepted／chat 消费注入／未接受不注入）；既有测试替身同步（`_FakeDocumentAI.complete_json` 补 purpose 形参等五处）。**变异三连全红→还原→绿**：M1 摘 chat 信号注入→消费用例红；M2 摘指纹计算→指纹落账用例红；M3 摘 purpose 兜底→兜底标记用例红（变异期间只跑定向文件，不与全量并行）。
+- **审计清单重生成（P2-7 同步）**：`v3-workbench-inventory.json` → 411 路由/49 蓝图/137 表/**54 rev 单头 `c4f7a2d9e1b6`**；route CSV 零变化（零新路由）；DB CSV `ai_call_audits` 行如实登记 `prompt_version` 列（零新表，138 行不变）。
+- **口径**：pytest 本地 `-n 4 --dist loadfile` **2464 收集 = 2455 passed + 6 skipped + 3 failed**（三失败系测试替身缺 purpose 形参/结构清单漂移两处非本体缺陷，修复后定向复跑 49 例全绿含三个原失败用例；**全量终值以本 PR CI server-tests 实测为准**；G3 基线 2454 收集 + 本轮 +10 = 2464）／mypy **279 基线不变**（官方闸 OK）／路由 **411**/蓝图 **49**/表 **137**/**54 rev 单头 `c4f7a2d9e1b6`**；server 变更 ⇒ 合并后 rebuild 三镜像 + alembic upgrade head（新迁移）；桌面零改动不重打包。
+- **台账与任务书回写**：台账 → **v1.3**（G-08/G-09/G-16 置 **CLOSED（N2，2026-11-09）** 各带四证复测结果 + NEW G-17 行 + 指纹/purpose 语义注记块）；任务书 §13 记录 #4/#5 + §14 轮次执行记录（N1 挂起等 D-1／N2 已实施）；评估文档本轮零改动（四特征评分要等第三证〔CI eval 回归〕落地才动，属 N4）。
+- **边界**：purpose/指纹覆盖面＝**工作台 AI 入口**（execute_ai_prompt/complete_json 两腿）；宿主通道 zcode 进程内部的 AI 调用不在面内（G-17 如实登记，不假装闭合）；`structured` 仅为签名缺省值非调用点字面量；红线全束（客户资料不入库／证据只指针+指纹／AI 不代拍板——D-1 仍待蔡工答复，N1 全部前置停在「零代码准备完成」态）。
+
 ## [未发布] — AI 原生化实施任务书 v1（leader 执行本：轮次编排 N1–N6 + 拍板闸 D-1–D-8）+ 台账/评估同日口径回写（纯文档零代码零迁移零路由，2026-11-09）
 
 - **动机**：蔡工要求「依据台账生成 leader 任务书」——把《AI 原生化差距评估》与《AI 原生化差距台账》从**叙述与登记**转成**逐轮可施工、可复测、可对账**的施工单（台账＝对账入口，任务书＝施工顺序与验收口径的载体，二者互相引用、不得各说各话）。

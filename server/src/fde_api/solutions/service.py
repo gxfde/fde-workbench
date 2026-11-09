@@ -508,6 +508,7 @@ def organize_solution(*, actor: User, project_id: str, payload: dict[str, Any]) 
                 "机会编号到方案能力的映射、范围边界和不包含项。不得改变机会、项目关系或状态。")},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
             request_id=f"solution-organize-{uuid4()}", max_tokens=8192,
+            purpose="solution_organize",
         )
     except DeepSeekError:
         _error("ai_unavailable", "AI 整理暂不可用，请稍后重试；已有内容未修改。", 502)

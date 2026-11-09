@@ -178,6 +178,7 @@ def test_execute_prompt_degrades_to_provider_when_dsh_is_not_enabled(app, db_ses
             prompt="你好",
             model_override=provider_model(),
             return_metadata=True,
+            purpose="unit_test"
         )
 
     assert result["text"] == "已直连回答。"
@@ -209,6 +210,7 @@ def test_execute_prompt_degrades_on_unreachable_dsh_runtime(app, db_session, ai_
             prompt="你好",
             model_override=provider_model(),
             return_metadata=True,
+            purpose="unit_test"
         )
 
     assert result["text"] == "降级后回答。"
@@ -233,6 +235,7 @@ def test_execute_prompt_does_not_degrade_on_execution_conflict(app, db_session, 
                 prompt="你好",
                 model_override=provider_model(),
                 return_metadata=True,
+                purpose="unit_test"
             )
 
     assert caught.value.code == "dsh_execution_conflict"
@@ -255,6 +258,7 @@ def test_execute_prompt_degraded_result_is_json_serialisable_for_storage(app, db
             prompt="你好",
             model_override=provider_model(),
             return_metadata=True,
+            purpose="unit_test"
         )
 
     assert json.loads(json.dumps(result))["degraded"] is True
@@ -314,6 +318,7 @@ def test_minimax_provider_is_rejected_by_the_depth_thinking_gate(app, db_session
                 model_override=minimax,
                 deep_thinking=True,
                 return_metadata=True,
+                purpose="unit_test"
             )
 
     assert caught.value.code == "thinking_unsupported"

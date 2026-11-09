@@ -87,6 +87,7 @@ def handle_translator_translate(job) -> None:
                     # id 会让第二次拿回第一次的坏结果。
                     request_id=f"{job.id}:{attempts}",
                     max_tokens=12_000,
+                    purpose="translator_translation",
                 )
                 draft = validate_guidance_output(payload, source_refs=SOURCE_REFS)
                 break

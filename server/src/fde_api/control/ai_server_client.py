@@ -77,9 +77,11 @@ def _sum_provider_usage_tokens(usage: dict[str, Any] | None) -> tuple[int | None
     return input_total, output_total
 
 
-def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str | None,
+def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str,
                      model: str, used_fallback: bool, duration_ms: int,
-                     usage: dict[str, Any] | None, status: str, error_code: str | None) -> None:
+                     usage: dict[str, Any] | None, status: str, error_code: str | None,
+                     prompt_version: str | None = None,
+                     prompt_fingerprint: str | None = None) -> None:
     """CR-006 统一记账腿：DSH 主路径/降级直连路径统一落 ``ai_call_audits``（E7）。
 
     此前这两条路径零记账——``dsh_enabled=true`` 时平台月度预算对 skill 节点/
@@ -100,6 +102,8 @@ def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str | No
             output_tokens=output_tokens,
             status=status,
             error_code=error_code,
+            prompt_version=prompt_version,
+            prompt_fingerprint=prompt_fingerprint,
         )
     except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
         logger.warning("AI execution audit dispatch failed request_id=%s", request_id, exc_info=True)
@@ -188,8 +192,14 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                       use_tools: bool = True, system_prompt: str | None = None,
                       max_tokens: int = 16384, model_override: dict | None = None,
                       capabilities: list[str] | None = None, deep_thinking: bool | None = None, all_projects: bool = False,
-                      return_metadata: bool = False, purpose: str | None = None) -> str | dict:
+                      return_metadata: bool = False, purpose: str,
+                      prompt_version: str | None = None) -> str | dict:
     identifier = execution_id or str(uuid4())
+    # N2 仪表化（G-09）：指纹＝指令源文本 sha256（system_prompt 优先，否则
+    # prompt 本身）；提示词正文绝不落库。模板身份 → 输出可按模板归因。
+    from fde_api.ai.auditing import compute_prompt_fingerprint
+
+    fingerprint = compute_prompt_fingerprint(system_prompt=system_prompt, prompt=prompt)
     settings = current_app.config["SETTINGS"]
     runtime = dsh_runtime.current.primary
     dsh_usable = runtime.enabled
@@ -225,7 +235,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
         from fde_api.ai.auditing import audit_budget_blocked
 
         audit_budget_blocked(request_id=identifier, actor_id=user_id, purpose=purpose,
-                             model=str(model.get("model") or ""))
+                             model=str(model.get("model") or ""),
+                             prompt_version=prompt_version, prompt_fingerprint=fingerprint)
         raise DSHRuntimeError("ai_budget_exceeded", "本月 AI 用量已达预算上限，请联系管理员调整或下月再试。", retryable=False)
     if not dsh_usable:
         # 没有部署 DSH 运行时：直接走供应商直连降级路径（带本地工具循环）。
@@ -234,7 +245,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             max_tokens=max_tokens, timeout_seconds=settings.dsh_timeout_seconds,
             reason="dsh_not_enabled", return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
-            use_tools=use_tools, purpose=purpose)
+            use_tools=use_tools, purpose=purpose,
+            prompt_version=prompt_version, prompt_fingerprint=fingerprint)
     body = {"schema_version": "fde-dsh-v1", "execution_id": identifier,
             "actor": {"user_id": user_id}, "scope": {"project_id": project_id},
             "agent_profile": "fde-assistant" if use_tools else "fde-structured",
@@ -253,7 +265,9 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
         if error.code not in DEGRADABLE_DSH_CODES:
             _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
                              model=str(model.get("model") or ""), used_fallback=False,
-                             duration_ms=elapsed_ms, usage=None, status="failed", error_code=error.code)
+                             duration_ms=elapsed_ms, usage=None, status="failed", error_code=error.code,
+                             prompt_version=prompt_version,
+                             prompt_fingerprint=fingerprint)
             raise
         logger.warning("DSH runtime unusable, degrading to direct provider call code=%s", error.code)
         return _degraded_direct_result(
@@ -261,13 +275,16 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             max_tokens=max_tokens, timeout_seconds=settings.dsh_timeout_seconds,
             reason=error.code, return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
-            use_tools=use_tools, purpose=purpose)
+            use_tools=use_tools, purpose=purpose,
+            prompt_version=prompt_version, prompt_fingerprint=fingerprint)
     if response.status_code >= 400:
         service_error = runtime._service_error(response.status_code)
         _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
                          model=str(model.get("model") or ""), used_fallback=False,
                          duration_ms=int((time.monotonic() - started) * 1000), usage=None,
-                         status="failed", error_code=service_error.code)
+                         status="failed", error_code=service_error.code,
+                         prompt_version=prompt_version,
+                         prompt_fingerprint=fingerprint)
         raise service_error
     result = runtime._json_object(response)
     text = result.get("output", {}).get("text")
@@ -275,13 +292,17 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
         _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
                          model=str(model.get("model") or ""), used_fallback=False,
                          duration_ms=int((time.monotonic() - started) * 1000), usage=None,
-                         status="failed", error_code="ai_output_invalid")
+                         status="failed", error_code="ai_output_invalid",
+                         prompt_version=prompt_version,
+                         prompt_fingerprint=fingerprint)
         raise DSHRuntimeError("ai_output_invalid", "AI Server 未返回有效结果。", retryable=True)
     provider_usage = result.get("provider_usage") or {"complete": False, "calls": []}
     _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
                      model=str(model.get("model") or ""), used_fallback=False,
                      duration_ms=int((time.monotonic() - started) * 1000), usage=provider_usage,
-                     status="succeeded", error_code=None)
+                     status="succeeded", error_code=None,
+                     prompt_version=prompt_version,
+                     prompt_fingerprint=fingerprint)
     if return_metadata:
         return {"text": text, "model": {"provider": model.get("provider", ""), "name": model.get("model", "")},
                 "provider_usage": provider_usage}
@@ -292,7 +313,9 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                             max_tokens: int, timeout_seconds: int, reason: str,
                             return_metadata: bool, user_id: str | None = None,
                             project_id: str | None = None, execution_id: str | None = None,
-                            use_tools: bool = True, purpose: str | None = None) -> str | dict:
+                            use_tools: bool = True, purpose: str,
+                            prompt_version: str | None = None,
+                            prompt_fingerprint: str | None = None) -> str | dict:
     """Run the direct provider call and shape it like a normal AI Server result.
 
     When tools are wanted, the provider is called with the workbench tool
@@ -320,12 +343,16 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                     _audit_execution(request_id=request_identifier, actor_id=user_id,
                                      purpose=purpose, model=model_name, used_fallback=True,
                                      duration_ms=int((time.monotonic() - started) * 1000),
-                                     usage=None, status="failed", error_code=error.code)
+                                     usage=None, status="failed", error_code=error.code,
+                                     prompt_version=prompt_version,
+                                     prompt_fingerprint=prompt_fingerprint)
                     raise
                 _audit_execution(request_id=request_identifier, actor_id=user_id,
                                  purpose=purpose, model=model_name, used_fallback=True,
                                  duration_ms=int((time.monotonic() - started) * 1000),
-                                 usage=usage, status="succeeded", error_code=None)
+                                 usage=usage, status="succeeded", error_code=None,
+                                 prompt_version=prompt_version,
+                                 prompt_fingerprint=prompt_fingerprint)
                 if not return_metadata:
                     return text
                 return {
@@ -346,12 +373,16 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
         _audit_execution(request_id=request_identifier, actor_id=user_id,
                          purpose=purpose, model=model_name, used_fallback=True,
                          duration_ms=int((time.monotonic() - started) * 1000),
-                         usage=None, status="failed", error_code=error.code)
+                         usage=None, status="failed", error_code=error.code,
+                         prompt_version=prompt_version,
+                         prompt_fingerprint=prompt_fingerprint)
         raise
     _audit_execution(request_id=request_identifier, actor_id=user_id,
                      purpose=purpose, model=model_name, used_fallback=True,
                      duration_ms=int((time.monotonic() - started) * 1000),
-                     usage=usage, status="succeeded", error_code=None)
+                     usage=usage, status="succeeded", error_code=None,
+                     prompt_version=prompt_version,
+                     prompt_fingerprint=prompt_fingerprint)
     if not return_metadata:
         return text
     return {
@@ -365,7 +396,9 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
     }
 
 
-def structured_completion(*, messages, model: str, base_url: str, api_key, max_tokens: int, on_event=None, deep_thinking=None):
+def structured_completion(*, messages, model: str, base_url: str, api_key, max_tokens: int,
+                          on_event=None, deep_thinking=None, purpose: str = "structured",
+                          prompt_version: str | None = None):
     actor = ai_actor_id.get()
     if not actor and has_request_context():
         user = getattr(g, "current_user", None)
@@ -392,7 +425,8 @@ def structured_completion(*, messages, model: str, base_url: str, api_key, max_t
     try:
         value = execute_ai_prompt(user_id=actor, prompt=json.dumps(messages, ensure_ascii=False), use_tools=False,
             system_prompt="按提供的messages逐条理解角色和要求。只输出一个合法JSON对象，不要Markdown代码块，不调用工具。",
-            max_tokens=max_tokens, deep_thinking=deep_thinking, purpose="structured",
+            max_tokens=max_tokens, deep_thinking=deep_thinking, purpose=purpose,
+            prompt_version=prompt_version,
             model_override=None if has_default else {"model": model, "base_url": base_url, "api_key": key,
                                                 "provider": "deepseek" if "deepseek.com" in base_url else "openai-compatible"})
     except ControlServiceError as error:

@@ -315,6 +315,7 @@ def _dispatch_skill(
             project_id=project_id,
             use_tools=False,
             system_prompt=instructions,
+            purpose="workflow_skill",
         )
     except DSHRuntimeError as error:
         raise _NodeFailure(error.code, error.public_message, retryable=error.retryable) from error

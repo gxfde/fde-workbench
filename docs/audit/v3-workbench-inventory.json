@@ -2,9 +2,9 @@
  "route_count": 411,
  "blueprint_count": 49,
  "table_count": 137,
- "revision_count": 53,
+ "revision_count": 54,
  "heads": [
-  "d5f9a3c7e1b4"
+  "c4f7a2d9e1b6"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -186,6 +186,14 @@
    "create_tables": [],
    "add_column_tables": [
     "projects"
+   ]
+  },
+  "c4f7a2d9e1b6": {
+   "file": "c4f7a2d9e1b6_ai_call_audit_attribution.py",
+   "down_revision": "d5f9a3c7e1b4",
+   "create_tables": [],
+   "add_column_tables": [
+    "ai_call_audits"
    ]
   },
   "c5d7e9f1a3b7": {

@@ -448,6 +448,7 @@ def _call_ai(messages: list[dict[str, str]], *, on_event: Callable[[dict[str, st
             request_id="industry-research-form-generate",
             max_tokens=12_000,
             on_event=on_event,
+            purpose="research_form_generate",
         )
     except DeepSeekError as error:
         status = {

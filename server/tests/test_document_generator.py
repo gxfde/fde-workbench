@@ -529,6 +529,7 @@ def test_handle_document_generation_freezes_ai_request_lineage(app, db_session):
     # 用后即清——ai_call_audits 不在 conftest 清理序）。
     audit = AICallAudit(
         request_id=captured,
+        purpose="document_ai_content",
         model="MiniMax-M3.1-Flash",
         duration_ms=12,
         status="succeeded",

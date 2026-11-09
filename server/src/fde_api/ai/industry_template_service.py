@@ -129,7 +129,8 @@ def cancel_generation(*, actor: User, generation_id: str) -> dict[str, bool]:
 
 def _call_ai(messages: list[dict[str, str]], *, request_id: str, on_event: Callable[[dict[str, str]], None] | None = None) -> dict[str, Any]:
     try:
-        return _client().complete_json(messages=messages, request_id=request_id, on_event=on_event)
+        return _client().complete_json(messages=messages, request_id=request_id, on_event=on_event,
+                                      purpose="industry_template_generate")
     except DeepSeekError as error:
         status = {
             "ai_service_not_configured": 503,

@@ -128,7 +128,8 @@ def test_budget_exceeded_blocks_call_without_provider_request(db_session, app, m
         g.current_user = user
         # 第一笔：100+50=150 token，恰好达到预算
         ai_client.complete_json(
-            messages=[{"role": "user", "content": "x"}], request_id="budget-1"
+            messages=[{"role": "user", "content": "x"}], request_id="budget-1",
+            purpose="unit_test"
         )
         db_session.commit()
         assert session.calls == 1
@@ -136,7 +137,8 @@ def test_budget_exceeded_blocks_call_without_provider_request(db_session, app, m
         # 第二笔：预算已用尽 → 明确报错且不发起任何供应商请求
         with pytest.raises(DeepSeekError) as excinfo:
             ai_client.complete_json(
-                messages=[{"role": "user", "content": "x"}], request_id="budget-2"
+                messages=[{"role": "user", "content": "x"}], request_id="budget-2",
+                purpose="unit_test"
             )
         assert excinfo.value.code == "ai_budget_exceeded"
         assert excinfo.value.retryable is False
@@ -171,6 +173,7 @@ def test_default_budget_zero_never_locks_out_users(db_session, app):
             ai_client.complete_json(
                 messages=[{"role": "user", "content": "x"}],
                 request_id=f"unlimited-{index}",
+                purpose="unit_test"
             )
         db_session.commit()
         assert session.calls == 3
@@ -200,7 +203,8 @@ def test_failed_call_writes_failed_audit(db_session, app):
         g.current_user = user
         with pytest.raises(DeepSeekError):
             ai_client.complete_json(
-                messages=[{"role": "user", "content": "x"}], request_id="fail-1"
+                messages=[{"role": "user", "content": "x"}], request_id="fail-1",
+                purpose="unit_test"
             )
         db_session.commit()
         audit = db_session.scalar(

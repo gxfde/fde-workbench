@@ -204,7 +204,7 @@ class DSHRuntimePool:
             from fde_api.control.ai_server_client import execute_ai_prompt
             answer = execute_ai_prompt(user_id=kwargs["actor_user_id"], prompt=kwargs["prompt"],
                 execution_id=execution_id, project_id=kwargs.get("project_id"),
-                capabilities=kwargs.get("allowed_tools"))
+                capabilities=kwargs.get("allowed_tools"), purpose="dsh_runtime_execute")
             return DSHExecutionResult(execution_id, "succeeded", answer[:1000], {"text": answer}, self.runtime_version)
         return self.primary.execute(execution_id=execution_id, **kwargs)
 

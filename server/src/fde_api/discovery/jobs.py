@@ -23,6 +23,7 @@ from fde_api.discovery.contract import DiscoveryContractError, validate_extracti
 from fde_api.discovery.models import (
     BusinessFact,
     DiscoveryExtraction,
+    PROMPT_VERSION,
     Requirement,
     RequirementSource,
     REDACTION_EVENT_TYPE,
@@ -113,6 +114,7 @@ def handle_discovery_extraction(job) -> None:
                     project_id=extraction.project_id,
                     execution_id=f"discovery:{extraction.id}:{attempts}",
                     purpose="discovery_extract",
+                    prompt_version=PROMPT_VERSION,
                     return_metadata=True,
                 )
                 if not isinstance(answer, dict):

@@ -61,7 +61,7 @@ def test_rate_limit_retries_with_retry_after_delay():
         sleeps,
     )
 
-    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r1")
+    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r1", purpose="unit_test")
 
     assert session.calls == 2
     assert sleeps == [2.0]
@@ -78,7 +78,7 @@ def test_rate_limit_without_retry_after_uses_bounded_exponential_backoff():
         sleeps,
     )
 
-    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r2")
+    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r2", purpose="unit_test")
 
     assert session.calls == 3
     assert sleeps == [1.0, 3.0]
@@ -89,7 +89,7 @@ def test_rate_limit_exhausts_bounded_retries_then_raises():
     client, session = _client([_FakeResponse(429), _FakeResponse(429), _FakeResponse(429)], sleeps)
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r3")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r3", purpose="unit_test")
 
     assert excinfo.value.code == "ai_rate_limited"
     assert excinfo.value.retryable is True
@@ -107,7 +107,7 @@ def test_timeout_is_retried_with_backoff():
         sleeps,
     )
 
-    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r4")
+    client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r4", purpose="unit_test")
 
     assert session.calls == 2
     assert sleeps == [1.0]
@@ -120,7 +120,7 @@ def test_timeout_exhausting_retries_raises_timeout_error():
     )
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r5")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r5", purpose="unit_test")
 
     assert excinfo.value.code == "ai_timeout"
     assert session.calls == 3
@@ -131,7 +131,7 @@ def test_authentication_error_is_not_retried():
     client, session = _client([_FakeResponse(401)], sleeps)
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r6")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="r6", purpose="unit_test")
 
     assert excinfo.value.code == "ai_authentication_failed"
     assert excinfo.value.retryable is False
@@ -172,7 +172,7 @@ def test_primary_failure_falls_back_to_backup_model():
         sleeps,
     )
 
-    result = client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f1")
+    result = client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f1", purpose="unit_test")
 
     assert result == {}
     assert session.calls == 2
@@ -183,7 +183,7 @@ def test_both_models_failing_hands_off_to_manual_processing():
     client, session = _fallback_client([_FakeResponse(500), _FakeResponse(500)], sleeps)
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f2")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f2", purpose="unit_test")
 
     assert excinfo.value.code == "ai_manual_handoff"
     assert excinfo.value.retryable is False
@@ -195,7 +195,7 @@ def test_non_retryable_errors_do_not_fall_back():
     client, session = _fallback_client([_FakeResponse(401)], sleeps)
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f3")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f3", purpose="unit_test")
 
     assert excinfo.value.code == "ai_authentication_failed"
     assert session.calls == 1
@@ -206,7 +206,7 @@ def test_no_fallback_configured_keeps_original_error():
     client, session = _fallback_client([_FakeResponse(500)], sleeps, fallback_model=None)
 
     with pytest.raises(DeepSeekError) as excinfo:
-        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f4")
+        client.complete_json(messages=[{"role": "user", "content": "x"}], request_id="f4", purpose="unit_test")
 
     assert excinfo.value.code == "ai_service_unavailable"
     assert excinfo.value.retryable is True

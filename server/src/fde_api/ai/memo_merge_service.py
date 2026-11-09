@@ -91,6 +91,7 @@ def merge_research_memos(
                 request_id=f"memo-merge-{uuid4()}",
                 max_tokens=8192,
                 on_event=on_event,
+                purpose="memo_merge",
             )
         except DeepSeekError as error:
             status = {"ai_timeout": 504, "ai_output_invalid": 502, "ai_empty_response": 502}.get(error.code, 503)

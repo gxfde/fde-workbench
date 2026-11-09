@@ -50,7 +50,7 @@ def _budget_session() -> Any:
 def _audit(
     request_id: str,
     actor_id: str | None,
-    purpose: str | None,
+    purpose: str,
     *,
     model: str,
     used_fallback: bool,
@@ -58,6 +58,8 @@ def _audit(
     usage: dict[str, int] | None,
     status: str,
     error_code: str | None,
+    prompt_version: str | None = None,
+    prompt_fingerprint: str | None = None,
 ) -> None:
     """E7 审计入口；只传元数据，绝不携带密钥或消息内容。"""
     try:
@@ -74,6 +76,8 @@ def _audit(
             output_tokens=(usage or {}).get("output"),
             status=status,
             error_code=error_code,
+            prompt_version=prompt_version,
+            prompt_fingerprint=prompt_fingerprint,
         )
     except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
         logger.warning("AI audit dispatch failed request_id=%s", request_id, exc_info=True)
@@ -110,9 +114,15 @@ class DeepSeekClient:
         max_tokens: int = 8192,
         on_event: Callable[[dict[str, str]], None] | None = None,
         deep_thinking: bool | None = None,
-        purpose: str | None = None,
+        purpose: str,
+        prompt_version: str | None = None,
     ) -> dict[str, Any]:
         from flask import current_app, has_app_context
+
+        # N2 仪表化（G-09）：指纹＝指令源文本 sha256（模板身份），正文不入库。
+        from fde_api.ai.auditing import compute_prompt_fingerprint
+
+        fingerprint = compute_prompt_fingerprint(messages=messages)
 
         # E7 预算门：月度 token 预算用尽时拒绝调用，且不发起任何供应商请求。
         # 预算设施自身故障时放行（fail-open），不阻塞业务。
@@ -135,6 +145,8 @@ class DeepSeekClient:
                     usage=None,
                     status="budget_blocked",
                     error_code="ai_budget_exceeded",
+                    prompt_version=prompt_version,
+                    prompt_fingerprint=fingerprint,
                 )
                 raise DeepSeekError(
                     "ai_budget_exceeded",
@@ -151,7 +163,8 @@ class DeepSeekClient:
             from fde_api.control.dsh_runtime import DSHRuntimeError
             try:
                 return structured_completion(messages=messages, model=self._model, base_url=self._base_url,
-                    api_key=self._api_key, max_tokens=max_tokens, on_event=on_event, deep_thinking=deep_thinking)
+                    api_key=self._api_key, max_tokens=max_tokens, on_event=on_event, deep_thinking=deep_thinking,
+                    purpose=purpose, prompt_version=prompt_version)
             except DSHRuntimeError as error:
                 raise DeepSeekError(error.code, error.public_message, retryable=error.retryable) from error
         timer = _Timer()
@@ -172,6 +185,8 @@ class DeepSeekClient:
                     duration_ms=timer.elapsed_ms(),
                     usage=getattr(self, "_last_usage", None),
                     status="failed", error_code=error.code,
+                    prompt_version=prompt_version,
+                    prompt_fingerprint=fingerprint,
                 )
                 raise
             # 主模型失败 → 备用模型（只对瞬时故障降级；配置/认证错误不降级）
@@ -199,6 +214,8 @@ class DeepSeekClient:
                     duration_ms=timer.elapsed_ms(),
                     usage=getattr(self, "_last_usage", None),
                     status="failed", error_code=fallback_error.code,
+                    prompt_version=prompt_version,
+                    prompt_fingerprint=fingerprint,
                 )
                 raise DeepSeekError(
                     "ai_manual_handoff",
@@ -211,6 +228,8 @@ class DeepSeekClient:
                 duration_ms=timer.elapsed_ms(),
                 usage=getattr(self, "_last_usage", None),
                 status="succeeded", error_code=None,
+                prompt_version=prompt_version,
+                prompt_fingerprint=fingerprint,
             )
             return result
         _audit(
@@ -219,6 +238,8 @@ class DeepSeekClient:
             duration_ms=timer.elapsed_ms(),
             usage=getattr(self, "_last_usage", None),
             status="succeeded", error_code=None,
+            prompt_version=prompt_version,
+            prompt_fingerprint=fingerprint,
         )
         return result
 

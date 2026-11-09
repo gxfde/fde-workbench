@@ -922,6 +922,13 @@ class AICallAudit(Base, TimestampMixin):
 
     记录模型/耗时/token 用量/结果状态，供月度 token 预算核算与调用追溯；
     预算超限时也落一条 status='budget_blocked'（未发起任何供应商请求）。
+
+    N2 仪表化（AI 原生化差距台账 G-09/G-16）：
+    - ``purpose`` **NOT NULL**（旧行按 ``legacy_unattributed`` 回填）——归因
+      账本不允许匿名调用方（调用点强制传 purpose，见 ``ai/auditing.py``）。
+    - ``prompt_fingerprint``＝**指令源文本**的 sha256（模板身份：同模板不同
+      输入同指纹；提示词正文绝不落库）；``prompt_version``＝提示词版本标签
+      （未登记版本者留空，随 G-13 版本注册表逐步填充）。
     """
 
     __tablename__ = "ai_call_audits"
@@ -929,6 +936,10 @@ class AICallAudit(Base, TimestampMixin):
         CheckConstraint(
             "status IN ('succeeded', 'failed', 'budget_blocked')",
             name="ck_ai_call_audits_status",
+        ),
+        CheckConstraint(
+            "purpose IS NOT NULL AND length(purpose) >= 1",
+            name="ck_ai_call_audits_purpose",
         ),
         Index("ix_ai_call_audits_actor_created", "actor_user_id", "created_at"),
     )
@@ -938,7 +949,7 @@ class AICallAudit(Base, TimestampMixin):
     actor_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
-    purpose: Mapped[str | None] = mapped_column(String(60))
+    purpose: Mapped[str] = mapped_column(String(60), nullable=False)
     model: Mapped[str] = mapped_column(String(120), nullable=False)
     used_fallback: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
@@ -948,3 +959,5 @@ class AICallAudit(Base, TimestampMixin):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(60))
+    prompt_version: Mapped[str | None] = mapped_column(String(60))
+    prompt_fingerprint: Mapped[str | None] = mapped_column(String(64))

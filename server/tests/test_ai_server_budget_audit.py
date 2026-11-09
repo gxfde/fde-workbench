@@ -188,6 +188,7 @@ def test_dsh_budget_block_prevents_request_and_writes_blocked_audit(app, db_sess
             execute_ai_prompt(
                 user_id=user.id, prompt="你好", execution_id="cr6-block-1",
                 model_override=provider_model(), use_tools=False,
+                purpose="unit_test"
             )
 
     assert caught.value.code == "ai_budget_exceeded"
@@ -210,6 +211,7 @@ def test_dsh_success_writes_audit_with_provider_usage_and_counts_toward_budget(a
         result = execute_ai_prompt(
             user_id=user.id, prompt="你好", execution_id="cr6-ok-1",
             model_override=provider_model(), use_tools=False, return_metadata=True,
+            purpose="unit_test"
         )
         db_session.commit()
 
@@ -221,7 +223,8 @@ def test_dsh_success_writes_audit_with_provider_usage_and_counts_toward_budget(a
     assert audit.input_tokens == 30
     assert audit.output_tokens == 20
     assert audit.actor_user_id == user.id
-    assert audit.purpose is None
+    # N2 仪表化（G-16）：purpose 入口必填 ⇒ 审计行必带用途标识
+    assert audit.purpose == "unit_test"
     # 防泄漏：审计不落提示词明文
     blob = f"{audit.request_id}{audit.purpose or ''}{audit.model}{audit.error_code or ''}"
     assert "你好" not in blob
@@ -242,6 +245,7 @@ def test_dsh_failure_writes_failed_audit_and_does_not_count(app, db_session, mon
             execute_ai_prompt(
                 user_id=user.id, prompt="你好", execution_id="cr6-fail-1",
                 model_override=provider_model(), use_tools=False,
+                purpose="unit_test"
             )
         db_session.commit()
 
@@ -268,6 +272,7 @@ def test_degraded_direct_path_writes_fallback_audit(app, db_session, monkeypatch
         result = execute_ai_prompt(
             user_id=user.id, prompt="你好", execution_id="cr6-deg-1",
             model_override=provider_model(), use_tools=False, return_metadata=True,
+            purpose="unit_test"
         )
         db_session.commit()
 

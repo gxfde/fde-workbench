@@ -114,6 +114,7 @@ def discover_ai_opportunities(*, actor: User, payload: object, on_event: Callabl
                     messages=build_ai_opportunity_messages(context),
                     request_id=f"ai-opportunity-{uuid4()}", max_tokens=8192,
                     on_event=on_event,
+                    purpose="opportunity_discovery",
                 )
             else:
                 raw = _client().complete_json(
@@ -121,6 +122,7 @@ def discover_ai_opportunities(*, actor: User, payload: object, on_event: Callabl
                     request_id=f"ai-opportunity-{uuid4()}", max_tokens=8192,
                     on_event=on_event,
                     deep_thinking=False,
+                    purpose="opportunity_discovery",
                 )
         except DeepSeekError as error:
             status = {"ai_timeout": 504, "ai_output_invalid": 502, "ai_empty_response": 502}.get(error.code, 503)

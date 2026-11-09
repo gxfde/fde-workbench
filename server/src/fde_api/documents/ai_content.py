@@ -115,6 +115,7 @@ def generate_document_fields(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         request_id=request_id or f"document-content-{uuid4()}",
         max_tokens=6144,
+        purpose="document_ai_content",
     )
     fields = result.get("fields")
     if not isinstance(fields, dict):

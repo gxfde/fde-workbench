@@ -33,7 +33,7 @@ class _FakeDocumentAI:
 
     payload = {"fields": {"current_situation": "排产依赖手工台账"}}
 
-    def complete_json(self, *, messages, request_id, max_tokens):
+    def complete_json(self, *, messages, request_id, max_tokens, purpose):
         return dict(self.payload)
 
 

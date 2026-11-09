@@ -551,3 +551,20 @@
 | 1 | 2026-11-09 | 首版成文（据台账 v1.2 + 评估 v1.2 + 第三轮活库实测）；轮次编排 N1–N6；拍板闸 D-1–D-8；起点基线 §2 |
 | 2 | 2026-11-09 | 口径现测校对：结构 411/49/137/53（单头 `d5f9a3c7e1b4`）、pytest 2448+6s / vitest 966 / mypy 279（CI `42544563159`）；活库 agent_runs=9（host_channel，`sim:*`）、agent_artifacts=34（全 reviewed=False）、simulation_runs=4、audits 11 行（purpose 空 2）、discovery 抽取 5 试 1 成 |
 | 3 | 2026-11-09 | 已知挂账：AGENTS.md 现行结构口径行已由 G3 轮更新（137/53/411，与实测一致），仅其 **vitest 值 965 与 CI 实测 966 差 1**；本轮不代改 AGENTS.md（与在途 PR #235 改 AGENTS.md 冲突），归口口径责任人 |
+| 4 | 2026-11-09 | **N2 仪表化轮开工**（D-1 未获答复 ⇒ 按 §6 默认「不擅自开真实订单通道」，N1 挂起只做零代码准备；推荐路径＝N2 先开）。实施内容：审计账本加提示词指纹/版本两列（迁移 `c4f7a2d9e1b6`）、`purpose` DB 层 NOT NULL+CHECK、入口 purpose 必填 + 调用点静态钉、人工接受信号进 chat 助手上下文（`agents/review_signals.py`） |
+| 5 | 2026-11-09 | **D-1 未获答复的处置留痕**：本轮**未开启任何执行通道**、未动真实订单、未改 pilot-runbook 的 C5/C6；N1 的三项拍板（真实订单选哪个／通道开哪条／审阅人账号安排）仍挂蔡工处，答复后即可开工（通道与账号的现成条件已查证：zcode 路径在位、4 个 `kind=zcode` 智能体已注册、`pilot.reviewer` 账号已存在） |
+
+---
+
+## 14. 轮次执行记录（N1–N6）
+
+| 轮次 | 状态 | 认领条目 | 实施结果 | 复测证据 |
+|---|---|---|---|---|
+| **N1** | **挂起（等 D-1）** | G-01、G-07 | 未开工——D-1（真实订单／通道／审阅人）未获答复 ⇒ 按 §6 默认不擅自开通道；**零代码准备已就绪**（通道与账号条件已查证：zcode 路径 `D:\software\zcode\...` 在位、4 个 `kind=zcode` 智能体已注册、`pilot.reviewer` 账号已在库、sandbox 项目在役） | — |
+| **N2** | **已实施（合并中）** | G-09、G-16、G-08 | ①**G-09**：迁移 `c4f7a2d9e1b6` 加 `prompt_version`/`prompt_fingerprint` 两列；指纹＝**指令源文本 sha256**（模板身份，正文不入库）；写入侧统一在 `execute_ai_prompt`／`DeepSeekClient.complete_json` 两个入口 ②**G-16**：入口 `purpose` 改**必填**（漏传即 TypeError）＋ DB 层 **NOT NULL + CHECK** ＋ **调用点静态钉**（AST 扫描 `server/src`，漏传即红）＋兜底 `unattributed` 标记 ＋存量 2 行回填 `legacy_unattributed`（留痕不删行） ③**G-08**：新增 `agents/review_signals.py`（纯函数聚合 + 上下文块），由 **chat 助手**消费（user 角色上下文，仅元数据与 sha256 指针） | NEW `server/tests/test_ai_call_audit_attribution.py` **10 例**（指纹模板语义 2＋落库 1＋入口必填 1＋DB CHECK 1＋兜底 1＋**静态钉 1**＋信号聚合 1＋**chat 消费 2**）；台账同步升 **v1.3**（三条 CLOSED + 新增 **G-17**：宿主通道 zcode 内部调用不入归因账本） |
+| **N3a/N3b/N3c** | 未开工 | G-05、G-04、G-03、G-06、G-15 | 等 N2 完成后启动（D-4/D-5 未获答复 ⇒ 按推荐：首发 quality；派单推荐纳入） | — |
+| **N4** | 未开工 | G-10、G-11、G-14 | 等 N2 + N3a 的真实样本（D-6 未获答复 ⇒ 按推荐：先作非必需观察轮） | — |
+| **N5** | 未开工 | G-02 | 末位（D-7 未获答复 ⇒ 按推荐：沿用 15min 窗 + 票据绑定） | — |
+| **N6** | 未开工 | G-13 | 可与 N4 并行 | — |
+
+> **N2 带来的两处诚实边界**：①`prompt_version` 目前**只有 discovery 有版本标签**（其余留空，留空 ≠ 归因失败——指纹已能定位模板），版本注册表仍归 G-13；②**归因仪表只覆盖工作台内 AI 调用面**——宿主通道 zcode 内部调用不入账本，已立 **G-17**。
