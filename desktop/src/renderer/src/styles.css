@@ -2381,3 +2381,25 @@ progress::-webkit-progress-value { background: var(--brand-gradient); border: no
 
 .simulation-run-adapter,
 .simulation-run-split { font-size: var(--font-caption); color: var(--text); }
+
+/* ── data-table 基础样式（此前全仓 5 个面板共用该 class 却零定义——
+   8 列长中文在浏览器默认 auto layout 下挤压重叠、文字叠字；补最小可读
+   表格样式，DiscoveryPanel/AgentsConsole/ExecutionFactChain/SkillVersionsPage/
+   HandoverPackagesPanel 同受益） ── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th,
+.data-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; word-break: break-word; }
+.data-table thead th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+.data-table tbody tr:nth-child(even) { background: var(--surface-inset); }
+
+.discovery-create-row,
+.discovery-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+.discovery-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
+.discovery-actions button { padding: 2px 8px; }
+
+/* 锚点核验分级徽标（A=高危红 / B=疑似滑移橙 / C=命中绿 / 无核验灰） */
+.anchor-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+.anchor-a { background: #FDE8E8; color: #B42318; border: 1px solid #F4B5B0; }
+.anchor-b { background: #FEF4E6; color: #B54708; border: 1px solid #F1CF9A; }
+.anchor-c { background: #EAF6EE; color: #1E7B3C; border: 1px solid #B7DFC2; }
+.anchor-none { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }

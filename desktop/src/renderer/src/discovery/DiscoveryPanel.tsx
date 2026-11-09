@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { auditFacts, summarizeAnchorAudit, type AnchorGrade } from "./anchorAudit"
 
 // V3.1 P0-1 批B：访谈事实与需求审阅面板（discovery 消费面）。
 // AI 抽取只是草稿生成器——逐条接受/拒绝/澄清永远是人工决策（任务书 §12
 // 权限矩阵：Agent 可生成草稿，不得批准正式事实/需求）。来源定位三形态
 // （line/transcript_segment/char_span）只读呈现，跳转锚交由纪要正文对照。
+// 试点轮追加：line 定位条目按 source_ref 拉取纪要正文做本地锚点核验
+// （A/B/C 分级只提示不裁决），列表分页加载缓解大纪要抽取的百级条目。
 
 interface RedactionEntryDto {
   name: string
@@ -126,6 +129,8 @@ const PRIORITY_LABEL: Record<string, string> = {
   low: "低",
 }
 
+const FACT_PAGE_SIZE = 100
+
 function label(map: Record<string, string>, value: string): string {
   return map[value] ?? value
 }
@@ -156,6 +161,11 @@ function objectValueText(value: unknown): string {
   }
 }
 
+function minutesIdFromRef(sourceRef: string): string | null {
+  const prefix = "interview_minutes:"
+  return sourceRef.startsWith(prefix) ? sourceRef.slice(prefix.length) : null
+}
+
 interface DiscoveryPanelProps {
   projectId: string
   canManage: boolean
@@ -169,31 +179,88 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
   const [facts, setFacts] = useState<FactDto[]>([])
   const [requirements, setRequirements] = useState<RequirementDto[]>([])
   const [factFilter, setFactFilter] = useState("")
+  const [anchorFilter, setAnchorFilter] = useState<"all" | "suspect">("all")
+  const [factsExhausted, setFactsExhausted] = useState(true)
+  const [requirementsExhausted, setRequirementsExhausted] = useState(true)
+  const [anchorAudit, setAnchorAudit] = useState<Map<string, AnchorGrade>>(new Map())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [loaded, setLoaded] = useState(false)
+  const minutesContentRef = useRef<Map<string, string>>(new Map())
+  const factsRef = useRef<FactDto[]>([])
+
+  const loadFacts = useCallback(async (offset: number, replace: boolean) => {
+    const params = new URLSearchParams({ limit: String(FACT_PAGE_SIZE), offset: String(offset) })
+    if (factFilter) params.set("review_status", factFilter)
+    const factData = await apiRequest<FactListDto>(`/api/v1/projects/${projectId}/business-facts?${params.toString()}`, { method: "GET" })
+    const page = factData.items
+    setFacts((prev) => {
+      const next = replace ? page : [...prev, ...page.filter((item) => !prev.some((p) => p.id === item.id))]
+      factsRef.current = next
+      return next
+    })
+    setFactsExhausted(page.length < FACT_PAGE_SIZE)
+  }, [apiRequest, projectId, factFilter])
 
   const loadAll = useCallback(async () => {
     setError("")
     try {
-      const [minutesData, extractionData, factData, requirementData] = await Promise.all([
+      const [minutesData, extractionData, requirementData] = await Promise.all([
         apiRequest<{ items: MinutesRowDto[] }>(`/api/v1/interview-minutes?project_id=${projectId}&limit=50`, { method: "GET" }),
         apiRequest<ExtractionListDto>(`/api/v1/projects/${projectId}/discovery/extractions?limit=20`, { method: "GET" }),
-        apiRequest<FactListDto>(`/api/v1/projects/${projectId}/business-facts?limit=100${factFilter ? `&review_status=${factFilter}` : ""}`, { method: "GET" }),
         apiRequest<RequirementListDto>(`/api/v1/projects/${projectId}/requirements?limit=100`, { method: "GET" }),
       ])
       setMinutes(minutesData.items)
       setExtractions(extractionData.items)
-      setFacts(factData.items)
       setRequirements(requirementData.items)
+      setRequirementsExhausted(requirementData.items.length < 100)
+      await loadFacts(0, true)
       setLoaded(true)
     } catch (caught) {
       setError(errorMessage(caught))
     }
-  }, [apiRequest, projectId, factFilter])
+  }, [apiRequest, projectId, loadFacts])
 
   useEffect(() => { void loadAll() }, [loadAll])
+
+  // 锚点核验：需要正文的纪要按需拉取（缓存去重），缺失时该条不标级（不炸面板）。
+  useEffect(() => {
+    const needed = new Set<string>()
+    for (const fact of facts) {
+      if (fact.source_locator.type !== "line") continue
+      const minutesId = minutesIdFromRef(fact.source_ref)
+      if (minutesId && !minutesContentRef.current.has(minutesId)) needed.add(minutesId)
+    }
+    if (!needed.size) {
+      setAnchorAudit(auditFacts(factsRef.current, minutesContentRef.current))
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      await Promise.all([...needed].map(async (minutesId) => {
+        try {
+          const detail = await apiRequest<{ content: string }>(`/api/v1/interview-minutes/${minutesId}`, { method: "GET" })
+          minutesContentRef.current.set(minutesId, detail.content ?? "")
+        } catch {
+          minutesContentRef.current.set(minutesId, "")
+        }
+      }))
+      if (!cancelled) setAnchorAudit(auditFacts(factsRef.current, minutesContentRef.current))
+    })()
+    return () => { cancelled = true }
+  }, [facts, apiRequest])
+
+  const anchorSummary = useMemo(() => summarizeAnchorAudit(anchorAudit), [anchorAudit])
+  const visibleFacts = useMemo(() => {
+    if (anchorFilter === "suspect") {
+      return facts.filter((fact) => {
+        const grade = anchorAudit.get(fact.id)
+        return grade ? grade.grade !== "C" : false
+      })
+    }
+    return facts
+  }, [facts, anchorAudit, anchorFilter])
 
   const createExtraction = async () => {
     if (!selectedMinutesId) return
@@ -225,6 +292,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     }
   }
 
+  // 审阅后就地更新该条状态（不整表刷新——保留已加载分页与锚点核验结果）。
   const reviewFact = async (factId: string, reviewStatus: string) => {
     setBusy(true); setError("")
     try {
@@ -232,7 +300,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         method: "PATCH",
         body: JSON.stringify({ review_status: reviewStatus }),
       })
-      await loadAll()
+      setFacts((prev) => prev.map((fact) => (fact.id === factId ? { ...fact, review_status: reviewStatus } : fact)))
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -247,7 +315,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         method: "PATCH",
         body: JSON.stringify({ status }),
       })
-      await loadAll()
+      setRequirements((prev) => prev.map((req) => (req.id === requirementId ? { ...req, status } : req)))
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -259,6 +327,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     const pending = facts.filter((fact) => fact.review_status === "pending")
     if (!pending.length) return
     setBusy(true); setError("")
+    const accepted: string[] = []
     let failed = 0
     for (const fact of pending) {
       try {
@@ -266,14 +335,41 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           method: "PATCH",
           body: JSON.stringify({ review_status: "accepted" }),
         })
+        accepted.push(fact.id)
       } catch {
         failed += 1
       }
     }
-    setNotice(failed ? `批量接受完成，${failed} 条失败（已终态或并发变动），列表已刷新。` : `已批量接受 ${pending.length} 条待审事实。`)
-    await loadAll()
+    setFacts((prev) => prev.map((fact) => (accepted.includes(fact.id) ? { ...fact, review_status: "accepted" } : fact)))
+    setNotice(failed ? `批量接受完成，${failed} 条失败（已终态或并发变动）。` : `已批量接受 ${accepted.length} 条待审事实。`)
     setBusy(false)
   }
+
+  const loadMoreFacts = async () => {
+    setBusy(true); setError("")
+    try {
+      await loadFacts(facts.length, false)
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadMoreRequirements = async () => {
+    setBusy(true); setError("")
+    try {
+      const data = await apiRequest<RequirementListDto>(`/api/v1/projects/${projectId}/requirements?limit=100&offset=${requirements.length}`, { method: "GET" })
+      setRequirements((prev) => [...prev, ...data.items.filter((item) => !prev.some((p) => p.id === item.id))])
+      setRequirementsExhausted(data.items.length < 100)
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const anchorBadge = (fact: FactDto): AnchorGrade | null => anchorAudit.get(fact.id) ?? null
 
   return (
     <section id="discovery-panel" className="panel-stack" aria-label="访谈事实与需求">
@@ -336,7 +432,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         </table>
       )}
 
-      <h4>业务事实（{facts.length}）</h4>
+      <h4>业务事实（已加载 {facts.length}{factsExhausted ? "" : "+"}）</h4>
       <div className="discovery-filter-row">
         <label htmlFor="discovery-fact-filter">审阅状态</label>
         <select id="discovery-fact-filter" value={factFilter} onChange={(event) => { setFactFilter(event.target.value) }}>
@@ -346,43 +442,62 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           <option value="accepted">已接受</option>
           <option value="rejected">已拒绝</option>
         </select>
+        <label htmlFor="discovery-anchor-filter">锚点核验</label>
+        <select id="discovery-anchor-filter" value={anchorFilter} onChange={(event) => { setAnchorFilter(event.target.value === "suspect" ? "suspect" : "all") }}>
+          <option value="all">全部</option>
+          <option value="suspect">仅看可疑（A/B 级）</option>
+        </select>
+        <span className="hint-text" title="锚点核验＝行号定位对纪要原文的程序化比对（A=高危/空行或全不命中，B=疑似相邻行滑移，C=命中）。分级仅提示，接受/拒绝仍由人工判断。">
+          锚点核验：A {anchorSummary.a} · B {anchorSummary.b} · C {anchorSummary.c}
+        </span>
         {canManage && facts.some((fact) => fact.review_status === "pending")
-          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>批量接受本页待审</button>
+          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>批量接受已加载待审</button>
+          : null}
+        {!factsExhausted
+          ? <button type="button" disabled={busy} onClick={() => { void loadMoreFacts() }}>加载更多事实</button>
           : null}
       </div>
-      {!loaded ? <p>正在加载…</p> : facts.length === 0 ? <p>暂无事实（发起抽取后生成草稿）。</p> : (
+      {!loaded ? <p>正在加载…</p> : visibleFacts.length === 0 ? <p>暂无事实（发起抽取后生成草稿）。</p> : (
         <table className="data-table">
           <thead>
-            <tr><th>类型</th><th>事实</th><th>取值</th><th>分类</th><th>来源定位</th><th>置信</th><th>审阅</th><th>{canManage ? "操作" : ""}</th></tr>
+            <tr><th>类型</th><th>事实</th><th>取值</th><th>分类</th><th>来源定位 / 锚点核验</th><th>置信</th><th>审阅</th><th>{canManage ? "操作" : ""}</th></tr>
           </thead>
           <tbody>
-            {facts.map((fact) => (
-              <tr key={fact.id}>
-                <td>{label(FACT_TYPE_LABEL, fact.fact_type)}</td>
-                <td>{fact.subject} · {fact.predicate}</td>
-                <td title={objectValueText(fact.object_value)}>{objectValueText(fact.object_value).slice(0, 60)}</td>
-                <td>{label(CLASSIFICATION_LABEL, fact.classification)}</td>
-                <td title={fact.source_ref}>{locatorText(fact.source_locator)}</td>
-                <td>{fact.confidence ?? "—"}</td>
-                <td>{label(REVIEW_STATUS_LABEL, fact.review_status)}</td>
-                <td>
-                  {canManage && fact.review_status !== "accepted" && fact.review_status !== "rejected"
-                    ? (
-                      <span className="discovery-actions">
-                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "accepted") }}>接受</button>
-                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "rejected") }}>拒绝</button>
-                        <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "needs_clarification") }}>澄清</button>
-                      </span>
-                    )
-                    : null}
-                </td>
-              </tr>
-            ))}
+            {visibleFacts.map((fact) => {
+              const grade = anchorBadge(fact)
+              return (
+                <tr key={fact.id}>
+                  <td>{label(FACT_TYPE_LABEL, fact.fact_type)}</td>
+                  <td>{fact.subject} · {fact.predicate}</td>
+                  <td title={objectValueText(fact.object_value)}>{objectValueText(fact.object_value).slice(0, 60)}</td>
+                  <td>{label(CLASSIFICATION_LABEL, fact.classification)}</td>
+                  <td title={`${fact.source_ref}${grade ? ` | 锚点核验：${grade.reason}` : ""}`}>
+                    <span className={`anchor-badge anchor-${grade ? grade.grade.toLowerCase() : "none"}`}>{locatorText(fact.source_locator)}</span>
+                    {grade
+                      ? <span className={`anchor-badge anchor-${grade.grade.toLowerCase()}`} title={grade.reason}>{` 锚${grade.grade}`}</span>
+                      : null}
+                  </td>
+                  <td>{fact.confidence ?? "—"}</td>
+                  <td>{label(REVIEW_STATUS_LABEL, fact.review_status)}</td>
+                  <td>
+                    {canManage && fact.review_status !== "accepted" && fact.review_status !== "rejected"
+                      ? (
+                        <span className="discovery-actions">
+                          <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "accepted") }}>接受</button>
+                          <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "rejected") }}>拒绝</button>
+                          <button type="button" disabled={busy} onClick={() => { void reviewFact(fact.id, "needs_clarification") }}>澄清</button>
+                        </span>
+                      )
+                      : null}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
 
-      <h4>需求（{requirements.length}）</h4>
+      <h4>需求（已加载 {requirements.length}{requirementsExhausted ? "" : "+"}）</h4>
       {!loaded ? <p>正在加载…</p> : requirements.length === 0 ? <p>暂无需求。</p> : (
         <table className="data-table">
           <thead>
@@ -414,6 +529,9 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           </tbody>
         </table>
       )}
+      {!requirementsExhausted
+        ? <button type="button" disabled={busy} onClick={() => { void loadMoreRequirements() }}>加载更多需求</button>
+        : null}
     </section>
   )
 }
