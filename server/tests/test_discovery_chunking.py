@@ -13,6 +13,16 @@ from __future__ import annotations
 import pytest
 
 from fde_api.discovery.chunking import plan_chunks, split_chunk
+from fde_api.discovery.contract import (
+    MAX_FACTS,
+    MAX_FACTS_PER_CHUNK,
+    MAX_REQUIREMENTS,
+    MAX_REQUIREMENTS_PER_CHUNK,
+    DiscoveryContractError,
+    batch_budgets,
+    chunk_quotas,
+    validate_extraction_output,
+)
 from fde_api.discovery.merge import merge_chunk_drafts, rebase_locator
 
 
@@ -103,7 +113,7 @@ def test_rebase_line_maps_chunk_local_to_absolute() -> None:
 def test_merge_rebases_line_numbers_across_chunks() -> None:
     chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
 
-    merged = merge_chunk_drafts([
+    merged, _report = merge_chunk_drafts([
         (chunks[0], {"facts": [_fact("询盘处理", 1)], "requirements": []}),
         (chunks[1], {"facts": [_fact("排程现状", 3)], "requirements": []}),
     ])
@@ -114,7 +124,7 @@ def test_merge_rebases_line_numbers_across_chunks() -> None:
 def test_merge_dedupes_identical_facts_across_chunks() -> None:
     chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
 
-    merged = merge_chunk_drafts([
+    merged, _report = merge_chunk_drafts([
         (chunks[0], {"facts": [_fact("询盘处理", 1)], "requirements": []}),
         (chunks[1], {"facts": [_fact("询盘处理", 2)], "requirements": []}),
     ])
@@ -126,7 +136,7 @@ def test_merge_dedupes_identical_facts_across_chunks() -> None:
 def test_merge_dedupes_requirements_by_title() -> None:
     chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
 
-    merged = merge_chunk_drafts([
+    merged, _report = merge_chunk_drafts([
         (chunks[0], {"facts": [_fact("询盘处理", 1)], "requirements": [_requirement("补齐下游链路", [0])]}),
         (chunks[1], {"facts": [_fact("排程现状", 1)], "requirements": [_requirement("补齐下游链路", [0])]}),
     ])
@@ -138,7 +148,7 @@ def test_merge_dedupes_requirements_by_title() -> None:
 def test_merge_remaps_requirement_fact_indexes_to_merged_table() -> None:
     chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
 
-    merged = merge_chunk_drafts([
+    merged, _report = merge_chunk_drafts([
         (chunks[0], {"facts": [_fact("询盘处理", 1)], "requirements": []}),
         (chunks[1], {"facts": [_fact("排程现状", 1), _fact("交付节奏", 2), _fact("验收口径", 3)],
                      "requirements": [_requirement("补齐下游链路", [0, 2])]}),
@@ -151,7 +161,7 @@ def test_merge_remaps_requirement_fact_indexes_to_merged_table() -> None:
 def test_merge_drops_references_to_deduplicated_facts() -> None:
     chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
 
-    merged = merge_chunk_drafts([
+    merged, _report = merge_chunk_drafts([
         (chunks[0], {"facts": [_fact("询盘处理", 1)], "requirements": []}),
         (chunks[1], {"facts": [_fact("询盘处理", 2), _fact("排程现状", 3)],
                      "requirements": [_requirement("补齐下游链路", [0])]}),
@@ -189,3 +199,116 @@ def test_split_chunk_returns_none_for_single_line() -> None:
     chunk = plan_chunks("只有一行", max_lines=25, max_chars=1600)[0]
 
     assert split_chunk(chunk) is None
+
+
+# --- V31-P1c：守恒预算（每片配额 × 片数 ≥ 合并产物 ≥ 旧全批闸） ----------------
+#
+# 活体缺陷（2026-11-09）：244 行纪要 → 10+ 片各自抽取 → 合并后事实数撞穿
+# 固定全批闸 MAX_FACTS=200，整批被契约拒绝（invalid_facts）——管线结构性地
+# 违反自己的契约。修复＝每片配额由契约常量导出、全批预算随片数上浮。
+
+
+def test_batch_budgets_never_below_legacy_single_batch_cap() -> None:
+    for pieces in range(1, 65):
+        fact_budget, requirement_budget = batch_budgets(pieces)
+
+        assert fact_budget >= MAX_FACTS, f"pieces={pieces}"
+        assert requirement_budget >= MAX_REQUIREMENTS, f"pieces={pieces}"
+
+
+def test_batch_budgets_scale_with_piece_count() -> None:
+    fact_budget, requirement_budget = batch_budgets(12)
+
+    assert fact_budget == MAX_FACTS_PER_CHUNK * 12
+    assert requirement_budget == MAX_REQUIREMENTS_PER_CHUNK * 12
+    assert fact_budget > MAX_FACTS
+    assert requirement_budget > MAX_REQUIREMENTS
+
+
+def test_chunk_quotas_keep_single_piece_at_legacy_cap() -> None:
+    # 单片＝分段前的单批上限（短纪要不因分段机制被压窄）
+    assert chunk_quotas(1) == (MAX_FACTS, MAX_REQUIREMENTS)
+    # 片数少时单片可承担更多（ceil(200/4)=50、ceil(50/4)=13）
+    assert chunk_quotas(4) == (50, 13)
+    # 片数多时回到片级提示词写明的单片配额（提示词与代码同源）
+    assert chunk_quotas(12) == (MAX_FACTS_PER_CHUNK, MAX_REQUIREMENTS_PER_CHUNK)
+
+
+def test_merge_enforces_per_piece_fact_quota_and_counts_drops() -> None:
+    chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
+    draft = {"facts": [_fact(f"主体{i}", min(i + 1, 40)) for i in range(45)], "requirements": []}
+
+    merged, report = merge_chunk_drafts([(chunks[0], draft)], fact_quota=40)
+
+    assert len(merged["facts"]) == 40
+    assert report.fact_quota == 40
+    assert report.facts_dropped == 5  # 超出配额的部分丢弃且计数（不静默）
+    assert report.fact_budget == 40
+
+
+def test_merge_enforces_per_piece_requirement_quota_and_counts_drops() -> None:
+    chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 61)), max_lines=40, max_chars=10000)
+    draft = {
+        "facts": [_fact(f"主体{i}", i + 1) for i in range(15)],
+        "requirements": [_requirement(f"需求{i:02d}", [i]) for i in range(15)],
+    }
+
+    merged, report = merge_chunk_drafts([(chunks[0], draft)], requirement_quota=10)
+
+    assert len(merged["requirements"]) == 10
+    assert report.requirement_quota == 10
+    assert report.requirements_dropped == 5
+    # 先入者保留：被裁掉的是片内第 10–14 条需求
+    assert {r["title"] for r in merged["requirements"]} == {f"需求{i:02d}" for i in range(10)}
+
+
+def test_merge_quotas_are_per_piece_not_global() -> None:
+    chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 121)), max_lines=20, max_chars=100000)
+    assert len(chunks) == 6
+    pairs = [
+        (
+            chunk,
+            {"facts": [_fact(f"片{chunk.index}主体{i}", (i % 20) + 1) for i in range(45)], "requirements": []},
+        )
+        for chunk in chunks
+    ]
+
+    merged, report = merge_chunk_drafts(pairs)
+
+    # 每片各自裁到 40：6 片 × (保留 40 + 丢弃 5)
+    assert report.fact_quota == 40
+    assert len(merged["facts"]) == 240
+    assert report.facts_dropped == 30
+    assert report.fact_budget == 240
+    # 每片配额而非全局闸：合并条数可以超过旧全批 200 闸（由守恒预算兜住）
+    assert len(merged["facts"]) > MAX_FACTS
+
+
+def test_merged_output_passes_contract_with_conserved_budget() -> None:
+    chunks = plan_chunks("\n".join(f"行{i}" for i in range(1, 121)), max_lines=20, max_chars=100000)
+    pairs = [
+        (
+            chunk,
+            {
+                "facts": [_fact(f"片{chunk.index}主体{i}", (i % 20) + 1) for i in range(45)],
+                "requirements": [_requirement(f"片{chunk.index}的整改诉求", [0, 44])],
+            },
+        )
+        for chunk in chunks
+    ]
+
+    merged, report = merge_chunk_drafts(pairs)
+
+    # 旧全批闸（缺省 200）下同一合并产物必然越界——这正是活体缺陷的失败形态
+    with pytest.raises(DiscoveryContractError) as exc:
+        validate_extraction_output(merged)
+    assert exc.value.code == "invalid_facts"
+
+    # 守恒预算下同一产物合法（配额 × 片数 ≥ 合并条数恒成立）
+    draft = validate_extraction_output(
+        merged, max_facts=report.fact_budget, max_requirements=report.requirement_budget
+    )
+    assert len(draft["facts"]) == 240
+    assert len(draft["requirements"]) == 6
+    # 指向被配额裁掉事实的片内引用（下标 44）一并作废，只保留合法引用
+    assert draft["requirements"][3]["source_fact_indexes"] == [3 * 40]

@@ -23,6 +23,42 @@ MAX_REQUIREMENTS = 50
 MAX_ACCEPTANCE_ITEMS = 20
 OBJECT_VALUE_MAX_BYTES = 4096
 
+# V31-P1c：分段抽取的**每片配额**（与片级提示词同源——提示词由这两个常量
+# 组装，不存在「提示词写一个数、代码按另一个数算」的漂移）。
+#
+# 为什么需要「每片配额」这层：V31-P1b 把长纪要切成多片分批抽取后，**每片
+# 各自抽取**——各片事实条数之和天然超过固定的全批闸（MAX_FACTS=200）。实测
+# （2026-11-09 活体）：244 行纪要 → 10 片（2 片自适应拆分）→ 14 次调用，
+# 合并后事实数撞穿 200 闸，整批被契约拒绝（``invalid_facts``）——**管线结构
+# 性地违反了自己的契约**。守恒解法：全批预算 **≥ Σ 每片配额**（按片数上浮，
+# 短纪要不下浮）。
+MAX_FACTS_PER_CHUNK = 40
+MAX_REQUIREMENTS_PER_CHUNK = 10
+
+
+def chunk_quotas(piece_count: int) -> tuple[int, int]:
+    """每片配额（事实, 需求）——按片数守恒分配。
+
+    * 下界＝``MAX_FACTS_PER_CHUNK``（片级提示词写明的单片上限）；
+    * 上界＝``ceil(MAX_FACTS / 片数)``（片数少时单片可承担更多——短纪要
+      不因分段而被压窄，保持与分段前一致的单批上限）。
+    """
+    pieces = max(1, int(piece_count))
+    fact_quota = max(MAX_FACTS_PER_CHUNK, -(-MAX_FACTS // pieces))
+    requirement_quota = max(MAX_REQUIREMENTS_PER_CHUNK, -(-MAX_REQUIREMENTS // pieces))
+    return fact_quota, requirement_quota
+
+
+def batch_budgets(piece_count: int) -> tuple[int, int]:
+    """全批预算（事实, 需求）＝每片配额 × 片数。
+
+    不变量：**全批预算 ≥ Σ 每片配额**（否则管线必然违反自己的契约），
+    且 **≥ 分段前的单批上限**（短纪要不回归）。
+    """
+    fact_quota, requirement_quota = chunk_quotas(piece_count)
+    pieces = max(1, int(piece_count))
+    return fact_quota * pieces, requirement_quota * pieces
+
 
 class DiscoveryContractError(ValueError):
     def __init__(self, code: str, path: str, message: str):
@@ -74,15 +110,24 @@ def _object_size_ok(value: object) -> bool:
         return False
 
 
-def validate_extraction_output(value: object) -> dict[str, Any]:
-    """校验 AI 抽取输出；任一违规整批拒绝（不部分写入）。"""
+def validate_extraction_output(
+    value: object,
+    *,
+    max_facts: int = MAX_FACTS,
+    max_requirements: int = MAX_REQUIREMENTS,
+) -> dict[str, Any]:
+    """校验 AI 抽取输出；任一违规整批拒绝（不部分写入）。
+
+    ``max_facts`` / ``max_requirements`` 缺省＝全批闸；分段抽取路径按
+    ``batch_budgets(片数)`` 上浮（见 V31-P1c 守恒预算）。
+    """
     if not isinstance(value, dict) or set(value) != {"facts", "requirements"}:
         raise DiscoveryContractError("invalid_extraction", "", "AI 返回的抽取结果字段不完整。")
     raw_facts, raw_requirements = value["facts"], value["requirements"]
-    if not isinstance(raw_facts, list) or len(raw_facts) > MAX_FACTS:
-        raise DiscoveryContractError("invalid_facts", "facts", f"事实条目格式不正确（至多 {MAX_FACTS} 条）。")
-    if not isinstance(raw_requirements, list) or len(raw_requirements) > MAX_REQUIREMENTS:
-        raise DiscoveryContractError("invalid_requirements", "requirements", f"需求条目格式不正确（至多 {MAX_REQUIREMENTS} 条）。")
+    if not isinstance(raw_facts, list) or len(raw_facts) > max_facts:
+        raise DiscoveryContractError("invalid_facts", "facts", f"事实条目格式不正确（至多 {max_facts} 条）。")
+    if not isinstance(raw_requirements, list) or len(raw_requirements) > max_requirements:
+        raise DiscoveryContractError("invalid_requirements", "requirements", f"需求条目格式不正确（至多 {max_requirements} 条）。")
 
     facts: list[dict[str, Any]] = []
     seen_identities: set[tuple[str, str, str]] = set()

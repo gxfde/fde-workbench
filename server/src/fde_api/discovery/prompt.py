@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fde_api.discovery.contract import MAX_FACTS_PER_CHUNK, MAX_REQUIREMENTS_PER_CHUNK
+
 DISCOVERY_SYSTEM_PROMPT = """你是制造业交付项目的访谈事实抽取器。输入是一段已代号化的访谈纪要正文，\
 你只做忠实抽取与归纳，不得虚构。
 
@@ -41,10 +43,15 @@ requirements 是数组，每项恰好包含：
 # 成本每调用约 12–16k tokens（与片长弱相关——实测 244 行与 40 行同量级），
 # 留给正文的额度只有 ~3k tokens。片级提示词把「本段要产出多少」显式封顶，
 # 让模型不要为凑数把正文撑爆预算（超预算即截断，且截断后正文整段作废）。
-DISCOVERY_CHUNK_SYSTEM_PROMPT = DISCOVERY_SYSTEM_PROMPT + """
+#
+# V31-P1c：单片配额的两个数字**由契约常量组装**（MAX_FACTS_PER_CHUNK /
+# MAX_REQUIREMENTS_PER_CHUNK）——提示词与代码配额同源，杜绝「提示词写 40、
+# 代码按别的数算」的漂移（这正是活体撞穿全批闸的根因之一）。
+DISCOVERY_CHUNK_SYSTEM_PROMPT = DISCOVERY_SYSTEM_PROMPT + f"""
 
 分段抽取补充约束：
 - 本次输入是长纪要的**一个连续片段**，只抽取本段明确出现的内容，不要补全未出现的部分；
 - 行号定位按本片段内行号（从 1 起）；
-- 本段至多 40 条事实、至多 10 条需求，宁缺毋滥，不要为凑数重复或臆造；
+- 本段至多 {MAX_FACTS_PER_CHUNK} 条事实、至多 {MAX_REQUIREMENTS_PER_CHUNK} 条需求（单片配额；\
+整批上限按片段数分摊到各片），宁缺毋滥，不要为凑数重复或臆造；
 - 直接输出 JSON，不要写任何解释性文字。"""

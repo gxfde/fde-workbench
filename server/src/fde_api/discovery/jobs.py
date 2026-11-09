@@ -26,6 +26,7 @@ from fde_api.discovery.merge import merge_chunk_drafts
 from fde_api.discovery.models import (
     BusinessFact,
     DiscoveryExtraction,
+    MERGE_QUOTA_EVENT_TYPE,
     PROMPT_VERSION,
     Requirement,
     RequirementSource,
@@ -277,9 +278,25 @@ def handle_discovery_extraction(job) -> None:
             for piece, draft in extracted.pairs:
                 pairs.append((piece, draft))
             model_name = extracted.model_name or model_name
-        merged = merge_chunk_drafts(pairs)
+        merged, quota_report = merge_chunk_drafts(pairs)
+        logger.info(
+            "discovery merged quota (extraction=%s pieces=%s facts=%s/%s requirements=%s/%s dropped=%s/%s)",
+            extraction.id, len(pairs), len(merged["facts"]), quota_report.fact_budget,
+            len(merged["requirements"]), quota_report.requirement_budget,
+            quota_report.facts_dropped, quota_report.requirements_dropped,
+        )
+        if quota_report.facts_dropped or quota_report.requirements_dropped:
+            # 被每片配额裁掉的条数**留痕**（不静默丢弃）
+            logger.warning(
+                "discovery merge quota dropped entries (extraction=%s facts=%s requirements=%s)",
+                extraction.id, quota_report.facts_dropped, quota_report.requirements_dropped,
+            )
         try:
-            draft = validate_extraction_output(merged)
+            draft = validate_extraction_output(
+                merged,
+                max_facts=quota_report.fact_budget,
+                max_requirements=quota_report.requirement_budget,
+            )
         except DiscoveryContractError as error:
             logger.warning(
                 "discovery merged output rejected (%s at %s)",
@@ -367,6 +384,27 @@ def handle_discovery_extraction(job) -> None:
                     target_id=extraction.id,
                     event_type=REDACTION_EVENT_TYPE,
                     changes={"entries": redaction_entries},
+                )
+            )
+        if quota_report.facts_dropped or quota_report.requirements_dropped:
+            # 被每片配额裁掉的条数**留痕**（不静默丢弃——审阅面据此知道本批
+            # 并非全文穷尽）
+            session.add(
+                OperationEvent(
+                    actor_user_id=extraction.created_by_user_id,
+                    project_id=extraction.project_id,
+                    target_type="discovery_extraction",
+                    target_id=extraction.id,
+                    event_type=MERGE_QUOTA_EVENT_TYPE,
+                    changes={
+                        "facts_dropped": quota_report.facts_dropped,
+                        "requirements_dropped": quota_report.requirements_dropped,
+                        "fact_quota": quota_report.fact_quota,
+                        "requirement_quota": quota_report.requirement_quota,
+                        "fact_budget": quota_report.fact_budget,
+                        "requirement_budget": quota_report.requirement_budget,
+                        "pieces": len(pairs),
+                    },
                 )
             )
         session.commit()

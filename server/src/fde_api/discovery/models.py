@@ -49,6 +49,9 @@ PROMPT_VERSION = "discovery-prompt-v2"
 
 REDACTION_EVENT_TYPE = "discovery.redaction_review"
 
+# V31-P1c：分段合并时被「每片配额」裁掉的条数留痕（不静默丢弃）。
+MERGE_QUOTA_EVENT_TYPE = "discovery.merge_quota_capped"
+
 
 class DiscoveryExtraction(Base, TimestampMixin):
     """一次结构化抽取：状态机 queued→running→{review_required|failed}。
