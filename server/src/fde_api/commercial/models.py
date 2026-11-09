@@ -31,6 +31,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -943,3 +944,251 @@ class CommercialOpportunityRule(Base, TimestampMixin):
         String(36), ForeignKey("users.id", ondelete="RESTRICT")
     )
     configured_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# G5：区域合作商能力建设（T-12a，**不含 T-12b**；ADR-005 区域商业化闸）
+# ══════════════════════════════════════════════════════════════════════════
+
+REGIONAL_PARTNER_STAGES = (
+    "city_observer",   # 城市观察伙伴（免费申请）
+    "city_service",    # 城市服务伙伴（按项目结算，一单一结，不设固定年费）
+    "formal_partner",  # 正式区域合作商（三档定价，见 regional_partner_tiers）
+    "regional_agent",  # 区域代理（**本期不启用**——保留位置，无任何进入路径）
+)
+
+# 阶段注记（读面派生；「暂不启用」是任务书 §9 对区域代理的落库要求）
+REGIONAL_PARTNER_STAGE_NOTES = {
+    "city_observer": "免费申请：参与活动、体验系统、了解市场；不授予独家区域权",
+    "city_service": "按项目结算，一单一结，不设固定年费；不授予独家区域权",
+    "formal_partner": "正式区域合作商（三档定价以 BP v4.0 为唯一基准）",
+    "regional_agent": "暂不启用（省级方案待试点后另定）",
+}
+
+REGIONAL_TIER_CODES = ("T1", "T2", "T3")
+
+REGIONAL_GATE_STATUSES = ("closed", "opened")
+
+# 售卖开关的合规条件清单（开启的**必要条件**；任务书 §9 硬约束——本期只登记，
+# 不实现任何对外收费签约路径；「本模式是否被认定为特许经营」是法律判断，须律师意见）
+REGIONAL_GATE_CONDITION_KEYS = (
+    "filing",         # ① 首次订立特许经营合同后 15 日内向商务主管部门备案
+    "disclosure",     # ② 订立合同之日前至少 30 日书面披露（经营资源/费用构成/合同文本）
+    "cooling_off",    # ③ 合同含被特许人单方解除冷静期条款并明确费用返还方式
+    "qualification",  # ④ 「至少 2 个直营店且经营满 1 年」主体资格（客观时间门槛，不可提前）
+)
+
+REGIONAL_GATE_SINGLETON_ID = "regional-sale-gate"
+
+# 正式区域合作商三档定价种子（**以 BP v4.0 为唯一基准**，v4.0 终版经蔡工拍板）——
+# 迁移播种与惰性补建（ensure_tier_catalog）共用此权威；测试机器闸对规则文件双向核对。
+REGIONAL_TIER_SEED = (
+    {"tier_code": "T1", "annual_fee_amount": Decimal("29800.00"),
+     "included_seats": 15, "transfer_quota_seats": 7,
+     "basis_reference": "BP v4.0 附录 C（v4.0 终版，经蔡工拍板）"},
+    {"tier_code": "T2", "annual_fee_amount": Decimal("59800.00"),
+     "included_seats": 30, "transfer_quota_seats": 15,
+     "basis_reference": "BP v4.0 附录 C（v4.0 终版，经蔡工拍板）"},
+    {"tier_code": "T3", "annual_fee_amount": Decimal("98000.00"),
+     "included_seats": 50, "transfer_quota_seats": 25,
+     "basis_reference": "BP v4.0 附录 C（v4.0 终版，经蔡工拍板）"},
+)
+
+
+class RegionalPartnerTier(Base, TimestampMixin):
+    """正式区域合作商三档定价目录（**以 BP v4.0 为唯一基准**；定价定案目录数据）。
+
+    目录存在 ≠ 可以售卖——对外收费签约被 ``regional_sale_gate`` 全局闸住
+    （默认 closed，开启须合规条件清单四项齐备，ADR-005 §2.2）。
+    城市服务伙伴**没有**档位行——按项目结算、不设固定年费是其结构性属性
+    （本表只收正式区域合作商三档）。
+    """
+
+    __tablename__ = "regional_partner_tiers"
+    __table_args__ = (
+        CheckConstraint(
+            f"tier_code IN {REGIONAL_TIER_CODES!r}",
+            name="ck_regional_partner_tiers_tier_code",
+        ),
+        CheckConstraint(
+            "annual_fee_amount > 0",
+            name="ck_regional_partner_tiers_amount_positive",
+        ),
+        CheckConstraint(
+            "included_seats > 0 AND transfer_quota_seats >= 0 "
+            "AND transfer_quota_seats < included_seats",
+            name="ck_regional_partner_tiers_seats_shape",
+        ),
+    )
+
+    tier_code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    annual_fee_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    included_seats: Mapped[int] = mapped_column(Integer, nullable=False)
+    transfer_quota_seats: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 定价基准指针（BP v4.0 附录 C，经蔡工拍板；不落第三方材料正文）
+    basis_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class RegionalPartner(Base, TimestampMixin):
+    """区域伙伴主体行（四阶段可区分；任务书 §9 / GAP-12）。
+
+    **只登伙伴代号与区域名**——真实身份材料一律指针 + sha256（AGENTS 红线）。
+    阶段升级须书面依据（指针＋指纹）；**前两阶段结构性不授予独家区域权**
+    （CHECK 联锁）；``regional_agent`` 在闭集里保留位置但**本期无任何写路径**
+    （服务层显式拒绝——「暂不启用」不是数据状态，是能力边界）。
+    """
+
+    __tablename__ = "regional_partners"
+    __table_args__ = (
+        CheckConstraint(
+            f"stage IN {REGIONAL_PARTNER_STAGES!r}",
+            name="ck_regional_partners_stage",
+        ),
+        # 前两阶段**不得授予独家区域权**（任务书 §9：结构性 CHECK，非判据）
+        CheckConstraint(
+            "stage NOT IN ('city_observer', 'city_service') OR exclusive_territory = FALSE",
+            name="ck_regional_partners_first_two_stages_no_exclusive",
+        ),
+        # 观察伙伴是初始态：无升级留痕；进入服务伙伴/正式合作商必有升级留痕
+        CheckConstraint(
+            "stage <> 'city_observer' OR (stage_changed_at IS NULL AND stage_evidence_uri IS NULL)",
+            name="ck_regional_partners_observer_shape",
+        ),
+        CheckConstraint(
+            "stage <> 'city_service' OR stage_changed_at IS NOT NULL",
+            name="ck_regional_partners_service_promoted",
+        ),
+        # 正式合作商 = 对外收费签约的开始：升级留痕 + 书面依据（指针+指纹）齐备
+        CheckConstraint(
+            "stage <> 'formal_partner' OR (stage_changed_at IS NOT NULL "
+            "AND stage_evidence_uri IS NOT NULL AND stage_evidence_hash IS NOT NULL)",
+            name="ck_regional_partners_formal_evidence",
+        ),
+        Index("ix_regional_partners_stage", "stage"),
+        UniqueConstraint("partner_code", name="uq_regional_partners_partner_code"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # 伙伴代号（企业代号三段式口径；**不是真实企业名**）
+    partner_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    region_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500))
+    stage: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="city_observer", server_default="city_observer"
+    )
+    # ── 申请（当事人自证，免费）──
+    applicant_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    applied_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    # ── 阶段升级（admin+密码；书面依据指针+指纹；正式档须选择 T1/T2/T3）──
+    stage_changed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    stage_changed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    stage_evidence_uri: Mapped[str | None] = mapped_column(String(500))
+    stage_evidence_hash: Mapped[str | None] = mapped_column(String(64))
+    tier_code: Mapped[str | None] = mapped_column(String(8))
+    exclusive_territory: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+
+class RegionalSaleGate(Base, TimestampMixin):
+    """区域售卖开关（**默认 closed**——售卖能力默认关闭；ADR-005 §2.2）。
+
+    开启＝关键流转（admin 门＋密码确认双闸），且**合规条件清单四项的签署证据
+    （指针＋指纹＋签署时刻）必须先行登记齐备**——CHECK 结构性排除缺件开门。
+    「两店一年」是客观时间门槛，不可提前：其证据行即 ``qualification`` 条件。
+    本期**不实现任何对外收费签约路径**；本表只承载开关与条件登记。
+    """
+
+    __tablename__ = "regional_sale_gate"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {REGIONAL_GATE_STATUSES!r}",
+            name="ck_regional_sale_gate_status",
+        ),
+        # 每项条件登记的原子性：uri / hash / signed_at 三者同有同无
+        CheckConstraint(
+            "(filing_uri IS NULL) = (filing_hash IS NULL) AND "
+            "(filing_uri IS NULL OR filing_signed_at IS NOT NULL) AND "
+            "(disclosure_uri IS NULL) = (disclosure_hash IS NULL) AND "
+            "(disclosure_uri IS NULL OR disclosure_signed_at IS NOT NULL) AND "
+            "(cooling_off_uri IS NULL) = (cooling_off_hash IS NULL) AND "
+            "(cooling_off_uri IS NULL OR cooling_off_signed_at IS NOT NULL) AND "
+            "(qualification_uri IS NULL) = (qualification_hash IS NULL) AND "
+            "(qualification_uri IS NULL OR qualification_signed_at IS NOT NULL)",
+            name="ck_regional_sale_gate_condition_atomic",
+        ),
+        # **缺件不可开门**（结构性排除）：opened ⇒ 四项齐备 + 开启人/时刻非空
+        CheckConstraint(
+            "status <> 'opened' OR ("
+            "filing_uri IS NOT NULL AND filing_hash IS NOT NULL AND filing_signed_at IS NOT NULL AND "
+            "disclosure_uri IS NOT NULL AND disclosure_hash IS NOT NULL AND disclosure_signed_at IS NOT NULL AND "
+            "cooling_off_uri IS NOT NULL AND cooling_off_hash IS NOT NULL AND cooling_off_signed_at IS NOT NULL AND "
+            "qualification_uri IS NOT NULL AND qualification_hash IS NOT NULL AND qualification_signed_at IS NOT NULL AND "
+            "opened_by_user_id IS NOT NULL AND opened_at IS NOT NULL)",
+            name="ck_regional_sale_gate_opened_complete",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="closed", server_default="closed"
+    )
+    # ① 备案证据
+    filing_uri: Mapped[str | None] = mapped_column(String(500))
+    filing_hash: Mapped[str | None] = mapped_column(String(64))
+    filing_signed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # ② 30 日前书面披露证据
+    disclosure_uri: Mapped[str | None] = mapped_column(String(500))
+    disclosure_hash: Mapped[str | None] = mapped_column(String(64))
+    disclosure_signed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # ③ 冷静期条款证据
+    cooling_off_uri: Mapped[str | None] = mapped_column(String(500))
+    cooling_off_hash: Mapped[str | None] = mapped_column(String(64))
+    cooling_off_signed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # ④ 两店一年主体资格证据（客观时间门槛）
+    qualification_uri: Mapped[str | None] = mapped_column(String(500))
+    qualification_hash: Mapped[str | None] = mapped_column(String(64))
+    qualification_signed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # ── 开启留痕（关键流转）──
+    opened_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    opened_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+
+class RegionalServiceSettlement(Base, TimestampMixin):
+    """城市服务伙伴按项目结算关联行（**一单一结**；不设固定年费的结构性证据）。
+
+    **引用既有 G3 科目层** ``commercial_revenue_ledger`` 的 ``project_share`` 行
+    （不建第二套结算引擎，ADR-003/ADR-005 同款纪律）；一个科目行至多被一个
+    伙伴结算关联（UNIQUE 防重复计数）。正式区域合作商的年费走各自签约通道
+    （本期开关关闭、无签约路径），**不得**写本表（服务层显式拒绝）。
+    """
+
+    __tablename__ = "regional_service_settlements"
+    __table_args__ = (
+        UniqueConstraint("ledger_entry_id", name="uq_regional_service_settlements_ledger"),
+        Index("ix_regional_service_settlements_partner", "partner_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    partner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("regional_partners.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    ledger_entry_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("commercial_revenue_ledger.id", ondelete="RESTRICT"), nullable=False
+    )
+    settled_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    note: Mapped[str | None] = mapped_column(String(500))

@@ -173,7 +173,7 @@
       "id": "api",
       "type": "backend",
       "label": "Flask API (fde_api)",
-      "sublabel": "127.0.0.1:8010 · 49 蓝图 · 427 路由",
+      "sublabel": "127.0.0.1:8010 · 49 蓝图 · 436 路由",
       "tag": "v0.3.0",
       "sources": [
         {
@@ -298,7 +298,7 @@
       "id": "db",
       "type": "database",
       "label": "PostgreSQL 16",
-      "sublabel": "twenty-db:5432/fde_workbench · 139 表",
+      "sublabel": "twenty-db:5432/fde_workbench · 143 表",
       "tag": "WSL 既有实例",
       "sources": [
         {

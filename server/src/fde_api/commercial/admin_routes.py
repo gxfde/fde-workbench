@@ -42,6 +42,14 @@ from fde_api.commercial.ledger_service import (
     serialize_split_rule,
 )
 from fde_api.commercial.quota_service import complete_diagnosis, grant_or_get_quota
+from fde_api.commercial.regional_service import (
+    get_or_create_gate,
+    open_sale_gate,
+    promote_partner,
+    record_service_settlement,
+    register_gate_condition,
+    serialize_gate,
+)
 from fde_api.commercial.service import (
     CommercialServiceError,
     activate_seat,
@@ -74,6 +82,20 @@ def _handle_service_error(error: CommercialServiceError):
         error.status,
     )
 
+
+
+
+def _parse_signed_at(value: object):
+    """ISO 8601 → aware datetime（无效即 None，由服务层 400）。"""
+    from datetime import datetime
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
 
 def _json_payload() -> dict:
     payload = request.get_json(silent=True)
@@ -539,6 +561,84 @@ def mark_disputed_route(opportunity_id: str):
             opportunity_id=opportunity_id,
             dispute_uri=payload.get("dispute_uri"),
             dispute_hash=payload.get("dispute_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.get("/regional-sale-gate")
+@require_auth
+def get_regional_sale_gate_route():
+    """售卖开关读面（状态 + 四项合规条件登记态，只出指针）。"""
+    with db.session() as session:
+        return jsonify({"data": serialize_gate(get_or_create_gate(session)), "error": None})
+
+
+@admin_commercial_blueprint.post("/regional-sale-gate/conditions/<key>")
+@require_auth
+def register_regional_gate_condition_route(key: str):
+    """登记一项合规条件的签署证据（admin+密码；**登记 ≠ 开启**）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = register_gate_condition(
+            session,
+            actor=g.current_user,
+            key=key,
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            signed_at=_parse_signed_at(payload.get("signed_at")),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/regional-sale-gate/open")
+@require_auth
+def open_regional_sale_gate_route():
+    """开启售卖开关（**关键流转**：admin+密码；四项合规条件证据齐备才可）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = open_sale_gate(
+            session,
+            actor=g.current_user,
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/regional-partners/<partner_id>/promote")
+@require_auth
+def promote_regional_partner_route(partner_id: str):
+    """区域伙伴阶段升级（admin+密码+书面依据；**正式档必先过售卖闸**）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = promote_partner(
+            session,
+            actor=g.current_user,
+            partner_id=partner_id,
+            to_stage=payload.get("to_stage"),
+            tier_code=payload.get("tier_code"),
+            exclusive_territory=payload.get("exclusive_territory"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/regional-partners/<partner_id>/settlements")
+@require_auth
+def record_regional_settlement_route(partner_id: str):
+    """城市服务伙伴按项目结算（一单一结；admin+密码；引用 G3 科目行）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_service_settlement(
+            session,
+            actor=g.current_user,
+            partner_id=partner_id,
+            project_id=payload.get("project_id"),
+            ledger_entry_id=payload.get("ledger_entry_id"),
+            note=payload.get("note"),
             confirm_password=payload.get("confirm_password"),
         )
         return jsonify({"data": data, "error": None})

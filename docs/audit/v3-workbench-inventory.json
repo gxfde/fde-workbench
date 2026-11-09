@@ -1,10 +1,10 @@
 {
- "route_count": 427,
+ "route_count": 436,
  "blueprint_count": 49,
- "table_count": 139,
- "revision_count": 55,
+ "table_count": 143,
+ "revision_count": 56,
  "heads": [
-  "e7b2c4d9f1a3"
+  "b3e8a6c2d4f7"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -90,6 +90,17 @@
    "create_tables": [
     "enterprise_quota_subjects",
     "enterprise_free_quota"
+   ],
+   "add_column_tables": []
+  },
+  "b3e8a6c2d4f7": {
+   "file": "b3e8a6c2d4f7_commercial_g5_regional_partners.py",
+   "down_revision": "e7b2c4d9f1a3",
+   "create_tables": [
+    "regional_partner_tiers",
+    "regional_partners",
+    "regional_sale_gate",
+    "regional_service_settlements"
    ],
    "add_column_tables": []
   },

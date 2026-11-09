@@ -34,6 +34,16 @@ from fde_api.commercial.quota_service import (
     get_quota_view,
     start_diagnosis,
 )
+from fde_api.commercial.regional_service import (
+    apply_city_observer,
+    get_or_create_gate,
+    get_partner,
+    list_partners,
+    list_tiers,
+    serialize_gate,
+    serialize_partner,
+    serialize_tier,
+)
 from fde_api.commercial.service import CommercialServiceError, get_entitlement_for_view
 from fde_api.extensions import db
 
@@ -255,3 +265,50 @@ def withdraw_opportunity_route(opportunity_id: str):
             session, actor=g.current_user, opportunity_id=opportunity_id
         )
         return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.post("/regional-partners")
+@require_auth
+def apply_regional_partner_route():
+    """申请成为城市观察伙伴（**免费；当事人自证动作**；任务书 §9 第一阶段）。"""
+    payload = request.get_json(silent=True)
+    payload = payload if isinstance(payload, dict) else {}
+    with db.session() as session, session.begin():
+        data = apply_city_observer(
+            session,
+            actor=g.current_user,
+            partner_code=payload.get("partner_code"),
+            region_name=payload.get("region_name"),
+            note=payload.get("note"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/regional-partners")
+@require_auth
+def list_regional_partners_route():
+    """区域伙伴列表（admin 全量；非 admin 只见本人申请的）。"""
+    with db.session() as session:
+        rows = list_partners(session, actor=g.current_user)
+        return jsonify({"data": [serialize_partner(r) for r in rows], "error": None})
+
+
+@commercial_blueprint.get("/regional-partners/<partner_id>")
+@require_auth
+def get_regional_partner_route(partner_id: str):
+    """区域伙伴详情（含阶段注记派生——区域代理显示「暂不启用」；他人 404）。"""
+    with db.session() as session:
+        data = get_partner(session, actor=g.current_user, partner_id=partner_id)
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/regional-partner-tiers")
+@require_auth
+def list_regional_tiers_route():
+    """正式区域合作商三档定价目录（BP v4.0 基准；目录可见 ≠ 可签约——售卖开关在 admin 面）。"""
+    with db.session() as session:
+        rows = list_tiers(session)
+        gate = serialize_gate(get_or_create_gate(session))
+        return jsonify(
+            {"data": {"tiers": [serialize_tier(r) for r in rows], "sale_gate_status": gate["status"]}, "error": None}
+        )

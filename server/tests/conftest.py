@@ -459,6 +459,21 @@ def db_session(app) -> Session:
 
     cleanup_models = (
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
+        # 商业化 G5：区域合作商四表。结算关联行引用伙伴/G3 科目行/项目，
+        # 伙伴行引用 users（**FK RESTRICT**）——必须先于 G4 两表、科目层、
+        # 派单簇与 users 清理；内部子先父后。
+        __import__(
+            "fde_api.commercial.models", fromlist=["RegionalServiceSettlement"]
+        ).RegionalServiceSettlement,
+        __import__(
+            "fde_api.commercial.models", fromlist=["RegionalSaleGate"]
+        ).RegionalSaleGate,
+        __import__(
+            "fde_api.commercial.models", fromlist=["RegionalPartner"]
+        ).RegionalPartner,
+        __import__(
+            "fde_api.commercial.models", fromlist=["RegionalPartnerTier"]
+        ).RegionalPartnerTier,
         # 商业化 G4：商机两表。商机行引用派单交付包、G3 科目层与 users
         # （**FK RESTRICT**）——必须先于派单簇、科目层与 users 清理。
         __import__(

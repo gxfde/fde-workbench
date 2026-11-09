@@ -1,9 +1,114 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／**G4 合并 `ffed2e2`（#241，基线 `9497b2c`，合并前两轮 rebase 融合上游 #240/#239/#235/#242 四笔）**
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 在途（`feat/commercial-g5-regional-partners`，基线 `2538a02`）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G4 商机归属与渠道保护（T-09，任务书 §8）— 已完成（闭环收口）；下一阶段 G5 区域合作商能力建设（T-12a，任务书 §9）**
+- 当前阶段：**G5 区域合作商能力建设（T-12a，任务书 §9）— 实施完成，PR→CI→合并→部署闭环进行中**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
+
+---
+
+## G5：区域合作商能力建设（T-12a，不含 T-12b）— 实施完成（闭环收口中）
+
+- 分支：`feat/commercial-g5-regional-partners`（工作树 `D:\test\fde-wt-g1`）
+- 基线 SHA：fork/main `2538a02`（G4 收口态）
+- 状态：**implemented**（本节终值——PR 编号／CI run／部署活体断言——在合并收口 PR 回填）
+
+### 目标
+
+任务书 §9：建区域阶梯的**内部能力**，同时**不具备**对外收费签约能力（本期不做 T-12b）；四阶段可区分、前两阶段无独家权、城市服务伙伴按项目结算无固定年费、**售卖能力默认关闭**且开关绑定合规条件清单。
+
+### 设计决策及理由（含 ADR 编号）
+
+- **ADR-005**（`decisions/ADR-005-regional-commercialization-gate.md`，G5 成文）十项裁决：①四阶段闭集（city_observer/city_service/formal_partner/regional_agent），阶段注记读面派生；②**售卖开关单行默认 closed**，CHECK 结构性排除缺件开门；③「无任何代码路径可在开关未开启时对外收费签约」＝结构性保证（`require_sale_gate_open` 唯一闸门 + formal_partner 写点唯一源码扫描钉）；④合规条件四项**登记 ≠ 开启**（登记后仍 closed，开启须独立双闸动作）；⑤前两阶段不授予独家区域权（CHECK＋服务层双封）；⑥区域代理「暂不启用」＝**无写路径**（409 `regional_agent_not_enabled`），不是禁用状态列；⑦城市服务按项目结算引用既有 G3 `project_share` 科目行（不建第二套结算），正式档不得写按项目结算（两档收费形态互斥）；⑧试运营升级指标与首期金额**本期不定数**（哨兵钉死示例数值不落码）；⑨三档定价以 **BP v4.0 为唯一基准**（迁移播种＋代码 `REGIONAL_TIER_SEED` 同源）；⑩真实身份材料零入库（伙伴代号＋指针＋sha256）。
+- 成文规则唯一处：`docs/commercialization/rules/regional-partner-program-rules.md`（§2 四阶段／§3 开关与合规清单／§4 三档定价＋机器可读块）；机器闸＝规则文件 JSON 块 ↔ 代码常量 ↔ 迁移种子**三方逐位一致**。
+
+### 修改文件
+
+```text
+新增：
+  docs/commercialization/rules/regional-partner-program-rules.md           （NEW：成文规则唯一处＋机器可读块）
+  docs/commercialization/decisions/ADR-005-regional-commercialization-gate.md
+  server/src/fde_api/commercial/regional_service.py                        （NEW：售卖闸＋四阶段＋按项目结算原语）
+  server/migrations/versions/b3e8a6c2d4f7_commercial_g5_regional_partners.py
+  server/tests/test_commercial_regional_partners.py                        （NEW：31 例）
+修改：
+  server/src/fde_api/commercial/models.py                                  （+4 表 + 常量）
+  server/src/fde_api/commercial/routes.py                                  （+4 读/自证路由）
+  server/src/fde_api/commercial/admin_routes.py                            （+5 治理写路由）
+  server/tests/conftest.py                                                 （清理序：G5 四表先于 G4 两表）
+  server/tests/test_migrations.py                                          （HEAD_REVISION b3e8a6c2d4f7 + 全集 56）
+  docs/audit/v3-{route,database}-inventory.csv + v3-workbench-inventory.json（重生成：436/49/143/56）
+  docs/architecture/archify-diagrams/architecture/{candidate.json,system-architecture.html,preview.png}
+  AGENTS.md / CHANGELOG.md / docs/commercialization/phase-status.md（本节）
+```
+
+### 数据库迁移
+
+迁移 `b3e8a6c2d4f7`（55→56 rev，additive 四表，单链单头）：`regional_partner_tiers`（三档定价目录，T1/T2/T3 CHECK＋金额>0＋席位形状 CHECK＋basis_reference 必填；**迁移播种三行**〔BP v4.0 基准〕）、`regional_partners`（伙伴主体：四阶段闭集＋申请自证戳＋升级书面依据三戳＋tier/exclusive；**五条 CHECK**：阶段闭集／前两阶段无独家权／观察档无升级留痕／服务档必有升级留痕／正式档须书面依据齐备；partner_code UNIQUE）、`regional_sale_gate`（**单行，播种 closed**：四条件各 uri+hash+signed_at＋开启人/时刻；三条 CHECK：状态闭集／条件原子性〔uri↔hash↔signed_at 同有同无〕／**opened ⇒ 四项齐备＋开启留痕非空**〔结构性排除缺件开门〕）、`regional_service_settlements`（一单一结关联行：FK 伙伴/项目/G3 科目行全 RESTRICT；ledger_entry_id UNIQUE 防重复计数）。**试运营数值零播种**（哨兵钉）。
+
+### API / 权限 / API Catalog
+
+- 读/自证面（4）：`POST /api/v1/commercial/regional-partners`（申请城市观察伙伴＝**当事人自证**，免费）、`GET /api/v1/commercial/regional-partners`（admin 全量／非 admin 只见本人）、`GET …/<id>`（含阶段注记派生——区域代理显示「暂不启用」；他人 404 不透 existence）、`GET /api/v1/commercial/regional-partner-tiers`（三档目录＋开关状态；**目录可见 ≠ 可签约**）。
+- 治理写面（5，admin＋`confirm_password` 双闸）：`GET /api/v1/admin/commercial/regional-sale-gate`（开关读面：状态＋四条件登记态，只出指针）、`POST …/regional-sale-gate/conditions/<key>`（登记签署证据，**登记 ≠ 开启**）、`POST …/regional-sale-gate/open`（**关键流转**：四项齐备才可）、`POST …/regional-partners/<id>/promote`（阶段升级；**formal_partner 第一步过售卖闸**；regional_agent 显式拒绝）、`POST …/regional-partners/<id>/settlements`（按项目结算，引用 G3 科目行）。
+- **全部不进 api_catalog**（商业治理面，AI 不可调用）——ENTRIES **94** 不变。
+
+### 前端变化
+
+无（纯服务端轮，桌面便携版不重打包；商业化桌面呈现面挂后续轮）。
+
+### 测试命令与结果
+
+- `pytest tests/test_commercial_regional_partners.py -q` → **31 passed**。
+- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2596 收集 = 2590 passed + 6 skipped，0 failed**（EXIT=0 / 16m13s；rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔（pytest 增量仅前三笔 +7／+12／+3，余四笔纯桌面或纯文档零 pytest 增量）；G4 基线 2543 收集 + V31-P1c +7 + N1 首跑补码 +12 + #250 +3 + 本轮 +31 ＝ 2596）。
+- **PR CI server-tests 实测在途——合并后由收口 PR 回填（终值以本 PR CI server-tests 实测为准）**。
+- `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（本轮回退零新增；实施期两处 Optional 收窄当场归零）。
+- `ruff check`（全部改动文件）→ All checks passed。
+- **变异五连全转红→还原→绿**（字节级备份还原，sha256 终验一致）：M1 售卖闸直通（`require_sale_gate_open` 摘 closed 判定→正式档反例红）／M2 缺件开门（`open_sale_gate` 摘四项齐备校验→缺件用例红）／M3 区域代理放行（摘显式拒绝→不可进入用例红）／M4 前两阶段独家放行（摘 `exclusive_not_allowed`→独家拒绝用例红）／M5 结算张冠李戴放行（摘 `ledger_project_mismatch`→跨项目结算用例红；**首版变异 `False and X or Y` 运算符优先级让判定意外存活——加括号全判失效后转红**〔变异本身也要验真〕）。
+
+### 安全检查
+
+- 对外收费签约唯一闸门＝`require_sale_gate_open`（闸关 409 `regional_sale_gate_closed`，不回落不绕行）；源码扫描钉把「formal_partner 写点唯一且在过闸函数内」机械化（`test_no_signing_path_bypasses_gate_source_scan`）。
+- 开闸/升级/条件登记/结算＝admin 门＋`confirm_password` 双闸（ADR-007 §2.1）；逐动作 `operation_events` 留痕（带 request_id，**密码不落事件**）。
+- 申请城市观察伙伴＝当事人自证（免费，不走 admin 门）。
+- 合规条件证据只存 `source_uri` 指针＋`content_hash` sha256 指纹＋签署时刻；伙伴真实身份材料零入库（只登伙伴代号＋区域名）。
+- 「两店一年」是客观时间门槛，不可提前（其证据行即 qualification 条件；不预设「本模式是否构成特许经营」的法律结论——须律师意见）。
+- 未读取无关密钥；`server/.env` 未入库；本轮零生产变更。
+
+### 数据兼容与回滚
+
+- additive 四表，**零既有表改列**（G4 两表/G3 科目层零触碰；opportunities 行零影响）。
+- 回滚＝`alembic downgrade e7b2c4d9f1a3`（child-first：settlements → gate → partners → tiers）＋回滚镜像。
+- 闸关闭态下区域模块读面/申请/升级（观察→服务）行为与既有商业面零交互；派单/项目/结算回归绿（ledger 26 例＋channel_guard 13 例＋G4 商机 23 例＋迁移全量 28 例）。
+
+### 验收证据（任务书 §9 逐条）
+
+| 验收项 | 证据 |
+|---|---|
+| 售卖能力默认关闭＋无代码路径可在开关未开启时对外收费签约（≥1 断言用例） | `test_gate_default_closed_lazy_seeded`＋`test_formal_partner_blocked_while_gate_closed`（409 `regional_sale_gate_closed`，含跳级路径）＋**源码扫描钉** `test_no_signing_path_bypasses_gate_source_scan`；变异 M1/M2 转红 |
+| 四阶段与「暂不启用」标注正确落库 | `test_rule_document_slots_match_code_bidirectionally`（闭集双向闸＋agent.enabled=false＋note「暂不启用」）＋`test_regional_agent_is_not_enterable`（409）＋读面派生注记；变异 M3 转红 |
+| 城市服务伙伴按项目结算，无固定年费 | `test_city_service_per_project_settlement`（一单一结＋重复 409）＋`test_tier_catalog_has_no_city_service_row`（目录只收 T1/T2/T3）＋`test_settlement_rejected_for_formal_stage`（两档互斥）＋`test_settlement_requires_matching_project`（张冠李戴 409）；变异 M5 转红 |
+| 前两阶段不授予独家区域权 | `test_exclusive_territory_rejected_for_first_two_stages`（409）＋`test_db_check_first_two_stages_no_exclusive`（DB CHECK 在位）；变异 M4 转红 |
+| 三档定价以 v4.0 为唯一基准 | `test_tier_seed_matches_rule_document`（文档块 ↔ `REGIONAL_TIER_SEED` ↔ 库行三方逐位）＋basis_reference 必填 CHECK |
+| 试运营指标与首期金额本期不定数 | `test_trial_upgrade_metrics_unset`（规则槽显式 unset）＋`test_trial_example_numbers_absent_from_g5_code`（哨兵：示例数值不落 G5 域代码与迁移，数字边界正则防误伤档位金额） |
+| 合规条件清单四项（备案/披露/冷静期/两店一年） | `test_opening_requires_all_four_conditions`（缺一 409 `gate_condition_missing`）＋`test_gate_opens_after_all_conditions`（齐备开闸＋重复开闸/开启后改条件 409）＋CHECK `ck_regional_sale_gate_opened_complete` |
+| 高风险写双闸＋事件无密码 | `test_gate_condition_registration_requires_admin_and_password`＋`test_promotion_requires_evidence_and_admin_password`＋`test_gate_events_recorded_without_password`＋`test_promotion_event_carries_stage_transition` |
+| 读面权限 | `test_partner_read_scopes`（本人/admin/他人 404/列表隔离）＋`test_partner_read_requires_auth`（401）＋`test_tier_catalog_visible_with_gate_status` |
+| 治理面不进 api_catalog | `test_governance_face_not_in_api_catalog`＋路由审计 CSV（ENTRIES 94 不变） |
+| 新增服务端逻辑有测试 | NEW `test_commercial_regional_partners.py` **31 例**＋变异五连全红→还原→绿 |
+
+### 遗留问题
+
+1. **T-12b（对外收费签约）本期不做**——闸关闭＋无签约服务原语；放行前置＝合规条件清单四项签署＋律师意见（「本模式是否构成特许经营」），留独立轮次。
+2. 试运营升级指标与首期金额**待业务拍板**（任务书 §17 数值类）——配置槽显式 unset，成文后填实无需改结构。
+3. 区域商业化桌面呈现面（伙伴列表/开关面板）挂后续桌面轮；GAP-15（AI 草稿采纳率埋点）与 ADR-004 §1.4 多子公司集团归并仍开放。
+
+### 部署活体验证（合并后）
+
+（收口 PR 回填：三镜像 rebuild 自本工作树＋alembic upgrade head → b3e8a6c2d4f7＋活体断言）
+
+### 是否允许进入下一阶段
+
+**允许进入 G6（企业空间与企业自助交付 T-06/T-08，任务书 §10）**——前置回填：PR 四绿＋合并态 main run 四绿＋部署活体绿。
 
 ---
 
