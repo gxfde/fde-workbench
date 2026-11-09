@@ -38,6 +38,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -264,6 +265,8 @@ class EnterpriseQuotaSubject(Base, TimestampMixin):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(String(255))
+    # 企业自助注册时的业务问题描述（G6；注册必填，库列可空＝兼容 G2 admin 授予的存量行）
+    problem_description: Mapped[str | None] = mapped_column(Text)
 
     first_user = relationship("User", foreign_keys=[first_user_id])
 
@@ -1192,3 +1195,138 @@ class RegionalServiceSettlement(Base, TimestampMixin):
         UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
     )
     note: Mapped[str | None] = mapped_column(String(500))
+
+# ══════════════════════════════════════════════════════════════════════════
+# 商业化 G6：企业空间与企业自助交付（任务书 §10；ADR-010）
+# ══════════════════════════════════════════════════════════════════════════
+
+# 三档分流/付费选项的合法键集——**唯一权威＝G2 的 ``DIAGNOSIS_PROJECT_TIERS`` 键集**
+# （三档定性描述单一权威，不另立枚举；系统不做任何硬规则判定，零阈值常量——
+# 选项/档位载荷无数值由哨兵用例钉住）。
+ENTERPRISE_TRIAGE_TIERS = tuple(DIAGNOSIS_PROJECT_TIERS)
+
+# 「同一主体两种状态」（自助态／付费交付态）的派生读面值域：
+# paid_delivery ＝ 存在未被取代的付费选项选择行（派生值，**不是账**——科目层零触碰，
+# 不另立第三套计费口径，ADR-010 §1.4）。
+ENGAGEMENT_STATES = ("self_service", "paid_delivery")
+
+# 四类注册入口（R1–R4 一一对应，齐备性由测试机器闸钉住：键集＝COMMERCIAL_ROLES）：
+# R1 企业自助注册＝本轮新增（当事人自证）；R2/R3＝G2 体验入口注册表；
+# R4＝G5 区域合作商申请（当事人自证）。
+REGISTRATION_ENTRIES: dict[str, dict[str, str]] = {
+    "R1": {
+        "label": "企业自助注册",
+        "path": "POST /api/v1/commercial/enterprise-registrations",
+        "source": "g6_self_service",
+    },
+    "R2": {
+        "label": "创业者模拟体验",
+        "path": "trial_entry:founder",
+        "source": "g2_trial_registry",
+    },
+    "R3": {
+        "label": "交付者脱敏模拟项目考核",
+        "path": "trial_entry:deliverer",
+        "source": "g2_trial_registry",
+    },
+    "R4": {
+        "label": "区域合作商申请（城市观察）",
+        "path": "POST /api/v1/commercial/regional-partners",
+        "source": "g5_self_attested",
+    },
+}
+
+
+class EnterpriseTriageDecision(Base, TimestampMixin):
+    """三档分流**人工判定**留痕行（交付咨询环节；任务书 §10 验收②）。
+
+    判据＝**定性描述**（``rationale`` 必填，判定人手写的依据）；系统不做任何
+    硬规则计算（本域零阈值常量，判定＝人的输入不是计算输出）；``tier`` 值域
+    复用 G2 三档闭集（单一权威）。可回看＝企业空间读面按主体列出（谁在何时
+    判了哪一档、依据是什么）。书面依据可选，落指针＋sha256 指纹（同有同无
+    CHECK；原件永不入库，证据红线同款）。
+    """
+
+    __tablename__ = "enterprise_triage_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            f"tier IN {ENTERPRISE_TRIAGE_TIERS!r}",
+            name="ck_enterprise_triage_decisions_tier",
+        ),
+        CheckConstraint(
+            "(basis_uri IS NULL) = (basis_sha256 IS NULL)",
+            name="ck_enterprise_triage_decisions_basis_atomic",
+        ),
+        Index("ix_enterprise_triage_decisions_subject", "subject_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    subject_key: Mapped[str] = mapped_column(
+        String(18),
+        ForeignKey("enterprise_quota_subjects.subject_key", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    tier: Mapped[str] = mapped_column(String(20), nullable=False)
+    decided_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    decided_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    rationale: Mapped[str] = mapped_column(String(2000), nullable=False)
+    basis_uri: Mapped[str | None] = mapped_column(String(500))
+    basis_sha256: Mapped[str | None] = mapped_column(String(64))
+    request_id: Mapped[str | None] = mapped_column(String(64))
+
+
+class EnterprisePaidOptionChoice(Base, TimestampMixin):
+    """付费选项选择行（诊断完成后系统呈现三个选项；**企业自主选择不被取消**）。
+
+    - **append-only**：全仓无删除/取消路径（源码扫描钉）；企业换主意＝企业本人
+      再选（新行写旧行 ``superseded_at`` 取代）；admin **不可代选、不可取消、
+      不可改选**——选择动作只认绑定账号本人（服务层 403，ADR-010 §1.7）。
+    - 平台侧唯一写面＝顾问跟进注记（admin+密码；只能补注记三元组，不能动
+      ``option_key``/``chosen_*``——CHECK 联锁原子性）。
+    - 一主体至多一份现行选择＝部分唯一索引（``superseded_at IS NULL``）；
+      「付费交付态」＝存在现行选择行（派生读面，不是账，科目层零触碰）。
+    """
+
+    __tablename__ = "enterprise_paid_option_choices"
+    __table_args__ = (
+        CheckConstraint(
+            f"option_key IN {ENTERPRISE_TRIAGE_TIERS!r}",
+            name="ck_enterprise_paid_option_choices_option",
+        ),
+        CheckConstraint(
+            "(advisor_note IS NULL) = (advisor_user_id IS NULL) "
+            "AND (advisor_note IS NULL) = (advisor_at IS NULL)",
+            name="ck_enterprise_paid_option_choices_advisor_atomic",
+        ),
+        Index(
+            "uq_enterprise_paid_option_choices_active",
+            "subject_key",
+            unique=True,
+            postgresql_where=text("superseded_at IS NULL"),
+        ),
+        Index("ix_enterprise_paid_option_choices_subject", "subject_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    subject_key: Mapped[str] = mapped_column(
+        String(18),
+        ForeignKey("enterprise_quota_subjects.subject_key", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    option_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    chosen_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    chosen_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=UTC_TIMESTAMP_SQL
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    advisor_note: Mapped[str | None] = mapped_column(String(500))
+    advisor_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    advisor_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

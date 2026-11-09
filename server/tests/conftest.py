@@ -638,6 +638,14 @@ def db_session(app) -> Session:
         __import__(
             "fde_api.commercial.models", fromlist=["CommercialEntitlement"]
         ).CommercialEntitlement,
+        # 商业化 G6：企业空间两表（triage/choice 引用 subjects 与 users RESTRICT，
+        # 先于 G2 额度两表清理）
+        __import__(
+            "fde_api.commercial.models", fromlist=["EnterprisePaidOptionChoice"]
+        ).EnterprisePaidOptionChoice,
+        __import__(
+            "fde_api.commercial.models", fromlist=["EnterpriseTriageDecision"]
+        ).EnterpriseTriageDecision,
         # 商业化 G2：免费额度两表（quota 引用 subjects RESTRICT，子表先清）
         __import__(
             "fde_api.commercial.models", fromlist=["EnterpriseFreeQuota"]

@@ -1,10 +1,10 @@
 {
- "route_count": 436,
+ "route_count": 441,
  "blueprint_count": 49,
- "table_count": 143,
- "revision_count": 56,
+ "table_count": 145,
+ "revision_count": 57,
  "heads": [
-  "b3e8a6c2d4f7"
+  "e8b3f7c2d9a5"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -439,6 +439,17 @@
    ],
    "add_column_tables": [
     "improvement_proposals"
+   ]
+  },
+  "e8b3f7c2d9a5": {
+   "file": "e8b3f7c2d9a5_commercial_g6_enterprise_space.py",
+   "down_revision": "b3e8a6c2d4f7",
+   "create_tables": [
+    "enterprise_triage_decisions",
+    "enterprise_paid_option_choices"
+   ],
+   "add_column_tables": [
+    "enterprise_quota_subjects"
    ]
   },
   "e9c4a1f7b3d2": {

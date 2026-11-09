@@ -108,6 +108,21 @@
 - **台账与任务书回写**：台账 → **v1.3**（G-08/G-09/G-16 置 **CLOSED（N2，2026-11-09）** 各带四证复测结果 + NEW G-17 行 + 指纹/purpose 语义注记块）；任务书 §13 记录 #4/#5 + §14 轮次执行记录（N1 挂起等 D-1／N2 已实施）；评估文档本轮零改动（四特征评分要等第三证〔CI eval 回归〕落地才动，属 N4）。
 - **边界**：purpose/指纹覆盖面＝**工作台 AI 入口**（execute_ai_prompt/complete_json 两腿）；宿主通道 zcode 进程内部的 AI 调用不在面内（G-17 如实登记，不假装闭合）；`structured` 仅为签名缺省值非调用点字面量；红线全束（客户资料不入库／证据只指针+指纹／AI 不代拍板——D-1 仍待蔡工答复，N1 全部前置停在「零代码准备完成」态）。
 
+## [未发布] — 商业化 G6：企业空间与企业自助交付（四类注册入口齐备+同一主体两状态+三档人工分流+不可取消的付费选择，2026-11-09）
+
+- **范围**：任务书 §10 T-06/T-08（**完全自助是长期目标，不第一天承诺**）。本轮成文 **ADR-010**（`docs/commercialization/decisions/ADR-010-enterprise-self-service-space.md`），消解 ADR-004 §3 三挂账中的两件（注册面 USCC 必填＋三档分流人工判定留痕）。
+- **四类注册入口齐备（R1–R4 一一对应，机器闸双向钉）**：`REGISTRATION_ENTRIES` 键集恒等 `COMMERCIAL_ROLES`——R1 企业自助注册（本轮新增，当事人自证）／R2·R3＝G2 体验入口注册表／R4＝G5 区域合作商申请；`free-diagnosis-profile` 读面增 `registration_entries` 节。
+- **企业自助注册（R1，当事人自证，公开入口无鉴权）**：一个事务四件全成全败——账号（`users.role='viewer'`＋自选密码 ⇒ must_change_password=False；NEW `users.register_self_service_user`）＋身份分层（`commercial_role='R1'`）＋主体与额度（USCC mod-31 必填＋`problem_description` 必填；**同主体幂等＝绝不新建绝不重置**，反例机器闸）＋事件留痕（无密码）。ADR-004「授予=admin」为边界澄清非推翻（admin 闸守 staff 路径；自助授予防滥用＝结构性保证）；注册面节流挂后续轮（内网部署假设）。
+- **同一主体两种状态＝派生不落列**：`engagement_state`（self_service/paid_delivery）＝是否存在未被取代的付费选项选择行——**派生值不是账**，科目层零触碰，不另立第三套计费口径。
+- **DB（迁移 `e8b3f7c2d9a5`，56→57 rev，additive 两表+一列，单链单头）**：①`enterprise_triage_decisions` 三档分流人工判定留痕（tier∈G2 三档闭集单一权威＋rationale 必填定性＋basis 指针/指纹同有同无 CHECK）；②`enterprise_paid_option_choices` 付费选项选择行（**append-only**＋部分唯一索引一主体一份现行＋顾问注记三元组原子 CHECK）；③`enterprise_quota_subjects.problem_description` 加列（可空＝兼容存量）。零播种零金额零数值。
+- **三档分流＝人工判定，系统零判定**：admin+密码双闸＋前置闸＝诊断已完成（409 `diagnosis_not_completed`）；**零阈值常量零评分代码**；空间读面按主体可回看。
+- **三个付费选项＋企业自主选择不被取消**：选项派生自 DIAGNOSIS_PROJECT_TIERS＋跟进语常量（哨兵：载荷无数字）；选择只认绑定账号本人（admin 越权 403）；换主意＝本人再选（superseded_at 留痕）；**源码扫描钉**（零 `.delete(`＋方法集 ⊆ {GET,POST}）；顾问跟进注记＝admin+密码只补三元组。
+- **企业空间复用既有权限模型（验收③）**：企业账号经既有 `add_project_member` 以 viewer 成员进 staff 立项的交付项目 → 既有 `project_access` 可读；空间读面交付项目＝`enterprise_code == display_name` ∩ 既有可见性；元数据机器闸钉「仅新增两表、无 permission/acl 命名」。
+- **路由（+5，436→441，全不进 api_catalog；ENTRIES 94 不变）**：`POST /api/v1/commercial/enterprise-registrations`（公开自证）、`GET /api/v1/commercial/enterprise-spaces/<subject_key>`、`POST …/paid-option-choices`＋admin 面 `POST …/triage-decisions`、`POST …/paid-option-choices/<id>/advisor-note`。
+- **测试**：NEW `server/tests/test_commercial_enterprise_space.py` **27 例**＋**变异六连全红→还原→绿**（M1 派生态抹平／M2 分流前置闸／M3 admin 代选／M4 supersede 摘除／M5 注册跳过额度落库／M6 注记可重复；sha256 终验一致）。**实施期自查修正**——夹具返回值误用 dict 当 subject_key／jsonify sort_keys 键序安全比较／弱密码 AuthServiceError 穿透 500 ⇒ users 原语内翻译／企业账号挂成员须 viewer 角色（既有角色尺，不放宽）。
+- **架构图口径同步（上游 P2-7 防陈旧闸）**：路由 436→441／表 143→145 后防陈旧闸转红，改 `candidate.json`＋`system-architecture.html` 同两处数字并重出整页实拍 preview.png（1440×2098），闸复跑绿。
+- **口径**：pytest **2624 收集 = 2618 passed + 6 skipped**〔本地 CI 同命令 `-n 4 --dist loadfile` EXIT=0 / 19m35s〔rebase 融合上游 #258/#259/#260 三笔后复跑〕；G5 基线 2596 收集 + 本轮 +27 + 上游 #258 +1 ＝ 2624；PR CI server-tests 实测在途——合并后由收口 PR 回填 run ID〕／mypy **279 基线不变**（官方闸 OK）／路由 **441**／蓝图 **49**／表 **145**／迁移 **57 rev** 单头 `e8b3f7c2d9a5`；审计三清单已重生成（route +5 行、DB +2 行+1 列、JSON 441/49/145/57 逐位吻合）；桌面零改动（不重打包）；server 变更 ⇒ 合并后 rebuild 三镜像＋alembic upgrade head（新迁移）。
+
 ## [未发布] — 商业化 G5：区域合作商能力建设（区域阶梯四阶段+售卖开关默认关闭+按项目结算，2026-11-09）
 
 - **范围**：任务书 §9 T-12a（**不含 T-12b**——对外收费签约能力本期不做）。本轮成文 **ADR-005**（区域商业化闸，`docs/commercialization/decisions/ADR-005-regional-commercialization-gate.md`）＋**成文规则唯一处**（NEW `docs/commercialization/rules/regional-partner-program-rules.md`，机器可读块）。

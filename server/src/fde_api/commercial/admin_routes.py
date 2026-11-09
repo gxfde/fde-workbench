@@ -50,6 +50,10 @@ from fde_api.commercial.regional_service import (
     register_gate_condition,
     serialize_gate,
 )
+from fde_api.commercial.enterprise_service import (
+    record_advisor_note,
+    record_triage_decision,
+)
 from fde_api.commercial.service import (
     CommercialServiceError,
     activate_seat,
@@ -640,5 +644,48 @@ def record_regional_settlement_route(partner_id: str):
             ledger_entry_id=payload.get("ledger_entry_id"),
             note=payload.get("note"),
             confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+# ── 商业化 G6：企业空间治理写面（admin+密码双闸；ADR-010；不进 api_catalog）──
+
+
+@admin_commercial_blueprint.post("/enterprise-spaces/<subject_key>/triage-decisions")
+@require_auth
+def record_triage_decision_route(subject_key: str):
+    """三档分流人工判定（交付咨询环节；admin+密码；诊断完成后才可判定）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_triage_decision(
+            session,
+            actor=g.current_user,
+            subject_key_raw=subject_key,
+            tier=payload.get("tier"),
+            rationale=payload.get("rationale"),
+            basis_uri=payload.get("basis_uri"),
+            basis_sha256=payload.get("basis_sha256"),
+            request_id=payload.get("request_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post(
+    "/enterprise-spaces/<subject_key>/paid-option-choices/<choice_id>/advisor-note"
+)
+@require_auth
+def record_advisor_note_route(subject_key: str, choice_id: str):
+    """顾问跟进注记（admin+密码；只能补注记三元组，不能动选择本体）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_advisor_note(
+            session,
+            actor=g.current_user,
+            subject_key_raw=subject_key,
+            choice_id=choice_id,
+            note=payload.get("note"),
+            confirm_password=payload.get("confirm_password"),
+            request_id=payload.get("request_id"),
         )
         return jsonify({"data": data, "error": None})

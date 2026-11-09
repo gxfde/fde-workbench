@@ -14,7 +14,11 @@ from fde_api.auth.models import (
 )
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.limits import USERNAME_MAX_LENGTH
-from fde_api.auth.service import normalize_username, validate_password_strength
+from fde_api.auth.service import (
+    AuthServiceError,
+    normalize_username,
+    validate_password_strength,
+)
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
 from fde_api.workbench.models import Project, ProjectMember
@@ -368,3 +372,51 @@ def _user_creation_failed_error() -> UserServiceError:
     return UserServiceError(
         "user_creation_failed", "Unable to create user at this time.", 503
     )
+
+
+def register_self_service_user(
+    session: Any, *, username: str, display_name: str, password: str
+) -> User:
+    """企业自助注册账号（商业化 G6；**当事人自证**，无 admin actor，ADR-010）。
+
+    与 ``create_user`` 的差异：密码由当事人自选（非临时密码 ⇒
+    ``must_change_password=False``）；平台权限角色固定 ``viewer``（最低档——
+    商业自助面的鉴权按绑定账号判定，不靠平台角色提权）；创建事件由商业域
+    以当事人为 actor 落 ``operation_events``（本原语只管账号行，调用方持有
+    同一事务——账号/主体/额度/身份分层要么全成要么全败）。
+    """
+    normalized_username = normalize_username(username)
+    normalized_display_name = display_name.strip()
+    if (
+        not normalized_username
+        or not normalized_display_name
+        or len(normalized_username) > USERNAME_MAX_LENGTH
+        or len(normalized_display_name) > DISPLAY_NAME_MAX_LENGTH
+    ):
+        raise UserServiceError(
+            "invalid_request", "The request body is missing required fields.", 400
+        )
+    try:
+        validate_password_strength(password)
+    except AuthServiceError as error:
+        raise UserServiceError(error.code, error.message, error.status) from None
+    existing = session.scalar(
+        select(User.id).where(User.username == normalized_username).with_for_update()
+    )
+    if existing is not None:
+        raise _duplicate_username_error()
+    user = User(
+        username=normalized_username,
+        display_name=normalized_display_name,
+        role="viewer",
+        password_hash=hash_password(password),
+        must_change_password=False,
+        is_active=True,
+    )
+    session.add(user)
+    try:
+        session.flush()
+    except IntegrityError:
+        # 并发同名校验兜底：唯一约束在库层兜底（SELECT 抢先窗口）
+        raise _duplicate_username_error() from None
+    return user

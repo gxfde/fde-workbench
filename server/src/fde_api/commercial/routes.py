@@ -44,6 +44,11 @@ from fde_api.commercial.regional_service import (
     serialize_partner,
     serialize_tier,
 )
+from fde_api.commercial.enterprise_service import (
+    get_enterprise_space_view,
+    record_paid_option_choice,
+    register_enterprise,
+)
 from fde_api.commercial.service import CommercialServiceError, get_entitlement_for_view
 from fde_api.extensions import db
 
@@ -312,3 +317,55 @@ def list_regional_tiers_route():
         return jsonify(
             {"data": {"tiers": [serialize_tier(r) for r in rows], "sale_gate_status": gate["status"]}, "error": None}
         )
+
+
+# ── 商业化 G6：企业空间与企业自助交付（读/自证面；ADR-010）──
+
+
+@commercial_blueprint.post("/enterprise-registrations")
+def register_enterprise_route():
+    """企业自助注册（R1；**当事人自证，公开入口无鉴权**——免费额度的结构性
+    防滥用＝USCC 一主体一份额度；治理面不进 api_catalog）。"""
+    payload = request.get_json(silent=True)
+    payload = payload if isinstance(payload, dict) else {}
+    with db.session() as session, session.begin():
+        data = register_enterprise(
+            session,
+            username=payload.get("username"),
+            display_name=payload.get("display_name"),
+            password=payload.get("password"),
+            subject_key_raw=payload.get("subject_key"),
+            problem_description=payload.get("problem_description"),
+            request_id=payload.get("request_id"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.get("/enterprise-spaces/<subject_key>")
+@require_auth
+def get_enterprise_space_route(subject_key: str):
+    """企业空间读面（绑定账号本人或 admin；他人 403）——业务问题/额度/三档
+    分流回看/付费选项与现行选择/交付项目（既有权限模型可见性过滤）。"""
+    with db.session() as session:
+        data = get_enterprise_space_view(
+            session, actor=g.current_user, subject_key_raw=subject_key
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@commercial_blueprint.post("/enterprise-spaces/<subject_key>/paid-option-choices")
+@require_auth
+def record_paid_option_choice_route(subject_key: str):
+    """企业选择付费选项（**只认绑定账号本人**；诊断完成后可选；换主意＝再选，
+    append-only 无取消路径）。"""
+    payload = request.get_json(silent=True)
+    payload = payload if isinstance(payload, dict) else {}
+    with db.session() as session, session.begin():
+        data = record_paid_option_choice(
+            session,
+            actor=g.current_user,
+            subject_key_raw=subject_key,
+            option_key=payload.get("option_key"),
+            request_id=payload.get("request_id"),
+        )
+        return jsonify({"data": data, "error": None})

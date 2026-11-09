@@ -32,6 +32,7 @@ from fde_api.commercial.models import (
     FREE_DIAGNOSIS_DELIVERABLES,
     FREE_EXCLUSIONS,
     FREE_TRIAL_ENTRIES,
+    REGISTRATION_ENTRIES,
     FREE_TRIAL_ENTRY_KEYS,
     EnterpriseFreeQuota,
     EnterpriseQuotaSubject,
@@ -353,6 +354,9 @@ def free_diagnosis_profile() -> dict[str, Any]:
         "experience_limits": EXPERIENCE_LIMITS,
         "experience_limits_placeholder": EXPERIENCE_LIMITS_PLACEHOLDER,
         "subject_key_rule": "18 位统一社会信用代码（GB 32100-2015 校验位）",
+        "registration_entries": {
+            role: dict(spec) for role, spec in REGISTRATION_ENTRIES.items()
+        },
     }
 
 

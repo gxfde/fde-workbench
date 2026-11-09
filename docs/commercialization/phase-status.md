@@ -1,9 +1,106 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 合并 `28285e5`（#251，基线 `5294a6e`，合并前两度 rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔）**
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 合并 `28285e5`（#251，基线 `5294a6e`，合并前两度 rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔）／**G6 在途（`feat/commercial-g6-enterprise-space`，基线 `212b5fb`）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G5 区域合作商能力建设（T-12a，任务书 §9）— 已完成（闭环收口）；下一阶段 G6 企业空间与企业自助交付（T-06/T-08，任务书 §10）**
+- 当前阶段：**G6 企业空间与企业自助交付（T-06/T-08，任务书 §10）— 实施完成，PR→CI→合并→部署闭环进行中**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
+
+---
+
+## G6：企业空间与企业自助交付（T-06/T-08）— 实施完成（闭环收口中）
+
+- 分支：`feat/commercial-g6-enterprise-space`（工作树 `D:\test\fde-wt-g1`）
+- 基线 SHA：fork/main `212b5fb`（G5 收口态）
+- 状态：**implemented**（本节终值——PR 编号／CI run／部署活体断言——在合并收口 PR 回填）
+
+### 目标
+
+任务书 §10：企业能**自己注册**、描述问题、完成诊断，并按三档分流；「企业客户」与「企业自助用户」为**同一主体两种状态**共享企业空间，不另立第三套计费口径；**完全自助是长期目标，不第一天承诺**。
+
+### 设计决策及理由（含 ADR 编号）
+
+- **ADR-010**（`decisions/ADR-010-enterprise-self-service-space.md`）八项裁决：①四类注册入口＝R1–R4 一一对应（`REGISTRATION_ENTRIES` 注册表机器闸）；②自助注册＝当事人自证（一事务四件全成全败）；③ADR-004「授予=admin」为边界澄清非推翻（admin 闸守 staff 路径，自助授予防滥用＝结构性保证）；④两状态派生不落列（paid_delivery＝现行选择行存在，**不是账**）；⑤三档分流人工判定留痕、系统零判定（tier 复用 G2 闭集；零阈值常量）；⑥付费选项派生 G2 权威＋跟进语（零金额零数值哨兵）；⑦企业自主选择不被取消＝append-only（admin 不可代选/取消/改选；源码扫描钉）；⑧企业空间复用既有权限模型（`add_project_member`＋`project_access`，零平行权限表）。
+
+### 修改文件
+
+```text
+新增：
+  docs/commercialization/decisions/ADR-010-enterprise-self-service-space.md
+  server/src/fde_api/commercial/enterprise_service.py                      （NEW：注册/空间/分流/选择/顾问注记原语）
+  server/migrations/versions/e8b3f7c2d9a5_commercial_g6_enterprise_space.py
+  server/tests/test_commercial_enterprise_space.py                         （NEW：27 例）
+修改：
+  server/src/fde_api/commercial/models.py                                  （+2 表 + 常量 + subject.problem_description 列）
+  server/src/fde_api/commercial/routes.py                                  （+3 读/自证路由）
+  server/src/fde_api/commercial/admin_routes.py                            （+2 治理写路由）
+  server/src/fde_api/commercial/quota_service.py                           （profile 读面增 registration_entries）
+  server/src/fde_api/users/service.py                                      （NEW register_self_service_user 原语）
+  server/tests/conftest.py                                                 （清理序：G6 两表先于 G2 额度两表）
+  server/tests/test_migrations.py                                          （HEAD e8b3f7c2d9a5 + 全集 57）
+  docs/audit/v3-{route,database}-inventory.csv + v3-workbench-inventory.json（重生成：441/49/145/57）
+  docs/architecture/archify-diagrams/architecture/{candidate.json,system-architecture.html,preview.png}
+  AGENTS.md / CHANGELOG.md / docs/commercialization/phase-status.md（本节）
+```
+
+### 数据库迁移
+
+迁移 `e8b3f7c2d9a5`（56→57 rev，additive，单链单头）：`enterprise_triage_decisions`（三档分流人工判定留痕：tier CHECK＝G2 三档闭集＋basis 指针/指纹同有同无 CHECK）、`enterprise_paid_option_choices`（append-only 选择行：option CHECK＝同一闭集＋部分唯一索引〔一主体一份现行〕＋顾问注记三元组原子 CHECK）、`enterprise_quota_subjects.problem_description` 加列（可空＝兼容存量）。**零播种零金额零数值**（哨兵钉）。
+
+### API / 权限 / API Catalog
+
+- 读/自证面（3）：`POST /api/v1/commercial/enterprise-registrations`（**公开自证入口，无鉴权**——任务书验收「无需经招商人员」的直接要求）、`GET /api/v1/commercial/enterprise-spaces/<subject_key>`（绑定账号/admin；他人 403）、`POST …/paid-option-choices`（**只认绑定账号本人**）。
+- 治理写面（2，admin＋`confirm_password` 双闸）：`POST /api/v1/admin/commercial/enterprise-spaces/<subject_key>/triage-decisions`（三档分流人工判定；前置闸＝诊断已完成）、`POST …/paid-option-choices/<choice_id>/advisor-note`（顾问跟进注记，只补三元组）。
+- `free-diagnosis-profile` 读面增 `registration_entries` 节（payload 扩展，零新路由）。**全部不进 api_catalog**——ENTRIES **94** 不变。
+
+### 前端变化
+
+无（纯服务端轮，桌面便携版不重打包；企业空间桌面呈现面挂后续轮）。
+
+### 测试命令与结果
+
+- `pytest tests/test_commercial_enterprise_space.py -q` → **27 passed**。
+- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2624 收集 = 2618 passed + 6 skipped，0 failed**（EXIT=0 / 19m35s〔rebase 融合上游 #258/#259/#260 三笔后复跑〕；G5 轮基线 2596 收集 + 本轮 +27 + 上游 #258 +1 ＝ 2624）。
+- **PR CI server-tests 实测在途——合并后由收口 PR 回填（终值以本 PR CI server-tests 实测为准）**。
+- `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（四实施期 Optional 收窄当场归零）。
+- `ruff check`（全部改动文件）→ All checks passed。
+- **变异六连全转红→还原→绿**（字节级备份还原，sha256 终验一致）：M1 派生态抹平（engagement_state 恒 self_service→付费态读面反例红）／M2 分流前置闸摘除（未完成诊断可分流→红）／M3 admin 代选放行（摘绑定账号校验→admin 越权用例红）／M4 supersede 摘除（旧行不退位→撞部分唯一索引 500→红）／M5 注册跳过额度落库（额度行缺失→DB 断言红）／M6 注记可重复（二条注记 409 摘除→红）。
+
+### 安全检查
+
+- 注册面公开自证＝任务书验收直接要求；防滥用＝结构性保证（USCC 一主体一份额度库层兜底＋七项不免费硬编码＋六项完成判据）；对外部署的注册面节流挂后续轮（内网部署假设，ADR-010 §3-3）。
+- 分流/顾问注记＝admin＋`confirm_password` 双闸；逐动作 `operation_events` 留痕（request_id，**密码不落事件**）。
+- 企业自主选择不被取消＝append-only（admin 越权 403＋源码扫描钉＋路由方法集扫描钉）。
+- 书面依据只存指针＋sha256；未读取无关密钥；`server/.env` 未入库；本轮零生产变更。
+
+### 数据兼容与回滚
+
+- additive 两表＋一列（可空），**零既有表改列语义**（科目层/G4/G5 表零触碰）。
+- 回滚＝`alembic downgrade b3e8a6c2d4f7`（child-first：choices → triage → 加列回退）＋回滚镜像。
+- 额度流程（G2 三态）零改动回归绿（quota 27 例全绿）；派单/项目/结算回归绿（全量套件）。
+
+### 验收证据（任务书 §10 逐条）
+
+| 验收项 | 证据 |
+|---|---|
+| 企业可独立注册并完成一次诊断，无需经招商人员或先行寻找 FDE 服务商 | 公开注册入口（无鉴权 200）＋自助授予额度＋start→complete（admin 登记）→confirm（绑定账号确认）全链用例；`test_self_registration_creates_account_identity_subject_quota`＋`_completed_subject` 链路 |
+| 三档分流可留痕、可回看判定了哪一档；无量化阈值硬编码 | `enterprise_triage_decisions` 留痕＋空间读面回看用例 `test_triage_decisions_reviewable_in_space_view`；**零阈值常量零评分代码**＋哨兵 `test_paid_options_derive_from_g2_authority_and_carry_no_numbers`（载荷无数字）＋闭集复用 G2 权威 `test_triage_tier_closed_set_matches_g2_authority` |
+| 复用既有权限模型，未新建平行权限表 | `test_enterprise_user_joins_delivery_project_via_existing_add_member`（既有 add_project_member＋project_members 既有表＋project_access 可读）＋元数据机器闸 `test_g6_metadata_adds_exactly_two_tables_and_no_permission_tables` |
+| 四类注册入口齐备；两状态同一主体 | `test_registration_entries_cover_all_four_identities`（键集＝R1–R4↔注册表↔G2 体验入口）＋`engagement_state` 派生用例 |
+| 换账号不重置（G2 硬不变量穿透自助路径） | `test_same_subject_second_registration_does_not_reset_quota`（额度行恒 1）＋`test_second_account_cannot_restart_bound_quota`（409）——M5 变异转红 |
+
+### 遗留问题
+
+1. 体验上限（ADR-004 §1.8）消费接线维持挂账——真实消费方在 V3.2 simulation 域（ADR-004 §1.9 不触碰），判定原语已在位。
+2. 注册面节流（复用 #250 登录限流模式）挂后续轮；本期内网部署假设。
+3. 企业空间桌面呈现面（自助注册页/空间视图）挂后续桌面轮；GAP-15 埋点、ADR-004 §1.4 集团归并（法务）、规则/费率数值拍板（§17）仍开放。
+
+### 部署活体验证（合并后）
+
+（收口 PR 回填：三镜像 rebuild 自本工作树＋alembic upgrade head → e8b3f7c2d9a5＋活体断言）
+
+### 是否允许进入下一阶段
+
+**G6 是任务书 §13/§16 的最后一个商业化阶段**——收口后按 §16 最终验收清单逐项核对（本节允许进入收尾核查，不再开启 G7 实施阶段）。
 
 ---
 
