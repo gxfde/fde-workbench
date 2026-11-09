@@ -1,17 +1,17 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／**G4 在途（`feat/commercial-g4-opportunity-attribution`，基线 `9497b2c`，合并前已 rebase 融合 AI 原生化 N2 迁移 `c4f7a2d9e1b6` 与 #240）**
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／**G4 合并 `ffed2e2`（#241，基线 `9497b2c`，合并前两轮 rebase 融合上游 #240/#239/#235/#242 四笔）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G4 商机归属与渠道保护（T-09，任务书 §8）— 实施完成，PR→CI→合并→部署闭环进行中**
+- 当前阶段：**G4 商机归属与渠道保护（T-09，任务书 §8）— 已完成（闭环收口）；下一阶段 G5 区域合作商能力建设（T-12a，任务书 §9）**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
 
 ---
 
-## G4：商机归属与渠道保护（T-09）— 实施完成（闭环收口中）
+## G4：商机归属与渠道保护（T-09）— 已完成
 
 - 分支：`feat/commercial-g4-opportunity-attribution`（工作树 `D:\test\fde-wt-g1`）
 - 基线 SHA：fork/main `9497b2c`（开工时）；合并前**两轮 rebase** 融合上游三笔——#240（AI 原生化 N2，迁移 `c4f7a2d9e1b6` 53→54 rev，+10 测试）、#239（V3.2 G9b 真机两闸轮，+4 测试）、#235（V31-P1b 大纪要分段抽取，+52 测试，零迁移零路由）⇒ 本轮迁移改挂 `c4f7a2d9e1b6` 之后，**55 rev 单链单头 `e7b2c4d9f1a3`**
-- 状态：**implemented**（本节终值——PR 编号／CI run／部署活体断言——在合并收口 PR 回填）
+- 状态：**completed**（PR #241 squash 合并 `ffed2e2`；PR run **42581664828** 四绿 ＋ **main run 42583246694 四绿**；**部署活体绿**——三镜像 rebuild 自本工作树 ＋ `alembic upgrade head` `c4f7a2d9e1b6`→`e7b2c4d9f1a3`，收口 PR：`feat/commercial-g4-closeout`）
 
 ### 目标
 
@@ -61,7 +61,7 @@
 
 - `pytest tests/test_commercial_opportunity_attribution.py -q` → **23 passed**。
 - 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2543 收集 = 2537 passed + 6 skipped，0 failed**（EXIT=0 / 8m39s；G3 轮基线 2454 收集 + AI 原生化 N2 +10 + #239 +4 + #235 +52 + 本轮 +23 ＝ 2543）。
-- **PR CI server-tests 实测 PR 在途——合并后由收口 PR 回填（终值以本 PR CI server-tests 实测为准）**（**终值以本 PR CI server-tests 实测为准**）。
+- **PR CI server-tests 实测**（run 42581664828）：**2537 passed + 6 skipped**（522.82s）；**main run 收口**（合并态 `ffed2e2`，run 42583246694）：**2537 passed + 6 skipped**（568.87s）——与本地 CI 同命令实测逐位一致；desktop 82 文件 **966 passed**（见口径行 vitest 校正注记）。
 - `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（实施期补一处测试断言形状〔re.search Optional 收窄〕后归零，无新增）。
 - `ruff check`（全部改动文件）→ All checks passed。
 - **变异五连全转红→还原→绿**（字节级备份还原，sha256 终验一致）：M1 归属不自动易主失效（企业注册派生事实恒 False→反例用例红）／M2 保护期未配置也封堵（守卫放宽为任意非 revoked 态＋绕过到期派生→反例用例红）／M3 规则未配置仍放行（`require_rule_configured` 直通→规则闸用例红）／M4 争议不冻结（`_reject_when_disputed` 摘除→争议冻结用例红）／M5 归属可静默改写（`attribution_already_confirmed` 摘除→防改写用例红）。
@@ -109,11 +109,13 @@
 
 ### 部署活体验证（合并后）
 
-（收口 PR 回填：三镜像 rebuild 自本工作树＋alembic upgrade head → e7b2c4d9f1a3＋活体断言）
+- 三镜像 rebuild 自本工作树干净树＋`docker compose up -d --force-recreate`；容器内 `alembic upgrade head` 实跑 `c4f7a2d9e1b6 -> e7b2c4d9f1a3`，`alembic current` ＝ **`e7b2c4d9f1a3 (head)`**。
+- **活体断言三项全绿**：①容器内 `create_app` url_map **428** 条（commercial **43**／admin commercial **27**／opportunity 14＋12，蓝图 **49**）与本轮口径一致；②容器 `alembic current` ＝ 本轮 head `e7b2c4d9f1a3`；③api/worker/scheduler 三容器镜像 ID ＝ 本工作树构建产物（`c7fba822aef1…`／`649da2c7ab3b…`／`113dbf0c0e4a…`，container==image）。
+- 活库断言：G4 两表结构正确（opportunities 34 列/6 CHECK；rules 11 列/5 CHECK），五规则槽全 **unset**，`commercial_opportunities` **0 行**，`delivery_settlements` 仍 20 列（零既有表改列）；`/api/v1/health/ready` 200 ＋ `/live` 200，四容器 healthy。
 
 ### 是否允许进入下一阶段
 
-**允许进入 G5（区域合作商能力建设 T-12a，**不含 T-12b**，任务书 §9）**——前置回填：PR 四绿＋合并态 main run 四绿＋部署活体绿。
+**允许进入 G5（区域合作商能力建设 T-12a，**不含 T-12b**，任务书 §9）**——前置已全部满足：PR #241 四绿（run 42581664828）＋合并态 main run 四绿（run 42583246694）＋部署活体绿（见上节）。
 T-12b（对外收费签约）本期不做：售卖能力默认关闭、开关绑定合规条件清单（《商业特许经营管理条例》七/八/十二/二十一条＋披露办法第四条四项）；「两直营店经营满 1 年」为客观时间门槛不可提前。
 
 ---
