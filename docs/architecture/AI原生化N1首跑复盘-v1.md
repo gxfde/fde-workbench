@@ -59,3 +59,19 @@
 | D-1 前 | v1.3 | 闸未开（业务闸未拍板） |
 | D-1 后 | v1.4 | 首跑前置未清（③票据/G-07 生产者/抽取腿复测/开关说明行） |
 | **首跑后（本轮，v1.5）** | v1.5 | **首跑已执行——机械面全链通过；业务面待供应商配额恢复后重跑** |
+
+---
+
+## 7. 重跑二补记（2026-11-09 晚，配额恢复后；台账 v1.6）
+
+**一句话**：蔡工拍板「确认重跑」后重跑执行（幂等键 `n1-somwyn-host-002`）——**配额面解除**（zcode exit 0 真实执行 221.8s／`token_cost=769055` 真实计费），**业务面推进到 C-1 产物校验闸后被结构性死锁拦下**：somwyn 无 confirmed 引导分析 ⇒ `problem_refs=∅`（known_refs 空集），任务书令「source_refs 只取已确认问题值、不要自创」⇒ 智能体如实写空数组 ⇒ C-1 `missing_source_refs` 把全部 5 产物判死 ⇒ run failed＋`ai_output_intercepted`＋422。**智能体行为完全正确；这是验证层的语义缺口**（「暂无已确认业务问题」＝售前发现期合法态，产出的 discovery-questions 本就是用来确认问题的）。G-07「仅 completed 登记」语义二次活体验证（failed run 零候选）。
+
+| 项 | 重跑二值 |
+| --- | --- |
+| run_id | `a5773e26-6ee3-4637-b2dc-2f89016035c6` |
+| 终态 | `failed`（degraded_reason=`artifact_validation_failed`），`exit_code=0`，`duration_ms=221780`，`token_cost=769055`（真实计费） |
+| authorization_id | `9f609637135e8b2d…de02681`（新指纹，前置③票据二次行使） |
+| 产物 | 5 行落库（presales-brief／assumptions／discovery-questions／README＝doc，manifest.json＝config；sha256+size+mime 逐行正确＝#247 MIME 修复活体验证），`reviewed=False` 全部 |
+| evidence_candidates | 0（仅 completed 登记，failed 语义二次成立） |
+
+**修复（随轮 PR）**：`_finalize` C-1 校验改 `if not artifact.source_refs and known_refs`（known_refs=∅ 时空引用放行；自创引用仍拦；有确认问题时追溯义务零松动）＋任务书模板补空态指引（「暂无已确认业务问题时 source_refs 写空数组 []」）；NEW 回归钉 1 例＋既有 `extra.bin` 断言按新语义收窄；`service.py` 1833→1835（预算 1836 内）。**G-01/G-07 维持 OPEN**——判据「completed run→候选登记→人工接受→至 G9」待**重跑三**（决策＝蔡工，H4 不代发起）；重跑二 5 产物与 run 行留痕保留（`pilot.reviewer` 可随时人工盘点留痕，不依赖重跑三）。

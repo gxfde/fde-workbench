@@ -2,6 +2,13 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — AI 原生化 N1 重跑二与 C-1 空引用集死锁修复轮（exit 0 真实执行／验证层语义缺口修复；零迁移零路由零桌面，2026-11-09）
+
+- **起因（重跑二实测，run `a5773e26`／幂等键 `n1-somwyn-host-002`）**：蔡工拍板「确认重跑」后重跑——GLM Token Plan 配额已恢复（起跑前最小直连探针 EXIT=0），**zcode exit 0 真实执行**（221.8s／`token_cost=769055` 真实计费／前置③票据二次行使＝新 `authorization_id` 指纹）＋**5 产物落库**（presales-brief／assumptions／discovery-questions／README 四 doc＋manifest.json config；sha256+size+mime 逐行正确＝#247 MIME 修复活体验证）。**但 5 产物全部被 C-1 拦截**（`ai_output_intercepted`＋422＋run failed/degraded_reason=artifact_validation_failed）：somwyn 无 confirmed 引导分析 ⇒ `problem_refs=∅`（known_refs 空集），任务书又明令「source_refs 只能取已确认业务问题的值、不要自创引用」⇒ 智能体如实写空数组 ⇒ `_finalize` 对空 `source_refs` **无条件**记 `missing_source_refs`——**智能体行为完全正确，这是验证层的结构性死锁**：known_refs=∅ 时任何产物都不可能过闸，而「暂无已确认业务问题」正是售前发现期的合法态（discovery-questions 本就是用来确认问题的）。
+- **修复（最小面，C-1 既有合同不动）**：`agents/service.py::_finalize` 校验改 `if not artifact.source_refs and known_refs`——**known_refs=∅ 时空引用放行**（无可引用项＝追溯义务自然满足，产物照旧 `reviewed=False` 永不自动进终审）；**自创引用仍拦**（空集下任何非空引用落 `unknown_source_refs`，elif 同支覆盖）；有确认问题时的追溯义务零松动（missing/unknown 由既有两用例继续钉死）。`agents/workspace_files.py` 任务书模板补空态指引：「context.md 显示『暂无已确认业务问题』时，source_refs 写空数组 []」（头部 355≤400 字上限；G9 实测教训同族——契约形状不写明，智能体只能猜）。`agents/service.py` 1833→**1835**（预算 1836 内，热点只许拆不许长的钉继续有效）。
+- **测试**：NEW `test_c1_no_confirmed_problems_allows_empty_source_refs` 1 例（不铺 confirmed guidance ⇒ 空引用 201 completed；同态自创引用 422 `unknown_source_refs`）＋既有 `extra.bin` 断言按新语义收窄（`{"invalid_kind", "file_missing"}`——该产物仍被双重拦截，只是不再单列 missing）；定向 **28 passed**（C-1 全文件＋预算钉＋宿主轮询邻域）；**变异验证**（还原旧行为 ⇒ 新钉红 ⇒ 还原 ⇒ 绿，无残留）；pytest 终值以本 PR CI 为准。
+- **随轮注记**：台账 **v1.6**（G-01/G-07 状态第四段演进＋标题号顺带由 v1.4 校正〔v1.5 漏改〕）＋复盘 doc §7（重跑二实录）＋任务书 §13 记录 **#9**＋§14 N1 行同步。**重跑二产物与 run 行留痕保留**（`pilot.reviewer` 人工盘点可随时开始）；**重跑三＝蔡工拍板**（H4 不代发起；G-01/G-07 判据「completed run→候选→人工接受→至 G9」待兑现）。
+
 ## [未发布] — V3.2 G7b 追加轮：运行台执行面过滤接通 + 运行行短编号 + 列表面板样式（蔡工实测反馈；纯桌面零服务端，2026-11-09）
 
 - **起因（蔡工实测）**：在运行台「执行面」下拉选「真实执行面」，下方列表**纹丝不动**，也找不到唯一那条真实执行面运行——该下拉自 G7 起只作为**新运行的默认执行面**（`createSimulationRun` 的默认值），**从未接到列表过滤**（服务端 `list_runs` 只有 scenario/status/split 参数，无 adapter_mode）；且运行台两栏布局与列表类（`.simulation-runs/-run-list/-run-item`）**零 CSS**，19 条运行裸排成一堵墙，真跑那条又是全库最早、排在列表最底部 ⇒ 无从找起。

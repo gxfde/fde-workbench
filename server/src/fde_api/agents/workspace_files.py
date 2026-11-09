@@ -37,7 +37,10 @@ def _write_workspace(workspace: Path, *, context_text: str, project_code: str, c
             "manifest.json 必须是 JSON 数组（不是对象），每条形如 "
             '{"path": "<文件名>", "kind": "doc|code|diff|config", "source_refs": ["…"]}：'
             "path 相对 output/ 目录（不带 output/ 前缀）；source_refs 只能取 "
-            "context.md 已确认业务问题的 source_refs 值，不要自创引用。",
+            "context.md 已确认业务问题的 source_refs 值，不要自创引用；"
+            # N1 重跑二（run a5773e26 实测）：无确认问题态必须明示空数组合法，
+            # 否则智能体依「不要自创引用」写空引用 ⇒ C-1 死锁（服务端已同步放行）。
+            "context.md 显示「暂无已确认业务问题」时，source_refs 写空数组 []。",
             "",
             "",
         )

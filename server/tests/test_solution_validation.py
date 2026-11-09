@@ -117,8 +117,9 @@ def test_c1_unknown_refs_and_invalid_kind_rejected(db_session, d4_client, d4_app
     assert body.status_code == 422
     failures = {entry["path"]: set(entry["reasons"]) for entry in body.json["error"]["details"]["failures"]}
     assert failures["plan.md"] == {"unknown_source_refs"}
-    # extra.bin 声明了但文件没写 → kind/引用/指纹三处都不过
-    assert failures["extra.bin"] == {"invalid_kind", "missing_source_refs", "file_missing"}
+    # extra.bin 声明了但文件没写 → kind/指纹两处不过；本用例未铺 confirmed
+    # guidance（known_refs=∅），空引用不再单列 missing（N1 重跑二语义修正）
+    assert failures["extra.bin"] == {"invalid_kind", "file_missing"}
 
 
 def test_c1_missing_file_rejected(db_session, d4_client, d4_app, d4_settings) -> None:
@@ -208,3 +209,43 @@ def test_v7_handoff_without_solution_skips_checkpoint_and_blocks_outsiders(
     ).json["data"]["id"]
     outsider = api_client(d4_client, db_session, d4_settings, "fde_engineer")
     assert outsider.post(f"/api/v1/agents/runs/{outsider_run}/handoff", json={}).status_code == 403
+
+
+def test_c1_no_confirmed_problems_allows_empty_source_refs(
+    db_session, d4_client, d4_app, d4_settings
+) -> None:
+    """N1 重跑二回归钉（run a5773e26，2026-11-09 实测）：无确认问题
+    （known_refs=∅）是售前发现期合法态——空 source_refs 放行进正常流；
+    自创引用仍拦（known_refs=∅ 下任何非空引用都越界）。有确认问题时的
+    追溯义务不减（missing/unknown 由既有两用例覆盖）。"""
+    leader, project, _solution, agent = _setup(db_session, d4_client, d4_settings, with_solution=False)
+
+    def factory(run_id, workspace):
+        output = Path(workspace) / "output"
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "brief.md").write_text("售前简报（无确认问题态）", encoding="utf-8")
+        return FakeScanner([ArtifactFile(path="brief.md", kind="doc", source_refs=())])
+
+    prime_run(d4_app, scanner_factory=factory)
+    body = leader.post(
+        f"/api/v1/agents/{agent.id}/run",
+        json={"project_id": project.id, "idempotency_key": f"c1e:{uuid4().hex}"},
+    )
+    assert body.status_code == 201, body.json
+    assert body.json["data"]["status"] == "completed"
+    assert body.json["data"]["artifacts"][0]["reviewed"] is False  # 留痕待人工接受
+
+    def ghost_factory(run_id, workspace):
+        output = Path(workspace) / "output"
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "ghost.md").write_text("自创引用草稿", encoding="utf-8")
+        return FakeScanner([ArtifactFile(path="ghost.md", kind="doc", source_refs=("ghost-ref",))])
+
+    prime_run(d4_app, scanner_factory=ghost_factory)
+    ghost = leader.post(
+        f"/api/v1/agents/{agent.id}/run",
+        json={"project_id": project.id, "idempotency_key": f"c1e2:{uuid4().hex}"},
+    )
+    assert ghost.status_code == 422
+    failures = ghost.json["error"]["details"]["failures"]
+    assert failures[0]["reasons"] == ["unknown_source_refs"]

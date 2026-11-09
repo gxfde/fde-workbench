@@ -430,7 +430,9 @@ def _finalize(
             problems: list[str] = []
             if artifact.kind not in ARTIFACT_KINDS:
                 problems.append("invalid_kind")
-            if not artifact.source_refs:
+            # N1 重跑二（run a5773e26 实测，2026-11-09）：known_refs=∅（无确认
+            # 问题）是售前发现期合法态——空引用放行；自创引用仍拦（elif 同支）。
+            if not artifact.source_refs and known_refs:
                 problems.append("missing_source_refs")
             elif not set(artifact.source_refs) <= known_refs:
                 problems.append("unknown_source_refs")
