@@ -2,6 +2,12 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 商业化 §16 最终验收清单核对（收尾核查轮；纯文档零代码零迁移零路由零桌面，2026-11-10）
+
+- **范围**：任务书 §16 十八条验收条款逐项对照 G0–G6 已交付证据勾稽，结论回填 `docs/commercialization/phase-status.md` 新节「§16 最终验收清单核对」——**18/18 全过**（#6 体验上限两档／#16 G0 采纳率与接管频次实测两条款附诚实注记：挂账项均为任务书 §17 外部输入或显式架构边界〔V3.2 simulation 接线、GAP-15 埋点〕，非验收缺口）。**商业化 G1–G6 Goal 循环全部收口**。
+- **关键项现测（不承袭）**：①两保护字段（`fde_profiles.level`／`agent_runs.fallback_level`）按九个商业化 squash 提交逐一 `git diff <sha>^ <sha>` 核验——仅 G1 命中 14 行且全为新增 docstring 文档性引用（ADR-001 三要素纪律），零列定义/语义/既有测试改动；区间其余命中归因上游 #195/#247/goal-d4（非商业化提交）。②商业域 L 字面量唯一落点＝`commercial/ladder.py` `EXTERNAL_LADDER_CODES` 对外换算映射表（G1 交付＝条款允许的唯一入口）。③`COMMERCIAL_ROLES`／`REGISTRATION_ENTRIES`／`FREE_EXCLUSIONS`（七项＝任务书六项＋驻场超集）／`EXPERIENCE_LIMITS`（两档×两资源＋PLACEHOLDER=True）常量现读。④G0 实测报告现读（00-baseline-audit.md §H）：人工接管 0 行、采纳率 insufficient_data＋GAP-15 登记（诚实无样本结论）。
+- 零代码零迁移零路由零桌面 ⇒ 无需 rebuild/alembic/重打包；部署活体维持 G6 收口态。
+
 ## [未发布] — 桌面总览布局分层修复轮（批量接受「没反应」破案 + 排版重叠真根因修复 + 审阅写幂等重发；纯桌面零服务端，2026-11-10）
 
 - **起因（蔡工实测 r28 便携版）**：①「点击批量接受没有反应」——重登后仍不行、单条接受也无反应、Console 仅一行 CSP 提示（非错误）；②「排版并没有改善，还是一样重叠，位置也不对」。

@@ -2,7 +2,7 @@
 
 - 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）／G3 合并 `f65f874`（#234）／G4 合并 `ffed2e2`（#241）／**G5 合并 `28285e5`（#251，基线 `5294a6e`，合并前两度 rebase 融合上游 #246/#247/#250/#249/#252/#254/#253 七笔）／**G6 合并 `4e3e0e0`（#262，基线 `212b5fb`，合并前两度 rebase 融合上游 #258/#259/#260/#261 四笔）**
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G6 企业空间与企业自助交付（T-06/T-08，任务书 §10）— 已完成（闭环收口）；商业化 G1–G6 全阶段闭环，进入 §16 最终验收清单核对**
+- 当前阶段：**§16 最终验收清单核对（收尾核查轮）— 已完成（18/18 全过）；商业化 G1–G6 Goal 循环全部收口**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
 
 ---
@@ -643,3 +643,37 @@ docs/commercialization/
 ### 是否允许进入下一阶段
 
 **G0 已允许 G1 开工**（G1 已完成，见上）。
+
+---
+
+## §16 最终验收清单核对（收尾核查轮）— 已完成
+
+- 分支：`feat/commercial-s16-final-audit`（工作树 `D:\test\fde-wt-g1`）
+- 基线 SHA：fork/main `9e0cd64`（G6 收口态，全阶段闭环后）
+- 状态：**completed**（收尾核查轮＝纯文档零代码零迁移零路由零桌面；18/18 条款勾稽全过）
+- 勾稽方法：逐条款对照 G0–G6 已交付证据（本文件各阶段「验收证据」节＋ADR-001~010＋CI 实测轮次）；**关键项当场现测**——①`fde_profiles.level`／`agent_runs.fallback_level` 两保护字段按九个商业化 squash 提交逐一 `git diff <sha>^ <sha>` 核验并对命中逐条归因；②商业域 L 字面量扫描；③`COMMERCIAL_ROLES`／`REGISTRATION_ENTRIES`／`FREE_EXCLUSIONS`／`EXPERIENCE_LIMITS` 常量现读；④G0 实测报告现读。口径数字引用前现测，不承袭。
+
+| # | 验收条款（§16 原文） | 结论 | 证据锚点 |
+|---|---|---|---|
+| 1 | 四个歧义 ADR 已出，且 `fde_profiles.level`（交付能力等级）与 `agent_runs.fallback_level`（降级链状态）既有测试零改动通过 | ✅ | G0 出具 ADR-001/002/003/006（`decisions/` 十 ADR 在位；ADR-004/007 随 G2、ADR-005 随 G5、ADR-008/009/010 随 G3/G4/G6 成文）。两保护字段九提交逐核：仅 G1（f186342）命中 14 行且**全为新增 docstring 文档性引用**（ADR-001 三要素纪律落新文件），零列定义/语义/既有测试改动；其余区间命中归因上游 #195/#247/goal-d4（非商业化提交）；全量套件三轮 CI 实测通过（终值 2618 passed + 6 skipped） |
+| 2 | 角色字段值域为 R1–R4，代码与迁移不出现以 L 开头的角色枚举值；对外 L 编号仅经映射表转换 | ✅ | `COMMERCIAL_ROLES = ("R1","R2","R3","R4")`（models.py:51，机器闸钉 G1/G6）；商业域 L 字面量唯一落点＝`commercial/ladder.py:38 EXTERNAL_LADDER_CODES`（G1 交付的**对外换算映射表**——正是条款允许的唯一入口，`git log --diff-filter=A` 归属 f186342）；六个商业化迁移零 L 字面量 |
+| 3 | 四类权益字段/表齐备且互不覆盖；无单一「会员等级」字段代表全部权益 | ✅ | ADR-002 四权益独立建模＋ADR-001 正交裁决；G1 两表＋G2 主体/额度两表＋G3 五表＋G4 两表＋G5 四表＋G6 两表＝**145 表**（57 rev 单头 `e8b3f7c2d9a5`）；G1 15 例互不覆盖钉 |
+| 4 | 四类注册入口齐备；企业客户与企业自助用户为同一主体两种状态 | ✅ | `REGISTRATION_ENTRIES`（models.py:1216）键集↔`COMMERCIAL_ROLES`↔G2 体验入口三方机器闸 `test_registration_entries_cover_all_four_identities`；`engagement_state` **派生不落列**（ADR-010 §1-1/§1-4） |
+| 5 | 企业免费额度按主体计，换账号不重置；诊断完成判据＝六项交付物产出并经企业确认 | ✅ | `enterprise_quota_subjects`（PK=subject_key）＋`enterprise_free_quota`（一主体一份，四 CHECK 联锁）；`test_start_binds_account_blocks_other_accounts_and_restart`＋`test_grant_idempotent_per_subject_never_second_row`＋行锁串行钉（G2 M1/M2/M6 红）＋G6 穿透自助路径两钉（M5 红）；`test_completion_requires_exactly_six_true`（M3 红）＋confirm 只认绑定账号本人 |
+| 6 | 六项不免费内容不在免费流程内；模拟体验算力与人工指导上限按两档生效 | ✅（附注记） | `FREE_EXCLUSIONS` 七项闭集（models.py:179——任务书六项＋驻场＝超集）＋闭集拒绝多余键；`EXPERIENCE_LIMITS` 两档×两资源分别计数＋触限 409 反例用例（G2 M4 红）＋`EXPERIENCE_LIMITS_PLACEHOLDER=True` 数值待定诚实标注（models.py:211）。**注记**：V3.2 simulation 域消费接线按 ADR-004 §1-8／ADR-010 §3-2 显式挂账（任务书 §3 并行线边界内，判定原语已在位） |
+| 7 | 实战营／陪跑营均含首年席位；席位不重复收有反例用例 | ✅ | `covers_first_year_fee`（models.py:362）＋实战营/陪跑营含首年席位常量（models.py:55-56）＋billing_service 双路径判定；`test_package_included_seat_is_not_charged_again`（409 `seat_fee_already_included`＋科目行恒 1 行；G3 M1 红） |
+| 8 | 首单扣费在交付完成并验收后触发，且须事先书面选定；无单不欠费 | ✅ | `test_first_order_fee_blocked_before_acceptance`（409 `acceptance_not_passed` 零行；M3 红）＋`test_first_order_fee_blocked_without_election`（409 `deduction_method_not_selected` 零行；M2 红）＋扣费选定＝当事人自证（admin 不得代选）——双闸结构性保证「无单不欠费」 |
+| 9 | 认证独立设项、认证挂模拟考核、陪跑期限与培训周期挂钩（数值待定） | ✅ | `commercial_certification_records` 独立设项＋`commercial_fee_configs` 三配置位迁移播种 unset；`test_certification_without_threshold_stays_pending`（M7 红）＋`test_mentoring_period_structure_is_pending_by_default`（M10 红）＋`test_certification_fee_cannot_be_charged_before_configured`（M9 红）；G3 service 陪跑期限挂钩配置位 |
+| 10 | 培训费／席位费／项目分成分别记账；六项计费名目已定义归属 | ✅ | ADR-003/008 科目层独立（`delivery_settlements` 列集合逐位钉**零加列**）＋`test_three_subject_types_separately_queryable_and_reconcilable`（分桶对账逐位吻合）＋六名目只定义归属（ADR-008）＋`commercial_split_rules` 零行（比例不落数） |
+| 11 | 商机七步链路完整；已确认归属不因企业自行注册而转移；规则数值可配置且未预写默认值 | ✅ | G4 `test_seven_step_chain_completes`＋跳步 409；`test_attribution_not_transferred_when_enterprise_registers_directly`（M1/M2 红）＋企业侧立项无商机行写路径（结构性保证）；五配置位播种 unset＋fail-closed 409 `rule_not_configured`（M3 红）＋转移唯一路径被 `attribution_criteria` 闸（本期无转移路径） |
+| 12 | 区域四阶段可区分；城市服务伙伴按项目结算；「区域代理」标注暂不启用；前两阶段无独家权 | ✅ | G5 四阶段闭集＋注记读面派生（agent.enabled=false＋note）；`test_city_service_per_project_settlement`（一单一结＋重复 409）＋`test_regional_agent_is_not_enterable`（409 无写路径）＋`test_exclusive_territory_rejected_for_first_two_stages`＋DB CHECK（M3/M4/M5 红） |
+| 13 | 区域售卖能力默认关闭，开关条件绑定合规条件清单已签署；本期无任何对外收费签约路径 | ✅ | `regional_sale_gate` 单行播种 closed＋CHECK 结构性排除缺件开门＋`require_sale_gate_open` 唯一闸门（闸关 409）＋**源码扫描钉**（formal_partner 写点唯一且在过闸函数内）＋合规四项「登记≠开启」；T-12b 本期不做（独立轮次） |
+| 14 | 企业空间复用既有权限模型；三档分流人工判定并留痕，无量化阈值硬编码 | ✅ | G6 既有 `add_project_member`/`project_access` **零平行权限表**（元数据机器闸：G6 仅两表且无 permission/acl 命名）；`enterprise_triage_decisions`（tier 闭集复用 G2 权威＋rationale 必填＋**零阈值常量零评分代码**＋载荷无数字哨兵）＋空间读面回看用例（M2 红＝前置闸真实拦截） |
+| 15 | 三档自助分级与「不承诺完全自助」一致 | ✅ | ADR-010 §1-8①：自助面（注册/分流/选择）自助，诊断内容生产维持 L3 形态（AI 草稿→admin 登记六项→企业确认）；任务书 §10「完全自助是长期目标，不第一天承诺」逐字承接 |
+| 16 | 关键流转默认需人工确认且可人工接管（L3 形态）；接管路径留审计事件；G0 已出具 AI 草稿采纳率与接管频次实测 | ✅（附注记） | ADR-007（G2 成文）：admin 门＋密码确认双闸＋自我动作例外＋AI 无直写入口（治理面六轮不进 api_catalog，ENTRIES 94 不变）；人工接管沿 `handoff_run` 既有模式；**G0 实测已出具**（00-baseline-audit.md §H）：人工接管频次 **0 行**/`agent_run_handoff` 0 条、AI 草稿采纳率 **insufficient_data**（无承载事件）——诚实无样本结论＋GAP-15 埋点缺口登记 gap-register（§17 外部输入）；G1–G6 关键流转逐动作 operation_events 留痕（密码不落事件） |
+| 17 | 全部写操作留审计事件；未新增未解释的 skip；全量测试与 lint／typecheck／mypy 通过 | ✅ | 逐动作 operation_events（G1–G6 各轮安全检查节）；skipped 恒 6（G0 基线 2333+6 → G6 2618+6，零新增零未解释）；main run 42663433357 四 job 全绿（desktop/server-tests/secrets-scan/pseudonymization）；mypy 279 基线六轮不变；ruff All checks passed；desktop typecheck/vitest CI 绿 |
+| 18 | 桌面端改动已挂账（便携版重打包 + asar 字节验证），本期不交付 | ✅ | G0–G6 六阶段「前端变化：无」（纯服务端/纯文档）；商业化桌面呈现面挂后续轮（ADR-010 §3-4），无需重打包 |
+
+- 总结论：**18/18 全过**（其中 #6/#16 附诚实注记——挂账项均为任务书 §17 预期内的外部输入或显式架构边界〔V3.2 simulation 接线、GAP-15 埋点〕，非验收缺口）。
+- 收尾核查轮零代码零迁移零路由零桌面：无需 rebuild/alembic/重打包；部署活体维持 G6 收口态（url_map 442／容器内 alembic `e8b3f7c2d9a5` head／三镜像 ID 一致／`/health/ready` 200）。
+- **商业化 G1–G6 Goal 循环至此全部收口**（G0 基线审计与四个歧义 ADR → G1–G6 六个实施阶段 → §16 收尾核查轮）；开放挂账汇总见各阶段「遗留问题」节与 ADR-010 §3。
