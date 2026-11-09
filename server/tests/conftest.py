@@ -459,6 +459,24 @@ def db_session(app) -> Session:
 
     cleanup_models = (
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
+        # 商业化 G3：收入科目层五表。科目行引用派单分账/交付包、报价/收款/合同、
+        # 培训权益与分成配置（**FK RESTRICT**）——必须先于派单簇与 users 清理；
+        # 内部子先父后：ledger（引 split_rules）→ split_rules。
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialRevenueLedger"]
+        ).CommercialRevenueLedger,
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialCertificationRecord"]
+        ).CommercialCertificationRecord,
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialDeductionElection"]
+        ).CommercialDeductionElection,
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialFeeConfig"]
+        ).CommercialFeeConfig,
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialSplitRule"]
+        ).CommercialSplitRule,
         # 派单簇（goal-r2 起）：结算/offer 先于包（FK RESTRICT），包先于
         # project_solutions/projects/quotes；证据链与档案先于 users。
         # goal-r3：package_access 先于包（FK RESTRICT）。

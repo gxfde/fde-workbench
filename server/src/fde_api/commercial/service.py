@@ -164,7 +164,11 @@ def add_training_entitlement(
     note: object = None,
     confirm_password: object = None,
 ) -> dict[str, Any]:
-    """登记培训权益购买行（培训费/认证费/陪跑；有效期可空=待试点数值）。"""
+    """登记培训权益购买行（培训费/认证费/陪跑；有效期可空=待试点数值）。
+
+    陪跑（``mentoring``）未给到期日时，按 G3 的「陪跑期限与培训周期挂钩」
+    配置位推导（任务书 §7：结构先落，数值待定——周期未配置则到期日留空）。
+    """
     _require_admin(actor)
     _confirm_password(session, actor, confirm_password)
     user = _require_user(session, user_id)
@@ -175,11 +179,19 @@ def add_training_entitlement(
         )
     if note is not None and (not isinstance(note, str) or len(note) > 255):
         raise _error("invalid_request", "note 必须是 ≤255 字符字符串或 null。")
+    valid_from_value = _parsemoment(valid_from, "valid_from")
+    valid_until_value = _parsemoment(valid_until, "valid_until")
+    if item_type == "mentoring" and valid_until_value is None:
+        # 陪跑期限与培训周期挂钩（任务书 §7）：周期配置位未设 ⇒ **数值待定**，
+        # 到期日留空（结构先落，数值后填）。延迟导入避免 commercial 环。
+        from fde_api.commercial.ledger_service import resolve_mentoring_valid_until
+
+        valid_until_value = resolve_mentoring_valid_until(session, valid_from_value)
     row = TrainingEntitlement(
         user_id=user_id,
         item_type=item_type,  # type: ignore[arg-type]
-        valid_from=_parsemoment(valid_from, "valid_from"),
-        valid_until=_parsemoment(valid_until, "valid_until"),
+        valid_from=valid_from_value,
+        valid_until=valid_until_value,
         granted_by_user_id=actor.id,
         note=note if isinstance(note, str) else None,
     )

@@ -73,7 +73,10 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # V3.1 P1-1：agent_runs 扩列 +5 / agent_artifacts 扩列 +4（执行面字段，additive）
 # 商业化 G1：commercial_entitlements + training_entitlements 两表（权益四分，additive）
 # 商业化 G2：enterprise_quota_subjects + enterprise_free_quota 两表（免费额度主体认定，additive）
-HEAD_REVISION = "b3e7c9d1a5f2"
+# 商业化 G3：commercial_split_rules + commercial_fee_configs + commercial_deduction_elections
+#            + commercial_certification_records + commercial_revenue_ledger 五表
+#            （收入科目层与订阅席位计费，additive）
+HEAD_REVISION = "d5f9a3c7e1b4"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1110,9 +1113,10 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     known = _known_alembic_revisions(config)
     assert HEAD_REVISION in known
     # 迁移文件全集权威=alembic ScriptDirectory（V3.1 P1-1 e7c4a9d2f6b8 +
-    # 商业化 G1 e9c4a1f7b3d2 + 商业化 G2 b3e7c9d1a5f2 之后 = 52）；
+    # 商业化 G1 e9c4a1f7b3d2 + 商业化 G2 b3e7c9d1a5f2 + 商业化 G3 d5f9a3c7e1b4
+    # 之后 = 53）；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 52
+    assert len(known) == 53
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

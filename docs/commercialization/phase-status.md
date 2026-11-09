@@ -1,13 +1,115 @@
 # 商业化阶段状态（按 Goal 轮次累积）
 
-- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 开工基线 `7c32736`
+- 权威基线：**fork/main**——G0 合并 `28f55fd`（#216）／G1 合并 `f186342`（#217）；G2 合并 `b0fd5fc`（#228）；G3 开工基线 `e06ae8d`
 - 工作树：`D:\test\fde-wt-g1`
-- 当前阶段：**G2 免费额度与三个体验入口（T-07，任务书 §6）**
+- 当前阶段：**G3 订阅、培训与科目结算（T-10/T-11/T-13，任务书 §7）**
 - 阶段纪律：**一个 Goal 只做一个阶段，不跳阶段**；每阶段按任务书 §14 总提示词逐项回报（SHA/分支/阶段、改动文件、迁移、API·权限·目录、前端、测试命令与通过·失败·跳过数、安全·兼容·回滚、验收证据、遗留、下一阶段是否可开）
 
 ---
 
-## G2：免费额度与三个体验入口（T-07）— 当前阶段
+## G3：订阅、培训与科目结算（T-10 / T-11 / T-13）— 当前阶段
+
+- 分支：`feat/commercial-g3-revenue-ledger`（工作树 `D:\test\fde-wt-g1`）
+- 基线 SHA：fork/main `e06ae8d`（开工时）；合并前融合上游 #231／#232／AI 原生化差距评估 v1.1（冲突仅 AGENTS.md 与 CHANGELOG.md，两边全留；融合后结构口径逐位不变）
+- 状态：**in_progress**（实现与自测完成；待 PR CI 四绿 → 合并 → main run 收口 → 部署活体绿——收口证据由本节的后续修订回写）
+
+### 目标
+
+任务书 §7：把席位、培训、认证、陪跑与收入科目分离落库。
+
+### 设计决策及理由（含 ADR 编号）
+
+- **ADR-008**（`decisions/ADR-008-revenue-ledger-and-seat-billing.md`，G3 成文）：收入科目层独立新建（不向 `delivery_settlements` 加列）；三类科目分别记账可分别核对；六名目只定义归属；分成比例只落结构不落数；席位份额复用 `seat_shares_for`；首单扣费闸落**服务层**（验收前不触发／未书面选定不得扣费）；扣费方式＝当事人自证（他人/admin 不得代选定）；认证挂模拟考核且通过线未设即不判定通过；陪跑期限结构先落数值待定；缺省不可用（认证费未配即不可收款）。
+- 承接 **ADR-003** §2.1–§2.5（科目层独立、份额复用、比例不落数、六名目只定义归属、科目层写路径属高风险写）与 **ADR-007**（admin 门＋密码确认双闸、自我动作例外、治理面不进 api_catalog）。
+
+### 修改文件
+
+```text
+新增：
+  docs/commercialization/decisions/ADR-008-revenue-ledger-and-seat-billing.md
+  server/src/fde_api/commercial/ledger_service.py        （NEW：科目层＋费用配置位＋分成结构）
+  server/src/fde_api/commercial/billing_service.py        （NEW：首单扣费闸＋扣费选定＋认证挂考核）
+  server/migrations/versions/d5f9a3c7e1b4_commercial_g3_revenue_ledger.py
+  server/tests/test_commercial_revenue_ledger.py         （NEW：26 例）
+修改：
+  server/src/fde_api/commercial/models.py                （+5 表 + 闭集常量）
+  server/src/fde_api/commercial/routes.py                （+7 读/自证路由）
+  server/src/fde_api/commercial/admin_routes.py          （+7 治理写路由）
+  server/src/fde_api/commercial/service.py               （陪跑期限挂钩 G3 配置位）
+  server/tests/conftest.py                               （清理序：G3 五表先于派单簇与 users）
+  server/tests/test_migrations.py                        （HEAD_REVISION + 全集断言 52→53）
+  docs/audit/v3-{route,database}-inventory.csv + v3-workbench-inventory.json（重生成）
+  docs/architecture/archify-diagrams/architecture/*      （口径数字同步 + preview 重出）
+  AGENTS.md / CHANGELOG.md（本节）
+```
+
+### 数据库迁移
+
+迁移 `d5f9a3c7e1b4`（52→53 rev，additive 五表）：`commercial_split_rules`（分成比例结构：角色 R1–R4 × 项目类型 → `ratio_bp`，**本期零行**）、`commercial_fee_configs`（认证费金额／陪跑期限／认证通过线三个配置位，**迁移播种为 unset**）、`commercial_deduction_elections`（扣费方式书面选定；部分唯一索引＝一人一条 elected）、`commercial_certification_records`（认证挂模拟考核）、`commercial_revenue_ledger`（**收入科目层**）。单链单头，无双头。
+
+### API / 权限 / API Catalog
+
+- 读面（7）：`GET /api/v1/commercial/packages`、`GET /api/v1/commercial/revenue-ledger`、`GET /api/v1/commercial/revenue-ledger/reconciliation`、`GET /api/v1/commercial/revenue-ledger/<entry_id>`、`GET /api/v1/commercial/deduction-election`、`GET /api/v1/commercial/certification-records/<user_id>`。
+- 自证面（1）：`POST /api/v1/commercial/deduction-election`（**只认 actor 本人**，payload 里的 `user_id` 无效——杜绝代选定）。
+- 治理写面（7，admin＋密码确认双闸）：`POST /api/v1/admin/commercial/revenue-ledger`、`POST /api/v1/admin/commercial/first-order-fee`、`POST /api/v1/admin/commercial/fee-configs/<key>`、`GET /api/v1/admin/commercial/fee-configs`、`GET /api/v1/admin/commercial/split-rules`、`POST /api/v1/admin/commercial/split-rules`、`POST /api/v1/admin/commercial/certification-records`。
+- **全部不进 api_catalog**（商业治理面，AI 不可调用）——`api_catalog` ENTRIES **94** 不变。
+
+### 前端变化
+
+无（纯服务端轮，桌面便携版不重打包；商业化桌面呈现面挂后续轮）。
+
+### 测试命令与结果
+
+- `PYTHONPATH=src ./.venv/Scripts/python.exe -m pytest tests/test_commercial_revenue_ledger.py -q` → **26 passed**。
+- 全量 `pytest -q -n 4 --dist loadfile`（**CI 同命令**）→ **2454 收集 = 2448 passed + 6 skipped，0 failed**（EXIT=0，8m16s；G2 轮基线 2402 收集 + 本轮 +26 + 融合上游 #231 的 26 ＝ 2454）——**终值以本 PR CI server-tests 实测为权威**。
+- `python scripts/check-python-types.py` → **OK：baseline 279 occurrences / 104 distinct，current 279**（无新增）。
+- `ruff check`（改动文件）→ All checks passed。
+- **变异十连全转红→还原→绿**（任务书 §12.10）：M1 不重复收判定整体失效／M2 未选定方案仍扣费／M3 验收前仍扣费／M4 项目分成按比例重算（不引用分账）／M5 名目归属校验失效／M6 关联对象必填失效／M7 通过线未设也判通过／M8 书面证据指纹闸失效／M9 认证费缺省可收款／M10 陪跑期限未配置也落默认天数。
+
+### 安全检查
+
+- 高风险写（记账／首单扣费／配置位／分成登记／认证判定）＝admin 门＋`confirm_password` 双闸；逐动作 `operation_events` 留痕（带 request_id，**密码不落事件**）。
+- 书面证据只存 `source_uri` 指针 + `content_hash` sha256 指纹；证据原件不进仓、不进库。
+- 扣费方式选定＝当事人自证（ADR-007 §2.4），**admin 不得代选定**；证据缺指针或指纹非 sha256 一律 400。
+- 未读取无关密钥；`server/.env` 未入库；客户资料零触碰；本轮零生产变更。
+
+### 数据兼容与回滚
+
+- additive 五表，**零既有表改列**（`delivery_settlements` 列集合逐位比对，结构钉）。
+- 回滚＝`alembic downgrade b3e7c9d1a5f2`（子表先行：ledger → certification_records → deduction_elections → fee_configs → split_rules）+ 回滚镜像。
+- 科目层与既有收款台账不双写：金额来源为配置位／关联收款实收额／线下约定金额三者之一。
+
+### 验收证据（任务书 §7 逐条）
+
+| 验收项 | 证据 |
+|---|---|
+| 「套餐含席位不重复收」反例用例（含 L2／L3／L0 三种组合） | `test_package_included_seat_is_not_charged_again[bootcamp_practical/bootcamp_mentorship]`（409 `seat_fee_already_included` ＋ **席位费科目行恒 1 行**）＋ `test_first_order_fee_applies_for_candidate_without_package`（无含席位套餐者扣 3980 且席位激活） |
+| 首单扣费在验收前不触发 | `test_first_order_fee_blocked_before_acceptance`（409 `acceptance_not_passed`，零行）；变异 M3 转红 |
+| 未选定方案时不得扣费 | `test_first_order_fee_blocked_without_election`（409 `deduction_method_not_selected`，零行）；变异 M2 转红 |
+| 三类科目分别可查、可对账 | `test_three_subject_types_separately_queryable_and_reconcilable`（按 `subject_type` 各查各的＋对账分桶金额逐位吻合） |
+| 新增服务端逻辑有测试 | NEW `test_commercial_revenue_ledger.py` 26 例；变异十连全转红→还原转绿 |
+| 新增路由有权限测试 | `test_ledger_read_scope_and_permissions`（本人／admin／他人 403／未认证 401）＋ `test_governance_writes_require_admin_and_password`（非 admin 403／缺密码 400／错密码 403） |
+| 席位份额复用 `seat_shares_for` | `test_project_share_references_settlement_without_recompute`（快照 ≡ `seat_shares_for`；金额 ≡ 分账 `delivery_amount`；不一致金额 409）；变异 M4 转红 |
+| 不在 `delivery_settlements` 加列 | `test_delivery_settlements_keeps_its_original_columns`（列集合逐位比对） |
+| 认证费金额本期不设→缺省不可收款 | `test_certification_fee_cannot_be_charged_before_configured`（409 `fee_not_configured`）；变异 M9 转红 |
+| 认证挂模拟考核、通过线本期不设 | `test_certification_without_threshold_stays_pending`（`pending_threshold`、认证状态不变）＋ `test_certification_after_threshold_configured`；变异 M7 转红 |
+| 陪跑期限结构先落、数值待定 | `test_mentoring_period_structure_is_pending_by_default`；变异 M10 转红 |
+
+### 遗留问题
+
+1. 认证费金额、陪跑周期、认证通过线、分成比例**仍待业务拍板**（任务书 §17 数值类）——配置位与结构已就位，填实数即可，无需改结构。
+2. 方案 B（年度分期）的周期与算式未实现（fail-closed 拒绝），随数值拍板一并落地。
+3. 商机归属与渠道保护本体 → 归 G4。
+4. GAP-15（AI 草稿采纳率埋点）仍开放——ADR-007 §2.5 的复审触发器依赖它。
+
+### 是否允许进入下一阶段
+
+**待定**——须先完成 PR 四绿 → 合并 → main run 收口 → 部署活体绿（任务书 §14 收口条件）。
+ADR-005（区域商业化闸）仍归 G5，不预支。
+
+---
+
+## G2：免费额度与三个体验入口（T-07）— 已完成
 
 - 分支：`feat/commercial-g2-free-quota`（工作树 `D:\test\fde-wt-g1`）
 - 基线 SHA：fork/main `7c32736`（开工时）→ 合并后 fork/main `b0fd5fc`

@@ -13,6 +13,19 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
+from fde_api.commercial.billing_service import (
+    charge_first_order_seat_fee,
+    record_certification_evaluation,
+)
+from fde_api.commercial.ledger_service import (
+    configure_fee_config,
+    list_fee_configs,
+    list_split_rules,
+    record_revenue_entry,
+    register_split_rule,
+    serialize_fee_config,
+    serialize_split_rule,
+)
 from fde_api.commercial.quota_service import complete_diagnosis, grant_or_get_quota
 from fde_api.commercial.service import (
     CommercialServiceError,
@@ -176,6 +189,142 @@ def complete_quota_route(subject_key: str):
             actor=g.current_user,
             subject_key_raw=subject_key,
             deliverables=payload.get("deliverables"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+# ── 商业化 G3：收入科目层与订阅席位计费（治理写：admin + 密码确认，ADR-007）──
+
+
+@admin_commercial_blueprint.get("/fee-configs")
+@require_auth
+def list_fee_configs_route():
+    """费用/周期配置位读面（admin）——本期全部 unset（缺省不可用）。"""
+    with db.session() as session:
+        rows = list_fee_configs(session)
+        return jsonify(
+            {
+                "data": {"fee_configs": [serialize_fee_config(row) for row in rows]},
+                "error": None,
+            }
+        )
+
+
+@admin_commercial_blueprint.post("/fee-configs/<key>")
+@require_auth
+def configure_fee_config_route(key: str):
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = configure_fee_config(
+            session,
+            actor=g.current_user,
+            key=key,
+            value=payload.get("value"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.get("/split-rules")
+@require_auth
+def list_split_rules_route():
+    """分成比例配置结构读面（admin）——本期零行（比例不定数）。"""
+    with db.session() as session:
+        rows = list_split_rules(session)
+        return jsonify(
+            {
+                "data": {"split_rules": [serialize_split_rule(row) for row in rows]},
+                "error": None,
+            }
+        )
+
+
+@admin_commercial_blueprint.post("/split-rules")
+@require_auth
+def register_split_rule_route():
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = register_split_rule(
+            session,
+            actor=g.current_user,
+            role_code=payload.get("role_code"),
+            project_type=payload.get("project_type"),
+            ratio_bp=payload.get("ratio_bp"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/revenue-ledger")
+@require_auth
+def record_revenue_route():
+    """记一笔收入科目（高风险写：admin + 密码确认）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_revenue_entry(
+            session,
+            actor=g.current_user,
+            subject_type=payload.get("subject_type"),
+            line_item=payload.get("line_item"),
+            amount=payload.get("amount"),
+            fee_key=payload.get("fee_key"),
+            subject_user_id=payload.get("subject_user_id"),
+            payee_user_id=payload.get("payee_user_id"),
+            quote_id=payload.get("quote_id"),
+            payment_id=payload.get("payment_id"),
+            contract_id=payload.get("contract_id"),
+            delivery_settlement_id=payload.get("delivery_settlement_id"),
+            delivery_package_id=payload.get("delivery_package_id"),
+            training_entitlement_id=payload.get("training_entitlement_id"),
+            package_code=payload.get("package_code"),
+            seat_source=payload.get("seat_source"),
+            role_code=payload.get("role_code"),
+            project_type=payload.get("project_type"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/first-order-fee")
+@require_auth
+def charge_first_order_fee_route():
+    """首单扣费闸（高风险写：admin + 密码确认）。
+
+    闸门在服务层：验收前不触发、未书面选定扣费方式不得扣费、已购含席位套餐
+    不重复收（任务书 §7）。
+    """
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = charge_first_order_seat_fee(
+            session,
+            actor=g.current_user,
+            user_id=payload.get("user_id"),
+            package_id=payload.get("package_id"),
+            confirm_password=payload.get("confirm_password"),
+        )
+        return jsonify({"data": data, "error": None})
+
+
+@admin_commercial_blueprint.post("/certification-records")
+@require_auth
+def record_certification_route():
+    """挂模拟考核结果为认证依据（高风险写：admin + 密码确认）。"""
+    payload = _json_payload()
+    with db.session() as session, session.begin():
+        data = record_certification_evaluation(
+            session,
+            actor=g.current_user,
+            user_id=payload.get("user_id"),
+            simulation_evaluation_id=payload.get("simulation_evaluation_id"),
+            source_uri=payload.get("source_uri"),
+            content_hash=payload.get("content_hash"),
             confirm_password=payload.get("confirm_password"),
         )
         return jsonify({"data": data, "error": None})
