@@ -126,7 +126,7 @@ function createdProject(): ProjectDto {
     id: "created-project",
     project_code: "XH-POV-001",
     name: "星河 PoV",
-    enterprise_code: "客户星·质检·深圳",
+    enterprise_code: "客户星·医疗器械",
     sop_phase: "S3",
     business_line: "FDE",
     openfde_engagement: null,
@@ -186,8 +186,9 @@ async function completeBasics(user: ReturnType<typeof userEvent.setup>, mode = "
   await screen.findByRole("heading", { name: "新建项目" })
   await user.click(screen.getByRole("button", { name: new RegExp(mode) }))
   await user.type(screen.getByLabelText("项目名称"), "星河 PoV")
-  // P1 代号化：客户代号必填（客户A·行业·城市），实名三件套不进本系统
-  await user.type(screen.getByLabelText("客户代号"), "客户星·质检·深圳")
+  // r31 降摩擦：客户名称手填 + 所属行业下拉，客户代号自动拼装（客户星·质检）
+  await user.type(screen.getByLabelText("客户名称"), "客户星")
+  await user.selectOptions(screen.getByLabelText("所属行业"), "医疗器械")
   await user.type(screen.getByLabelText("项目编号"), "XH-POV-001")
   await user.type(screen.getByLabelText("项目背景"), "验证质检场景")
   await user.type(screen.getByLabelText("备注"), "周五例会")
@@ -253,7 +254,7 @@ describe("四步项目创建向导", () => {
     await user.click(screen.getByRole("button", { name: "下一步" }))
 
     const review = await screen.findByRole("region", { name: "创建摘要" })
-    expect(within(review).getByText("客户星·质检·深圳")).toBeVisible()
+    expect(within(review).getByText("客户星·医疗器械")).toBeVisible()
     expect(within(review).getByText("通用企业 AI 落地模板 v2")).toBeVisible()
     expect(within(review).getByText("项目负责人王工")).toBeVisible()
     expect(within(review).getByText("预诊断、PoV")).toBeVisible()
@@ -266,7 +267,7 @@ describe("四步项目创建向导", () => {
       method: "POST",
       body: {
         name: "星河 PoV",
-        enterprise_code: "客户星·质检·深圳",
+        enterprise_code: "客户星·医疗器械",
         openfde_engagement: null,
         fdeops_workspace: null,
         background: "验证质检场景",
@@ -291,7 +292,7 @@ describe("四步项目创建向导", () => {
     await screen.findByRole("heading", { name: "新建项目" })
     await user.click(screen.getByRole("button", { name: /从模板新建/ }))
     await user.click(screen.getByRole("button", { name: "下一步" }))
-    expect(await screen.findByRole("alert")).toHaveTextContent("请填写项目名称、客户代号和计划开始日期")
+    expect(await screen.findByRole("alert")).toHaveTextContent("请填写项目名称、客户名称和计划开始日期")
     expect(screen.getByRole("heading", { name: "1. 基础信息" })).toBeVisible()
   })
 

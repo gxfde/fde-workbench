@@ -147,8 +147,8 @@ export function NewProjectPage() {
     setStepError("")
     setSubmitError("")
     if (step === 1) {
-      if (!basics.name.trim() || !basics.enterpriseCode.trim() || !basics.plannedStartDate) {
-        setStepError("请填写项目名称、客户代号和计划开始日期。")
+      if (!basics.name.trim() || !basics.clientName.trim() || !basics.plannedStartDate) {
+        setStepError("请填写项目名称、客户名称和计划开始日期。")
         return
       }
       if (basics.plannedEndDate && basics.plannedEndDate < basics.plannedStartDate) {

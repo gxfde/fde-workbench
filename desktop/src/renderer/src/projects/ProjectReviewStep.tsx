@@ -20,7 +20,9 @@ export function ProjectReviewStep({
       <p className="supporting-copy">创建后将按模板快照原子生成首期模块、任务与排期。</p>
       <div className="review-grid" role="region" aria-label="创建摘要">
         <ReviewItem label="项目" value={basics.name} />
-        <ReviewItem label="客户代号" value={basics.enterpriseCode} />
+        <ReviewItem label="客户名称" value={basics.clientName} />
+        <ReviewItem label="所属行业" value={basics.enterpriseIndustry || "未选择"} />
+        <ReviewItem label="客户代号（自动生成）" value={basics.enterpriseCode} />
         <ReviewItem label="模板版本" value={`${template.template_name} v${template.version_number}`} />
         <ReviewItem label="负责人" value={leader.display_name} />
         <ReviewItem label="首期模块" value={modules.map((module) => module.name).join("、")} wide />

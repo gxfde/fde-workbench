@@ -966,3 +966,102 @@ def test_project_dto_serialization_failure_rolls_back_the_complete_project_tree(
         Project,
     ):
         assert db_session.scalar(select(func.count()).select_from(model)) == 0
+
+
+# ---------------------------------------------------------------------------
+# r31 对外试用缺陷修复：可选字段 null 归一 + 企业代号放宽（OWNER 降摩擦裁决）
+# ---------------------------------------------------------------------------
+
+
+def test_create_project_accepts_null_optional_text_fields(
+    admin_client, published_template, leader_client, db_session
+):
+    """Web 前端硬编码发 JSON null：openfde/fdeops 的 null 必须归一为空，不得 400。"""
+    seed_workbench(db_session)
+    db_session.commit()
+    response = admin_client.post(
+        "/api/v1/projects",
+        json=project_payload(
+            published_template,
+            leader_client.user,
+            openfde_engagement=None,
+            fdeops_workspace=None,
+        ),
+    )
+    assert response.status_code == 201, response.get_data(as_text=True)
+    data = response.json["data"]
+    assert data["openfde_engagement"] is None
+    assert data["fdeops_workspace"] is None
+
+
+def test_create_project_accepts_two_segment_enterprise_code(
+    admin_client, published_template, leader_client, db_session
+):
+    """r31 降摩擦：下拉拼装的「客户名·行业」两段式必须可建项目。"""
+    seed_workbench(db_session)
+    db_session.commit()
+    response = admin_client.post(
+        "/api/v1/projects",
+        json=project_payload(
+            published_template,
+            leader_client.user,
+            enterprise_code="星河制造·制造",
+        ),
+    )
+    assert response.status_code == 201, response.get_data(as_text=True)
+    assert response.json["data"]["enterprise_code"] == "星河制造·制造"
+
+
+def test_create_project_accepts_plain_enterprise_code_without_dot(
+    admin_client, published_template, leader_client, db_session
+):
+    """r31 降摩擦：不带「·」的纯客户名也必须可建项目。"""
+    seed_workbench(db_session)
+    db_session.commit()
+    response = admin_client.post(
+        "/api/v1/projects",
+        json=project_payload(
+            published_template,
+            leader_client.user,
+            enterprise_code="星河制造",
+        ),
+    )
+    assert response.status_code == 201, response.get_data(as_text=True)
+    assert response.json["data"]["enterprise_code"] == "星河制造"
+
+
+def test_create_project_still_rejects_malformed_dot_counts(
+    admin_client, published_template, leader_client, db_session
+):
+    """≥3 枚「·」或空段仍拒绝（结构明显异常）；单/双「·」两段三段式均合法。"""
+    seed_workbench(db_session)
+    db_session.commit()
+    for bad in ("星河制造·制造·深圳·extra", "·abc", "abc·", "a··b"):
+        response = admin_client.post(
+            "/api/v1/projects",
+            json=project_payload(
+                published_template,
+                leader_client.user,
+                enterprise_code=bad,
+            ),
+        )
+        assert_error(response, 400, "invalid_request")
+    db_session.rollback()
+
+
+def test_create_project_rejects_blank_enterprise_code(
+    admin_client, published_template, leader_client, db_session
+):
+    """完全空白仍拒绝（必填防线不随放宽消失）。"""
+    seed_workbench(db_session)
+    db_session.commit()
+    response = admin_client.post(
+        "/api/v1/projects",
+        json=project_payload(
+            published_template,
+            leader_client.user,
+            enterprise_code="   ",
+        ),
+    )
+    assert_error(response, 400, "invalid_request")
+    db_session.rollback()

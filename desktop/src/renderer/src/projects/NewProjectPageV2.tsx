@@ -106,7 +106,7 @@ export function NewProjectPageV2() {
   function next() {
     setError("")
     if (!mode) return
-    if (step === 1 && (!basics.name.trim() || !basics.enterpriseCode.trim() || !basics.plannedStartDate)) { setError("请填写项目名称、客户代号和计划开始日期。"); return }
+    if (step === 1 && (!basics.name.trim() || !basics.clientName.trim() || !basics.plannedStartDate)) { setError("请填写项目名称、客户名称和计划开始日期。"); return }
     if (step === 1 && basics.plannedEndDate && basics.plannedEndDate < basics.plannedStartDate) { setError("计划结束日期不能早于开始日期。"); return }
     if (step === 2 && (loading || resourceError || !leader)) { setError("请选择有效的项目负责人，并等待数据加载完成。"); return }
     if (step === 3 && !selectedKeys.length) { setError("请至少选择一个首期模块。"); return }
