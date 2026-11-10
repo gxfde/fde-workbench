@@ -1152,9 +1152,7 @@ def _normalize_create_input(input: Mapping[str, Any]) -> dict[str, Any]:
         values = {
             "name": _required_text(input.get("name"), maximum=160),
             "enterprise_code": _enterprise_code(input.get("enterprise_code")),
-            # r31（对外试用缺陷①）：前端硬编码发 JSON null（空值即 null），
-            # _optional_text 的 isinstance(str) 会直接 ValueError ⇒ 400。
-            # `or ""` 把 null/缺省/空串统一归一为空串，再 or None 落库为 NULL。
+            # r31：前端硬编码发 JSON null ⇒ isinstance(str) 检查直接 400 ⇒ `or ""` 归一（缺陷①）。
             "openfde_engagement": (
                 _optional_text(input.get("openfde_engagement") or "", 100) or None
             ),
@@ -1201,17 +1199,10 @@ _GATE_KEY_PATTERN = r"G[1-9]"
 
 
 def _enterprise_code(value: object) -> str:
+    # 代号规则（设计 §3.1 v0.3.2）。r31 降摩擦（OWNER 裁决）：三段式强制是试用
+    # 硬摩擦 ⇒ 0/1 枚「·」均可；≥3 枚与空段仍拒；派单 client_city 短段兼容。
     code = _required_text(value, maximum=80)
-    # 代号规则（设计 §3.1 v0.3.2；r31 放宽）：立项时录入 + 普通索引
-    # （goal-r2 起放宽原全局唯一约束：派单 §3.3 复购判据要求同企业 ≥2 项目
-    # 可表达；代号纪律不变），格式「客户A·行业·城市」——三段、两枚「·」。
-    # r31（对外试用降摩擦，OWNER 裁决）：三段式强制对试用客户是硬摩擦，
-    # 放宽为——零或一枚「·」（纯客户名 / 下拉拼装的「客户名·行业」两段式）
-    # 均接受；≥3 枚仍拒（结构明显异常）。空段（首尾/连续「·」）也拒。
-    # 派单线 client_city 段取 split 后不足三段时为空串，行为兼容（access.py:153）。
-    if code.count("·") >= 3:
-        raise ValueError
-    if "·" in code and (code.startswith("·") or code.endswith("·") or "··" in code):
+    if code.count("·") >= 3 or (code.count("·") and (code[0] == "·" or code[-1] == "·" or "··" in code)):
         raise ValueError
     return code
 
