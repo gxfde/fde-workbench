@@ -291,6 +291,11 @@ class MockOntologyAdapter:
         cs = self._change_sets.get(change_set_id)
         if cs is None:
             return {"code": "not_found", "message": "change set not found", "_status": 404}
+        # 与 runtime 同契约：publish 仅接受 approved 状态（否则 409 base_conflict）
+        if cs["status"] != "approved":
+            raise OntologyConflict(
+                {"code": "base_conflict", "message": f"publish requires approved (now={cs['status']})"}
+            )
         ont_id = cs["ontology_id"]
         ver_id = f"ver-{uuid.uuid4().hex[:12]}"
         snapshot = {"version": version, "items": cs["proposed_json"]}
@@ -440,21 +445,21 @@ class MockOntologyAdapter:
         actor_id: str,
         org_id: str,
         project_id: str,
-        ontology_id: str,
         pinned_version_id: str,
-        object_type_key: str,
-        filter_expr: dict[str, Any] | None = None,
+        object_type_id: str,
+        filters: dict[str, Any] | None = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
         self._maybe_fault()
-        if (ontology_id, pinned_version_id) not in self._versions:
+        if (SEED_ONTOLOGY_ID, pinned_version_id) not in self._versions:
             return {"code": "not_found", "message": "version not found", "_status": 404}
         rows = [
             {
                 "object_ref_id": _ref_id(
-                    org_id, ontology_id, pinned_version_id, object_type_key, "BATCH-202611-01"
+                    org_id, SEED_ONTOLOGY_ID, pinned_version_id, object_type_id, "BATCH-202611-01"
                 ),
-                "object_type_key": object_type_key,
+                "object_type_id": object_type_id,
                 "pinned_version_id": pinned_version_id,
                 "display": "BATCH-202611-01",
                 "properties": {
@@ -464,9 +469,9 @@ class MockOntologyAdapter:
             },
             {
                 "object_ref_id": _ref_id(
-                    org_id, ontology_id, pinned_version_id, object_type_key, "BATCH-202611-02"
+                    org_id, SEED_ONTOLOGY_ID, pinned_version_id, object_type_id, "BATCH-202611-02"
                 ),
-                "object_type_key": object_type_key,
+                "object_type_id": object_type_id,
                 "pinned_version_id": pinned_version_id,
                 "display": "BATCH-202611-02",
                 "properties": {
@@ -476,10 +481,9 @@ class MockOntologyAdapter:
             },
         ]
         return {
-            "ontology_id": ontology_id,
             "pinned_version_id": pinned_version_id,
-            "object_type_key": object_type_key,
-            "items": rows[: max(1, limit)],
+            "object_type_id": object_type_id,
+            "items": rows[offset : offset + max(1, limit)],
             "_status": 200,
         }
 
@@ -489,27 +493,26 @@ class MockOntologyAdapter:
         actor_id: str,
         org_id: str,
         project_id: str,
-        ontology_id: str,
         pinned_version_id: str,
         object_ref_id: str,
         relation_key: str,
         limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
         self._maybe_fault()
-        if (ontology_id, pinned_version_id) not in self._versions:
+        if (SEED_ONTOLOGY_ID, pinned_version_id) not in self._versions:
             return {"code": "not_found", "message": "version not found", "_status": 404}
         insp_ref = _ref_id(
-            org_id, ontology_id, pinned_version_id, "inspection", "INSP-202611-001"
+            org_id, SEED_ONTOLOGY_ID, pinned_version_id, "inspection", "INSP-202611-001"
         )
         return {
-            "ontology_id": ontology_id,
             "pinned_version_id": pinned_version_id,
             "source_object_ref_id": object_ref_id,
             "relation_key": relation_key,
             "items": [
                 {
                     "object_ref_id": insp_ref,
-                    "object_type_key": "inspection",
+                    "object_type_id": "inspection",
                     "pinned_version_id": pinned_version_id,
                     "display": "INSP-202611-001",
                     "properties": {
@@ -518,6 +521,6 @@ class MockOntologyAdapter:
                         "result": "PASS",
                     },
                 }
-            ][: max(1, limit)],
+            ][offset : offset + max(1, limit)],
             "_status": 200,
         }

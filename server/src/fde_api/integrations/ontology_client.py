@@ -300,21 +300,22 @@ class OntologyClient:
         actor_id: str,
         org_id: str,
         project_id: str,
-        ontology_id: str,
         pinned_version_id: str,
-        object_type_key: str,
-        filter_expr: dict[str, Any] | None = None,
+        object_type_id: str,
+        filters: dict[str, Any] | None = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        """S-13 版本固定对象引用查询（只返脱敏属性与 ObjectRef，不落库源明细）。"""
+        """S-13 版本固定对象引用查询（对齐 runtime QueryObjectsInput：object_type_id
+        + filters AST，extra=forbid，不送 ontology_id/别名键）。"""
         body: dict[str, Any] = {
-            "ontology_id": ontology_id,
+            "object_type_id": object_type_id,
             "pinned_version_id": pinned_version_id,
-            "object_type_key": object_type_key,
             "limit": limit,
+            "offset": offset,
         }
-        if filter_expr is not None:
-            body["filter"] = filter_expr
+        if filters is not None:
+            body["filters"] = filters
         return self._request(
             "POST",
             "/api/v1/query/objects",
@@ -330,13 +331,14 @@ class OntologyClient:
         actor_id: str,
         org_id: str,
         project_id: str,
-        ontology_id: str,
         pinned_version_id: str,
         object_ref_id: str,
         relation_key: str,
         limit: int = 50,
+        offset: int = 0,
     ) -> dict[str, Any]:
-        """S-13 版本固定一跳关系查询（基于 ObjectRef 游走，禁止任意 SQL）。"""
+        """S-13 版本固定一跳关系查询（对齐 runtime QueryRelatedInput：
+        object_ref_id + relation_key + pinned_version_id，禁任意 SQL）。"""
         return self._request(
             "POST",
             "/api/v1/query/related",
@@ -344,11 +346,11 @@ class OntologyClient:
             org_id=org_id,
             project_id=project_id,
             json_body={
-                "ontology_id": ontology_id,
-                "pinned_version_id": pinned_version_id,
                 "object_ref_id": object_ref_id,
                 "relation_key": relation_key,
+                "pinned_version_id": pinned_version_id,
                 "limit": limit,
+                "offset": offset,
             },
         )
 

@@ -172,11 +172,11 @@ class _FakeHttpBackend:
                 actor_id="u1",
                 org_id="org-1",
                 project_id="proj-1",
-                ontology_id=str(body.get("ontology_id", "")),
                 pinned_version_id=str(body.get("pinned_version_id", "")),
-                object_type_key=str(body.get("object_type_key", "")),
-                filter_expr=body.get("filter"),
+                object_type_id=str(body.get("object_type_id", "")),
+                filters=body.get("filters"),
                 limit=int(body.get("limit", 50)),
+                offset=int(body.get("offset", 0)),
             )
             return _Resp(int(res.get("_status", 200)), res)
 
@@ -185,11 +185,11 @@ class _FakeHttpBackend:
                 actor_id="u1",
                 org_id="org-1",
                 project_id="proj-1",
-                ontology_id=str(body.get("ontology_id", "")),
                 pinned_version_id=str(body.get("pinned_version_id", "")),
                 object_ref_id=str(body.get("object_ref_id", "")),
                 relation_key=str(body.get("relation_key", "")),
                 limit=int(body.get("limit", 50)),
+                offset=int(body.get("offset", 0)),
             )
             return _Resp(int(res.get("_status", 200)), res)
 
@@ -226,19 +226,18 @@ def test_client_and_mock_pass_identical_m3_contract_suite(
         actor_id="u1",
         org_id="org-1",
         project_id="proj-1",
-        ontology_id="ont-seed-mfg",
         pinned_version_id="ver-seed-1-0-0",
-        object_type_key="batch",
+        object_type_id="batch",
     )
     assert seeded_objs["_status"] == 200
     assert len(seeded_objs["items"]) >= 1
+    assert seeded_objs["items"][0]["object_type_id"] == "batch"
     first_batch_ref = seeded_objs["items"][0]["object_ref_id"]
 
     related_objs = adapter.query_related(
         actor_id="u1",
         org_id="org-1",
         project_id="proj-1",
-        ontology_id="ont-seed-mfg",
         pinned_version_id="ver-seed-1-0-0",
         object_ref_id=first_batch_ref,
         relation_key="batch_has_inspection",
@@ -320,12 +319,36 @@ def test_mock_adapter_conflict_and_fault_injection() -> None:
             actor_id="u1",
             org_id="org-1",
             project_id="proj-1",
-            ontology_id="ont-seed-mfg",
             pinned_version_id="ver-seed-1-0-0",
-            object_type_key="batch",
+            object_type_id="batch",
         )
     mock.clear_fault()
     assert mock.health() is True
+
+
+def test_mock_publish_requires_approved_and_returns_conflict() -> None:
+    """Patch C：mock publish 与 runtime 同契约——未 approved 即 409 base_conflict。"""
+    mock = MockOntologyAdapter()
+    ont = mock.create_ontology(
+        actor_id="u1", org_id="org-1", project_id="proj-1", domain_key="mfg", title="制造"
+    )
+    cs = mock.submit_candidates(
+        actor_id="u1",
+        org_id="org-1",
+        project_id="proj-1",
+        ontology_id=ont["id"],
+        title="cs-draft",
+        items=[],
+        captured_from="discovery:1",
+    )
+    with pytest.raises(OntologyConflict):
+        mock.publish(
+            actor_id="u1",
+            org_id="org-1",
+            project_id="proj-1",
+            change_set_id=cs["id"],
+            version="1.0.0",
+        )
 
 
 def _fill_sqlite_timestamps(
