@@ -75,18 +75,26 @@ _EXPECTED_ENDPOINTS = {
         "/api/v1/projects/<project_id>/ontology-bindings"
         "/<binding_id>/approve-upgrade/<upgrade_id>",
     ),
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/grounding-check",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/lineage",
+    ),
 }
 
 
 def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
-    """off（默认）：四入口仍在路由表（注册表单一真身），但整面 404 not_found。
+    """off（默认）：六入口仍在路由表（注册表单一真身），但整面 404 not_found。
 
     D12：路由表不再是「与 V3.2 逐条相同」的判据——等价物改为「功能面不可
     用且不可区分于不存在」（下面两钉承担）。
     """
     app = create_app(_settings(tmp_path, enabled=False))
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
-    assert len(_ontology_routes(app)) == 3  # 规则串去重后（GET/POST 同串）
+    assert len(_ontology_routes(app)) == 5  # 规则串去重后（GET/POST 同串）
     assert app.config["SETTINGS"].ontology_enabled is False
 
     client = app.test_client()
@@ -94,7 +102,7 @@ def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
     assert response.status_code == 404
     assert response.get_json()["error"]["code"] == "not_found"
 
-    # 四个入口逐个探：关闭态一律 404（写入口亦不得先行受理）
+    # 六个入口逐个探：关闭态一律 404（写入口亦不得先行受理）
     probes: tuple[tuple[str, str, dict[str, object] | None], ...] = (
         ("GET", "/api/v1/projects/proj-1/ontology-bindings", None),
         ("POST", "/api/v1/projects/proj-1/ontology-bindings", {}),
@@ -107,6 +115,16 @@ def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
             "POST",
             "/api/v1/projects/proj-1/ontology-bindings/bind-1/approve-upgrade/up-1",
             {},
+        ),
+        (
+            "POST",
+            "/api/v1/projects/proj-1/ontology-bindings/bind-1/grounding-check",
+            {},
+        ),
+        (
+            "GET",
+            "/api/v1/projects/proj-1/ontology-bindings/bind-1/lineage",
+            None,
         ),
     )
     for method, path, body in probes:
@@ -141,13 +159,15 @@ def test_flag_off_probe_indistinguishable_from_absent_path(tmp_path: Path) -> No
 
 
 def test_flag_on_mounts_bindings_api(tmp_path: Path) -> None:
-    """on：§5.2 四路径挂载（list/create/upgrade-proposal/approve-upgrade）。"""
+    """on：§5.2 四路径 + M3 D21 两路径挂载（共 6 个 method/rule 端点）。"""
     app = create_app(_settings(tmp_path, enabled=True))
     routes = sorted(str(r) for r in app.url_map.iter_rules() if "ontology-bindings" in str(r))
-    assert len(routes) == 4, routes
+    assert len(routes) == 6, routes
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
     assert any(r.endswith("/ontology-bindings") for r in routes)
     assert any("upgrade-proposal" in r for r in routes)
+    assert any("grounding-check" in r for r in routes)
+    assert any(r.endswith("/lineage") for r in routes)
     assert any("approve-upgrade" in r for r in routes)
 
 

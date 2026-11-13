@@ -523,3 +523,126 @@ def approve_upgrade(
     except Exception as exc:
         current_app.logger.exception("approve_upgrade failed")
         raise BindingError("upgrade approval failed", status=500, code="upgrade_approval_failed") from exc
+
+
+# ---- M3 数据接地质量检查与双层血缘只读代理（D21 / WP4③）----
+
+
+def _load_active_binding_for_project(
+    session: Any, actor: User, project_id: str, binding_id: str
+) -> tuple[str, ProjectOntologyBinding]:
+    """校验项目访问权（S-01）+ 提取项目 org_id（D10）+ 锁定活跃绑定（S-13）。"""
+    project = _load_accessible_project(session, actor, project_id)
+    org_id = _project_org(project)
+    binding = session.get(ProjectOntologyBinding, binding_id)
+    if (
+        binding is None
+        or binding.project_id != project_id
+        or binding.status not in ("active", "upgrade_pending")
+    ):
+        raise BindingError("binding not found", status=404, code="not_found")
+    if binding.org_id != org_id:
+        raise BindingError(
+            "binding organization attribution mismatch (project re-attributed)",
+            status=409,
+            code="binding_org_mismatch",
+        )
+    return org_id, binding
+
+
+def _translate_runtime_call(call_fn: Any) -> dict[str, Any]:
+    """统一映射 OntologyClient / MockOntologyAdapter 异常到显性 BindingError（§14-4 禁吞错）。"""
+    try:
+        body: dict[str, Any] = call_fn()
+    except OntologyUnavailable as exc:
+        raise BindingError(
+            f"ontology runtime unreachable: {exc}", status=503, code="ontology_unavailable"
+        ) from exc
+    except OntologyAuthError as exc:
+        raise BindingError(
+            "ontology runtime rejected credentials (check FDE_ONTOLOGY_* config)",
+            status=502,
+            code="runtime_auth",
+        ) from exc
+    except OntologyConflict as exc:
+        raise BindingError(
+            f"ontology runtime conflict: {exc}", status=409, code="runtime_conflict"
+        ) from exc
+    except OntologyClientError as exc:
+        raise BindingError(
+            f"ontology runtime failure: {exc}", status=502, code="runtime_error"
+        ) from exc
+    status = int(body.pop("_status", 500))
+    if status == 404:
+        raise BindingError(
+            str(body.get("message", "grounding target not found on runtime")),
+            status=404,
+            code="not_found",
+        )
+    if status == 429:
+        raise BindingError(
+            str(body.get("message", "ontology connector rate limited")),
+            status=429,
+            code="rate_limited",
+        )
+    if status >= 400:
+        raise BindingError(
+            str(body.get("message", "ontology runtime request rejected")),
+            status=status,
+            code=str(body.get("code", "runtime_rejected")),
+        )
+    return body
+
+
+def check_binding_grounding(
+    *, actor: User, project_id: str, binding_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """D21 / WP4③：触发项目已固定本体版本的对象类型接地质量检查（强制 pinned_version_id）。"""
+    ensure_enabled()
+    object_type_key = str(payload.get("object_type_key", "")).strip()
+    if not object_type_key:
+        raise BindingError("object_type_key is required", code="invalid_request")
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    return _translate_runtime_call(
+        lambda: client.check_grounding(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            version_id=binding.pinned_version_id,
+            object_type_key=object_type_key,
+        )
+    )
+
+
+def get_binding_lineage(
+    *,
+    actor: User,
+    project_id: str,
+    binding_id: str,
+    object_type: str | None = None,
+    object_ref_id: str | None = None,
+) -> dict[str, Any]:
+    """D21 / WP4③：只读查询项目已固定本体版本的双层血缘（强制 pinned_version_id）。"""
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    clean_ot = object_type.strip() if isinstance(object_type, str) and object_type.strip() else None
+    clean_ref = (
+        object_ref_id.strip() if isinstance(object_ref_id, str) and object_ref_id.strip() else None
+    )
+    return _translate_runtime_call(
+        lambda: client.get_lineage(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            version_id=binding.pinned_version_id,
+            object_type=clean_ot,
+            object_ref_id=clean_ref,
+        )
+    )
+

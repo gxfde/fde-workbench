@@ -21,8 +21,10 @@ from fde_api.errors import error_response
 from fde_api.integrations.service import (
     BindingError,
     approve_upgrade,
+    check_binding_grounding,
     create_binding,
     ensure_enabled,
+    get_binding_lineage,
     list_bindings,
     propose_upgrade,
 )
@@ -113,3 +115,41 @@ def approve_upgrade_route(project_id: str, binding_id: str, upgrade_id: str):
     except BindingError as exc:
         return _binding_error(exc)
     return jsonify({"data": result, "error": None})
+
+
+@ontology_bindings_blueprint.post(
+    "/<project_id>/ontology-bindings/<binding_id>/grounding-check"
+)
+@require_auth
+def check_binding_grounding_route(project_id: str, binding_id: str):
+    """D21 / WP4③：触发项目已固定本体版本的对象类型接地质量检查。"""
+    try:
+        report = check_binding_grounding(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            payload=_json_object(),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": report, "error": None})
+
+
+@ontology_bindings_blueprint.get(
+    "/<project_id>/ontology-bindings/<binding_id>/lineage"
+)
+@require_auth
+def get_binding_lineage_route(project_id: str, binding_id: str):
+    """D21 / WP4③：只读获取项目已固定本体版本的双层血缘（定义血缘 + 实例引用追溯）。"""
+    try:
+        lineage = get_binding_lineage(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            object_type=request.args.get("object_type"),
+            object_ref_id=request.args.get("object_ref_id"),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": lineage, "error": None})
+

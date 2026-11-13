@@ -245,3 +245,110 @@ class OntologyClient:
             "GET", f"/api/v1/ontologies/{ontology_id}/versions/{version_id}/snapshot",
             actor_id=actor_id, org_id=org_id, project_id=project_id,
         )
+
+    # ---- M3 数据接地与血缘只读方法（契约 §7 增量方法）----
+
+    def check_grounding(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        object_type_key: str,
+    ) -> dict[str, Any]:
+        """D21：触发指定已发布版本下对象类型的接地数据质量检查（§14-9 四类必检）。"""
+        return self._request(
+            "POST",
+            f"/api/v1/ontologies/{ontology_id}/versions/{version_id}/grounding/{object_type_key}/check",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            idem=uuid.uuid4().hex,
+        )
+
+    def get_lineage(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        object_type: str | None = None,
+        object_ref_id: str | None = None,
+    ) -> dict[str, Any]:
+        """D21 / ADR §5：查询版本双层血缘（定义血缘 + 可选对象实例引用追溯）。"""
+        params: dict[str, Any] = {}
+        if object_type:
+            params["object_type"] = object_type
+        if object_ref_id:
+            params["object_ref_id"] = object_ref_id
+        return self._request(
+            "GET",
+            f"/api/v1/ontologies/{ontology_id}/versions/{version_id}/lineage",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            params=params or None,
+        )
+
+    def query_objects(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        pinned_version_id: str,
+        object_type_key: str,
+        filter_expr: dict[str, Any] | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """S-13 版本固定对象引用查询（只返脱敏属性与 ObjectRef，不落库源明细）。"""
+        body: dict[str, Any] = {
+            "ontology_id": ontology_id,
+            "pinned_version_id": pinned_version_id,
+            "object_type_key": object_type_key,
+            "limit": limit,
+        }
+        if filter_expr is not None:
+            body["filter"] = filter_expr
+        return self._request(
+            "POST",
+            "/api/v1/query/objects",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            json_body=body,
+        )
+
+    def query_related(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        pinned_version_id: str,
+        object_ref_id: str,
+        relation_key: str,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """S-13 版本固定一跳关系查询（基于 ObjectRef 游走，禁止任意 SQL）。"""
+        return self._request(
+            "POST",
+            "/api/v1/query/related",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            json_body={
+                "ontology_id": ontology_id,
+                "pinned_version_id": pinned_version_id,
+                "object_ref_id": object_ref_id,
+                "relation_key": relation_key,
+                "limit": limit,
+            },
+        )
+

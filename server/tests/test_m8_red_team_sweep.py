@@ -460,6 +460,14 @@ _EXCLUSION_RECORDS = {
         "b_owner_status": 404,
         "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
     },
+    ("GET", "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/lineage"): {
+        "reason": "阳性对照不可行：A 实测 404、同角色 A 实测 404、B 属主同路径实测 404（V3.3 M3-WP4 绑定血缘面默认关闭——D12/D13 契约：关闭态一律 404 not_found，与「路径不存在」逐字节同形，禁用面不可区分 ⇒ B 属主非 200，阳性对照不可构造，同码假绿风险）；启用态跨租户 404 隔离由 test_ontology_m3_grounding 专测钉死",
+        "exclusion_kind": "positive_control_infeasible",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 404,
+        "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
+    },
     ("GET", "/api/v1/projects/<project_id>/ontology/change-sets/<change_set_id>"): {
         "reason": "阳性对照不可行：A 实测 403、同角色 A 实测 403、B 属主同路径实测 404（B 属主非 200 ⇒ 阳性对照不可构造，同码假绿风险），本轮夹具无该资源前置状态",
         "exclusion_kind": "positive_control_infeasible",
@@ -990,7 +998,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
     assert len(ROUTES) == 38, ("爬扫面条数基线被改动：", len(ROUTES))
-    assert len(_EXCLUSION_RECORDS) == 67, (
+    assert len(_EXCLUSION_RECORDS) == 68, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
     )
