@@ -183,6 +183,34 @@ def _normalize_idempotency_key(value: object) -> str | None:
     return value.strip()
 
 
+def _ontology_snapshot_for(session: Session, project_id: str, workflow_version: int) -> dict[str, Any] | None:
+    """§9.3 版本五元组：发起时从项目活跃绑定冻结快照（D27；写后不可变）。
+
+    tool/Logic/Action 版本与数据源映射版本均序列化在 runtime ``pinned_version_id``
+    指向的发布快照内（runtime 无独立版本实体）——故两键同指 opaque 指针，
+    追溯时经 lineage 还原。无活跃绑定返回 None（诚实缺省，不伪造记录）。
+    """
+    from fde_api.integrations.models import ACTIVE_MARKER, ProjectOntologyBinding
+
+    binding = session.scalar(
+        select(ProjectOntologyBinding).where(
+            ProjectOntologyBinding.project_id == project_id,
+            ProjectOntologyBinding.active_marker == ACTIVE_MARKER,
+        )
+    )
+    if binding is None:
+        return None
+    return {
+        "ontology_id": binding.ontology_id,
+        "ontology_version": binding.pinned_version,
+        "pinned_version_id": binding.pinned_version_id,
+        "org_id": binding.org_id,
+        "tool_logic_action_version": binding.pinned_version_id,
+        "datasource_mapping_version": binding.pinned_version_id,
+        "workflow_version": workflow_version,
+    }
+
+
 def start_run(
     session: Session,
     *,
@@ -247,6 +275,9 @@ def start_run(
         initiated_by_user_id=actor.id,
         idempotency_key=clean_key or f"run-{uuid4().hex}",
         context_json={},
+        ontology_snapshot_json=_ontology_snapshot_for(
+            session, project.id, definition.version
+        ),
     )
     session.add(run)
     session.flush()

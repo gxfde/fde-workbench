@@ -44,7 +44,11 @@ from fde_api.control.models import PluginInstallation, PluginPackage
 from fde_api.meetings.templates import MEETING_AGENT_TOOLS
 
 # 写类工具默认不授予智能体（§2.3：要求人在回路上；即便授权也须走密码确认流）
-AGENT_WRITE_DENIED_TOOLS: frozenset[str] = frozenset({"api_execute", "file_send_wechat"})
+# D26（M4）：ontology_action_execute 为执行档——Agent 运行面恒剥（强授权单独放行），
+# 与 api_execute/file_send_wechat 同列；propose（提议档）/logic_run（计算档）不剥。
+AGENT_WRITE_DENIED_TOOLS: frozenset[str] = frozenset(
+    {"api_execute", "file_send_wechat", "ontology_action_execute"}
+)
 
 # run 面恒剥集合：写类 + 会议面（会中只读面另有判定，不入沙箱 ctx）
 RUN_FACE_DENIED_TOOLS: frozenset[str] = AGENT_WRITE_DENIED_TOOLS | MEETING_AGENT_TOOLS

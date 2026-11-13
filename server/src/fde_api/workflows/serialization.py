@@ -44,6 +44,8 @@ def serialize_run(
         "started_at": _iso(run.started_at),
         "finished_at": _iso(run.finished_at),
         "created_at": _iso(run.created_at),
+        # §9.3 五元组快照（D27：发起时冻结，写后不可变；None=未使用本体面）
+        "ontology_snapshot_json": run.ontology_snapshot_json,
         "nodes": [_serialize_node(node) for node in nodes],
     }
     # B#5 挂起时长统计进 run 详情：waiting_approval 的挂起秒数（锚=

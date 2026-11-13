@@ -45,7 +45,11 @@ class MockOntologyAdapter:
         self._change_sets: dict[str, dict[str, Any]] = {}
         self._locked_by_ontology: dict[str, str] = {}
         self._versions: dict[tuple[str, str], dict[str, Any]] = {}
+        self._action_requests: dict[str, dict[str, Any]] = {}
+        self._action_approvals: dict[str, list[dict[str, Any]]] = {}
+        self._action_seq: int = 0
         self._seed_manufacturing_domain()
+        self._seed_m4_logic_and_materialization()
 
     def inject_fault(self, mode: str | None, *, latency_ms: int = 0) -> None:
         """注入故障：`None` | `'unavailable'` | `'5xx'` | `'auth'` | `'conflict'`。"""
@@ -143,7 +147,270 @@ class MockOntologyAdapter:
             "published_at": _now_iso(),
         }
 
+    def _seed_m4_logic_and_materialization(self) -> None:
+        """M4 种子：trace_scope Logic + 受控物化 batch/BATCH-001（D24/D25 契约面）。"""
+        self._logics: dict[str, dict[str, Any]] = {
+            "trace_scope": {
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "planned_qty": {"type": "number"},
+                        "stock_qty": {"type": "number"},
+                        "defect_rate": {"type": "number"},
+                    },
+                    "required": ["planned_qty", "stock_qty", "defect_rate"],
+                },
+                "output_type": "number",
+                "fn": lambda x: (
+                    min(x["planned_qty"], x["stock_qty"]) if x["defect_rate"] < 0.05 else 0
+                ),
+            }
+        }
+        self._materialized: dict[tuple[str, str, str], dict[str, Any]] = {
+            (SEED_VERSION_ID, "batch", "BATCH-001"): {
+                "expires_at": _now_iso(),
+                "payload_masked": {"batch_no": "B***01"},
+            }
+        }
+
+    def _action_view(self, req: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": req["id"],
+            "org_id": req["org_id"],
+            "ontology_id": req["ontology_id"],
+            "pinned_version_id": req["pinned_version_id"],
+            "action_definition_id": req["action_key"],
+            "action_kind": req["action_key"],
+            "status": req["status"],
+            "requested_by_user_id": req["requested_by_user_id"],
+            "dry_run_result": req.get("dry_run_result"),
+            "approvals": list(self._action_approvals.get(req["id"], [])),
+            "idempotency_key": req.get("idempotency_key"),
+            "executed_at": req.get("executed_at"),
+            "pre_snapshot": req.get("pre_snapshot"),
+            "post_snapshot": req.get("post_snapshot"),
+            "compensation": req.get("compensation"),
+            "error_text": req.get("error_text"),
+            "created_at": req.get("created_at"),
+        }
+
+    # ---- M4 方法（D28 冻结契约形态）----
+
+    def run_logic(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        logic_key: str,
+        input_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        spec = self._logics.get(logic_key)
+        if spec is None:
+            return {
+                "_status": 404,
+                "code": "not_found",
+                "message": "logic not found in pinned version",
+            }
+        values = input_payload if isinstance(input_payload, dict) else {}
+        for name in spec["input_schema"].get("required", []):
+            if name not in values:
+                return {
+                    "_status": 422,
+                    "code": "validation_failed",
+                    "message": f"missing required input field: {name}",
+                }
+        props = spec["input_schema"].get("properties", {})
+        for name in values:
+            if name not in props:
+                return {
+                    "_status": 422,
+                    "code": "validation_failed",
+                    "message": f"unknown input field: {name}",
+                }
+        result = spec["fn"](values)
+        return {
+            "_status": 200,
+            "logic_key": logic_key,
+            "ontology_id": ontology_id,
+            "pinned_version_id": version_id,
+            "result": result,
+        }
+
+    def propose_action(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        action_key: str,
+        version_id: str,
+        input_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        if action_key != "retention_extension":
+            return {
+                "_status": 422,
+                "code": "validation_failed",
+                "message": f"unknown action_key {action_key!r}",
+            }
+        values = input_payload if isinstance(input_payload, dict) else {}
+        ot_key = str(values.get("object_type_key", ""))
+        pk_val = str(values.get("external_pk_value", ""))
+        ttl = values.get("ttl_seconds")
+        if (
+            not ot_key
+            or not pk_val
+            or isinstance(ttl, bool)
+            or not isinstance(ttl, int)
+            or not (60 <= ttl <= 86400 * 30)
+        ):
+            return {
+                "_status": 422,
+                "code": "validation_failed",
+                "message": "invalid retention_extension input",
+            }
+        mat = self._materialized.get((version_id, ot_key, pk_val))
+        if mat is None:
+            return {
+                "_status": 404,
+                "code": "not_found",
+                "message": "materialized object not found in pinned version",
+            }
+        self._action_seq += 1
+        req_id = f"act-req-{self._action_seq:04d}"
+        dry = {"simulated": True, "extended_by_seconds": ttl, "expires_at": mat["expires_at"]}
+        req: dict[str, Any] = {
+            "id": req_id,
+            "org_id": org_id,
+            "ontology_id": ontology_id,
+            "pinned_version_id": version_id,
+            "action_key": action_key,
+            "status": "pending",
+            "requested_by_user_id": actor_id,
+            "dry_run_result": dry,
+            "input_payload": values,
+            "created_at": _now_iso(),
+        }
+        self._action_requests[req_id] = req
+        self._action_approvals[req_id] = []
+        return {"_status": 201, **self._action_view(req)}
+
+    def approve_action(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        request_id: str,
+        role: str,
+        decision: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        req = self._action_requests.get(request_id)
+        if req is None:
+            return {"_status": 404, "code": "not_found", "message": "action request not found"}
+        if req["status"] != "pending":
+            return {
+                "_status": 409,
+                "code": "base_conflict",
+                "message": f"status={req['status']}; only pending approvable",
+            }
+        if actor_id == req["requested_by_user_id"]:
+            return {
+                "_status": 403,
+                "code": "forbidden",
+                "message": "requester cannot approve own action request (I4)",
+            }
+        if role not in ("business_owner", "model_consultant", "data_owner", "risk"):
+            return {"_status": 422, "code": "validation_failed", "message": "invalid role"}
+        if decision not in ("approved", "rejected"):
+            return {
+                "_status": 422,
+                "code": "validation_failed",
+                "message": "decision must be approved|rejected",
+            }
+        self._action_approvals[request_id].append(
+            {"role": role, "reviewer_user_id": actor_id, "decision": decision, "comment": comment}
+        )
+        req["status"] = "rejected" if decision == "rejected" else "approved"
+        return {"_status": 200, **self._action_view(req)}
+
+    def get_action_request(
+        self, *, actor_id: str, org_id: str, project_id: str, ontology_id: str, request_id: str
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        req = self._action_requests.get(request_id)
+        if req is None:
+            return {"_status": 404, "code": "not_found", "message": "action request not found"}
+        return {"_status": 200, **self._action_view(req)}
+
+    def execute_action(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        action_key: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        req = self._action_requests.get(request_id)
+        if req is None:
+            return {"_status": 404, "code": "not_found", "message": "action request not found"}
+        if req["status"] == "pending":
+            return {
+                "_status": 409,
+                "code": "approval_required",
+                "message": "action request requires human approval before execution",
+            }
+        if req["status"] != "approved":
+            return {
+                "_status": 409,
+                "code": "base_conflict",
+                "message": f"status={req['status']}; only approved executable",
+            }
+        values = req["input_payload"]
+        mat_key = (
+            req["pinned_version_id"],
+            str(values["object_type_key"]),
+            str(values["external_pk_value"]),
+        )
+        mat = self._materialized.get(mat_key)
+        if mat is None:
+            req["status"] = "failed"
+            req["error_text"] = "not_found: materialized object missing at execute time"
+            req["compensation"] = {"reversible": False}
+            return {"_status": 200, **self._action_view(req)}
+        prev = mat["expires_at"]
+        new_iso = _now_iso()
+        req["status"] = "executing"
+        req["pre_snapshot"] = {
+            "expires_at": prev,
+            "object_type_key": values["object_type_key"],
+            "external_pk_value": values["external_pk_value"],
+        }
+        req["post_snapshot"] = {"expires_at": new_iso}
+        req["compensation"] = {"previous_expires_at": prev, "reversible": True}
+        req["dry_run_result"] = {
+            "simulated": False,
+            "extended_by_seconds": values["ttl_seconds"],
+            "expires_at": new_iso,
+        }
+        req["executed_at"] = new_iso
+        mat["expires_at"] = new_iso
+        req["status"] = "completed"
+        return {"_status": 200, **self._action_view(req)}
+
     # ---- M2 方法 ----
+
 
     def health(self) -> bool:
         if self._fault_mode == "unavailable":

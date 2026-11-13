@@ -83,6 +83,28 @@ _EXPECTED_ENDPOINTS = {
         "GET",
         "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/lineage",
     ),
+    # M4-WP3（D26/D28）：Logic/Action 代理五入口
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/logic/<logic_key>/run",
+    ),
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/actions/<action_key>/propose",
+    ),
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings"
+        "/<binding_id>/action-requests/<request_id>/approvals",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/action-requests/<request_id>",
+    ),
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/actions/<action_key>/execute",
+    ),
 }
 
 
@@ -94,7 +116,7 @@ def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
     """
     app = create_app(_settings(tmp_path, enabled=False))
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
-    assert len(_ontology_routes(app)) == 5  # 规则串去重后（GET/POST 同串）
+    assert len(_ontology_routes(app)) == 10  # 规则串去重后（M3 五规则 + M4 五规则）
     assert app.config["SETTINGS"].ontology_enabled is False
 
     client = app.test_client()
@@ -159,16 +181,19 @@ def test_flag_off_probe_indistinguishable_from_absent_path(tmp_path: Path) -> No
 
 
 def test_flag_on_mounts_bindings_api(tmp_path: Path) -> None:
-    """on：§5.2 四路径 + M3 D21 两路径挂载（共 6 个 method/rule 端点）。"""
+    """on：§5.2 四路径 + M3 D21 两路径 + M4 Logic/Action 五入口（共 11 个 method/rule 端点；去重规则 10 条）。"""
     app = create_app(_settings(tmp_path, enabled=True))
     routes = sorted(str(r) for r in app.url_map.iter_rules() if "ontology-bindings" in str(r))
-    assert len(routes) == 6, routes
+    assert len(routes) == 11, routes  # url_map 不去重：GET/POST 同串各计一条
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
     assert any(r.endswith("/ontology-bindings") for r in routes)
     assert any("upgrade-proposal" in r for r in routes)
     assert any("grounding-check" in r for r in routes)
     assert any(r.endswith("/lineage") for r in routes)
     assert any("approve-upgrade" in r for r in routes)
+    assert any("/logic/" in r for r in routes)
+    assert any("/actions/" in r for r in routes)
+    assert any("action-requests" in r for r in routes)
 
 
 _INGEST_ENDPOINTS: set[tuple[str, str]] = {

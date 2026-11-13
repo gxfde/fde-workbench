@@ -646,3 +646,143 @@ def get_binding_lineage(
         )
     )
 
+
+
+def run_binding_logic(
+    *,
+    actor: Any,
+    project_id: str,
+    binding_id: str,
+    logic_key: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """D24 / §13 M4 条 1：项目已固定版本 Logic 执行（强制 pinned_version_id 与 org_id）。
+
+    请求体伪造的 pinned_version_id / org_id 一律忽略（S-13/D10 服务端注入，D26）。
+    """
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    input_payload = payload.get("input")
+    if not isinstance(input_payload, dict):
+        raise BindingError("input must be a JSON object", status=400, code="invalid_request")
+    return _translate_runtime_call(
+        lambda: client.run_logic(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            version_id=binding.pinned_version_id,
+            logic_key=logic_key,
+            input_payload=input_payload,
+        )
+    )
+
+
+def propose_binding_action(
+    *,
+    actor: Any,
+    project_id: str,
+    binding_id: str,
+    action_key: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """D25/D28 / 条 5：提议受控动作（runtime 默认 dry-run 出 dry_run_result，零副作用）。"""
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    input_payload = payload.get("input")
+    if not isinstance(input_payload, dict):
+        raise BindingError("input must be a JSON object", status=400, code="invalid_request")
+    return _translate_runtime_call(
+        lambda: client.propose_action(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            action_key=action_key,
+            version_id=binding.pinned_version_id,
+            input_payload=input_payload,
+        )
+    )
+
+
+def approve_binding_action(
+    *,
+    actor: Any,
+    project_id: str,
+    binding_id: str,
+    request_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """D28 / 条 6：审批代理（I4 自批语义由 runtime 强制；requested_by 即调用方映射）。"""
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    role = str(payload.get("role", ""))
+    decision = str(payload.get("decision", ""))
+    if not role or not decision:
+        raise BindingError("role and decision are required", status=400, code="invalid_request")
+    comment = payload.get("comment")
+    return _translate_runtime_call(
+        lambda: client.approve_action(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            request_id=request_id,
+            role=role,
+            decision=decision,
+            comment=str(comment) if isinstance(comment, str) and comment else None,
+        )
+    )
+
+
+def get_binding_action(
+    *, actor: Any, project_id: str, binding_id: str, request_id: str
+) -> dict[str, Any]:
+    """D28：只读查询 ActionRequest 状态机当前态 + 审批留痕。"""
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    return _translate_runtime_call(
+        lambda: client.get_action_request(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            request_id=request_id,
+        )
+    )
+
+
+def execute_binding_action(
+    *,
+    actor: Any,
+    project_id: str,
+    binding_id: str,
+    action_key: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """D28 / 条 6：执行代理（仅 approved 可执行——runtime 强制；MCP 执行档走强授权面）。"""
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    request_id = str(payload.get("request_id", ""))
+    if not request_id:
+        raise BindingError("request_id is required", status=400, code="invalid_request")
+    return _translate_runtime_call(
+        lambda: client.execute_action(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            action_key=action_key,
+            request_id=request_id,
+        )
+    )

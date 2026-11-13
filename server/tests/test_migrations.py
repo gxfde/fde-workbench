@@ -106,7 +106,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          c8e2a6f0b9d4 之后保单头）
 # V3.3 M2 WP4 段 2 步 3+4：绑定 org_id 回填为项目归属并收紧 NOT NULL
 #          （b7d3f9a1c5e2；挂 c4a8f2e6b1d9 之后保单头；evidence kind 扩 ontology_annotation）
-HEAD_REVISION = "b7d3f9a1c5e2"
+HEAD_REVISION = "e1a9d4c7b2f8"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1173,8 +1173,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + V3.3 M2 WP4 段 1 项目本体绑定 9d4f2b7e8c1a（挂 c8e2a6f0b9d4 之后保单头）之后 = 75；
     # + V3.3 M2 WP4 段 2 绑定 org_id 回填 c4a8f2e6b1d9 之后 = 76；
     # + V3.3 M2 WP4 段 2 步 5 evidence kind 扩 ontology_annotation b7d3f9a1c5e2 之后 = 77；
+    # + V3.3 M4 WP3 D27 workflow_runs 本体版本五元组快照 e1a9d4c7b2f8 之后 = 78；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 77
+    assert len(known) == 78
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

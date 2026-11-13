@@ -20,13 +20,18 @@ from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
 from fde_api.integrations.service import (
     BindingError,
+    approve_binding_action,
     approve_upgrade,
     check_binding_grounding,
     create_binding,
     ensure_enabled,
+    execute_binding_action,
+    get_binding_action,
     get_binding_lineage,
     list_bindings,
+    propose_binding_action,
     propose_upgrade,
+    run_binding_logic,
 )
 
 ontology_bindings_blueprint = Blueprint(
@@ -153,3 +158,97 @@ def get_binding_lineage_route(project_id: str, binding_id: str):
         return _binding_error(exc)
     return jsonify({"data": lineage, "error": None})
 
+
+
+@ontology_bindings_blueprint.post(
+    "/<project_id>/ontology-bindings/<binding_id>/logic/<logic_key>/run"
+)
+@require_auth
+def run_binding_logic_route(project_id: str, binding_id: str, logic_key: str):
+    """D24 / §13 M4 条 1：项目已固定版本的 Logic 执行（D26 注入守卫在 runtime 侧）。"""
+    try:
+        result = run_binding_logic(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            logic_key=logic_key,
+            payload=_json_object(),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": result, "error": None})
+
+
+@ontology_bindings_blueprint.post(
+    "/<project_id>/ontology-bindings/<binding_id>/actions/<action_key>/propose"
+)
+@require_auth
+def propose_binding_action_route(project_id: str, binding_id: str, action_key: str):
+    """D25/D28 / 条 5：提议受控动作（默认 dry-run，零副作用）。"""
+    try:
+        result = propose_binding_action(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            action_key=action_key,
+            payload=_json_object(),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": result, "error": None}), 201
+
+
+@ontology_bindings_blueprint.post(
+    "/<project_id>/ontology-bindings/<binding_id>/action-requests/<request_id>/approvals"
+)
+@require_auth
+def approve_binding_action_route(project_id: str, binding_id: str, request_id: str):
+    """D28 / 条 6：审批子表代理（I4 自批 403 由 runtime 强制）。"""
+    try:
+        result = approve_binding_action(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            request_id=request_id,
+            payload=_json_object(),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": result, "error": None})
+
+
+@ontology_bindings_blueprint.get(
+    "/<project_id>/ontology-bindings/<binding_id>/action-requests/<request_id>"
+)
+@require_auth
+def get_binding_action_route(project_id: str, binding_id: str, request_id: str):
+    """D28：只读查询 ActionRequest 状态机当前态 + 审批留痕。"""
+    try:
+        result = get_binding_action(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            request_id=request_id,
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": result, "error": None})
+
+
+@ontology_bindings_blueprint.post(
+    "/<project_id>/ontology-bindings/<binding_id>/actions/<action_key>/execute"
+)
+@require_auth
+def execute_binding_action_route(project_id: str, binding_id: str, action_key: str):
+    """D28 / 条 6：执行代理（仅 approved；runtime 执行前重验 S-13）。"""
+    try:
+        result = execute_binding_action(
+            actor=g.current_user,
+            project_id=project_id,
+            binding_id=binding_id,
+            action_key=action_key,
+            payload=_json_object(),
+        )
+    except BindingError as exc:
+        return _binding_error(exc)
+    return jsonify({"data": result, "error": None})
