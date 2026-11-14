@@ -128,6 +128,20 @@ class OntologyClient:
             self._failure_count = 0
             self._opened_at = None
 
+    @property
+    def breaker_state(self) -> str:
+        """熔断态只读视图：closed | open | half_open（零副作用）。
+
+        M5-WP2 消费方：``GateEvaluationReceipt`` 固化「求值瞬间熔断态」
+        （D29）与 S-12「熔断窗口禁下调」——两者都只观察，不允许本视图改变
+        任何状态（状态变更只发生在 _breaker_check/_breaker_record 请求路径）。
+        """
+        if self._opened_at is None:
+            return "closed"
+        if time.monotonic() - self._opened_at < CIRCUIT_RECOVERY_SECONDS:
+            return "open"
+        return "half_open"
+
     # ---- 有界重试（契约 §2-2）----
 
     def _attempt_with_retry(
@@ -532,5 +546,75 @@ class OntologyClient:
             project_id=project_id,
             idem=uuid.uuid4().hex,
             json_body={"request_id": request_id},
+        )
+
+    # ---- M5 治理只读方法（契约 §9.1，D29/D31/D32/D33）----
+
+    def get_version_impact(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        from_ver: str,
+        to_ver: str,
+    ) -> dict[str, Any]:
+        """D29/D32：纯 Schema 级升级影响分析（Breaking/Additive + D32 分离指纹；
+        S-07 零句柄回显——报告只含实体标识与字段名）。零项目态耦合（Workbench
+        侧治理服务在本地聚合爆炸半径）。"""
+        return self._request(
+            "GET",
+            f"/api/v1/ontologies/{ontology_id}/versions/{from_ver}/impact/{to_ver}",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+        )
+
+    def get_version_governance_summary(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        as_of: str | None = None,
+    ) -> dict[str, Any]:
+        """D31/D32：版本治理完整度摘要（缺口 + <0.8/冲突候选 100% 处置闭环 +
+        72h SLA 账龄 + 编译器遥测解耦）。as_of 为可选 ISO-8601 UTC 时刻。"""
+        params: dict[str, Any] | None = {"as_of": as_of} if as_of else None
+        return self._request(
+            "GET",
+            f"/api/v1/ontologies/{ontology_id}/versions/{version_id}/governance-summary",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            params=params,
+        )
+
+    def reconcile_references(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        references: list[dict[str, Any]],
+        cutover_at: str | None = None,
+        idem_key: str,
+    ) -> dict[str, Any]:
+        """D33：双独立 PG 恢复切点 T 只读跨库引用对账（逐条七态分类）。
+        idem_key 必带——同批引用重放复用同键（恢复演练重跑幂等）。"""
+        body: dict[str, Any] = {"references": references}
+        if cutover_at is not None:
+            body["cutover_at"] = cutover_at
+        return self._request(
+            "POST",
+            "/api/v1/maintenance/reconcile-references",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            idem=idem_key,
+            json_body=body,
         )
 

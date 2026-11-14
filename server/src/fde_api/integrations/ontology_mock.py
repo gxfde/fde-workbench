@@ -33,6 +33,12 @@ def canonical_json_sha256(obj: object) -> str:
 
 SEED_ONTOLOGY_ID = "ont-seed-mfg"
 SEED_VERSION_ID = "ver-seed-1-0-0"
+# M5（D29/D31/D32）第二版本种子：1.0.0 → 1.1.0 只改现场绑定（D32 分离指纹演示面）
+M5_SEED_VERSION_ID = "ver-seed-1-1-0"
+
+# D31 处置闭环口径：已处置终态（免改/精修/驳回均绿灯，与 runtime governance.py 一致）
+_DISPOSED_CS_STATUSES = frozenset({"approved", "published", "rejected", "discarded"})
+_SLA_THRESHOLD_HOURS = 72
 
 
 def _now_iso() -> str:
@@ -59,6 +65,7 @@ class MockOntologyAdapter:
         self._action_seq: int = 0
         self._seed_manufacturing_domain()
         self._seed_m4_logic_and_materialization()
+        self._seed_m5_governance()
 
     def inject_fault(self, mode: str | None, *, latency_ms: int = 0) -> None:
         """注入故障：`None` | `'unavailable'` | `'5xx'` | `'auth'` | `'conflict'`。"""
@@ -144,6 +151,11 @@ class MockOntologyAdapter:
                     ],
                 }
             ],
+            # M5 §10.2 缺口演示：batch 一条必填属性未映射（1.0.0 即存在——
+            # 1.1.0 只改 site 绑定，domain 指纹跨版本不变，D32 分离演示面）
+            "property_definitions": [
+                {"key": "batch_qty", "object_type_id": "batch", "required": True, "status": "active"},
+            ],
         }
         etag = canonical_json_sha256(snapshot)
         self._versions[(SEED_ONTOLOGY_ID, SEED_VERSION_ID)] = {
@@ -179,6 +191,75 @@ class MockOntologyAdapter:
                 "expires_at": _now_iso(),
                 "payload_masked": {"batch_no": "B***01"},
             }
+        }
+
+    def _seed_m5_governance(self) -> None:
+        """M5 种子（D29/D31/D32/D33 契约面）：1.1.0 只改现场绑定 + 治理候选 CS。
+
+        - 1.1.0 快照 = 1.0.0 + additive 对象类型 supplier + data_sources 换
+          connection_ref（site_binding 变、domain_schema 不变）+ batch 一条必填
+          属性未映射（§10.2 缺口演示）；
+        - 治理候选：cs-m5-approved（confidence 0.6，已处置）+
+          cs-m5-draft（confidence 0.5，未处置 → all_disposed=False）。
+        """
+        base = self._versions[(SEED_ONTOLOGY_ID, SEED_VERSION_ID)]["snapshot"]
+        patched = json.loads(json.dumps(base))
+        patched["version"] = "1.1.0"
+        # 只改现场绑定（data_sources 句柄）——domain 指纹跨版本不变（D32 分离演示面；
+        # supplier 等 additive domain 演示不在本种子，避免与 D32 演示互相干扰）
+        for ds in patched["data_sources"]:
+            ds["connection_ref"] = "env://FDE_MES_READONLY_DSN_V2"  # 演练种子值，非真实凭据
+        self._versions[(SEED_ONTOLOGY_ID, M5_SEED_VERSION_ID)] = {
+            "id": M5_SEED_VERSION_ID,
+            "ontology_id": SEED_ONTOLOGY_ID,
+            "version": "1.1.0",
+            "etag": canonical_json_sha256(patched),
+            "snapshot": patched,
+            "published_at": _now_iso(),
+        }
+        # 治理候选 CS（六件套 captured_from 条目带 confidence，D31 追踪口径）
+        self._change_sets["cs-m5-approved"] = {
+            "id": "cs-m5-approved",
+            "ontology_id": SEED_ONTOLOGY_ID,
+            "org_id": "org-1",
+            "project_id": "proj-1",
+            "title": "M5 种子：已处置候选",
+            "description": "",
+            "status": "approved",
+            "proposed_json": [
+                {
+                    "entity_type": "object_types",
+                    "key": "supplier",
+                    "op": "create",
+                    "captured_from": {"agent_run": "ar-1", "confidence": 0.6, "conflicts": []},
+                }
+            ],
+            "captured_from": "agent_run:ar-1",
+            "approvals": {},
+            "created_by": "u1",
+            "submitted_at": _now_iso(),
+            "_status": 200,
+        }
+        self._change_sets["cs-m5-draft"] = {
+            "id": "cs-m5-draft",
+            "ontology_id": SEED_ONTOLOGY_ID,
+            "org_id": "org-1",
+            "project_id": "proj-1",
+            "title": "M5 种子：待处置候选",
+            "description": "",
+            "status": "draft",
+            "proposed_json": [
+                {
+                    "entity_type": "object_types",
+                    "key": "supplier_v2",
+                    "op": "create",
+                    "captured_from": {"agent_run": "ar-2", "confidence": 0.5, "conflicts": []},
+                }
+            ],
+            "captured_from": "agent_run:ar-2",
+            "approvals": {},
+            "created_by": "u1",
+            "_status": 200,
         }
 
     def _action_view(self, req: dict[str, Any]) -> dict[str, Any]:
@@ -797,5 +878,302 @@ class MockOntologyAdapter:
                     },
                 }
             ][offset : offset + max(1, limit)],
+            "_status": 200,
+        }
+
+    # ---- M5 治理只读方法（契约 §9.1，D29/D31/D32/D33）----
+
+    def _m5_fingerprints(self, snapshot: dict[str, Any]) -> dict[str, str]:
+        """D32 双层分区指纹（与 runtime governance.partition_fingerprints 同口径）。"""
+        domain_view = {
+            key: snapshot.get(key)
+            for key in (
+                "object_types", "relation_types", "property_definitions",
+                "logic_definitions", "state_definitions", "event_definitions",
+                "business_rules", "action_definitions",
+            )
+        }
+        site_view = {
+            key: snapshot.get(key)
+            for key in ("data_sources", "object_bindings", "field_mappings")
+        }
+        return {
+            "domain_schema_sha256": canonical_json_sha256(domain_view),
+            "site_binding_sha256": canonical_json_sha256(site_view),
+        }
+
+    def _version_or_404(self, ontology_id: str, version_id: str) -> dict[str, Any] | None:
+        """按 ID 优先、semver 兜底解析同本体已发布版本（对齐 runtime _resolve_version）。"""
+        ver = self._versions.get((ontology_id, version_id))
+        if ver is not None:
+            return ver
+        for candidate in self._versions.values():
+            if candidate["ontology_id"] == ontology_id and candidate["version"] == version_id:
+                return candidate
+        return None
+
+    def get_version_impact(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        from_ver: str,
+        to_ver: str,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        src = self._version_or_404(ontology_id, from_ver)
+        dst = self._version_or_404(ontology_id, to_ver)
+        if src is None or dst is None:
+            return {"code": "not_found", "message": "version not found", "_status": 404}
+        if src["ontology_id"] != ontology_id or dst["ontology_id"] != ontology_id:
+            return {"code": "not_found", "message": "version not found", "_status": 404}
+        from_snap = src["snapshot"]
+        to_snap = dst["snapshot"]
+        fp_from = self._m5_fingerprints(from_snap)
+        fp_to = self._m5_fingerprints(to_snap)
+        # 条目口径对齐 runtime governance.compute_impact：条目只含实体标识与变更
+        # 字段名（S-07 零值回显）；breaking = removed/deprecated/required 收紧
+        breaking: list[dict[str, Any]] = []
+        from_props = {
+            (p.get("object_type_id"), p.get("key"))
+            for p in from_snap.get("property_definitions", [])
+        }
+        for p in to_snap.get("property_definitions", []):
+            ident = (p.get("object_type_id"), p.get("key"))
+            if ident in from_props and p.get("required") and not any(
+                q.get("key") == p.get("key") and q.get("object_type_id") == p.get("object_type_id")
+                and q.get("required")
+                for q in from_snap.get("property_definitions", [])
+            ):
+                breaking.append(
+                    {
+                        "entity_type": "property_definitions",
+                        "entity_key": str(ident[1]),
+                        "change_type": "changed",
+                        "fields": ["required"],
+                    }
+                )
+        additive = [
+            {"entity_type": "object_types", "entity_key": str(ot.get("key")), "change_type": "created"}
+            for ot in to_snap.get("object_types", [])
+            if ot.get("key") not in {o.get("key") for o in from_snap.get("object_types", [])}
+        ]
+        cascades = [
+            {
+                "entity_type": "object_bindings",
+                "entity_key": str(b.get("id") or b.get("key")),
+                "depends_on_object_types": sorted({str(b.get("object_type_key"))}),
+            }
+            for b in to_snap.get("object_bindings", [])
+            if json.dumps(b, sort_keys=True) not in {
+                json.dumps(x, sort_keys=True) for x in from_snap.get("object_bindings", [])
+            }
+        ]
+        breaking_count = len(breaking)
+        return {
+            "ontology_id": ontology_id,
+            "from_version_id": src["id"],
+            "from_version": src["version"],
+            "to_version_id": dst["id"],
+            "to_version": dst["version"],
+            "compat": "breaking" if breaking_count else "compatible",
+            "domain_schema_sha256_from": fp_from["domain_schema_sha256"],
+            "domain_schema_sha256_to": fp_to["domain_schema_sha256"],
+            "domain_schema_changed": fp_from["domain_schema_sha256"] != fp_to["domain_schema_sha256"],
+            "site_binding_sha256_from": fp_from["site_binding_sha256"],
+            "site_binding_sha256_to": fp_to["site_binding_sha256"],
+            "site_binding_changed": fp_from["site_binding_sha256"] != fp_to["site_binding_sha256"],
+            "breaking_changes": breaking,
+            "additive_changes": additive,
+            "internal_cascades": cascades,
+            "summary": {
+                "breaking_count": breaking_count,
+                "additive_count": len(additive),
+                "cascade_count": len(cascades),
+            },
+            "_status": 200,
+        }
+
+    def get_version_governance_summary(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        as_of: str | None = None,
+    ) -> dict[str, Any]:
+        self._maybe_fault()
+        ver = self._version_or_404(ontology_id, version_id)
+        if ver is None:
+            return {"code": "not_found", "message": "version not found", "_status": 404}
+        snap = ver["snapshot"]
+        fps = self._m5_fingerprints(snap)
+        props = [r for r in snap.get("property_definitions", []) if isinstance(r, dict)]
+        bindings = [r for r in snap.get("object_bindings", []) if isinstance(r, dict)]
+        active_ots = {
+            str(r["key"])
+            for r in snap.get("object_types", [])
+            if isinstance(r, dict) and r.get("status", "active") == "active"
+        }
+        bound_ots = {str(b.get("object_type_key")) for b in bindings}
+        mapped_keys_by_ot: dict[str, set[str]] = {}
+        for b in bindings:
+            for m in b.get("field_mappings", []):
+                mapped_keys_by_ot.setdefault(str(b.get("object_type_key")), set()).add(
+                    str(m.get("property_key"))
+                )
+        unmapped = [
+            {"object_type_id": str(p.get("object_type_id")), "property_key": str(p["key"])}
+            for p in props
+            if p.get("status") == "active"
+            and p.get("required") is True
+            and str(p.get("object_type_id")) in bound_ots
+            and str(p["key"]) not in mapped_keys_by_ot.get(str(p.get("object_type_id")), set())
+        ]
+        unbound = sorted(active_ots - bound_ots)
+        # D31 处置闭环 + SLA 账龄 + 遥测（键同形对齐 runtime compute_sla_aging /
+        # compiler_telemetry；时钟锚 CS.submitted_at 单一 UTC 权威）
+        tracked_total = 0
+        disposed_count = 0
+        undisposed: list[dict[str, Any]] = []
+        overdue: list[dict[str, Any]] = []
+        pending_review_count = 0
+        oldest_age_hours: float | None = None
+        now = datetime.now(UTC)
+        for cs in self._change_sets.values():
+            if cs.get("ontology_id") != ontology_id or cs.get("org_id") != org_id:
+                continue
+            items = cs.get("proposed_json", [])
+            tracked = any(
+                isinstance(item.get("captured_from"), dict)
+                and (
+                    float(item["captured_from"].get("confidence", 1.0)) < 0.8
+                    or item["captured_from"].get("conflicts")
+                )
+                for item in items
+                if isinstance(item, dict)
+            )
+            if not tracked:
+                continue
+            tracked_total += 1
+            if cs["status"] in _DISPOSED_CS_STATUSES:
+                disposed_count += 1
+            else:
+                undisposed.append({"change_set_id": cs["id"], "status": cs["status"]})
+                pending_review_count += 1
+                submitted_at = cs.get("submitted_at")
+                if isinstance(submitted_at, str):
+                    try:
+                        age_hours = (
+                            now - datetime.fromisoformat(submitted_at.replace("Z", "+00:00"))
+                        ).total_seconds() / 3600.0
+                        if age_hours > _SLA_THRESHOLD_HOURS:
+                            overdue.append({"change_set_id": cs["id"], "age_hours": round(age_hours, 2)})
+                        oldest_age_hours = (
+                            age_hours
+                            if oldest_age_hours is None
+                            else max(oldest_age_hours, age_hours)
+                        )
+                    except ValueError:
+                        pass
+        # 遥测口径（runtime compiler_telemetry 键）：accepted=已处置、rejected=驳回、
+        # unmodified=免改（approved 且无人工修订标记的简化演示值）
+        rejected_count = sum(
+            1
+            for cs in self._change_sets.values()
+            if cs.get("ontology_id") == ontology_id
+            and cs.get("org_id") == org_id
+            and cs["status"] == "rejected"
+        )
+        unmodified_count = disposed_count
+        rate = (unmodified_count / disposed_count) if disposed_count else 0.0
+        return {
+            "ontology_id": ontology_id,
+            "ontology_version_id": ver["id"],
+            "version": ver["version"],
+            "snapshot_sha256": ver["etag"],
+            "domain_schema_sha256": fps["domain_schema_sha256"],
+            "site_binding_sha256": fps["site_binding_sha256"],
+            "evaluated_at": _now_iso(),
+            "sla_threshold_hours": _SLA_THRESHOLD_HOURS,
+            "unmapped_required_properties": unmapped,
+            "unbound_object_types": unbound,
+            "unowned_or_unevidenced_rules": [],
+            "candidate_disposition": {
+                "tracked_count": tracked_total,
+                "disposed_count": disposed_count,
+                "undisposed_count": len(undisposed),
+                "undisposed": undisposed,
+                "all_disposed": len(undisposed) == 0,
+            },
+            "sla_aging": {
+                "threshold_hours": _SLA_THRESHOLD_HOURS,
+                "pending_review_count": pending_review_count,
+                "overdue_count": len(overdue),
+                "overdue": overdue,
+                "oldest_pending_age_hours": (
+                    round(oldest_age_hours, 2) if oldest_age_hours is not None else None
+                ),
+            },
+            "compiler_telemetry": {
+                "unmodified_accept_rate": round(rate, 4),
+                "accepted_count": disposed_count,
+                "unmodified_count": unmodified_count,
+                "rejected_count": rejected_count,
+            },
+            "gate_ready": bool(
+                not unmapped and not unbound and len(undisposed) == 0 and len(overdue) == 0
+            ),
+            "_status": 200,
+        }
+
+    def reconcile_references(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        references: list[dict[str, Any]],
+        cutover_at: str | None = None,
+        idem_key: str,
+    ) -> dict[str, Any]:
+        """D33 只读对账（键与判定对齐 runtime：本体不存在/跨租户 → tenant_mismatch
+        且不泄露存在性 S-01；本体属本租户但版本缺 → orphan_version）。"""
+        self._maybe_fault()
+        results: list[dict[str, Any]] = []
+        valid_count = 0
+        for ref in references:
+            ref = ref if isinstance(ref, dict) else {}
+            ref_ontology = str(ref.get("ontology_id", ""))
+            ref_version = str(ref.get("pinned_version_id", ""))
+            ont = self._ontologies.get(ref_ontology)
+            if ont is None or ont.get("org_id") != org_id:
+                status = "tenant_mismatch"
+            else:
+                ver = self._versions.get((ref_ontology, ref_version))
+                status = "valid" if ver is not None else "orphan_version"
+            if status == "valid":
+                valid_count += 1
+            results.append(
+                {
+                    "ref_key": ref.get("ref_key"),
+                    "ontology_id": ref_ontology,
+                    "pinned_version_id": ref_version,
+                    "status": status,
+                }
+            )
+        total = len(results)
+        return {
+            "checked_at": _now_iso(),
+            "cutover_at": cutover_at,
+            "total_checked": total,
+            "valid_count": valid_count,
+            "anomaly_count": total - valid_count,
+            "passed": valid_count == total,
+            "results": results,
             "_status": 200,
         }

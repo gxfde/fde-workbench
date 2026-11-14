@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -91,6 +92,13 @@ class OntologyTerm(Base, TimestampMixin, VersionedMixin):
     created_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+    # ---- V3.3 M5-WP2 改进单 4 单向晋升锚点（晋升写路径归 WP3 独立模块）----
+    # 晋升后词条成为只读投影（工作台不再接受词条编辑），promoted_at 记晋升
+    # 时刻；本迁移只落锚点列，零行为变化。
+    promoted_readonly: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class OntologyTermAlias(Base, TimestampMixin):

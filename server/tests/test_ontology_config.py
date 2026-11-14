@@ -52,4 +52,5 @@ def test_ontology_enabled_with_material_ok() -> None:
     assert not hasattr(settings, "ontology_org_id")
     # 契约 §1 预留字段（M3 起）已声明
     assert settings.ontology_model_endpoint == ""
-    assert settings.ontology_gate_dependency == ""
+    # M5-WP2 S-16：全局降级闸缺省 per_gate（集成契约 §0；空串 env 显式值归一）
+    assert settings.ontology_gate_dependency == "per_gate"

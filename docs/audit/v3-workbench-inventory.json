@@ -1,10 +1,10 @@
 {
  "route_count": 503,
  "blueprint_count": 54,
- "table_count": 155,
- "revision_count": 78,
+ "table_count": 157,
+ "revision_count": 79,
  "heads": [
-  "e1a9d4c7b2f8"
+  "c7e1b3d9f4a2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -333,6 +333,19 @@
    "down_revision": "d4e6f8a2c7b9",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "c7e1b3d9f4a2": {
+   "file": "c7e1b3d9f4a2_m5_wp2_gate_ontology_governance.py",
+   "down_revision": "e1a9d4c7b2f8",
+   "create_tables": [
+    "gate_evaluation_receipts",
+    "acceptance_contracts"
+   ],
+   "add_column_tables": [
+    "gates",
+    "ontology_terms",
+    "project_evidence"
+   ]
   },
   "c8d2f6a4e9b1": {
    "file": "c8d2f6a4e9b1_dispatch_five_seat_baseline.py",

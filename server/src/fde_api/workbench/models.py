@@ -585,6 +585,12 @@ class Gate(Base, TimestampMixin, VersionedMixin):
             "decision IS NULL OR decision IN ('proceed', 'pivot', 'stop')",
             name="ck_gates_decision",
         ),
+        # S-16 内层等级闭集（可空=未建档；M5-WP2）
+        CheckConstraint(
+            "ontology_dependency IS NULL OR "
+            "ontology_dependency IN ('required', 'optional', 'none')",
+            name="ck_gates_ontology_dependency",
+        ),
         Index("ix_gates_project_id", "project_id"),
     )
 
@@ -632,6 +638,14 @@ class Gate(Base, TimestampMixin, VersionedMixin):
     # revision——总览 B#28 的 revision ≡ 本表既有 version 列，不另开重复列。
     lifecycle_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
+    )
+    # ---- V3.3 M5-WP2 S-16/S-12 本体依赖锚点（可空=未建档，走全局缺省）----
+    # 仅全局闸 FDE_ONTOLOGY_GATE_DEPENDENCY=per_gate 时读本值（S-16 双层）；
+    # 下调须走 gate_ontology.set_gate_dependency 三闸（Owner 异人 + 非熔断），
+    # baseline 记基线建档人（异人判定锚点，收紧不改）。
+    ontology_dependency: Mapped[str | None] = mapped_column(String(12))
+    ontology_dependency_baseline_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
     )
 
     project: Mapped[Project] = relationship(back_populates="gates")

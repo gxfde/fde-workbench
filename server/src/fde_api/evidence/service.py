@@ -29,7 +29,10 @@ from fde_api.workbench.models import AICallAudit, Gate, OperationEvent, Project
 
 _HEX64_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 _GATE_REF_PATTERN = re.compile(r"gate:(G[1-9])")
-_REGISTER_FIELDS = {"kind", "source_uri", "content_sha256", "origin", "captured_from"}
+# M5-WP2 S-13：本体引用（可选；不进唯一指纹键，防互踩）
+_REGISTER_FIELDS = {
+    "kind", "source_uri", "content_sha256", "origin", "captured_from", "ontology_ref",
+}
 _ORIGIN_MAX_LENGTH = 2000
 
 
@@ -102,6 +105,78 @@ def normalize_captured_from(value: object) -> str:
     )
 
 
+def normalize_ontology_ref(value: object) -> dict[str, str | None] | None:
+    """S-13 本体引用（M5-WP2，可选）：``ontology_id``/``pinned_version_id``
+    必填，``object_ref_id``/``action_request_id``/``logic_eval_digest`` 可选；
+    None = 不引用（纯文件指纹证据，既有调用方零影响）。"""
+    if value is None:
+        return None
+    allowed = {
+        "ontology_id", "pinned_version_id", "object_ref_id",
+        "action_request_id", "logic_eval_digest",
+    }
+    if not isinstance(value, Mapping) or set(value) - allowed:
+        raise EvidenceServiceError("invalid_request", "ontology_ref 字段无效。", 400)
+    ontology_id = value.get("ontology_id")
+    pinned = value.get("pinned_version_id")
+    if not isinstance(ontology_id, str) or not ontology_id.strip():
+        raise EvidenceServiceError(
+            "invalid_request", "ontology_ref.ontology_id 必填。", 400
+        )
+    if not isinstance(pinned, str) or not pinned.strip():
+        raise EvidenceServiceError(
+            "invalid_request", "ontology_ref.pinned_version_id 必填。", 400
+        )
+    ref: dict[str, str | None] = {
+        "ontology_id": ontology_id.strip(),
+        "pinned_version_id": pinned.strip(),
+        "object_ref_id": None,
+        "action_request_id": None,
+        "logic_eval_digest": None,
+    }
+    for key in ("object_ref_id", "action_request_id"):
+        item = value.get(key)
+        if item is not None:
+            if not isinstance(item, str) or not item.strip():
+                raise EvidenceServiceError(
+                    "invalid_request", f"ontology_ref.{key} 须为非空字符串或省略。", 400
+                )
+            ref[key] = item.strip()
+    digest = value.get("logic_eval_digest")
+    if digest is not None:
+        if not isinstance(digest, str) or not _HEX64_PATTERN.fullmatch(digest.strip()):
+            raise EvidenceServiceError(
+                "invalid_sha256", "ontology_ref.logic_eval_digest 须为 64 位十六进制。", 400
+            )
+        ref["logic_eval_digest"] = digest.strip().lower()
+    return ref
+
+
+def verify_ontology_ref(session: Session, project: Project, ref: dict[str, str | None]) -> None:
+    """S-13 归属强验：引用必须钉住**本项目活跃绑定**的版本；未钉/跨租户一律
+    400 ontology_ref_not_pinned——错误码与文案不泄露本体存在性（S-01）。
+    跨库无外键，归属约束只能由服务层强制。
+    （ProjectOntologyBinding 函数内导入：包级顶层导入环冻结
+    test_architecture_purity——integrations→evidence 既有边不可反向成环）
+    """
+    from fde_api.integrations.models import ProjectOntologyBinding
+
+    binding = session.scalar(
+        select(ProjectOntologyBinding).where(
+            ProjectOntologyBinding.project_id == project.id,
+            ProjectOntologyBinding.ontology_id == ref["ontology_id"],
+            ProjectOntologyBinding.pinned_version_id == ref["pinned_version_id"],
+            ProjectOntologyBinding.status == "active",
+        )
+    )
+    if binding is None:
+        raise EvidenceServiceError(
+            "ontology_ref_not_pinned",
+            "本体引用未钉住项目活跃绑定版本，拒绝登记（ontology_ref_not_pinned）。",
+            400,
+        )
+
+
 # ---------------------------------------------------------------------------
 # 会话内幂等登记（gate_service 等内部调用方直接用）
 # ---------------------------------------------------------------------------
@@ -127,8 +202,10 @@ def upsert_evidence(
     origin: str | None = None,
     captured_from: str | None = "human",
     created_by_user_id: str | None = None,
+    ontology_ref: dict[str, str | None] | None = None,
 ) -> tuple[ProjectEvidence, bool]:
-    """返回 (row, created)。同指纹已有则原样返回（不改写任何列——证据不可变）。"""
+    """返回 (row, created)。同指纹已有则原样返回（不改写任何列——证据不可变；
+    S-13 引用列同样只在首建落值，幂等重发不改写引用）。"""
     existing = _find(session, project_id, source_uri, content_sha256)
     if existing is not None:
         return existing, False
@@ -140,6 +217,7 @@ def upsert_evidence(
         origin=origin,
         captured_from=captured_from,
         created_by_user_id=created_by_user_id,
+        **(ontology_ref or {}),
     )
     try:
         with session.begin_nested():
@@ -164,6 +242,12 @@ def serialize_evidence(row: ProjectEvidence) -> dict[str, Any]:
         "origin": row.origin,
         "captured_from": row.captured_from,
         "created_by_user_id": row.created_by_user_id,
+        # S-13 本体引用投影（M5-WP2；未引用恒 None，透明缺省）
+        "ontology_id": row.ontology_id,
+        "pinned_version_id": row.pinned_version_id,
+        "object_ref_id": row.object_ref_id,
+        "action_request_id": row.action_request_id,
+        "logic_eval_digest": row.logic_eval_digest,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -192,8 +276,13 @@ def register_evidence(*, actor: User, project_id: str, payload: Mapping[str, Any
     content_sha256 = normalize_sha256(payload.get("content_sha256"))
     origin = normalize_origin(payload.get("origin"))
     captured_from = normalize_captured_from(payload.get("captured_from"))
+    ontology_ref = normalize_ontology_ref(payload.get("ontology_ref"))
     with db.session() as session, session.begin():
         project = _load_project(session, actor, project_id, manage=True)
+        # S-13 归属强验在写前（防跨租户注入；幂等重发同验，引用不可变语义
+        # 意味着首建后的重发不改变既有引用）
+        if ontology_ref is not None:
+            verify_ontology_ref(session, project, ontology_ref)
         row, created = upsert_evidence(
             session,
             project_id=project.id,
@@ -203,6 +292,7 @@ def register_evidence(*, actor: User, project_id: str, payload: Mapping[str, Any
             origin=origin,
             captured_from=captured_from,
             created_by_user_id=actor.id,
+            ontology_ref=ontology_ref,
         )
         if created:
             record_event(

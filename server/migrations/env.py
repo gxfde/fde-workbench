@@ -20,6 +20,10 @@ from fde_api.mailing import models as mailing_models  # noqa: F401
 from fde_api.dispatch import models as dispatch_models  # noqa: F401
 from fde_api.translator import models as translator_models  # noqa: F401  (goal-d9)
 from fde_api.evidence import models as evidence_models  # noqa: F401  (V3 T-E1)
+from fde_api.projects.gate_receipt import (  # noqa: F401  (V3.3 M5-WP2 D29 回执+契约)
+    AcceptanceContract,
+    GateEvaluationReceipt,
+)
 from fde_api.workflows import models as workflow_models  # noqa: F401  (V3 T-W1)
 from fde_api.ontology import models as ontology_models  # noqa: F401  (V3 T-O1)
 from fde_api.integrations import models as ontology_binding_models  # noqa: F401  (V3.3 M2 WP4)
