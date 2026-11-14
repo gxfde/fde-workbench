@@ -145,6 +145,8 @@ def test_wp2_migration_columns_exist(db_session) -> None:
         "id", "project_id", "gate_id", "gate_key", "revision", "result", "decision",
         "input_snapshot_json", "input_snapshot_sha256", "ontology_checks_json",
         "ontology_degradation", "decided_by_user_id", "decided_at", "receipt_sha256",
+        # 合流回植观测值列（e9c4b7a1d5f8；源=并行评审版）
+        "domain_schema_sha256", "site_binding_sha256", "gate_ready", "disposition_closed",
     } <= receipt_cols
 
     # 契约独立实体（吸收并行评审亮点：可独立建档/换版，acceptor 按**角色**判定，
@@ -263,6 +265,10 @@ def test_receipt_frozen_on_decide_and_immutable(m5_env, db_session, monkeypatch)
     assert rec.gate_key == "G5"
     assert rec.result == "pass"
     assert rec.ontology_degradation in ("online", "degraded", "skipped", "disabled")
+    # 合流回植观测值列固化（e9c4b7a1d5f8）：online 档双指纹可空诚实、
+    # gate_ready/disposition_closed 从 summary 透传落列
+    assert rec.gate_ready is not None
+    assert rec.disposition_closed is not None
     # 快照哈希可重放验真
     assert verify_receipt(rec) is True
     # 篡改快照 → 验真失败

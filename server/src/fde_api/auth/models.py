@@ -77,6 +77,11 @@ class UTCDateTime(TypeDecorator[datetime]):
 class UTCTimestamp(UTCDateTime):
     """Portable UTC-normalized TIMESTAMP storage."""
 
+    # SQLAlchemy 的 cache-key 检查只读本类 ``__dict__``（type_api.py
+    # ``__class__.__dict__.get("cache_ok")``）——不感知父类声明；缺此行每个
+    # 实例首次编译都发 SAWarning 且污染 CLI 输出（M5-WP2 合流回植，源=并行评审）。
+    cache_ok = True
+
 
 class Base(DeclarativeBase):
     pass

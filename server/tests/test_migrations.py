@@ -108,7 +108,9 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          （b7d3f9a1c5e2；挂 c4a8f2e6b1d9 之后保单头；evidence kind 扩 ontology_annotation）
 # V3.3 M5 WP2：S-13 证据引用列 + Gate 评估回执/验收契约两表 + 本体依赖/晋升锚点
 #          （c7e1b3d9f4a2；挂 e1a9d4c7b2f8 之后保单头；WP2 唯一 DDL 收口）
-HEAD_REVISION = "c7e1b3d9f4a2"
+# V3.3 M5 WP2 合流回植：回执观测值列（双指纹/gate_ready/disposition_closed）
+#          （e9c4b7a1d5f8；挂 c7e1b3d9f4a2 之后保单头；源=并行评审版决策单步④）
+HEAD_REVISION = "e9c4b7a1d5f8"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1177,8 +1179,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + V3.3 M2 WP4 段 2 步 5 evidence kind 扩 ontology_annotation b7d3f9a1c5e2 之后 = 77；
     # + V3.3 M4 WP3 D27 workflow_runs 本体版本五元组快照 e1a9d4c7b2f8 之后 = 78；
     # + V3.3 M5 WP2 Gate 本体治理（S-13/D29/S-16 锚点）c7e1b3d9f4a2 之后 = 79；
+    # + V3.3 M5 WP2 合流回植观测值列 e9c4b7a1d5f8 之后 = 80；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 79
+    assert len(known) == 80
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

@@ -200,6 +200,9 @@ def evaluate_gate_ontology(
     if isinstance(disposition, dict):
         checks["candidate_disposition"] = disposition
     checks["gate_ready"] = bool(summary.get("gate_ready"))
+    # 合流回植观测值（e9c4b7a1d5f8 物理列的数据源）：D32 双层指纹随 summary 透传
+    checks["domain_schema_sha256"] = summary.get("domain_schema_sha256")
+    checks["site_binding_sha256"] = summary.get("site_binding_sha256")
     # D31 古德哈特护栏：required/strong 只卡「<0.8/冲突候选 100% 人工处置」；
     # 免改/精修/驳回均算已处置（summary all_disposed 口径），不算阻断项。
     if (

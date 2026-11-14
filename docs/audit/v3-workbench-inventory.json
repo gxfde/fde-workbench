@@ -2,9 +2,9 @@
  "route_count": 503,
  "blueprint_count": 54,
  "table_count": 157,
- "revision_count": 79,
+ "revision_count": 80,
  "heads": [
-  "c7e1b3d9f4a2"
+  "e9c4b7a1d5f8"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -627,6 +627,14 @@
     "training_entitlements"
    ],
    "add_column_tables": []
+  },
+  "e9c4b7a1d5f8": {
+   "file": "e9c4b7a1d5f8_m5_wp2_receipt_observability_backport.py",
+   "down_revision": "c7e1b3d9f4a2",
+   "create_tables": [],
+   "add_column_tables": [
+    "gate_evaluation_receipts"
+   ]
   },
   "ebb003a5c3a8": {
    "file": "ebb003a5c3a8_baseline_pg.py",

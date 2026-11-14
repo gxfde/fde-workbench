@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -33,6 +34,7 @@ from sqlalchemy import (
     JSON,
     String,
     event,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -153,6 +155,19 @@ class GateEvaluationReceipt(Base, TimestampMixin):
         JSON, nullable=False, default=dict
     )
     ontology_degradation: Mapped[str] = mapped_column(String(16), nullable=False)
+    # ---- 合流回植（源=并行评审 b2e8d4c6a9f1 版本，append-only e9c4b7a1d5f8）----
+    # 高频审计查询字段从 checks_json 提升为物理列（决策单步④）；双指纹诚实
+    # 可空（disabled/skipped 档无指纹），gate_ready/disposition_closed 与并行
+    # 版查询形态兼容（NOT NULL + server_default）。不进两级哈希口径（观测值列，
+    # 结论完整性由既有 _RECEIPT_CONTENT_COLUMNS 守卫）。
+    domain_schema_sha256: Mapped[str | None] = mapped_column(String(64))
+    site_binding_sha256: Mapped[str | None] = mapped_column(String(64))
+    gate_ready: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    disposition_closed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     decided_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -248,6 +263,14 @@ def freeze_gate_receipt(
         input_snapshot_sha256=snapshot_sha256(input_snapshot),
         ontology_checks_json=dict(ontology_eval.get("checks") or {}),
         ontology_degradation=ontology_eval["degradation"],
+        domain_schema_sha256=ontology_eval.get("checks", {}).get("domain_schema_sha256"),
+        site_binding_sha256=ontology_eval.get("checks", {}).get("site_binding_sha256"),
+        gate_ready=bool(ontology_eval.get("checks", {}).get("gate_ready")),
+        disposition_closed=bool(
+            (ontology_eval.get("checks", {}).get("candidate_disposition") or {}).get(
+                "all_disposed", True
+            )
+        ),
         decided_by_user_id=actor.id,
         decided_at=datetime.now(timezone.utc),
     )
