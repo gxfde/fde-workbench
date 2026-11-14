@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — AI 原生化学习闭环 2.0 L6 实施轮：真实交付反哺宿主侧只读抽取脚本（门禁 fail→pass 迁移＋产物拒收 → 真相层 `import_card_v1` 候选卡；零迁移零路由零表，2026-11-14）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L6 条款①②④⑤（条款③ L-C 原文核对视图挂账顺延，见任务书挂账登记）：
+
+- **NEW 宿主侧只读脚本 `scripts/extract_case_from_project.py`**：只读扫描 `operation_events` 的 `gate_decided` fail→pass/conditional_pass 真实驳回修正链与四类拒收信号（`business_facts`/`requirements` 审阅拒收、`agent_artifacts` 人工撤回、`solution_review_checkpoints` 驳回），以已接受事实/需求为骨架装配脱敏 `import_card_v1` 候选卡；**宿主通道五边界先例裁定**（沿 `scripts/lead_ledger_append.py`：人工发起＋数据库只读事务 `SET TRANSACTION READ ONLY`＋真相层只插不改＋确定性 `card_id`〔信号指纹 sha256〕幂等＋登记面缺失 fail-closed 不自动建目录），服务端容器不直连宿主 CLI。
+- **脱敏与隔离红线**：全部自由文本字段强制经 T-A2 `redact_text_detailed`（企业名→代号、PII 掩码；凭据串命中 `SensitiveCredentialDetected` / 词典故障 `RedactionConfigError` 即 fail-closed 中止、零落盘）；输出目录双闸（落本仓内 `out_dir_inside_repo` / 目录不存在 `out_dir_missing` 一律拒绝——候选卡含判卷基准，永不入仓、不入被扫面）；写出前强制过 L1 `import_cases.build_payload`＋`gate_payload` 生产四重闸（卡 schema 允许名单＋`validate_scenario` 八规则＋`load_view` 三视图泄漏自检），激活仍复用 L1 人工链（导入→桌面核对→启用），零自动入库路径。
+- **预算记账主体写明**（任务书条款④）：脚本纯确定性 SQL 只读，零 AI 调用零 token 消耗；候选卡后续训练场运行/回归的 AI 记账统一归发起运行的平台服务/操作员账号（`provenance.billing_actor_policy='service_account'`），不伪造匿名主体。
+- **验证**：NEW `server/tests/test_extract_case_from_project.py` 4 例（输出目录安全双闸／信号抽取→脱敏→幂等落盘→L1 衔接／凭据串 fail-closed／源码零答案键静态钉）全绿；污染隔离钉＋L1 管线＋lessons 装载邻域回归 34 passed；ruff clean；变异四连（幂等短路／仓库内落盘闸／凭据 fail-closed／目录缺席闸）全真红→字节级 sha256 逐位核对还原→复绿。真机反哺实证（真实驳回信号→候选卡落真相层）随收口轮从主树补跑（worktree 无 `server/.env`，真相层目录须人工预建）；零迁移零路由零表——口径 **493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`** 不变，审计清单三件套与 archify 图沿用 L5 刷新态。
+
 ## [未发布] — AI 原生化学习闭环 2.0 L5 实施轮：三载体热生效（动态 Lessons＋Prompt Overlay 两点共用＋Skill 双闸链）＋回归真化噪声带四钉＋异步 BackgroundJob（迁移 `a9f3e5c7b1d2` 76→77 单头，路由 491→493，表 153→155，2026-11-14）
 
 承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L5 与设计稿 v1.1（§6 六条拍板全裁决），打通验证面与回流面全链机械化闭环：
