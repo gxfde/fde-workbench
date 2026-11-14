@@ -443,6 +443,7 @@ class OntologyClient:
             actor_id=actor_id,
             org_id=org_id,
             project_id=project_id,
+            idem=uuid.uuid4().hex,
             json_body={"pinned_version_id": version_id, "input": input_payload},
         )
 
@@ -464,6 +465,7 @@ class OntologyClient:
             actor_id=actor_id,
             org_id=org_id,
             project_id=project_id,
+            idem=uuid.uuid4().hex,
             json_body={"pinned_version_id": version_id, "input": input_payload},
         )
 
@@ -489,6 +491,7 @@ class OntologyClient:
             actor_id=actor_id,
             org_id=org_id,
             project_id=project_id,
+            idem=uuid.uuid4().hex,
             json_body=payload,
         )
 
@@ -527,6 +530,7 @@ class OntologyClient:
             actor_id=actor_id,
             org_id=org_id,
             project_id=project_id,
+            idem=uuid.uuid4().hex,
             json_body={"request_id": request_id},
         )
 

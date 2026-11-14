@@ -559,6 +559,14 @@ def _translate_runtime_call(call_fn: Any) -> dict[str, Any]:
             f"ontology runtime unreachable: {exc}", status=503, code="ontology_unavailable"
         ) from exc
     except OntologyAuthError as exc:
+        # 授权拒绝（403 body.code=forbidden，如 I4 自批）是调用方语义错 → 原样
+        # 403 透传；凭据被拒（401 unauthorized）才是配置错误 → 502 告警
+        # （M4 演练 D4 实证缺陷：两者曾混为一谈）
+        body = getattr(exc, "body", {}) or {}
+        if str(body.get("code", "")) == "forbidden":
+            raise BindingError(
+                str(body.get("message", "forbidden")), status=403, code="forbidden"
+            ) from exc
         raise BindingError(
             "ontology runtime rejected credentials (check FDE_ONTOLOGY_* config)",
             status=502,

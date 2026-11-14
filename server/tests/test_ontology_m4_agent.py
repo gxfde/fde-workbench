@@ -545,3 +545,69 @@ def test_mcp_gateway_ontology_tool_tiering(mcp_agent_app: Flask) -> None:
     assert "ontology-agent" in groups
     assert "ontology_logic_run" in groups["ontology-agent"]
     assert "ontology_action_execute" not in groups["ontology-agent"]
+
+
+def test_auth_error_with_forbidden_code_translates_to_403_not_502(m4_binding_app, monkeypatch):
+    """演练 D4 实证缺陷修复：runtime I4 自批 403（body.code=forbidden）经代理必须
+    原样 403 透传，不得混入"凭据配置错误 502"（授权拒绝 ≠ 配置错误）。"""
+    from fde_api.integrations import service as svc
+    from fde_api.integrations.ontology_client import OntologyAuthError
+
+    class _ForbiddenClient:
+        def propose_action(self, **kwargs):  # noqa: ANN001, ANN003
+            return {"_status": 201, "id": "req-1", "status": "pending"}
+
+        def approve_action(self, **kwargs):  # noqa: ANN001, ANN003
+            raise OntologyAuthError({"code": "forbidden", "message": "requester cannot approve own action request (I4)"})
+
+    monkeypatch.setattr(svc, "client_from_settings", lambda: _ForbiddenClient())
+
+    with m4_binding_app.app_context():
+        session = svc.db.session()
+        user = User(
+            id="u-forbidden",
+            username="fb@x.test",
+            role="project_lead",
+            password_hash="x",
+            is_active=True,
+            must_change_password=False,
+            auth_version=1,
+            org_id="org-alpha",
+        )
+        proj = Project(
+            id="proj-forbidden",
+            project_code="PF-01",
+            name="Forbidden Project",
+            enterprise_code="ENT-PF",
+            leader_user_id="u-forbidden",
+            status="active",
+            template_snapshot={},
+            org_id="org-alpha",
+            planned_start_date=date(2026, 11, 14),
+        )
+        member = ProjectMember(project_id="proj-forbidden", user_id="u-forbidden", role="member")
+        binding = ProjectOntologyBinding(
+            id="bind-fb-1",
+            org_id="org-alpha",
+            project_id="proj-forbidden",
+            ontology_id="ont-x",
+            pinned_version_id="ver-x",
+            pinned_version="1.0.0",
+            binding_role="primary",
+            status="active",
+            active_marker=ACTIVE_MARKER,
+            bound_by_user_id="u-forbidden",
+        )
+        session.add_all([user, proj, member, binding])
+        session.commit()
+
+        with pytest.raises(svc.BindingError) as raised:
+            svc.approve_binding_action(
+                actor=user,
+                project_id="proj-forbidden",
+                binding_id="bind-fb-1",
+                request_id="req-1",
+                payload={"role": "business_owner", "decision": "approved"},
+            )
+    assert raised.value.status == 403, f"授权拒绝必须 403，实际 {raised.value.status}"
+    assert raised.value.code == "forbidden"
