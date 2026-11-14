@@ -106,13 +106,30 @@ class ProjectFeedbackBundle:
         return bool(self.gate_transitions or self.rejections)
 
 
+# L1 转换器单一真身路径（同套仓库布局知识只写这一处；挪动 import_cases.py
+# 须同步改此行——tests/test_extract_case_from_project.py 有在场钉先红）。
+IMPORT_CASES_PATH = REPO_ROOT / "scripts" / "simulation" / "import_cases.py"
+# manifest 登记锁：持锁超过此时长视为崩溃残留强拆（宿主人工脚本无等待轮询）。
+LOCK_STALE_SECONDS = 30.0
+MANIFEST_LOCK_SUFFIX = ".lock"
+
+
 def _load_import_cases_module() -> Any:
-    script_path = REPO_ROOT / "scripts" / "simulation" / "import_cases.py"
-    spec = importlib.util.spec_from_file_location("_l1_import_cases", script_path)
+    spec = importlib.util.spec_from_file_location("_l1_import_cases", IMPORT_CASES_PATH)
     if spec is None or spec.loader is None:
-        raise CaseExtractionError("import_cases_unavailable", f"找不到 L1 转换器：{script_path}")
+        raise CaseExtractionError("import_cases_unavailable", f"找不到 L1 转换器：{IMPORT_CASES_PATH}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Python 3.13+ 注解解析要求模块可经 sys.modules 查到：先注册再 exec，
+    # 失败即回收并转 CaseExtractionError（裸 ImportError 堆栈对宿主操作者无意义）。
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException as exc:
+        sys.modules.pop(spec.name, None)
+        raise CaseExtractionError(
+            "import_cases_unavailable",
+            f"L1 转换器加载失败（{IMPORT_CASES_PATH}）：{exc}",
+        ) from exc
     return module
 
 
@@ -154,6 +171,54 @@ def _redact(value: str, *, enterprise_code: str) -> str:
         raise CaseExtractionError("sensitive_credential_detected", str(exc)) from exc
     except RedactionConfigError as exc:
         raise CaseExtractionError("pseudonym_dict_unavailable", str(exc)) from exc
+
+
+def _parse_gate_decision(ev: OperationEvent) -> tuple[str, str]:
+    """解析 gate_decided 事件的 ``(gate_key, result)``；缺键返回空串由调用方跳过。"""
+    changes = ev.changes if isinstance(ev.changes, dict) else {}
+    gate_key = str(changes.get("gate_key") or "").strip()
+    result = str(changes.get("result") or "").strip()
+    return gate_key, result
+
+
+def pair_gate_transitions(
+    events: list[OperationEvent],
+) -> list[tuple[str, OperationEvent, OperationEvent]]:
+    """party 评审挂账 B：两遍配对——不依赖事件顺序，消除时间戳打平时的静默漏检。
+
+    第一遍按 gate_key 收集 fail 池；第二遍按 occurred_at 升序消费
+    pass/conditional_pass，每个 pass 配对**未消费且 ``occurred_at <= pass``**
+    的最晚 fail（最近前因语义，等价旧栈式 pop 在正常时序下的形态）。
+    全打平（同事务批量代录，``occurred_at`` 同值）时 ``<=`` 仍成立 ⇒ **只可能
+    错配 fail note，不可能漏检迁移链**；fail 严格晚于 pass 则不配对（语义同旧）。
+    返回 ``(gate_key, fail_event, pass_event)`` 列表，pass 按 occurred_at 升序。
+    """
+    fails_by_key: dict[str, list[OperationEvent]] = {}
+    passes: list[tuple[OperationEvent, str]] = []
+    for ev in events:
+        gate_key, result = _parse_gate_decision(ev)
+        if not gate_key:
+            continue
+        if result == "fail":
+            fails_by_key.setdefault(gate_key, []).append(ev)
+        elif result in ("pass", "conditional_pass"):
+            passes.append((ev, gate_key))
+
+    def _ts(ev: OperationEvent) -> datetime:
+        return ev.occurred_at or datetime.min.replace(tzinfo=UTC)
+
+    passes.sort(key=lambda item: _ts(item[0]))
+    consumed: set[str] = set()
+    pairs: list[tuple[str, OperationEvent, OperationEvent]] = []
+    for pass_ev, gate_key in passes:
+        pool = [f for f in fails_by_key.get(gate_key, []) if f.id not in consumed]
+        eligible = [f for f in pool if _ts(f) <= _ts(pass_ev)]
+        if not eligible:
+            continue
+        chosen = max(eligible, key=_ts)
+        consumed.add(chosen.id)
+        pairs.append((gate_key, chosen, pass_ev))
+    return pairs
 
 
 def collect_project_feedback_signals(
@@ -207,40 +272,31 @@ def collect_project_feedback_signals(
             g.gate_key: g
             for g in session.scalars(select(Gate).where(Gate.project_id == project.id))
         }
-        last_fail_by_gate: dict[str, OperationEvent] = {}
-        for ev in gate_events:
-            changes = ev.changes if isinstance(ev.changes, dict) else {}
-            gate_key = str(changes.get("gate_key") or "").strip()
-            result = str(changes.get("result") or "").strip()
-            if not gate_key:
-                continue
-            if result == "fail":
-                last_fail_by_gate[gate_key] = ev
-            elif result in ("pass", "conditional_pass") and gate_key in last_fail_by_gate:
-                fail_ev = last_fail_by_gate.pop(gate_key)
-                fail_changes = fail_ev.changes if isinstance(fail_ev.changes, dict) else {}
-                gate_row = gates_by_key.get(gate_key)
-                checklist_labels: list[str] = []
-                if gate_row and isinstance(gate_row.evidence_checklist, list):
-                    checklist_labels = [
-                        str(item.get("label") or "").strip()
-                        for item in gate_row.evidence_checklist
-                        if isinstance(item, dict) and str(item.get("label") or "").strip()
-                    ]
-                bundle.gate_transitions.append(
-                    GateFailPassSignal(
-                        gate_key=gate_key,
-                        fail_event_id=fail_ev.id,
-                        pass_event_id=ev.id,
-                        fail_note=str(
-                            fail_changes.get("note")
-                            or fail_changes.get("fail_exit")
-                            or f"{gate_key} 首次核验未通过"
-                        ),
-                        pass_note=str(changes.get("note") or f"{gate_key} 补齐证据后核验通过"),
-                        accepted_labels=tuple(checklist_labels),
-                    )
+        for gate_key, fail_ev, ev in pair_gate_transitions(gate_events):
+            fail_changes = fail_ev.changes if isinstance(fail_ev.changes, dict) else {}
+            gate_row = gates_by_key.get(gate_key)
+            checklist_labels: list[str] = []
+            if gate_row and isinstance(gate_row.evidence_checklist, list):
+                checklist_labels = [
+                    str(item.get("label") or "").strip()
+                    for item in gate_row.evidence_checklist
+                    if isinstance(item, dict) and str(item.get("label") or "").strip()
+                ]
+            pass_changes = ev.changes if isinstance(ev.changes, dict) else {}
+            bundle.gate_transitions.append(
+                GateFailPassSignal(
+                    gate_key=gate_key,
+                    fail_event_id=fail_ev.id,
+                    pass_event_id=ev.id,
+                    fail_note=str(
+                        fail_changes.get("note")
+                        or fail_changes.get("fail_exit")
+                        or f"{gate_key} 首次核验未通过"
+                    ),
+                    pass_note=str(pass_changes.get("note") or f"{gate_key} 补齐证据后核验通过"),
+                    accepted_labels=tuple(checklist_labels),
                 )
+            )
 
         # 2A. 被拒收的业务事实
         for fact in session.scalars(
@@ -551,6 +607,38 @@ def _atomic_write_bytes(target: Path, data: bytes) -> None:
             tmp.unlink(missing_ok=True)
 
 
+def _acquire_dir_lock(safe_dir: Path) -> Path:
+    """party 评审挂账 A：O_EXCL 独占锁护 manifest 读-改-写段（跨平台，Windows 宿主适用）。
+
+    并发双实例下只有一个拿到锁，另一方 ``manifest_lock_busy`` fail-closed
+    （不等待不轮询——宿主人工脚本场景直接重跑）；锁文件 mtime 超过
+    ``LOCK_STALE_SECONDS`` 视为进程崩溃残留，强拆重试一次。
+    """
+    import time
+
+    lock_path = safe_dir / f"{MANIFEST_FILENAME}{MANIFEST_LOCK_SUFFIX}"
+    for attempt in range(2):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.write(fd, str(os.getpid()).encode("utf-8"))
+            os.close(fd)
+            return lock_path
+        except FileExistsError:
+            if attempt == 0:
+                try:
+                    age = time.time() - lock_path.stat().st_mtime
+                except OSError:
+                    age = 0.0
+                if age > LOCK_STALE_SECONDS:
+                    lock_path.unlink(missing_ok=True)
+                    continue
+            raise CaseExtractionError(
+                "manifest_lock_busy",
+                f"清单登记锁被持有（pid 见锁文件内容），稍后重跑即可：{lock_path}",
+            ) from None
+    raise CaseExtractionError("manifest_lock_busy", f"清单登记锁重试耗尽：{lock_path}")
+
+
 def write_candidate_card_idempotent(
     card: dict[str, Any],
     out_dir: Path,
@@ -583,35 +671,41 @@ def write_candidate_card_idempotent(
     digest = _sha256_bytes(encoded)
     _atomic_write_bytes(target_path, encoded)
 
-    manifest_path = safe_dir / MANIFEST_FILENAME
-    manifest_entries: list[dict[str, Any]] = []
-    if manifest_path.exists():
-        try:
-            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict) and isinstance(loaded.get("cards"), list):
-                manifest_entries = list(loaded["cards"])
-        except ValueError as exc:
-            raise CaseExtractionError("manifest_corrupted", f"候选清单 JSON 损坏：{manifest_path}") from exc
+    # manifest 读-改-写段在 O_EXCL 锁内执行：并发双实例不会互相覆盖丢登记
+    # 条目（卡文件本体幂等不丢，锁只护登记簿）；退出 finally 强制释放。
+    lock_path = _acquire_dir_lock(safe_dir)
+    try:
+        manifest_path = safe_dir / MANIFEST_FILENAME
+        manifest_entries: list[dict[str, Any]] = []
+        if manifest_path.exists():
+            try:
+                loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict) and isinstance(loaded.get("cards"), list):
+                    manifest_entries = list(loaded["cards"])
+            except ValueError as exc:
+                raise CaseExtractionError("manifest_corrupted", f"候选清单 JSON 损坏：{manifest_path}") from exc
 
-    if not any(isinstance(item, dict) and item.get("card_id") == card_id for item in manifest_entries):
-        manifest_entries.append(
-            {
-                "card_id": card_id,
-                "file": target_path.name,
-                "sha256": digest,
-                "project_code": card.get("provenance", {}).get("project_code", ""),
-                "recorded_at": datetime.now(UTC).isoformat(),
+        if not any(isinstance(item, dict) and item.get("card_id") == card_id for item in manifest_entries):
+            manifest_entries.append(
+                {
+                    "card_id": card_id,
+                    "file": target_path.name,
+                    "sha256": digest,
+                    "project_code": card.get("provenance", {}).get("project_code", ""),
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            manifest_doc = {
+                "schema": "l6-candidate-manifest-v1",
+                "note": "真相层候选卡登记簿（只插不改；激活须人工跑 import_cases.py 并经桌面启用）",
+                "cards": manifest_entries,
             }
-        )
-        manifest_doc = {
-            "schema": "l6-candidate-manifest-v1",
-            "note": "真相层候选卡登记簿（只插不改；激活须人工跑 import_cases.py 并经桌面启用）",
-            "cards": manifest_entries,
-        }
-        _atomic_write_bytes(
-            manifest_path,
-            (json.dumps(manifest_doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
-        )
+            _atomic_write_bytes(
+                manifest_path,
+                (json.dumps(manifest_doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+            )
+    finally:
+        lock_path.unlink(missing_ok=True)
 
     return {
         "card_id": card_id,

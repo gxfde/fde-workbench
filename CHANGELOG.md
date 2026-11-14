@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — L6 挂账清偿轮：manifest O_EXCL 锁＋两遍配对（打平不漏检）＋importlib 单一真身（零迁移零路由零表，2026-11-15）
+
+承 party 评审追改轮（#479）遗留的三笔宿主域挂账，蔡工「按推荐执行」（选择题未答，留痕可推翻）一 PR 清偿：
+
+- **manifest 并发锁（挂账②清偿）**：`candidate_manifest.json` 读-改-写段入 `O_EXCL` 独占锁（`_acquire_dir_lock`，跨平台 Windows 宿主适用）——并发双实例单方 `manifest_lock_busy` fail-closed（不等待不轮询，人工脚本重跑即可）；锁 mtime 超 `LOCK_STALE_SECONDS`（30s）视为崩溃残留强拆重试一次；卡文件本体幂等语义不变，锁只护登记簿。两钉：持锁拒写／陈旧强拆（`os.utime` 回拨构造）。
+- **两遍配对算法（③排序残界清偿）**：门禁迁移链从顺序扫描升级为纯函数 `pair_gate_transitions`——第一遍按 `gate_key` 收集 fail 池，第二遍按 `occurred_at` 升序消费 pass，每个 pass 配对**未消费且 `occurred_at <= pass`** 的最晚 fail（最近前因，等价旧栈式 pop 的正常时序形态）。同事务批量代录全打平（PG 同事务 `now()` 恒定）时 `<=` 仍成立 ⇒ **只可能错配 fail note，不可能漏检迁移链**；fail 严格晚于 pass 不配对。全打平确定性钉（1 fail＋1 pass 全字段相等＋pass id 字典序在前，变异 `<=`→`<` 必红）。
+- **importlib 单一真身（Yui 第一笔清偿）**：`IMPORT_CASES_PATH` 提为模块级常量＋在场钉（L1 `import_cases.py` 挪位未同步即红）＋加载失败转 `CaseExtractionError("import_cases_unavailable")`（裸 ImportError 堆栈不再外泄）＋加载器 `sys.modules` 先注册再 exec（与测试加载器同纪律）。
+- **验证**：L6 套件 9 例（+4 钉）＋污染钉/台账钉 9 例全绿；变异三连（锁 busy 吞掉／`<=` 退化 `<`／真身路径改错）全真红→字节级 sha256 还原→复绿；ruff clean；官方 mypy 277 基线零新增。**未实施留痕**：Yui 第二笔（单文件拆分）＝抑制性警告非指令；`billing_actor_policy` 机制化＝动生产记账链路需独立轮立项。
+- 口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**。
+
 ## [未发布] — L6 party 评审追改轮：三裁定落地——`occurred_at` 破平局钉＋发起权裁定登记＋manifest 锁挂账（零迁移零路由零表，2026-11-15）
 
 承 party mode 专家评审会（Code Review Crew＋红线特聘两名圆桌，蔡工拍板「按建议处理」）：

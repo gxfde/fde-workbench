@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -343,5 +345,121 @@ def test_same_created_at_events_use_occurred_at_tiebreak(db_session):
     assert len(bundles) == 1
     transitions = bundles[0].gate_transitions
     assert len(transitions) == 1
+    assert transitions[0].fail_event_id == "b" * 32 + "0000"
+    assert transitions[0].pass_event_id == "a" * 32 + "0000"
+
+
+def test_import_cases_path_anchor_is_present():
+    """挂账 C 在场钉：L1 转换器单一真身路径必须真实存在（挪位未同步即红）。"""
+    extractor = _load_extractor()
+    assert extractor.IMPORT_CASES_PATH.is_file(), (
+        f"L1 转换器已挪位但 extract_case_from_project.IMPORT_CASES_PATH 未同步："
+        f"{extractor.IMPORT_CASES_PATH}"
+    )
+
+
+def test_manifest_lock_rejects_concurrent_writer(db_session, tmp_path: Path):
+    """挂账 A：登记锁被持有时 fail-closed（manifest_lock_busy），不等待不覆盖。"""
+    extractor = _load_extractor()
+    project = _seed_project_with_feedback(db_session)
+    bundles = extractor.collect_project_feedback_signals(
+        db_session, project_code=project.project_code
+    )
+    card = extractor.build_candidate_card(bundles[0])
+    out_dir = tmp_path / "truth_candidates"
+    out_dir.mkdir()
+    lock = out_dir / f"candidate_manifest.json{extractor.MANIFEST_LOCK_SUFFIX}"
+    lock.write_text("999999", encoding="utf-8")
+    with pytest.raises(extractor.CaseExtractionError) as exc_busy:
+        extractor.write_candidate_card_idempotent(card, out_dir)
+    assert exc_busy.value.code == "manifest_lock_busy"
+
+
+def test_manifest_stale_lock_is_force_broken(db_session, tmp_path: Path):
+    """挂账 A：崩溃残留锁（mtime 超 LOCK_STALE_SECONDS）被强拆后正常写入。"""
+    extractor = _load_extractor()
+    project = _seed_project_with_feedback(db_session)
+    bundles = extractor.collect_project_feedback_signals(
+        db_session, project_code=project.project_code
+    )
+    card = extractor.build_candidate_card(bundles[0])
+    out_dir = tmp_path / "truth_candidates_stale"
+    out_dir.mkdir()
+    lock = out_dir / f"candidate_manifest.json{extractor.MANIFEST_LOCK_SUFFIX}"
+    lock.write_text("1", encoding="utf-8")
+    stale = time.time() - (extractor.LOCK_STALE_SECONDS + 5)
+    os.utime(lock, (stale, stale))
+    receipt = extractor.write_candidate_card_idempotent(card, out_dir)
+    assert receipt["status"] == "written"
+    assert not lock.exists()
+
+
+def test_pair_gate_transitions_survives_full_tie(db_session):
+    """挂账 B：created_at 与 occurred_at 全打平（同事务批量代录形态）时迁移链不漏检。
+
+    构造 1 fail + 1 pass 全字段时间戳打平、pass id 字典序在前：
+    - 两遍配对（正确实现）：fail 池非空且 occurred_at <= pass ⇒ 配对成功 = 1；
+    - 变异（``<=`` 退化 ``<`` 或退回顺序扫描）：eligible 空/先消费 pass ⇒ 0（确定性红）。
+    全打平只可能错配 fail note，不可能丢信号——这是本钉钉死的语义。
+    """
+    extractor = _load_extractor()
+    suffix = uuid4().hex[:8]
+    user = User(
+        username=f"l6.tie.{suffix}",
+        password_hash=hash_password("Passw0rd!234"),
+        role="admin",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    project = Project(
+        project_code=f"PRJ-L6F-{suffix.upper()}",
+        name=f"全打平钉-{suffix}",
+        enterprise_code="客户L6·装备制造·苏州",
+        background="同事务批量代录门禁拍板：created_at 与 occurred_at 全打平形态。",
+        status="completed",
+        planned_start_date=date(2026, 11, 1),
+        leader_user_id=user.id,
+        template_snapshot={"modules": []},
+        research_snapshot={},
+    )
+    db_session.add(project)
+    db_session.flush()
+    gate = Gate(project_id=project.id, gate_key="G7", status="passed", evidence_checklist=[])
+    db_session.add(gate)
+    db_session.flush()
+
+    flat = datetime.now(timezone.utc) - timedelta(hours=3)
+    ev_fail = OperationEvent(
+        id="b" * 32 + "0000",
+        project_id=project.id,
+        actor_user_id=user.id,
+        event_type="gate_decided",
+        target_type="gate",
+        target_id=gate.id,
+        created_at=flat,
+        occurred_at=flat,
+        changes={"gate_key": "G7", "from_status": "evidence", "result": "fail", "note": "全打平 fail"},
+    )
+    ev_pass = OperationEvent(
+        id="a" * 32 + "0000",
+        project_id=project.id,
+        actor_user_id=user.id,
+        event_type="gate_decided",
+        target_type="gate",
+        target_id=gate.id,
+        created_at=flat,
+        occurred_at=flat,
+        changes={"gate_key": "G7", "from_status": "evidence", "result": "pass", "note": "全打平 pass"},
+    )
+    db_session.add_all([ev_fail, ev_pass])
+    db_session.commit()
+
+    bundles = extractor.collect_project_feedback_signals(
+        db_session, project_code=project.project_code
+    )
+    assert len(bundles) == 1
+    transitions = bundles[0].gate_transitions
+    assert len(transitions) == 1, "全打平时迁移链必须仍被检出（两遍配对语义），漏检即假阴性回归"
     assert transitions[0].fail_event_id == "b" * 32 + "0000"
     assert transitions[0].pass_event_id == "a" * 32 + "0000"
