@@ -186,6 +186,9 @@ def collect_project_feedback_signals(
         )
 
         # 1. 门禁 fail -> pass / conditional_pass 迁移链
+        # 排序三键：created_at 打平（如同秒/同事务批量代录）时由 occurred_at
+        # 破平局；生产双拍板为独立事务、occurred_at 微秒可分——id（UUID，
+        # 字典序随机）只作最后兜底，禁止在打平时被实际消费。
         gate_events = list(
             session.scalars(
                 select(OperationEvent)
@@ -193,7 +196,11 @@ def collect_project_feedback_signals(
                     OperationEvent.project_id == project.id,
                     OperationEvent.event_type == "gate_decided",
                 )
-                .order_by(OperationEvent.created_at.asc(), OperationEvent.id.asc())
+                .order_by(
+                    OperationEvent.created_at.asc(),
+                    OperationEvent.occurred_at.asc(),
+                    OperationEvent.id.asc(),
+                )
             )
         )
         gates_by_key: dict[str, Gate] = {

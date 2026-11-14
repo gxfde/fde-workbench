@@ -267,3 +267,81 @@ def test_extractor_source_carries_no_forbidden_diagnostic_answer_tokens():
         "诊断案例集",
     ):
         assert forbidden not in source
+
+
+def test_same_created_at_events_use_occurred_at_tiebreak(db_session):
+    """party 评审裁定③：created_at 打平（如同事务批量代录）时由 occurred_at 破平局。
+
+    构造使 id 字典序把 pass 排在 fail 之前（pass id="a"*36 < fail id="b"*36）：
+    - 排序键含 occurred_at（正确实现）：fail 先消费、pass 配对 ⇒ 迁移链 = 1；
+    - 若退化回 created_at,id 双键（变异）：pass 先消费、fail 落单 ⇒ 迁移链 = 0（确定性红，
+      不依赖 UUID 随机——id 已显式固定）。
+    生产双拍板为独立事务、occurred_at 微秒可分；同事务批量代录是已知批量回填形态。
+    """
+    extractor = _load_extractor()
+    suffix = uuid4().hex[:8]
+    user = User(
+        username=f"l6.tiebreak.{suffix}",
+        password_hash=hash_password("Passw0rd!234"),
+        role="admin",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+
+    project = Project(
+        project_code=f"PRJ-L6T-{suffix.upper()}",
+        name=f"平局钉-{suffix}",
+        enterprise_code="客户L6·装备制造·苏州",
+        background="门禁拍板同事务批量代录形态：created_at 打平，occurred_at 破平局。",
+        status="completed",
+        planned_start_date=date(2026, 11, 1),
+        leader_user_id=user.id,
+        template_snapshot={"modules": []},
+        research_snapshot={},
+    )
+    db_session.add(project)
+    db_session.flush()
+    gate = Gate(
+        project_id=project.id,
+        gate_key="G7",
+        status="passed",
+        evidence_checklist=[],
+    )
+    db_session.add(gate)
+    db_session.flush()
+
+    same_created_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    ev_fail = OperationEvent(
+        id="b" * 32 + "0000",  # 字典序在 pass 之后：id 兜底序会把 fail 排后面
+        project_id=project.id,
+        actor_user_id=user.id,
+        event_type="gate_decided",
+        target_type="gate",
+        target_id=gate.id,
+        created_at=same_created_at,
+        occurred_at=same_created_at - timedelta(seconds=5),
+        changes={"gate_key": "G7", "from_status": "evidence", "result": "fail", "note": "打平钉 fail"},
+    )
+    ev_pass = OperationEvent(
+        id="a" * 32 + "0000",  # 字典序在 fail 之前
+        project_id=project.id,
+        actor_user_id=user.id,
+        event_type="gate_decided",
+        target_type="gate",
+        target_id=gate.id,
+        created_at=same_created_at,
+        occurred_at=same_created_at + timedelta(seconds=5),
+        changes={"gate_key": "G7", "from_status": "evidence", "result": "pass", "note": "打平钉 pass"},
+    )
+    db_session.add_all([ev_fail, ev_pass])
+    db_session.commit()
+
+    bundles = extractor.collect_project_feedback_signals(
+        db_session, project_code=project.project_code
+    )
+    assert len(bundles) == 1
+    transitions = bundles[0].gate_transitions
+    assert len(transitions) == 1
+    assert transitions[0].fail_event_id == "b" * 32 + "0000"
+    assert transitions[0].pass_event_id == "a" * 32 + "0000"

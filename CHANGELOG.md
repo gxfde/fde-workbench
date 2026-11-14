@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — L6 party 评审追改轮：三裁定落地——`occurred_at` 破平局钉＋发起权裁定登记＋manifest 锁挂账（零迁移零路由零表，2026-11-15）
+
+承 party mode 专家评审会（Code Review Crew＋红线特聘两名圆桌，蔡工拍板「按建议处理」）：
+
+- **排序修复（评审③，Boundary 发现）**：`scripts/extract_case_from_project.py` 门禁事件排序 `created_at, id` 双键升级为 `created_at, occurred_at, id` 三键——`created_at` 打平（如同秒/同事务批量代录）时由 `occurred_at` 破平局，杜绝 UUID 字典序随机兜底导致的**静默假阴性**（pass 先于 fail 被消费 ⇒ 迁移链漏检）；NEW 确定性测试钉 `test_same_created_at_events_use_occurred_at_tiebreak`（显式固定事件 id 使字典序把 pass 排前，变异拆掉 `occurred_at` 键必红——不依赖 UUID 随机），变异验证红→sha256 字节还原→绿。已知残界登记：同事务批量代录两事件 `occurred_at` 仍打平（PG 同事务 `now()` 恒定），生产双拍板为独立事务不受影响。
+- **发起权裁定登记（评审①，Vex 提案）**：L6 真机实证由 AI 会话持用户当轮指令执行真相层写入，裁定为 `lead_ledger_append` 先例「人工显式发起」的合法形态（授权措辞＝用户当轮指令＋当轮汇报＋留痕可推翻）；后续宿主写面操作须在轮次回执显式登记发起语境（任务书挂账登记 #1）。
+- **manifest 并发无锁挂账（评审②，Dana 口径）**：`candidate_manifest.json` 读-改-写无文件锁，并发双实例同目录会丢登记条目（卡文件本体幂等不丢）；单机单人竞态窗口可忽略，挂账不排期（任务书挂账登记 #2）。
+- **信号有效性置信度登记（评审④，Level 提案）**：「管线可用」＝高（真机 n=1）；「反哺信号有效」＝未知，待首批候选卡人工激活进训练场跑分后升格（任务书挂账登记 #3）。
+- **草稿质量教训（评审⑤，Grumbal）**：跨会话交接的「ready 草稿」须先空跑 import smoke——L6 草稿三处 import 级错误（`auth/security`→`auth/passwords`、`ProjectSolution` 域归属、动态加载未注册 `sys.modules`）全部在实施轮当场抓出，零漏入 main，但烧的是同一轮 token。
+
+口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**；测试 L6 套件 5 例（+1 钉）＋污染钉/台账钉 9 例全绿，ruff clean。
+
 ## [未发布] — AI 原生化学习闭环 2.0 L6 实施轮：真实交付反哺宿主侧只读抽取脚本（门禁 fail→pass 迁移＋产物拒收 → 真相层 `import_card_v1` 候选卡；零迁移零路由零表，2026-11-14）
 
 承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L6 条款①②④⑤（条款③ L-C 原文核对视图挂账顺延，见任务书挂账登记）：
