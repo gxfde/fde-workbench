@@ -13,10 +13,11 @@ import {
   decideProposal,
   listFindings,
   listProposals,
+  previewProposalRelease,
   releaseProposal,
   rollbackProposal,
 } from "./api"
-import type { FindingDto, ProposalDto } from "./types"
+import type { FindingDto, ProposalDto, ProposalReleasePreviewDto } from "./types"
 
 const STATUS_LABEL: Record<ProposalDto["status"], string> = {
   draft: "草稿",
@@ -55,6 +56,7 @@ export function ImprovementProposals(): ReactElement {
   const [channelPassword, setChannelPassword] = useState("")
   const [channelNote, setChannelNote] = useState("")
   const [channelError, setChannelError] = useState("")
+  const [releasePreview, setReleasePreview] = useState<ProposalReleasePreviewDto | null>(null)
   const sequence = useRef(0)
 
   const clearChannelState = useCallback(() => {
@@ -62,14 +64,30 @@ export function ImprovementProposals(): ReactElement {
     setChannelPassword("")
     setChannelNote("")
     setChannelError("")
+    setReleasePreview(null)
   }, [])
 
-  const openChannelForm = useCallback((proposalId: string, mode: "release" | "rollback") => {
-    setChannelTarget({ proposalId, mode })
-    setChannelPassword("")
-    setChannelNote("")
-    setChannelError("")
-  }, [])
+  const openChannelForm = useCallback(
+    (proposal: ProposalDto, mode: "release" | "rollback") => {
+      setChannelTarget({ proposalId: proposal.id, mode })
+      setChannelPassword("")
+      setChannelNote("")
+      setChannelError("")
+      setReleasePreview(null)
+      if (mode === "release" && proposal.candidate_payload && Object.keys(proposal.candidate_payload).length > 0) {
+        void previewProposalRelease(apiRequest, proposal.id)
+          .then((data) => {
+            if (data && data.proposal_id === proposal.id) {
+              setReleasePreview(data)
+            }
+          })
+          .catch(() => {
+            // 预览只读辅助——后端不可达不阻塞密码确认主框
+          })
+      }
+    },
+    [apiRequest],
+  )
 
   const load = useCallback(async () => {
     const requestSequence = ++sequence.current
@@ -249,12 +267,33 @@ export function ImprovementProposals(): ReactElement {
                       版本 {releaseInfo.released_version} · {releaseInfo.released_at} · 备注：
                       {releaseInfo.release_note}
                     </dd>
+                    {releaseInfo.materialized ? (
+                      <>
+                        <dt>热生效载体</dt>
+                        <dd>
+                          {releaseInfo.materialized.lesson
+                            ? `Lesson 已生效：${releaseInfo.materialized.lesson.entry_id} `
+                            : ""}
+                          {releaseInfo.materialized.overlay
+                            ? `Overlay 已生效：${releaseInfo.materialized.overlay.overlay_id} `
+                            : ""}
+                          {releaseInfo.materialized.skill
+                            ? `Skill 双闸已记账：${releaseInfo.materialized.skill.skill_ref}（须经 ${releaseInfo.materialized.skill.publish_via} 密码闸滚版本）`
+                            : ""}
+                        </dd>
+                      </>
+                    ) : null}
                     {releaseInfo.rollback ? (
                       <>
                         <dt>回滚记录</dt>
                         <dd>
                           {releaseInfo.rollback.rolled_back_at} · 备注：
                           {releaseInfo.rollback.rollback_note}
+                          {releaseInfo.rollback.retired_payload &&
+                          ((releaseInfo.rollback.retired_payload.lesson?.length ?? 0) > 0 ||
+                            (releaseInfo.rollback.retired_payload.overlay?.length ?? 0) > 0)
+                            ? `（已退役 Lesson ${releaseInfo.rollback.retired_payload.lesson?.length ?? 0} 条 / Overlay ${releaseInfo.rollback.retired_payload.overlay?.length ?? 0} 条）`
+                            : ""}
                         </dd>
                       </>
                     ) : null}
@@ -293,7 +332,7 @@ export function ImprovementProposals(): ReactElement {
                       <UiButton
                         variant="primary"
                         disabled={busy || !canReleasePlan}
-                        onClick={() => openChannelForm(proposal.id, "release")}
+                        onClick={() => openChannelForm(proposal, "release")}
                       >
                         发布记账
                       </UiButton>
@@ -309,7 +348,7 @@ export function ImprovementProposals(): ReactElement {
                       <UiButton
                         variant="danger"
                         disabled={busy}
-                        onClick={() => openChannelForm(proposal.id, "rollback")}
+                        onClick={() => openChannelForm(proposal, "rollback")}
                       >
                         回滚
                       </UiButton>
@@ -324,6 +363,56 @@ export function ImprovementProposals(): ReactElement {
                         activeChannelMode === "release" ? "发布记账确认" : "发布回滚确认"
                       }
                     >
+                      {activeChannelMode === "release" &&
+                      releasePreview &&
+                      releasePreview.proposal_id === proposal.id ? (
+                        <div className="simulation-release-preview" role="region" aria-label="三载体发布并排预览">
+                          {releasePreview.overfit_blocked ? (
+                            <p className="simulation-error" role="alert">
+                              最近一次回归检出过拟合风险（overfit_risk=True），服务端发布闸将机械拦截。
+                            </p>
+                          ) : null}
+                          {releasePreview.overlay_preview ? (
+                            <div className="simulation-overlay-side-by-side">
+                              <p className="simulation-hint">
+                                <strong>Overlay 注入预览</strong>｜purpose:{" "}
+                                <code>{releasePreview.overlay_preview.purpose_key}</code>｜近 30 天调用量：
+                                <strong>{releasePreview.overlay_preview.calls_last_30d}</strong> 次｜12-gram 重叠率：
+                                {releasePreview.overlay_preview.ngram_overlap_ratio}
+                              </p>
+                              {releasePreview.overlay_preview.syntax_violation ? (
+                                <p className="simulation-error">
+                                  句式闸违例：{releasePreview.overlay_preview.syntax_violation}
+                                </p>
+                              ) : null}
+                              <div className="simulation-side-by-side-grid">
+                                <div>
+                                  <span>基座静态提示词（{releasePreview.overlay_preview.prompt_version ?? "—"}）</span>
+                                  <pre>{releasePreview.overlay_preview.base_prompt || "（无静态正文）"}</pre>
+                                </div>
+                                <div>
+                                  <span>注入后生效终文</span>
+                                  <pre>{releasePreview.overlay_preview.effective_prompt}</pre>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                          {releasePreview.lesson_preview ? (
+                            <p className="simulation-hint">
+                              <strong>Lesson 热生效预览</strong>：<code>{releasePreview.lesson_preview.entry_id}</code> ·{" "}
+                              {releasePreview.lesson_preview.text}
+                            </p>
+                          ) : null}
+                          {releasePreview.skill_preview ? (
+                            <p className="simulation-hint">
+                              <strong>Skill 双闸记账预览</strong>：目标{" "}
+                              <code>{releasePreview.skill_preview.skill_ref || "（未填 skill_ref）"}</code> · 回归报告{" "}
+                              <code>{releasePreview.skill_preview.test_report_regression_id ?? "无"}</code>
+                              （发布后仍须经既有 publish_skill 操作员密码闸生效）
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <label>
                         <span>
                           {activeChannelMode === "release"

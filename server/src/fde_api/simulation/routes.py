@@ -399,6 +399,19 @@ def decide_proposal(proposal_id):
     return _data(data)
 
 
+@simulation_blueprint.get("/proposals/<proposal_id>/release-preview")
+@require_auth
+def preview_proposal_release(proposal_id):
+    """发布前并排预览（L5 注入闸五件套③：注入终文＋purpose＋近 30 天调用量＋过拟合闸状态）。"""
+    try:
+        data = release_channel.preview_proposal_release(
+            actor=g.current_user, proposal_id=proposal_id
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
 @simulation_blueprint.post("/proposals/<proposal_id>/release")
 @require_auth
 def release_proposal(proposal_id):
@@ -472,17 +485,32 @@ def get_regression_suite(suite_id):
 @simulation_blueprint.post("/regression/suites/<suite_id>/run")
 @require_auth
 def run_regression_suite(suite_id):
-    """跑一次回归对比（基线组 vs 候选组）。"""
+    """跑一次回归对比（stub+mock 同步 201；model:server 或 workbench 转后台作业返回 202）。"""
     payload = _payload()
     try:
         data = regression_service.run_regression(
             actor=g.current_user,
             suite_id=suite_id,
             proposal_id=payload.get("proposal_id"),
+            force_sync=bool(payload.get("force_sync")),
         )
     except service.ScenarioServiceError as error:
         return error_response(error.code, error.message, error.status, error.detail or None)
-    return _data(data), 201
+    status_code = 202 if data.get("queued_async") else 201
+    return _data(data), status_code
+
+
+@simulation_blueprint.get("/regression/jobs/<job_id>")
+@require_auth
+def get_regression_job(job_id):
+    """查询异步回归后台作业状态（供桌面端轮询）。"""
+    try:
+        data = regression_service.get_regression_job_status(
+            actor=g.current_user, job_id=job_id
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
 
 
 @simulation_blueprint.get("/regression/results")

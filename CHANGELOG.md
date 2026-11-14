@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — AI 原生化学习闭环 2.0 L5 实施轮：三载体热生效（动态 Lessons＋Prompt Overlay 两点共用＋Skill 双闸链）＋回归真化噪声带四钉＋异步 BackgroundJob（迁移 `a9f3e5c7b1d2` 76→77 单头，路由 491→493，表 153→155，2026-11-14）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L5 与设计稿 v1.1（§6 六条拍板全裁决），打通验证面与回流面全链机械化闭环：
+
+- **迁移②（NEW `server/migrations/versions/a9f3e5c7b1d2_loop2_l5_agent_lessons_prompt_overlays.py`，76→77 单头）**：新建 `agent_lessons` 表（`LESS-DYN-` 前缀、`status ∈ (draft,published,retired)` CHECK、`text_sha256` 唯一索引）与 `prompt_overlays` 表（`purpose_key`、`fragment` ≤200 字、`content_sha256`、`min_prompt_version`、`status` CHECK），`ai_call_audits` 加 `context_payload_json` 归因列（无覆层调用保持 `NULL`）。
+- **三载体协同热生效与热回滚**：①**动态 Lessons**（`agents/lessons.py`＋`agents/service.py`）：`seeds/lessons.json` 底座 ∪ `agent_lessons(status='published')` 零模块缓存每次现查（top_k 竞争时 seed 优先），发布前拦截动态 ID/sha256 与底座碰撞，宿主 `agent_run_created` 事件 `changes.dynamic_lesson_ids` 快照留痕；②**Prompt Overlay**（NEW `ai/overlays.py`＋`control/ai_server_client.py`＋`ai/deepseek.py`＋`ai/auditing.py`）：`load_overlays(purpose)` 在 `execute_ai_prompt` 与 `DeepSeekClient.complete_json` 直连腿两点共用并在 `compute_prompt_fingerprint` **之后**追加（`prompt_registry` 常量零触碰），归因落 `AICallAudit.context_payload_json`，注入闸五件套齐全（禁祈使句/第二人称/中英注入模式词黑名单＋≤200 字／12-gram 重叠率 >50% 防洗稿拦截／NEW `GET /api/v1/simulation/proposals/<id>/release-preview` 审批并排呈现基座提示词 vs 注入终文＋近 30 天调用量／蒸馏数据框定／v1 白名单 13 key 排除公网 `diagnostics_report`）且 `WorkbenchAdapter` 沙箱同尺；③**Skill 双闸链**（`improvement_service.py`＋`release_channel.py`）：AI 草稿提案拒绝 `personal` scope（防保存即 published 绕闸），`release_channel` 仅记账 `skill_ref` 与回归报告 ID，热生效走既有 `publish_skill`／`rollback_skill` 滚版本指针。
+- **发布闸与回归真化＋噪声带四钉＋异步回归**：`release_proposal` 机械拦截最近一次 `RegressionResult.overfit_risk=True`（409 `conflict`），`_materialize_payload`／`_retire_payload_rows` 承载发布落表与回滚 `retired`（两新表写面 AST 静态钉收敛）；`regression_runner.py` 新增 `DEFAULT_NOISE_BAND = 0.1049`（与 L2 底册 `docs/audit/训练场分布读数-L2底册-1.md` 双锚）、`RunSummary` 可选 `model_total/evaluator_axis`、`compare()` keyword-only `noise_band/noise_band_axis` 输出独立 `model_verdict`（不动顶层 `verdict` 闭集），套件存档轴与现算轴 `f"{RUBRIC_VERSION}|model:{mode}"` 不符 fail-closed 409 `noise_band_axis_mismatch`；`adapter_mode=workbench` 或 `model_mode=server` 转 202 后台作业（NEW `simulation/regression_jobs.py` 注册 `simulation.regression` 入 `RECOVERABLE_JOB_TYPES`＋NEW `GET /api/v1/simulation/regression/jobs/<job_id>` 状态读面，零额外迁移）。
+- **红线升格与桌面接线**：`AGENTS.md` 写入 §6-5 N6 受控例外红线条款与 §6-6 平台级生效登记；桌面 `ImprovementProposals.tsx` 发布确认弹层接入并排终文预览＋30 天调用量展示与发布/回滚真载荷回执，`RegressionDashboard.tsx` 接入 202 异步回归轮询与 `model_verdict` 徽标。
+- **验证与口径**：服务端定向套件 114 passed＋机械闸 48 passed、桌面 `typecheck` 零错＋`simulation-lab-console.test.tsx` 19 passed、官方 mypy 277 基线零新增、ruff clean；变异四连 M1–M4 全真红→`try/finally` sha256 逐位核对还原→72 passed 全绿；审计清单三件套重生成（**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**）＋`architecture` 架构图四件套刷新与 1440×2119 整页 `preview.png` 实拍过防陈旧闸。便携版随 L6 收口轮对齐最新 `RELEASE-COUNTER` 统一打包验证。
+
 ## [未发布] — goal-liveinfra R1 清退轮：diag 孤儿栈清退消解跨栈 Redis 别名轮询＋R2 探针缺陷判定不成立（纯运维清退零代码零迁移零路由，2026-11-14）
 
 承接 `docs/goal-sprint-BLOCKED.md` #4/#5 与 `docs/goal-liveinfra-活体基础设施修复-任务书-v1.md` 立项，经蔡工交互拍板（R1 修法＝清退 diag 孤儿栈；时点＝立即开工）实修收口：

@@ -335,18 +335,26 @@ def _parse_json_payload(raw: str) -> Any:
 
 
 def _candidate_overlay_fragment(ctx: AdapterContext) -> str:
-    """读 ctx.config 的 candidate_payload.prompt_overlay_fragment（≤200 字条款）。"""
+    """读 ctx.config 的 candidate_payload.prompt_overlay_fragment（≤200 字条款）。
+
+    沙箱同尺（学习闭环 2.0 L5 §2.5C）：候选 overlay 注入前同过句式静态闸与
+    purpose 白名单闸——违例片段在回归沙箱内即拒注入（与发布通道同尺）。
+    """
+    from fde_api.ai.overlays import purpose_allowed, validate_overlay_fragment
+
     candidate_payload = ctx.config.get("candidate_payload")
     if not isinstance(candidate_payload, dict):
         return ""
     fragment = candidate_payload.get("prompt_overlay_fragment")
     if not isinstance(fragment, dict):
         return ""
-    text = str(fragment.get("fragment") or "").strip()
-    if not text:
+    purpose_key = str(fragment.get("purpose_key") or "simulation_workbench").strip()
+    if purpose_key and not purpose_allowed(purpose_key):
         return ""
-    # 沙箱同尺：候选 overlay 片段同受 200 字上限（防超长条款改变行为面）
-    return text[:200]
+    text = str(fragment.get("fragment") or "").strip()[:200]
+    if not text or validate_overlay_fragment(text) is not None:
+        return ""
+    return text
 
 
 def _simulation_workbench_system_prompt(ctx: AdapterContext) -> str:

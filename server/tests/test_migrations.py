@@ -106,7 +106,9 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          兼任指针扩长 500 + 商机结算科目部分唯一索引（保单头 74→75）
 # 学习闭环 2.0 L4 迁移①：improvement_proposals 加 candidate_payload_json 列 +
 #          simulation_runs.adapter_mode 列宽 8→16 与 CHECK 扩 workbench（保单头 75→76）
-HEAD_REVISION = "d4b7e2f9a6c1"
+# 学习闭环 2.0 L5 迁移②：agent_lessons + prompt_overlays 两新表 +
+#          ai_call_audits 加 context_payload_json 列（overlay 归因；保单头 76→77）
+HEAD_REVISION = "a9f3e5c7b1d2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1173,8 +1175,11 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + goal-crv-fix2 r3 批 D 商业加固 d4b8e1f6a9c3（挂 c8e2a6f0b9d4 之后保单头）之后 = 75；
     # + 学习闭环 2.0 L4 迁移① d4b7e2f9a6c1（三载体候选载荷列＋workbench
     #   适配档扩值；挂 d4b8e1f6a9c3 之后保单头）之后 = 76；
+    # + 学习闭环 2.0 L5 迁移② a9f3e5c7b1d2（agent_lessons + prompt_overlays
+    #   两新表 + ai_call_audits.context_payload_json 列；挂 d4b7e2f9a6c1 之后
+    #   保单头）之后 = 77；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 76
+    assert len(known) == 77
     # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
         assert historical in known, historical

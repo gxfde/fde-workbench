@@ -101,6 +101,14 @@ def ensure_default_handlers() -> None:
 
         register_simulation_run_handler()
 
+    # 学习闭环 2.0 L5：训练场 workbench / model:server 回归批跑异步化
+    if get_handler("simulation.regression") is None:
+        from fde_api.simulation.regression_jobs import (
+            register_simulation_regression_handler,
+        )
+
+        register_simulation_regression_handler()
+
     # V3 T-W3：workflow 执行器（call/skill 节点；agent/human_approval 随 T-W4）。
     # handler 内部同时注册 worker-loss 收尾钩子（run/悬挂节点推终态）。
     if get_handler("workflow.run") is None:

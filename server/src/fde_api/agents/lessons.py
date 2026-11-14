@@ -85,12 +85,58 @@ def select_lessons(
     return picked
 
 
-def knowledge_snippets_for(*, project: Any, agent: Any, settings: Any) -> tuple[dict[str, str], ...]:
+def dynamic_published_entries(session: Any) -> list[dict[str, Any]]:
+    """学习闭环 2.0 L5：``agent_lessons`` 表 published 动态行（DB 腿，零模块级缓存）。
+
+    与静态 seeds 底座（``load_entries``，lru_cache 仅缓存文件 mtime）同构 schema，
+    供 ``knowledge_snippets_for`` 做「seeds 底座 ∪ published 动态行」装载读面。
+    **零模块级缓存**：每次调用现查 DB 腿——release_channel 热生效依赖此
+    （发布→下一 run 立即可见；回滚→立即消失；模块级缓存会让热生效钉红）。
+    动态腿读面异常（DB 腿故障/表未迁移）软失败回落空列表——静态底座仍生效，
+    run 路径不因动态腿问题炸客户可见面（同 L3 软失败纪律）。
+    排序 (created_at, id) 保证同进程内确定性。
+    """
+    if session is None:
+        return []
+    try:
+        from sqlalchemy import select
+
+        from fde_api.agents.models import AgentLesson
+
+        rows = session.scalars(
+            select(AgentLesson)
+            .where(AgentLesson.status == "published")
+            .order_by(AgentLesson.created_at.asc(), AgentLesson.id.asc())
+        ).all()
+    except Exception:
+        return []
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        entry: dict[str, Any] = {
+            "id": row.entry_id,
+            "capability_tags": list(row.capability_tags or []),
+            "text": row.text,
+            "source_ref": row.source_ref,
+            "sha256": row.text_sha256,
+        }
+        if row.industries:
+            entry["industries"] = list(row.industries)
+        entries.append(entry)
+    return entries
+
+
+def knowledge_snippets_for(
+    *, project: Any, agent: Any, settings: Any, session: Any = None
+) -> tuple[dict[str, str], ...]:
     """``_render_context`` 接线入口：返回可注入 ``render_masked_context`` 的片段。
 
     任何装载/读取异常都回落空元组（运行时软失败——CI 静态钉保证种子质量，
     run 路径不为种子问题炸客户可见面）；渲染面既有禁区词＋模式遮蔽闸对
     注入文本二次把关（``render_masked_context`` 内 ``_clean``），零新脱敏面。
+
+    学习闭环 2.0 L5：``session`` 在场时做「seeds 底座 ∪ published 动态行」装载
+    （动态腿 DB 现查、零模块级缓存，见 ``dynamic_published_entries``）；
+    ``session=None``（既有测试/零回归路径）只走静态 seeds，行为逐字节不变。
     """
     # 键名＝config.Settings 字段名（agent_lessons_*，env FDE_AGENT_LESSONS_*）。
     # 学习闭环 2.0 L4 断点⑥修正：此前误读 ``fde_agent_lessons_*``（配置侧从无
@@ -99,11 +145,16 @@ def knowledge_snippets_for(*, project: Any, agent: Any, settings: Any) -> tuple[
     if not bool(getattr(settings, "agent_lessons_enabled", False)):
         return ()
     try:
-        entries = load_entries()
+        seed_entries = load_entries()
     except (Exception, SystemExit):
         # SystemExit 是 BaseException 直系——load_entries 的 fail-closed 异常
         # 也必须被软失败接住（种子缺文件/形状坏都不炸 run 路径）。
         return ()
+    entries = list(seed_entries)
+    # 学习闭环 2.0 L5：seeds 底座 ∪ published 动态行（DB 腿零模块级缓存）。
+    # seeds 在前 ⇒ top_k 竞争由静态底座优先；动态腿按 (created_at, id) 追加。
+    if session is not None:
+        entries.extend(dynamic_published_entries(session))
     industry: str | None = None
     snapshot = getattr(project, "template_snapshot", None)
     if isinstance(snapshot, dict):
@@ -116,3 +167,15 @@ def knowledge_snippets_for(*, project: Any, agent: Any, settings: Any) -> tuple[
         max_chars=int(getattr(settings, "agent_lessons_max_chars", 400)),
     )
     return tuple(picked)
+
+
+def seed_ids_and_hashes(path: Path | None = None) -> tuple[frozenset[str], frozenset[str]]:
+    """返回静态 seeds 的 (entry_id 集合, sha256 集合)，供发布侧校验跨层唯一性。"""
+    try:
+        entries = load_entries(path=path)
+    except (Exception, SystemExit):
+        return frozenset(), frozenset()
+    ids = frozenset(str(e.get("id") or "") for e in entries if e.get("id"))
+    hashes = frozenset(str(e.get("sha256") or "") for e in entries if e.get("sha256"))
+    return ids, hashes
+

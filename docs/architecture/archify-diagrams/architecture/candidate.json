@@ -173,7 +173,7 @@
       "id": "api",
       "type": "backend",
       "label": "Flask API (fde_api)",
-      "sublabel": "127.0.0.1:8010 · 52 蓝图 · 491 路由",
+      "sublabel": "127.0.0.1:8010 · 52 蓝图 · 493 路由",
       "tag": "v0.3.0",
       "sources": [
         {
@@ -298,7 +298,7 @@
       "id": "db",
       "type": "database",
       "label": "PostgreSQL 16",
-      "sublabel": "twenty-db · 153 表 · 76 迁移",
+      "sublabel": "twenty-db · 155 表 · 77 迁移",
       "tag": "WSL 既有实例",
       "sources": [
         {
@@ -644,7 +644,7 @@
   "cards": [
     {
       "dot": "cyan",
-      "title": "服务端业务域 (fde_api 单体 · 52 蓝图 · 491 路由)",
+      "title": "服务端业务域 (fde_api 单体 · 52 蓝图 · 493 路由)",
       "items": [
         "项目交付: 门禁 G1–G9 · 报价/收款/合同/任务 · 产物采纳与证据候选",
         "售前与交付: 调研 discovery · 方案 plans · 质量 quality · 封包 handover · 转写 transcripts",
@@ -654,7 +654,7 @@
     },
     {
       "dot": "emerald",
-      "title": "异步任务链与数据底座 (153 表 · 76 迁移)",
+      "title": "异步任务链与数据底座 (155 表 · 77 迁移)",
       "items": [
         "业务事务内写 outbox_events(必填 subject_org 主体标签), worker 认领后经 Redis fde-jobs 派发",
         "无 Celery: 自研 Redis list 队列 + 租约续期 + 无主作业对账",

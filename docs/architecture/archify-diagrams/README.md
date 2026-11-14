@@ -29,7 +29,7 @@
 ## 取证版本说明
 
 2026-11-14 全量刷新：六张统一钉 `8c297a12`（融合树 `fork/main` `7e99b658` + 本分支文档同步；含多租户 `orgs` 隔离底座、公网免注册诊断/四入口注册、五席位分账+AI 派单推荐、单 run 宿主代理 `host_agent`+⑦出站白名单闸、AI 原生化 N1–N6 全链、学习闭环 2.0 L4 服务端与 E8 A 轨只读降级闭合）。
-实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**52 蓝图 / 491 路由 / 153 表 / 76 rev（单头 `d4b7e2f9a6c1`）/
+实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**52 蓝图 / 493 路由 / 155 表 / 77 rev（单头 `a9f3e5c7b1d2`）/
 52 蓝图注册 `app.py::_BLUEPRINT_SPECS`（29-100）**。口径漂移由 `scripts/audit/check_archify_diagram_freshness.py`
 机械拦截（见下「防陈旧闸」）。
 链接模式为 `local-only`：fork/main 领先 upstream（gxfde），web 链接会指向不存在的上游 revision；

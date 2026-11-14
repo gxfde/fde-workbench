@@ -321,6 +321,18 @@ export async function decideProposal(
   return data as import("./types").ProposalDto
 }
 
+export async function previewProposalRelease(
+  apiRequest: SimulationApiRequest,
+  proposalId: string,
+): Promise<import("./types").ProposalReleasePreviewDto> {
+  const data = await apiRequest(
+    `${BASE}/proposals/${encodeURIComponent(proposalId)}/release-preview`,
+    { method: "GET" },
+  )
+  if (!data || typeof data !== "object") throw new Error("提案发布预览数据格式异常")
+  return data as import("./types").ProposalReleasePreviewDto
+}
+
 export async function releaseProposal(
   apiRequest: SimulationApiRequest,
   proposalId: string,
@@ -368,13 +380,25 @@ export async function runRegression(
   apiRequest: SimulationApiRequest,
   suiteId: string,
   proposalId?: string,
-): Promise<import("./types").RegressionResultDto> {
+): Promise<import("./types").RunRegressionResponseDto> {
   const data = await apiRequest(
     `${BASE}/regression/suites/${encodeURIComponent(suiteId)}/run`,
     { method: "POST", body: proposalId ? { proposal_id: proposalId } : {} },
   )
   if (!data || typeof data !== "object") throw new Error("回归结果数据格式异常")
-  return data as import("./types").RegressionResultDto
+  return data as import("./types").RunRegressionResponseDto
+}
+
+export async function getRegressionJobStatus(
+  apiRequest: SimulationApiRequest,
+  jobId: string,
+): Promise<import("./types").RegressionJobStatusDto> {
+  const data = await apiRequest(
+    `${BASE}/regression/jobs/${encodeURIComponent(jobId)}`,
+    { method: "GET" },
+  )
+  if (!data || typeof data !== "object") throw new Error("回归作业状态数据格式异常")
+  return data as import("./types").RegressionJobStatusDto
 }
 
 export async function listRegressionResults(

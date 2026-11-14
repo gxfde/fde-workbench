@@ -30,6 +30,15 @@ TOTAL_SIGNIFICANT_DELTA = 0.02
 # 泛化差阈值：train 增益 − blind 增益 超过此值 ⇒ 过拟合风险
 OVERFIT_GAP_THRESHOLD = 0.15
 
+# L-B 模型层噪声带闸（学习闭环 2.0 L5 §2.4，§6-3 拍板确认）：
+# 缺省值锚定 L2 底册 `docs/audit/训练场分布读数-L2底册-1.md` 锚点观测极差 0.1049
+# （评估轴 `rubric-v1|model:server`，anchor_n=3）。样本数 n < 3 ⇒ insufficient_data；
+# n ≥ 3 且 |model_total_delta| ≤ band ⇒ within_noise（严格大于才可判 improved/regressed）。
+DEFAULT_NOISE_BAND = 0.1049
+DEFAULT_NOISE_BAND_AXIS = "rubric-v1|model:server"
+MIN_NOISE_BAND_SAMPLES = 3
+MODEL_VERDICTS = ("improved", "regressed", "within_noise", "insufficient_data")
+
 
 @dataclass(frozen=True)
 class RunSummary:
@@ -44,6 +53,8 @@ class RunSummary:
     hard_failures: tuple[str, ...]
     cost: dict[str, Any]
     failure_codes: tuple[str, ...] = ()
+    model_total: float | None = None
+    evaluator_axis: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -56,6 +67,8 @@ class RunSummary:
             "hard_failures": list(self.hard_failures),
             "cost": dict(self.cost),
             "failure_codes": list(self.failure_codes),
+            "model_total": self.model_total,
+            "evaluator_axis": self.evaluator_axis,
         }
 
 
@@ -84,6 +97,12 @@ def summarize(summaries: list[RunSummary]) -> dict[str, Any]:
     return {
         "runs": len(summaries),
         "mean_total": _mean([summary.total_score for summary in summaries]),
+        "mean_model_total": (
+            _mean([float(summary.model_total) for summary in summaries if summary.model_total is not None])
+            if any(summary.model_total is not None for summary in summaries)
+            else None
+        ),
+        "model_runs": sum(1 for summary in summaries if summary.model_total is not None),
         "dimension_scores": {
             dimension: _mean(
                 [
@@ -107,10 +126,37 @@ def summarize(summaries: list[RunSummary]) -> dict[str, Any]:
     }
 
 
+def _compute_model_verdict(
+    *,
+    before: list[RunSummary],
+    after: list[RunSummary],
+    band: float,
+) -> tuple[str, float | None]:
+    """L-B 模型层独立判定（不动顶层 L-A verdict 闭集）。
+
+    规则（delta-noise-band 同构，设计稿 §2.4）：
+    - 参与对比的两组有效模型分样本数任一 < MIN_NOISE_BAND_SAMPLES (3) ⇒ insufficient_data；
+    - |Δ| <= band ⇒ within_noise（严格大于才脱离噪声域）；
+    - Δ > band ⇒ improved；Δ < -band ⇒ regressed。
+    """
+    before_vals = [float(item.model_total) for item in before if item.model_total is not None]
+    after_vals = [float(item.model_total) for item in after if item.model_total is not None]
+    if not before_vals or not after_vals:
+        return "insufficient_data", None
+    model_delta = round(_mean(after_vals) - _mean(before_vals), 4)
+    if len(before_vals) < MIN_NOISE_BAND_SAMPLES or len(after_vals) < MIN_NOISE_BAND_SAMPLES:
+        return "insufficient_data", model_delta
+    if abs(model_delta) <= band:
+        return "within_noise", model_delta
+    return ("improved" if model_delta > band else "regressed"), model_delta
+
+
 def compare(
     *,
     before: list[RunSummary],
     after: list[RunSummary],
+    noise_band: float | None = None,
+    noise_band_axis: str | None = None,
 ) -> dict[str, Any]:
     """基线组 vs 候选组 ⇒ 差异报告。"""
     before_summary = summarize(before)
@@ -189,6 +235,12 @@ def compare(
         and train_gain > TOTAL_SIGNIFICANT_DELTA
     )
 
+    effective_band = float(DEFAULT_NOISE_BAND if noise_band is None else noise_band)
+    effective_axis = str(noise_band_axis or "")
+    model_verdict, model_total_delta = _compute_model_verdict(
+        before=before, after=after, band=effective_band
+    )
+
     return {
         "before": before_summary,
         "after": after_summary,
@@ -205,6 +257,10 @@ def compare(
         "generalization_gap": generalization_gap,
         "overfit_risk": overfit_risk,
         "verdict": verdict,
+        "model_verdict": model_verdict,
+        "model_total_delta": model_total_delta,
+        "noise_band": effective_band,
+        "noise_band_axis": effective_axis,
     }
 
 

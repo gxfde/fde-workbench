@@ -422,6 +422,29 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
                     "invalid_request",
                     f"prompt_overlay_fragment.fragment 超长（≤{MAX_OVERLAY_FRAGMENT} 字）。",
                 )
+            skill_draft = candidate_payload.get("skill_version_draft")
+            if isinstance(skill_draft, dict):
+                # Skill 双闸链（L5 §2.5B，评审 P0-Ⅳ）：AI 蒸馏与提案候选载荷禁 personal
+                # scope——personal Skill 保存即 published 零闸会绕过全套回归与密码闸。
+                if str(skill_draft.get("scope") or "").strip().lower() == "personal":
+                    raise ScenarioServiceError(
+                        "invalid_request",
+                        "skill_version_draft 禁止 personal scope（个人 Skill 保存即生效，必须走公共受控治理链）。",
+                        400,
+                        {"forbidden_scope": "personal"},
+                    )
+                skill_ref = skill_draft.get("skill_ref")
+                if isinstance(skill_ref, str) and skill_ref.strip():
+                    from fde_api.control.models import SkillDefinition
+
+                    skill_row = session.get(SkillDefinition, skill_ref.strip())
+                    if skill_row is not None and skill_row.scope == "personal":
+                        raise ScenarioServiceError(
+                            "conflict",
+                            "skill_version_draft.skill_ref 不得指向个人（personal）Skill。",
+                            409,
+                            {"skill_ref": skill_ref.strip(), "scope": "personal"},
+                        )
 
         fingerprint = _finding_fingerprint(
             [row.id for row in rows],

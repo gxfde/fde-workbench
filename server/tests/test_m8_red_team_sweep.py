@@ -544,6 +544,22 @@ _EXCLUSION_RECORDS = {
         "b_owner_status": 404,
         "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
     },
+    ("GET", "/api/v1/simulation/proposals/<proposal_id>/release-preview"): {
+        "reason": "阳性对照不可行：A 实测 404、同角色 A 实测 404、B 属主同路径实测 404（B 属主非 200 ⇒ 阳性对照不可构造，同码假绿风险），本轮夹具无该资源前置状态",
+        "exclusion_kind": "positive_control_infeasible",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 404,
+        "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
+    },
+    ("GET", "/api/v1/simulation/regression/jobs/<job_id>"): {
+        "reason": "阳性对照不可行：A 实测 404、同角色 A 实测 404、B 属主同路径实测 404（B 属主非 200 ⇒ 阳性对照不可构造，同码假绿风险），本轮夹具无该资源前置状态",
+        "exclusion_kind": "positive_control_infeasible",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 404,
+        "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
+    },
     ("GET", "/api/v1/simulation/regression/results/<result_id>"): {
         "reason": "阳性对照不可行：A 实测 404、同角色 A 实测 404、B 属主同路径实测 404（B 属主非 200 ⇒ 阳性对照不可构造，同码假绿风险），本轮夹具无该资源前置状态",
         "exclusion_kind": "positive_control_infeasible",
@@ -719,6 +735,7 @@ def _measurement_ids(world):
         "extraction_id": uuid4().hex,
         "execution_id": uuid4().hex,
         "proposal_id": uuid4().hex,
+        "job_id": uuid4().hex,
         "result_id": uuid4().hex,
         "suite_id": uuid4().hex,
         "scenario_id": uuid4().hex,
@@ -970,7 +987,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
     assert len(ROUTES) == 38, ("爬扫面条数基线被改动：", len(ROUTES))
-    assert len(_EXCLUSION_RECORDS) == 65, (
+    assert len(_EXCLUSION_RECORDS) == 67, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
     )

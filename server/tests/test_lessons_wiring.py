@@ -210,3 +210,143 @@ def test_render_context_knowledge_section_non_empty(monkeypatch):
     assert "（未检索到知识片段）" not in text
     # 方案腿条目在场（真实种子 → 真实渲染）。
     assert any(row["id"] in text for row in lessons.load_entries())
+
+
+# ---------------------------------------------------------------------------
+# 学习闭环 2.0 L5：动态 Lessons 装载层（agent_lessons published 行 DB 腿）
+# ---------------------------------------------------------------------------
+
+
+def _dyn_row(entry_id: str, *, status: str = "published", tags=None) -> SimpleNamespace:
+    """合成 AgentLesson 行（只带 dynamic_published_entries 读面的属性面）。"""
+    return SimpleNamespace(
+        entry_id=entry_id,
+        capability_tags=tags or ["agent.module.solution"],
+        text=f"动态经验 {entry_id}" * 5,
+        source_ref=f"improvement-proposal:{entry_id}",
+        text_sha256="f" * 64,
+        industries=None,
+        status=status,
+        created_at=None,
+        id=f"row-{entry_id}",
+    )
+
+
+class _FakeScalars:
+    def __init__(self, rows: list) -> None:
+        self._rows = rows
+
+    def all(self) -> list:
+        return list(self._rows)
+
+
+class _FakeSession:
+    """DB 腿替身：只暴露 dynamic_published_entries 用到的 .scalars()。"""
+
+    def __init__(self, rows: list) -> None:
+        self.rows = rows
+        self.query_count = 0
+
+    def scalars(self, stmt):  # noqa: ARG002 - stmt 只验形状
+        self.query_count += 1
+        return _FakeScalars(self.rows)
+
+
+def test_dynamic_published_entries_none_session_empty():
+    """session=None（既有零回归路径）⇒ 动态腿读面空列表。"""
+    assert lessons.dynamic_published_entries(None) == []
+
+
+def test_dynamic_published_entries_soft_fail_on_broken_db_leg():
+    """DB 腿故障（无 .scalars 属性 ⇒ AttributeError）软失败返 []，不炸 run 路径。"""
+    assert lessons.dynamic_published_entries(SimpleNamespace()) == []
+
+
+def test_dynamic_published_entries_maps_rows_like_seeds_schema():
+    """published 行映射为与 seeds 同构 entry（capability_tags/text/source_ref/sha256）。"""
+    session = _FakeSession([_dyn_row("LESS-DYN-001"), _dyn_row("LESS-DYN-002")])
+    rows = lessons.dynamic_published_entries(session)
+    assert [row["id"] for row in rows] == ["LESS-DYN-001", "LESS-DYN-002"]
+    assert all(set(row) >= {"id", "capability_tags", "text", "source_ref", "sha256"} for row in rows)
+    # 过滤（status=='published'）在 SQL WHERE 层，读面只映射；_FakeSession 不模拟
+    # 真实 DB，故 status 过滤行为由「回滚行不在 rows ⇒ 不注入」钉（见下行测试）。
+
+
+def test_dynamic_published_entries_industries_optional():
+    """industries 为空 ⇒ 不写键（通用条目）；非空 ⇒ 原样带出（行业过滤腿生效）。"""
+    session = _FakeSession([_dyn_row("LESS-DYN-003")])
+    row = lessons.dynamic_published_entries(session)[0]
+    assert "industries" not in row
+    tagged = _dyn_row("LESS-DYN-004")
+    tagged.industries = ["foreign_trade"]
+    row2 = lessons.dynamic_published_entries(_FakeSession([tagged]))[0]
+    assert row2["industries"] == ["foreign_trade"]
+
+
+def test_knowledge_snippets_dynamic_union_seeds_first(tmp_path, monkeypatch):
+    """seeds 底座 ∪ published 动态行：top_k 竞争 seeds 优先、动态腿追加在后。"""
+    import unittest.mock as mock
+
+    seed_rows = [
+        {"id": f"S-{i}", "capability_tags": ["agent.module.solution"], "text": f"种子甲{i}",
+         "source_ref": "seed", "sha256": "e" * 64, "industries": []}
+        for i in range(10)
+    ]
+    dynamic = _dyn_row("LESS-DYN-001")
+    session = _FakeSession([dynamic])
+    with mock.patch.object(lessons, "load_entries", return_value=tuple(seed_rows)):
+        picked = lessons.knowledge_snippets_for(
+            project=SimpleNamespace(template_snapshot=None),
+            agent=SimpleNamespace(capability_tier="agent.module.solution"),
+            settings=_settings(agent_lessons_top_k=11),
+            session=session,
+        )
+    ids = [row["id"] for row in picked]
+    # seeds 10 条在前（底座优先），动态行第 11 位追加；top_k=11 全收。
+    assert ids == [f"S-{i}" for i in range(10)] + ["LESS-DYN-001"]
+    assert session.query_count == 1
+
+
+def test_knowledge_snippets_dynamic_hot_effect_and_rollback(tmp_path, monkeypatch):
+    """热生效/回滚行为钉：同进程内两次装载间 DB 腿变了 ⇒ 注入面立变（零模块级缓存）。"""
+    import unittest.mock as mock
+
+    seed_rows = [
+        {"id": f"S-{i}", "capability_tags": ["agent.module.solution"], "text": f"种子甲{i}",
+         "source_ref": "seed", "sha256": "e" * 64, "industries": []}
+        for i in range(2)
+    ]
+    agent = SimpleNamespace(capability_tier="agent.module.solution")
+    project = SimpleNamespace(template_snapshot=None)
+    with mock.patch.object(lessons, "load_entries", return_value=tuple(seed_rows)):
+        # 发布 ⇒ 下一 run 立即可见（published 行在场）。
+        live = _FakeSession([_dyn_row("LESS-DYN-001")])
+        ids_live = [row["id"] for row in lessons.knowledge_snippets_for(
+            project=project, agent=agent, settings=_settings(agent_lessons_top_k=10), session=live)]
+        assert "LESS-DYN-001" in ids_live
+        # 回滚（published→retired 行从读面消失）⇒ 立即不见，同进程无需重启。
+        rolled_back = _FakeSession([])
+        ids_rolled = [row["id"] for row in lessons.knowledge_snippets_for(
+            project=project, agent=agent, settings=_settings(agent_lessons_top_k=10), session=rolled_back)]
+        assert "LESS-DYN-001" not in ids_rolled
+        assert ids_rolled == [f"S-{i}" for i in range(2)]
+
+
+def test_knowledge_snippets_session_none_behavior_byte_identical(tmp_path, monkeypatch):
+    """零回归：session=None 只走静态 seeds（动态腿不读、不查 DB），行为逐字节不变。"""
+    import unittest.mock as mock
+
+    seed_rows = [
+        {"id": f"S-{i}", "capability_tags": ["agent.module.solution"], "text": f"种子甲{i}",
+         "source_ref": "seed", "sha256": "e" * 64, "industries": []}
+        for i in range(2)
+    ]
+    with mock.patch.object(lessons, "load_entries", return_value=tuple(seed_rows)), \
+         mock.patch.object(lessons, "dynamic_published_entries") as dyn_spy:
+        picked = lessons.knowledge_snippets_for(
+            project=SimpleNamespace(template_snapshot=None),
+            agent=SimpleNamespace(capability_tier="agent.module.solution"),
+            settings=_settings(agent_lessons_top_k=2),
+        )
+    assert [row["id"] for row in picked] == ["S-0", "S-1"]
+    dyn_spy.assert_not_called()

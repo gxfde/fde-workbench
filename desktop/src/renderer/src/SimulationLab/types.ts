@@ -324,6 +324,21 @@ export interface ProposalRollbackDto {
   rolled_back_at: string
   rolled_back_by_user_id: string
   rollback_note: string
+  retired_payload?: {
+    lesson?: string[]
+    overlay?: string[]
+  }
+}
+
+export interface ProposalReleaseMaterializedDto {
+  lesson?: { entry_id: string; text_sha256: string }
+  overlay?: { overlay_id: string; content_sha256: string }
+  skill?: {
+    skill_ref: string
+    test_report_regression_id: string | null
+    publish_via: string
+    note: string
+  }
 }
 
 export interface ProposalReleaseDto {
@@ -331,7 +346,46 @@ export interface ProposalReleaseDto {
   released_by_user_id: string
   released_version: string
   release_note: string
+  materialized?: ProposalReleaseMaterializedDto
   rollback: ProposalRollbackDto | null
+}
+
+export interface OverlayPreviewDto {
+  purpose_key: string
+  purpose_allowed: boolean
+  prompt_version: string | null
+  base_prompt: string
+  existing_overlay_count: number
+  candidate_fragment: string
+  effective_prompt: string
+  syntax_violation: string | null
+  ngram_overlap_ratio: number
+  ngram_blocked: boolean
+  calls_last_30d: number
+}
+
+export interface ProposalReleasePreviewDto {
+  proposal_id: string
+  proposal_key: string
+  status: string
+  overfit_blocked: boolean
+  latest_regression_id: string | null
+  latest_regression_verdict: string | null
+  branches: string[]
+  overlay_preview: OverlayPreviewDto | null
+  lesson_preview: {
+    entry_id: string
+    text: string
+    text_sha256: string
+    capability_tags: string[]
+    industries: string[]
+  } | null
+  skill_preview: {
+    skill_ref?: string
+    summary?: string
+    instructions_delta?: string
+    test_report_regression_id: string | null
+  } | null
 }
 
 export interface ProposalDto {
@@ -404,12 +458,14 @@ export interface RegressionSuiteDto {
   created_at: string | null
 }
 
+export type ModelVerdict = "improved" | "regressed" | "within_noise" | "insufficient_data"
+
 export interface RegressionResultDto {
   id: string
   suite_id: string
   proposal_id: string | null
-  before: { runs: number; mean_total: number; hard_failures?: string[] }
-  after: { runs: number; mean_total: number; hard_failures?: string[] }
+  before: { runs: number; mean_total: number; mean_model_total?: number | null; hard_failures?: string[] }
+  after: { runs: number; mean_total: number; mean_model_total?: number | null; hard_failures?: string[] }
   deltas: {
     total_delta?: number
     dimension_deltas?: Record<string, number>
@@ -418,6 +474,10 @@ export interface RegressionResultDto {
     cost_delta?: Record<string, number>
     train_gain?: number
     blind_gain?: number
+    model_verdict?: ModelVerdict
+    model_total_delta?: number | null
+    noise_band?: number
+    noise_band_axis?: string
   }
   new_hard_failures: string[]
   resolved_hard_failures: string[]
@@ -426,6 +486,29 @@ export interface RegressionResultDto {
   verdict: "improved" | "regressed" | "mixed" | "no_change" | "inconclusive"
   note: string | null
   created_at: string | null
+  created?: boolean
+}
+
+export interface RegressionAsyncQueuedDto {
+  queued_async: true
+  job_id: string
+  outbox_event_id: string
+  job_status: string
+  suite_id: string
+  proposal_id: string | null
+  adapter_mode: string
+  model_mode: string
+}
+
+export type RunRegressionResponseDto = RegressionResultDto | RegressionAsyncQueuedDto
+
+export interface RegressionJobStatusDto {
+  job_id: string
+  suite_id: string
+  status: string
+  attempts: number
+  last_error: string | null
+  latest_result: RegressionResultDto | null
 }
 
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {

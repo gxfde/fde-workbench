@@ -71,8 +71,8 @@
 
 | 轮 | 状态 | PR | 迁移 | 备注 |
 |---|---|---|---|---|
-| L4 | 全轮施工完成（服务端 PR #455 → `7e99b658` 已合入＋活体升迁 `d4b7e2f9a6c1`；桌面 L4-⑦＋直连四元组热修随第二 PR 落地） | #455（服务端 `7e99b658`）＋桌面 PR | ① `d4b7e2f9a6c1`（candidate_payload_json 加列＋adapter_mode 列宽/CHECK 扩值勘误） | 勘误：设计稿 §2.1 漏记列宽与 CHECK 两处 DB 落点，已随迁 ① 落地；活体冒烟检出直连四元组缺口当轮闭合 |
-| L5 | 待开工（强串行于 L4） | — | ② 两表＋一列 | AGENTS 红线升格＋平台级登记随本轮 |
+| L4 | ✅ 已实施并合并（服务端 PR #455 → `7e99b658`＋桌面 PR #467 → `ce4a9bde`；活体升迁 `d4b7e2f9a6c1`） | #455 / #467 | ① `d4b7e2f9a6c1`（candidate_payload_json 加列＋adapter_mode 列宽/CHECK 扩值勘误） | 勘误：设计稿 §2.1 漏记列宽与 CHECK 两处 DB 落点，已随迁 ① 落地；活体冒烟检出直连四元组缺口当轮闭合 |
+| L5 | ✅ 已实施（三载体热生效＋回归真化噪声带四钉＋异步 BackgroundJob＋AGENTS 红线升格＋桌面并排预览/真载荷回执/异步轮询） | 随本轮 PR 合入 | ② `a9f3e5c7b1d2`（`agent_lessons`＋`prompt_overlays`＋`ai_call_audits.context_payload_json`） | 变异四连红→sha256 还原→绿；493 路由 / 155 表 / 77 迁移；清单与架构图四件套同步 |
 | L6 | 待开工（可并行） | — | 零迁移 | 宿主侧脚本；L-6 批跑 IP 按 run 派生可顺带 |
 
 ## 挂账登记

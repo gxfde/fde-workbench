@@ -95,6 +95,9 @@ RECOVERABLE_JOB_TYPES = frozenset({
     # 学习闭环 2.0 L4：训练场 workbench 档单跑——run 终态幂等承载
     # （终态直接返回，不重复执行不重复计费），worker 死后可重跑。
     "simulation.run",
+    # 学习闭环 2.0 L5：训练场回归对比——单题 run_key 幂等＋结果 fingerprint 幂等，
+    # worker 中途死亡后重跑只补跑未完成题。
+    "simulation.regression",
 })
 
 # Written to `last_error` when a job is given up on, so an operator can tell

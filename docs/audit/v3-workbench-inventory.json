@@ -1,10 +1,10 @@
 {
- "route_count": 491,
+ "route_count": 493,
  "blueprint_count": 52,
- "table_count": 153,
- "revision_count": 76,
+ "table_count": 155,
+ "revision_count": 77,
  "heads": [
-  "d4b7e2f9a6c1"
+  "a9f3e5c7b1d2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -96,6 +96,17 @@
    "down_revision": "a5e9c3f1b7d4",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "a9f3e5c7b1d2": {
+   "file": "a9f3e5c7b1d2_loop2_l5_agent_lessons_prompt_overlays.py",
+   "down_revision": "d4b7e2f9a6c1",
+   "create_tables": [
+    "agent_lessons",
+    "prompt_overlays"
+   ],
+   "add_column_tables": [
+    "ai_call_audits"
+   ]
   },
   "b2c4d6e8f1a3": {
    "file": "b2c4d6e8f1a3_dispatch_p1_closeout.py",

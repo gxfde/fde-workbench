@@ -307,3 +307,50 @@ class SolutionReviewCheckpoint(Base, TimestampMixin):
     # triggered_by_run_id/retry_of 偏离先例，允许 run 归档清理）。终审台
     # 按此把「接管→拍板」配对成资深介入时长样本，拍板事件 payload 携带。
     handoff_run_id: Mapped[str | None] = mapped_column(String(36))
+class AgentLesson(Base, TimestampMixin):
+    """动态经验卡行（学习闭环 2.0 L5）——与 seeds/lessons.json 同构 schema。
+
+    由改进提案采纳后经 release_channel 创建；status 走
+    draft -> published（热生效）-> retired（回滚）。id 前缀 LESS-DYN-，
+    与 seeds LESS-SOP- 跨层经 text_sha256 唯一约束防重。
+
+    **零模块级缓存**：装载读面（agents/lessons.py::knowledge_snippets_for）
+    每次调用现查 DB 腿；seeds 文件腿 lru_cache 仅缓存文件 mtime，不缓存
+    本表行——任何模块级缓存都会让热生效测试红。
+    """
+
+    __tablename__ = "agent_lessons"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'retired')",
+            name="ck_agent_lessons_status",
+        ),
+        Index("ix_agent_lessons_status", "status"),
+        Index("ix_agent_lessons_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # 稳定业务键（如 LESS-DYN-001）；跨层与 seeds 不重号
+    entry_id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    # capability_tags 与 seeds 同构：字符串列表（agent.module.* 域）
+    capability_tags: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # 经验正文（≤300 字纪律，蒸馏提示词框定）
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # 服务端写入侧现算（content 不可变；变更须开新行）
+    text_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    # 来源指针（SOP 章节 / 提案 ref）
+    source_ref: Mapped[str | None] = mapped_column(String(500))
+    # 产生本条的改进提案（软链，ondelete SET NULL 允许提案归档）
+    source_proposal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("improvement_proposals.id", ondelete="SET NULL")
+    )
+    # draft / published / retired
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
+    # 行业过滤（可选）；空列表＝全行业（NOT NULL＋server_default []，与迁移逐位一致）
+    # ★列名 text 遮蔽了导入的 sqlalchemy.text，故 server_default 用字符串字面量（＝literal SQL）
+    industries: Mapped[list[Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="'[]'::json",
+    )

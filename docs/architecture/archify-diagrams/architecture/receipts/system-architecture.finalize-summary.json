@@ -6,13 +6,13 @@
   "type": "architecture",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
-    "sha256": "eb2023dfdecaf1239b49b9142f4a6bbc62c6983ca9dbd7b2d8414bdd206227ee",
+    "path": "D:\\test\\fde-wt-uilib\\docs\\architecture\\archify-diagrams\\architecture\\candidate.json",
+    "sha256": "9e8a029eba3d63b9c4547bc8c6d7d6cc42d9f0c070ced0b124f32d3f791edc08",
     "bytes": 16118
   },
   "artifact": {
-    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
-    "sha256": "4b5b0dad8febc95dbfb56222d953afe2bf4ca9c632bc3bb9567a2dafea21674a",
+    "path": "D:\\test\\fde-wt-uilib\\docs\\architecture\\archify-diagrams\\architecture\\system-architecture.html",
+    "sha256": "051dcc1be0e85c65360bee93a8cdf3a7a96fa7e702af7e7ec4f8eac2510b9e1a",
     "bytes": 845952
   },
   "gates": {
@@ -28,22 +28,22 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
+    "receipt": "D:\\test\\fde-wt-uilib\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-uilib\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-uilib\\docs\\architecture\\archify-diagrams\\architecture\\receipts\\system-architecture.browser-check.json"
   },
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
     "releaseNotes": null,
-    "checkedAt": "2026-11-13T06:10:42.431Z",
+    "checkedAt": "2026-11-14T13:45:17.845Z",
     "source": "cache",
     "noticeRequired": false,
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 4074,
+  "durationMs": 7009,
   "browserCheck": {
     "requested": true,
     "ran": true

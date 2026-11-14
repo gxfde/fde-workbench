@@ -179,6 +179,7 @@ def record_audit(
     error_code: str | None,
     prompt_version: str | None = None,
     prompt_fingerprint: str | None = None,
+    context_payload_json: dict[str, Any] | None = None,
 ) -> None:
     """落一条审计。尽力而为：任何失败只记日志，不打断业务调用。
 
@@ -212,6 +213,7 @@ def record_audit(
                         error_code=error_code[:60] if error_code else None,
                         prompt_version=prompt_version[:60] if prompt_version else None,
                         prompt_fingerprint=prompt_fingerprint[:64] if prompt_fingerprint else None,
+                        context_payload_json=context_payload_json,
                     )
                 )
         finally:
@@ -236,6 +238,7 @@ class Timer:
 def audit_budget_blocked(
     *, request_id: str, actor_id: str | None, purpose: str, model: str,
     prompt_version: str | None = None, prompt_fingerprint: str | None = None,
+    context_payload_json: dict[str, Any] | None = None,
 ) -> None:
     """预算拦截统一留痕（CR-006 统一闸）：落一条 ``budget_blocked`` 审计。
 
@@ -256,4 +259,5 @@ def audit_budget_blocked(
         error_code="ai_budget_exceeded",
         prompt_version=prompt_version,
         prompt_fingerprint=prompt_fingerprint,
+        context_payload_json=context_payload_json,
     )

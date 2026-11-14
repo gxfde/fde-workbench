@@ -1202,4 +1202,169 @@ it("失败分析支持 L-B likely 标记提示与「失败 → AI 起草改进�
   expect(await screen.findByText(/已创建改进提案 PROP-L4-NEW/)).toBeInTheDocument()
 })
 
+it("L5 提案发布弹窗加载三载体并排预览（含注入终文与近 30 天调用量）并展示热生效/回滚退役摘要", async () => {
+  mocks.user.role = "admin"
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (path.includes("/findings")) {
+      return Promise.resolve({ items: [], total: 0 })
+    }
+    if (path === "/api/v1/simulation/proposals/prop-l5-ov/release-preview") {
+      return Promise.resolve({
+        proposal_id: "prop-l5-ov",
+        proposal_key: "PROP-L5-OV",
+        status: "approved",
+        overfit_blocked: false,
+        latest_regression_id: "reg-1",
+        latest_regression_verdict: "improved",
+        branches: ["prompt_overlay_fragment"],
+        overlay_preview: {
+          purpose_key: "simulation_workbench",
+          purpose_allowed: true,
+          prompt_version: "simulation-workbench-prompt-v1",
+          base_prompt: "原始基座系统提示词正文。",
+          existing_overlay_count: 0,
+          candidate_fragment: "未确认预算范围前不出具固定总价承诺。",
+          effective_prompt:
+            "原始基座系统提示词正文。\n\n【平台动态经验条款】\n未确认预算范围前不出具固定总价承诺。",
+          syntax_violation: null,
+          ngram_overlap_ratio: 0.0,
+          ngram_blocked: false,
+          calls_last_30d: 42,
+        },
+        lesson_preview: null,
+        skill_preview: null,
+      })
+    }
+    if (path.includes("/proposals")) {
+      return Promise.resolve({
+        items: [
+          {
+            ...sampleProposal,
+            id: "prop-l5-ov",
+            proposal_key: "PROP-L5-OV",
+            status: "approved",
+            regression_plan: { suite: "smoke-l5" },
+            candidate_payload: {
+              prompt_overlay_fragment: {
+                purpose_key: "simulation_workbench",
+                fragment: "未确认预算范围前不出具固定总价承诺。",
+              },
+            },
+          },
+          {
+            ...sampleProposal,
+            id: "prop-l5-mat",
+            proposal_key: "PROP-L5-MAT",
+            status: "published",
+            regression_plan: { suite: "smoke-l5" },
+            release: {
+              released_at: "2026-11-14T12:00:00Z",
+              released_by_user_id: "admin-1",
+              released_version: "v2",
+              release_note: "L5 热生效发布",
+              materialized: {
+                lesson: { entry_id: "LESS-DYN-PROP-L5-MAT", text_sha256: "deadbeef" },
+                overlay: { overlay_id: "ov-uuid-01", content_sha256: "cafebabe" },
+              },
+              rollback: null,
+            },
+          },
+        ],
+        total: 2,
+      })
+    }
+    return Promise.resolve({})
+  })
+  const user = userEvent.setup()
+
+  render(<ImprovementProposals />)
+
+  expect(await screen.findByText("PROP-L5-OV")).toBeInTheDocument()
+  expect(screen.getByText(/Lesson 已生效：LESS-DYN-PROP-L5-MAT/)).toBeInTheDocument()
+  expect(screen.getByText(/Overlay 已生效：ov-uuid-01/)).toBeInTheDocument()
+
+  await user.click(screen.getByRole("button", { name: "发布记账" }))
+  const previewRegion = await screen.findByRole("region", { name: "三载体发布并排预览" })
+  expect(within(previewRegion).getByText("42")).toBeInTheDocument()
+  expect(
+    within(previewRegion).getByText(/【平台动态经验条款】/),
+  ).toBeInTheDocument()
+})
+
+it("L5 回归面板呈现 L-B 模型层噪声带判定并支持 202 异步回归作业排队提示", async () => {
+  mocks.apiRequest.mockImplementation(
+    (path: string, options: { method?: string } = {}) => {
+      if (path === "/api/v1/simulation/regression/suites" && options.method === "GET") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "suite-async",
+              name: "真模型异步套件",
+              split: "regression",
+              scenario_ids: ["scn-1", "scn-2", "scn-3"],
+              baseline_config: { adapter_mode: "workbench", model_mode: "server" },
+              note: null,
+              created_at: "2026-11-14T10:00:00Z",
+            },
+          ],
+          total: 1,
+        })
+      }
+      if (path.includes("/regression/results") && options.method === "GET") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "res-l5-1",
+              suite_id: "suite-async",
+              proposal_id: "prop-1",
+              before: { runs: 3, mean_total: 0.65, mean_model_total: 0.61 },
+              after: { runs: 3, mean_total: 0.72, mean_model_total: 0.68 },
+              deltas: {
+                total_delta: 0.07,
+                model_verdict: "within_noise",
+                model_total_delta: 0.07,
+                noise_band: 0.1049,
+                noise_band_axis: "rubric-v1|model:server",
+              },
+              new_hard_failures: [],
+              resolved_hard_failures: [],
+              generalization_gap: 0.01,
+              overfit_risk: false,
+              verdict: "improved",
+              note: null,
+              created_at: "2026-11-14T11:00:00Z",
+            },
+          ],
+          total: 1,
+        })
+      }
+      if (path === "/api/v1/simulation/regression/suites/suite-async/run" && options.method === "POST") {
+        return Promise.resolve({
+          queued_async: true,
+          job_id: "job-99887766-abcd",
+          outbox_event_id: "evt-1",
+          job_status: "pending",
+          suite_id: "suite-async",
+          proposal_id: null,
+          adapter_mode: "workbench",
+          model_mode: "server",
+        })
+      }
+      return Promise.resolve({})
+    },
+  )
+  const user = userEvent.setup()
+
+  render(<RegressionDashboard />)
+
+  expect(await screen.findByText(/落在噪声带内（不可判改进）/)).toBeInTheDocument()
+  expect(screen.getByText(/噪声带 ±0.1049/)).toBeInTheDocument()
+
+  await user.click(screen.getByRole("button", { name: "跑对比" }))
+  expect(
+    await screen.findByText(/真模型回归已转入后台作业（Job #job-9988/),
+  ).toBeInTheDocument()
+})
+
+
 

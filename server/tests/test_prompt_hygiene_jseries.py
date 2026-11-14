@@ -45,10 +45,15 @@ _SYSTEM_PROMPT_PARAM_NAMES = {"system_prompt"}
 #   投影，≤200 字追加式条款）**——沿 industry_template.context 先例
 #   （adapters/workbench.py::_system_content；当前经 execute_ai_prompt
 #   system_prompt 形参传递，登记兼防未来重构为消息字典）。
+# - overlays.overlay_system_content：学习闭环 2.0 L5 Prompt Overlay 在
+#   deepseek 直连腿 messages 无 system 行时的受控前插（PromptOverlay 表
+#   status='published' 行＝经 admin release_channel 密码闸＋五件套注入闸
+#   发布的 ≤200 字治理面条款，与 workbench.system_content 同性质）。
 _KNOWN_EXCEPTION_VARIABLES = {
     "GENERATION_SYSTEM_PROMPT",  # industry_template_prompt.py 模块常量
     "SYSTEM_PROMPT",             # research_form_prompt.py 模块常量
     "system_content",            # simulation/adapters/workbench.py DB 载荷 overlay 内插（L4）
+    "overlay_system_content",    # ai/overlays.py 已发布 PromptOverlay 治理面直连腿注入（L5）
     "instruction",               # lcsc_desktop.py 函数内常量拼接
     "RULES",                     # lcsc_other.py 模块常量
     "file_content",              # guidance/ai_prompt.py:51（已登记例外）
