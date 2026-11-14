@@ -15,12 +15,21 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import json
+
 from fde_api.integrations.ontology_client import (
     OntologyAuthError,
     OntologyClientError,
     OntologyConflict,
     OntologyUnavailable,
 )
+
+def canonical_json_sha256(obj: object) -> str:
+    """与 ontology-service/fingerprints.py 同款规范化 JSON SHA-256（64 位 hex）。"""
+    return hashlib.sha256(
+        json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+
 
 SEED_ONTOLOGY_ID = "ont-seed-mfg"
 SEED_VERSION_ID = "ver-seed-1-0-0"
@@ -136,8 +145,7 @@ class MockOntologyAdapter:
                 }
             ],
         }
-        raw = repr(snapshot).encode("utf-8")
-        etag = f'"{hashlib.sha256(raw).hexdigest()}"'
+        etag = canonical_json_sha256(snapshot)
         self._versions[(SEED_ONTOLOGY_ID, SEED_VERSION_ID)] = {
             "id": SEED_VERSION_ID,
             "ontology_id": SEED_ONTOLOGY_ID,
@@ -566,7 +574,7 @@ class MockOntologyAdapter:
         ont_id = cs["ontology_id"]
         ver_id = f"ver-{uuid.uuid4().hex[:12]}"
         snapshot = {"version": version, "items": cs["proposed_json"]}
-        etag = f'"{hashlib.sha256(repr(snapshot).encode()).hexdigest()}"'
+        etag = canonical_json_sha256(snapshot)
         ver_rec = {
             "id": ver_id,
             "ontology_id": ont_id,
