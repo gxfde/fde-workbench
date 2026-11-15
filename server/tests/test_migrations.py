@@ -279,6 +279,39 @@ def test_head_projects_schema_is_codename_only(engine):
     )
 
 
+# 审计零原文列集冻结（Vex 13:22 M6 放行条件(b)）：工作令所称 audit_events ≡
+# 本仓唯一审计事件表 operation_events（projects/gate_receipt.py 头注名实映射）。
+# 「审计零原文」依赖列集不扩——任何新列（如 detail TEXT）都可能被用来旁路落
+# 原文；此前迁移纪律只管链卫生（单头/清单覆盖），对 add_column 无闸。白名单
+# =现存全部 11 列（9 显式 + TimestampMixin 2）；新增列必须先走决策单再改本清单。
+OPERATION_EVENTS_FROZEN_COLUMNS = frozenset({
+    "id",
+    "actor_user_id",
+    "project_id",
+    "org_id",
+    "target_type",
+    "target_id",
+    "event_type",
+    "occurred_at",
+    "changes",
+    "created_at",
+    "updated_at",
+})
+
+
+def test_audit_operation_events_column_set_is_frozen(engine):
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("operation_events")}
+
+    unexpected = columns - OPERATION_EVENTS_FROZEN_COLUMNS
+    missing = OPERATION_EVENTS_FROZEN_COLUMNS - columns
+    assert not unexpected and not missing, (
+        "operation_events 列集漂移（审计表列集冻结闸，Vex 13:22 M6 条件(b)）："
+        f"多出={sorted(unexpected)} 缺失={sorted(missing)}——"
+        "审计零原文依赖列集不扩，任何新列先走决策单再改 OPERATION_EVENTS_FROZEN_COLUMNS"
+    )
+
+
 def test_p1_sop_migration_preserves_users_and_adds_codename_column(
     alembic_config, engine
 ):

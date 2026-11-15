@@ -202,7 +202,10 @@ class OntologyClient:
                     method, url, headers=headers, json=json_body, params=params, timeout=self.timeout
                 )
             except (requests.ConnectionError, requests.Timeout) as exc:
-                raise OntologyUnavailable(f"ontology runtime unreachable: {url}") from exc
+                # Vex 13:22 M6 放行条件(a)（S-07 边角闭环）：文案禁带内网 URL——该消息
+                # 会经 integrations/service.py 管理面 5 处透出至报错面；拓扑细节只留异常链
+                # （__cause__，服务端日志可见），不进对客/管理面文案。
+                raise OntologyUnavailable("ontology runtime unreachable") from exc
             if resp.status_code >= 500:
                 raise OntologyClientError(f"ontology runtime 5xx: {resp.status_code} {path}")
             body: dict[str, Any] = {}

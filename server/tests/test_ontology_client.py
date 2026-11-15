@@ -231,3 +231,24 @@ def test_health_true_on_200(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("fde_api.integrations.ontology_client.requests.get", fake_get)
     assert _client().health() is True
+
+
+def test_unavailable_message_carries_no_intranet_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Vex 13:22 M6 放行条件(a)（S-07 边角闭环）：OntologyUnavailable 文案禁回显内网 URL。
+
+    该消息曾带 ``f"{url}"`` 并经 integrations/service.py 管理面 5 处 ``{exc}`` 透出至
+    报错面；修复后拓扑细节只留在异常链（__cause__，服务端日志可见），不进文案。
+    """
+    import requests as _requests
+
+    intranet = "http://10.203.7.42:8902"
+    client = OntologyClient(intranet, API_KEY, SIGNING_KEY)
+
+    def fake_request(*args: object, **kwargs: object) -> object:
+        raise _requests.ConnectionError("refused")
+
+    monkeypatch.setattr("fde_api.integrations.ontology_client.requests.request", fake_request)
+    with pytest.raises(OntologyUnavailable) as excinfo:
+        client.get_change_set(actor_id="u", org_id="o", project_id="p", change_set_id="cs")
+    assert intranet not in str(excinfo.value)
+    assert "10.203.7.42" not in str(excinfo.value)

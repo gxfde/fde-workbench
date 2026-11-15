@@ -142,6 +142,10 @@ from fde_api.integrations.ontology_client import (
 
 
 
+    OntologyClientError,
+
+
+
     OntologyConflict,
 
 
@@ -1150,7 +1154,62 @@ def test_create_binding_runtime_down_503(wb_app: Flask, monkeypatch: pytest.Monk
 
 
 
-    assert excinfo.value.code == "ontology_unavailable"
+    assert excinfo.value.code == "ontology_unavailable"
+
+
+def test_translate_runtime_call_messages_carry_no_internal_details() -> None:
+    """Vex 13:22 M6 放行条件(a)（S-07）：_translate_runtime_call 三处映射文案零内部细节回显。
+
+    异常链（__cause__）保留全部拓扑细节供服务端日志；管理面文案只留语义
+    （不可达/冲突/失败 + 原状态码），禁 ``{exc}`` 直透内网 URL/内部路径。
+    """
+    intranet = "http://10.203.7.42:8902/api/v1/versions/ver-1/snapshot"
+
+    def raiser(exc: Exception) -> Any:
+        def call() -> dict[str, Any]:
+            raise exc
+
+        return call
+
+    cases = [
+        (OntologyUnavailable(f"ontology runtime unreachable: {intranet}"),
+         503, "ontology_unavailable"),
+        (OntologyConflict({"message": "base_conflict"}), 409, "runtime_conflict"),
+        (OntologyClientError("ontology runtime 5xx: 502 /api/v1/versions"),
+         502, "runtime_error"),
+    ]
+    for exc, status, code in cases:
+        with pytest.raises(service.BindingError) as excinfo:
+            service._translate_runtime_call(raiser(exc))
+        assert excinfo.value.status == status
+        assert excinfo.value.code == code
+        assert intranet not in excinfo.value.message
+        assert "10.203.7.42" not in excinfo.value.message
+        assert "/api/v1/" not in excinfo.value.message
+
+
+def test_create_binding_runtime_down_message_no_intranet_echo(
+    wb_app: Flask, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vex 13:22 条件(a) 全链路钉：client 文案带内网 URL 时，绑定面 503 亦零回显（I5 路径）。"""
+    intranet = "http://10.203.7.42:8902"
+
+    class _LeakyClient(FakeClient):
+        def get_version_snapshot(self, **kwargs: Any) -> dict[str, Any]:
+            raise OntologyUnavailable(f"ontology runtime unreachable: {intranet}/healthz")
+
+    with wb_app.app_context():
+        _patch_client(monkeypatch, _LeakyClient())
+        with pytest.raises(service.BindingError) as excinfo:
+            service.create_binding(
+                actor=_leader(), project_id="p-1",
+                payload={"ontology_id": "ont-1", "pinned_version_id": "ver-1"},
+            )
+    assert excinfo.value.status == 503
+    assert excinfo.value.code == "ontology_unavailable"
+    assert intranet not in excinfo.value.message
+    assert "10.203.7.42" not in excinfo.value.message
+
 
 
 

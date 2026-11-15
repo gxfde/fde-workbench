@@ -214,8 +214,9 @@ def _verified_snapshot(
             version_id=version_id,
         )
     except OntologyUnavailable as exc:
+        # S-07/Vex M6 条件(a)：管理面文案零内部细节回显（内网 URL/路径），拓扑细节只在异常链
         raise BindingError(
-            f"ontology runtime unreachable: {exc}", status=503, code="ontology_unavailable"
+            "ontology runtime unreachable", status=503, code="ontology_unavailable"
         ) from exc
     except OntologyAuthError as exc:
         # 配置错误（key 失效//org 错）必须显性暴露，不得伪装成领域错误
@@ -231,8 +232,9 @@ def _verified_snapshot(
             code="runtime_conflict",
         ) from exc
     except OntologyClientError as exc:
+        # S-07/Vex M6 条件(a)：同上，5xx 状态码与路径不进管理面文案
         raise BindingError(
-            f"ontology runtime failure: {exc}", status=502, code="runtime_error"
+            "ontology runtime failure", status=502, code="runtime_error"
         ) from exc
     status = body.pop("_status", 500)
     if status != 200:
@@ -555,8 +557,9 @@ def _translate_runtime_call(call_fn: Any) -> dict[str, Any]:
     try:
         body: dict[str, Any] = call_fn()
     except OntologyUnavailable as exc:
+        # S-07/Vex M6 条件(a)：管理面文案零内部细节回显（内网 URL/路径），拓扑细节只在异常链
         raise BindingError(
-            f"ontology runtime unreachable: {exc}", status=503, code="ontology_unavailable"
+            "ontology runtime unreachable", status=503, code="ontology_unavailable"
         ) from exc
     except OntologyAuthError as exc:
         # 授权拒绝（403 body.code=forbidden，如 I4 自批）是调用方语义错 → 原样
@@ -573,12 +576,14 @@ def _translate_runtime_call(call_fn: Any) -> dict[str, Any]:
             code="runtime_auth",
         ) from exc
     except OntologyConflict as exc:
+        # S-07/Vex M6 条件(a)：runtime 409 响应体细节不透管理面
         raise BindingError(
-            f"ontology runtime conflict: {exc}", status=409, code="runtime_conflict"
+            "ontology runtime conflict", status=409, code="runtime_conflict"
         ) from exc
     except OntologyClientError as exc:
+        # S-07/Vex M6 条件(a)：同上，5xx 状态码与路径不进管理面文案
         raise BindingError(
-            f"ontology runtime failure: {exc}", status=502, code="runtime_error"
+            "ontology runtime failure", status=502, code="runtime_error"
         ) from exc
     status = int(body.pop("_status", 500))
     if status == 404:
