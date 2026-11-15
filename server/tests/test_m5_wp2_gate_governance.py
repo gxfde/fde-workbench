@@ -281,6 +281,49 @@ def test_receipt_frozen_on_decide_and_immutable(m5_env, db_session, monkeypatch)
         db_session.flush()
 
 
+def test_immutable_guard_blocks_null_to_value_rewrite(m5_env, db_session, monkeypatch) -> None:
+    """D29 守卫须覆盖 NULL→值 形态（Winston 架构席实测缺口）。
+
+    非 G8 门禁的 ``decision`` 落库恒为 NULL；SQLAlchemy 对「None → 具体值」
+    的 ``History`` 给出 ``deleted == ()`` 而 ``added`` 有名值，若守卫判据叠加
+    ``history.deleted`` 该形态即可静默穿透——事后补写决定/结论是伪造审计面
+    的最短路径。回归钉断言：守卫只看 ``has_changes()``。
+    """
+    env = m5_env
+    _settings_with(env, ontology_gate_dependency="per_gate")
+    monkeypatch.setattr(
+        "fde_api.projects.gate_ontology.client_from_settings",
+        _mock_client_factory(env["mock"]),
+    )
+    _submit_gate_evidence(env, "G5")
+    resp = _decide(env, "G5", {"result": "pass"})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    rec = db_session.scalars(
+        select(GateEvaluationReceipt).where(
+            GateEvaluationReceipt.project_id == env["project"]["id"]
+        )
+    ).one()
+    # 前置形态确认：decision 为空（非 G8 门禁不走决定字段）
+    assert rec.decision is None
+
+    # NULL → 值：SQLAlchemy 的 History 形态随加载态而异（实测三种）：
+    #   fresh-load      → added=["stop"] / deleted=[None]
+    #   expire-then     → added=["stop"] / deleted=()
+    #   same-session insert-then → added=["stop"] / deleted=()
+    # 后两种的 deleted 为空元组——旧判据 `has_changes() and deleted` 对它们
+    # 静默放行，故新判据只看 has_changes()。
+    rec.decision = "stop"
+    from sqlalchemy import inspect as sa_inspect
+
+    history = sa_inspect(rec).attrs["decision"].history
+    assert history.has_changes() is True
+    assert history.added == ["stop"]
+
+    with pytest.raises(RuntimeError, match="immutable"):
+        db_session.flush()
+
+
 def _settings_with(env, **overrides: Any):
     """返回当前测试 app 的 Settings 对象并就地覆盖（function 级 fixture 同对象）。"""
     from fde_api.extensions import db  # noqa: F401  (确保 app 上下文已建立)

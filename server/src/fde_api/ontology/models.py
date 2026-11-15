@@ -104,8 +104,8 @@ class OntologyTerm(Base, TimestampMixin, VersionedMixin):
 
 
 # ---- M5-WP3⑦ 单向晋升只读锁（party 评审 P2-1：装配点贴模型定义） ----
-# 注册在 models 层（WP2 回执守卫 workbench/models.py:731 / 研究客体守卫
-# research/models.py:454 同款先例）：任何 import OntologyTerm 的上下文
+# 注册在 models 层（先例：研究客体守卫 research/models.py:454/465/476 同款
+# 属性级 set 钩子 + before_insert）：任何 import OntologyTerm 的上下文
 # （含绕 create_app 的 CLI/维护进程）即武装——数据完整性锁不依赖路由
 # import 链。晋升流本体在 ontology/glossary_promotion.py（职责不动）。
 

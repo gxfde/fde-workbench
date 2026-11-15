@@ -199,7 +199,12 @@ def _gate_receipt_immutable_update(mapper: Any, connection: Any, target: Any) ->
     state = sa_inspect(target)
     for attr in _RECEIPT_IMMUTABLE_COLUMNS:
         history = state.attrs[attr].history
-        if history.has_changes() and history.deleted:
+        # 判据只看 has_changes()，不叠加 ``history.deleted``：可空列由 NULL
+        # 改为具体值（如非 G8 门禁的 decision 恒为 NULL）时 SQLAlchemy 的
+        # ``deleted`` 是空元组、``added`` 才有内容——叠加 deleted 会让该形态
+        # 静默穿透 D29 全行不可变（M5-WP5 party 架构席实测缺口，回归钉
+        # test_immutable_guard_blocks_null_to_value_rewrite）。
+        if history.has_changes():
             raise RuntimeError(
                 "gate_evaluation_receipts is immutable after insert "
                 f"(D29; column={attr})"
