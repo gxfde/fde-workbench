@@ -41,16 +41,54 @@ def upgrade() -> None:
     )
     op.add_column(
         "gate_evaluation_receipts",
+        sa.Column("disposition_closed", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+    )
+    # 合流回植②：WP3 爆炸半径聚合的证据挂钉查询键（诚实可空）
+    op.add_column(
+        "gate_evaluation_receipts",
+        sa.Column("ontology_id", sa.String(36), nullable=True),
+    )
+    op.add_column(
+        "gate_evaluation_receipts",
+        sa.Column("pinned_version_id", sa.String(36), nullable=True),
+    )
+    # 合流回植③：gate_id 放宽为可空（WP3 遥测/爆炸半径聚合只按 project+gate_key
+    # 查询，不依赖具体 Gate 行；B 版本无 gate_id 列，A 版超集兼容）
+    op.alter_column(
+        "gate_evaluation_receipts",
+        "gate_id",
+        existing_type=sa.String(36),
+        nullable=True,
+    )
+    # 合流回植③：B 版回执创建人审计列（与 decided_by_user_id 互补——
+    # created_by = 建行人，decided_by = 拍板人）
+    op.add_column(
+        "gate_evaluation_receipts",
         sa.Column(
-            "disposition_closed",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("true"),
+            "created_by_user_id",
+            sa.String(36),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
         ),
+    )
+    # 合流回植③（WP3 依赖）：求值瞬间熔断态（closed|open|half_open）
+    op.add_column(
+        "gate_evaluation_receipts",
+        sa.Column("breaker_state", sa.String(16), nullable=True),
     )
 
 
 def downgrade() -> None:
+    op.drop_column("gate_evaluation_receipts", "breaker_state")
+    op.drop_column("gate_evaluation_receipts", "created_by_user_id")
+    op.alter_column(
+        "gate_evaluation_receipts",
+        "gate_id",
+        existing_type=sa.String(36),
+        nullable=False,
+    )
+    op.drop_column("gate_evaluation_receipts", "pinned_version_id")
+    op.drop_column("gate_evaluation_receipts", "ontology_id")
     op.drop_column("gate_evaluation_receipts", "disposition_closed")
     op.drop_column("gate_evaluation_receipts", "gate_ready")
     op.drop_column("gate_evaluation_receipts", "site_binding_sha256")

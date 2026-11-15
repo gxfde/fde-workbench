@@ -327,6 +327,10 @@ class Settings(BaseSettings):
     # 集成契约 §0 配置表口径；单门禁 required|optional|none 仅 per_gate 下生效，
     # 见 projects/gate_ontology.py）。启动即校验闭集，非法值 fail-fast。
     ontology_gate_dependency: str = "per_gate"
+    # M5-WP3 D30：冻结证据评审包服务端 HMAC 独立密钥（与 runtime S-02 签名键
+    # 分离——证据包防伪面独立换钥）。缺省 None：导出/签收 fail-closed 503
+    # evidence_pack_not_configured（宁可拒绝不可裸包出闸）。
+    ontology_evidence_pack_hmac_key: SecretStr | None = Field(default=None, repr=False)
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

@@ -90,7 +90,7 @@ def upgrade() -> None:
         sa.Column("input_snapshot_json", sa.JSON(), nullable=False),
         sa.Column("input_snapshot_sha256", sa.String(64), nullable=False),
         sa.Column("ontology_checks_json", sa.JSON(), nullable=False),
-        sa.Column("ontology_degradation", sa.String(16), nullable=False),
+        sa.Column("ontology_degradation", sa.String(16), nullable=False, server_default=sa.text("'disabled'")),
         sa.Column(
             "decided_by_user_id",
             sa.String(36),
@@ -98,7 +98,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("receipt_sha256", sa.String(64), nullable=False),
+        sa.Column("receipt_sha256", sa.String(64), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True),
             server_default=sa.text("now()"), nullable=False,

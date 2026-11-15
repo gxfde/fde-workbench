@@ -22,7 +22,7 @@ leader 任务书 :106-107 与 ADR-M3 §6 :44 定的最终兜底：用企业 A �
   ``sweep_required``／``b_owner_status``／``measured``（三套 token 实测码）。
 - **降级即红（反逃逸闸，本轮新增）**：并集恒等对「把爬扫面降级成排除登记」
   是不变量，故另配四道闸：
-  ① 条数基线 ``len(ROUTES) == 38``／``len(_EXCLUSION_RECORDS) == 67``；
+  ① 条数基线 ``len(ROUTES) == 38``／``len(_EXCLUSION_RECORDS) == 71``；
   ② **实测派生 must_sweep 必须为空**——凡「B 属主实测 200 且 A/同角色 A
      均被拒」的路由若停留在排除登记里即转红；
   ③ 排除登记的 ``measured`` 与**现测重测**逐条一致（登记不可伪造、不可陈旧）；
@@ -111,6 +111,7 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>/members"): lambda w: f"/api/v1/projects/{w['project_b'].id}/members",
     ("GET", "/api/v1/projects/<project_id>/ontology/candidates"): lambda w: f"/api/v1/projects/{w['project_b'].id}/ontology/candidates",
     ("GET", "/api/v1/projects/<project_id>/ontology/change-sets"): lambda w: f"/api/v1/projects/{w['project_b'].id}/ontology/change-sets",
+    ("GET", "/api/v1/projects/<project_id>/ontology/glossary/promoted"): lambda w: f"/api/v1/projects/{w['project_b'].id}/ontology/glossary/promoted",
     ("GET", "/api/v1/projects/<project_id>/ontology/relation-types"): lambda w: f"/api/v1/projects/{w['project_b'].id}/ontology/relation-types",
     ("GET", "/api/v1/projects/<project_id>/ontology/terms"): lambda w: f"/api/v1/projects/{w['project_b'].id}/ontology/terms",
     ("GET", "/api/v1/projects/<project_id>/payments"): lambda w: f"/api/v1/projects/{w['project_b'].id}/payments",
@@ -692,6 +693,22 @@ _EXCLUSION_RECORDS = {
         "b_owner_status": 403,
         "measured": {"a": 403, "same_role_a": 403, "b_owner": 403},
     },
+    ("GET", "/api/v1/projects/<project_id>/ontology/review-queue"): {
+        "reason": "ontology 默认禁用（D12）→ 404 not_found；启用态跨租户 404 隔离由 test_m5_wp3_review_queue_telemetry 专测钉死（disabled 404 / 无绑定 409）",
+        "exclusion_kind": "internal_service",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 404,
+        "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
+    },
+    ("GET", "/api/v1/projects/<project_id>/ontology/upgrade-blast-radius"): {
+        "reason": "ontology 默认禁用（D12）→ 404 not_found；启用态跨租户 404 隔离由 test_m5_wp3_governance_blast_radius 专测钉死（disabled 404 / 无绑定 409 / 跨租户 404）",
+        "exclusion_kind": "internal_service",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 404,
+        "measured": {"a": 404, "same_role_a": 404, "b_owner": 404},
+    },
 }
 # 人类可读视图（由 _EXCLUSION_RECORDS 派生，不单独维护，避免两处失同步）
 _EXCLUDED_WITH_REASON = {route: rec["reason"] for route, rec in _EXCLUSION_RECORDS.items()}
@@ -1005,8 +1022,8 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-    assert len(ROUTES) == 38, ("爬扫面条数基线被改动：", len(ROUTES))
-    assert len(_EXCLUSION_RECORDS) == 69, (
+    assert len(ROUTES) == 39, ("爬扫面条数基线被改动：", len(ROUTES))
+    assert len(_EXCLUSION_RECORDS) == 71, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
     )
@@ -1154,3 +1171,10 @@ def test_m8_artifact_content_route_full_matrix(
         allowed.status_code,
         allowed.get_data(as_text=True)[:200],
     )
+
+
+# M5-WP3 合流：ontology 默认禁用（D12）→ review-queue / upgrade-blast-radius 404
+ROUTES.update({
+    k: v for k, v in list(ROUTES.items())
+    if 'review-queue' not in k[1] and 'blast-radius' not in k[1]
+})

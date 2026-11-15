@@ -140,8 +140,8 @@ class GateEvaluationReceipt(Base, TimestampMixin):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    gate_id: Mapped[str] = mapped_column(
-        ForeignKey("gates.id", ondelete="CASCADE"), nullable=False
+    gate_id: Mapped[str | None] = mapped_column(
+        ForeignKey("gates.id", ondelete="SET NULL")
     )
     gate_key: Mapped[str] = mapped_column(String(10), nullable=False)
     # B#28 revision（≡ gates.version 拍板时点值）——与门禁 CAS 语义同源
@@ -154,7 +154,9 @@ class GateEvaluationReceipt(Base, TimestampMixin):
     ontology_checks_json: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
     )
-    ontology_degradation: Mapped[str] = mapped_column(String(16), nullable=False)
+    ontology_degradation: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'disabled'")
+    )
     # ---- 合流回植（源=并行评审 b2e8d4c6a9f1 版本，append-only e9c4b7a1d5f8）----
     # 高频审计查询字段从 checks_json 提升为物理列（决策单步④）；双指纹诚实
     # 可空（disabled/skipped 档无指纹），gate_ready/disposition_closed 与并行
@@ -162,6 +164,15 @@ class GateEvaluationReceipt(Base, TimestampMixin):
     # 结论完整性由既有 _RECEIPT_CONTENT_COLUMNS 守卫）。
     domain_schema_sha256: Mapped[str | None] = mapped_column(String(64))
     site_binding_sha256: Mapped[str | None] = mapped_column(String(64))
+    # ---- 合流回植②（源=并行评审 B 链 WP3 依赖，e9c4b7a1d5f8 扩展）：ontology_id
+    # / pinned_version_id 为 WP3 爆炸半径聚合的证据挂钉查询键（evidence_pack.py
+    # _receipt_by_binding），诚实可空（disabled/skipped 档无本体绑定）。不进两级
+    # 哈希口径（观测值列）。
+    ontology_id: Mapped[str | None] = mapped_column(String(36))
+    pinned_version_id: Mapped[str | None] = mapped_column(String(36))
+    # 合流回植③（WP3 依赖）：求值瞬间熔断态（closed|open|half_open），party
+    # D5 receipt_annotation 透明标注数据源
+    breaker_state: Mapped[str | None] = mapped_column(String(16))
     gate_ready: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
@@ -171,10 +182,13 @@ class GateEvaluationReceipt(Base, TimestampMixin):
     decided_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
     decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    receipt_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    receipt_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 @event.listens_for(GateEvaluationReceipt, "before_update")
@@ -265,6 +279,8 @@ def freeze_gate_receipt(
         ontology_degradation=ontology_eval["degradation"],
         domain_schema_sha256=ontology_eval.get("checks", {}).get("domain_schema_sha256"),
         site_binding_sha256=ontology_eval.get("checks", {}).get("site_binding_sha256"),
+        ontology_id=ontology_eval.get("checks", {}).get("ontology_id"),
+        pinned_version_id=ontology_eval.get("checks", {}).get("pinned_version_id"),
         gate_ready=bool(ontology_eval.get("checks", {}).get("gate_ready")),
         disposition_closed=bool(
             (ontology_eval.get("checks", {}).get("candidate_disposition") or {}).get(

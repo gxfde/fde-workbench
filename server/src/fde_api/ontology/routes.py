@@ -29,10 +29,26 @@
 """
 from __future__ import annotations
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
+from fde_api.extensions import db
+from fde_api.ontology.evidence_pack import (
+    EvidencePackError,
+    export_evidence_pack,
+    import_annotation_receipt,
+)
+from fde_api.ontology.glossary_promotion import (
+    GlossaryPromotionError,
+    list_promoted_terms,
+    promote_glossary_terms,
+)
+from fde_api.ontology.governance import (
+    GovernanceError,
+    build_review_queue,
+    build_upgrade_blast_radius,
+)
 from fde_api.ontology import service
 
 ontology_blueprint = Blueprint(
@@ -43,6 +59,21 @@ ontology_blueprint = Blueprint(
 @ontology_blueprint.errorhandler(service.OntologyServiceError)
 def service_error(error):
     return error_response(error.code, error.message, error.status)
+
+
+@ontology_blueprint.errorhandler(EvidencePackError)
+def evidence_pack_error(error):
+    return error_response(error.code, str(error), error.status)
+
+
+@ontology_blueprint.errorhandler(GovernanceError)
+def governance_error(error):
+    return error_response(error.code, str(error), error.status)
+
+
+@ontology_blueprint.errorhandler(GlossaryPromotionError)
+def glossary_promotion_error(error):
+    return error_response(error.code, str(error), error.status)
 
 
 global_ontology_blueprint = Blueprint(
@@ -247,3 +278,75 @@ def reject_change_set(project_id: str, change_set_id: str):
         payload=payload,
     )
     return jsonify({"data": data, "error": None})
+
+
+def _current_settings():
+    return current_app.config['SETTINGS']
+
+
+@ontology_blueprint.post('/evidence-packs/export')
+@require_auth
+def export_project_evidence_pack(project_id: str):
+    data = export_evidence_pack(
+        session=db.session(),
+        actor=g.current_user,
+        project_id=project_id,
+        settings=_current_settings(),
+    )
+    return jsonify({'data': data, 'error': None})
+
+
+@ontology_blueprint.post('/evidence-packs/receipt')
+@require_auth
+def import_project_annotation_receipt(project_id: str):
+    payload = request.get_json(silent=True)
+    data = import_annotation_receipt(
+        session=db.session(),
+        actor=g.current_user,
+        project_id=project_id,
+        settings=_current_settings(),
+        payload=payload or {},
+    )
+    return jsonify({'data': data, 'error': None})
+
+
+@ontology_blueprint.get('/upgrade-blast-radius')
+@require_auth
+def get_upgrade_blast_radius(project_id: str):
+    with db.session() as session:
+        data = build_upgrade_blast_radius(
+            session, actor=g.current_user, project_id=project_id,
+            to_version=(request.args.get('to_version') or '').strip(),
+            settings=_current_settings(),
+        )
+        return jsonify({'data': data, 'error': None})
+
+
+@ontology_blueprint.post('/glossary/promote')
+@require_auth
+def promote_project_glossary(project_id: str):
+    payload = request.get_json(silent=True)
+    term_ids = (payload or {}).get("term_ids") or []
+    data = promote_glossary_terms(
+        session=db.session(), actor=g.current_user, project_id=project_id,
+        term_ids=term_ids,
+    )
+    return jsonify({"data": data, "error": None})
+
+
+@ontology_blueprint.get('/glossary/promoted')
+@require_auth
+def list_project_promoted_terms(project_id: str):
+    data = list_promoted_terms(session=db.session(), actor=g.current_user, project_id=project_id)
+    return jsonify({'data': data, 'error': None})
+
+
+@ontology_blueprint.get('/review-queue')
+@require_auth
+def get_project_review_queue(project_id: str):
+    with db.session() as session:
+        data = build_review_queue(
+            session, actor=g.current_user, project_id=project_id,
+            settings=_current_settings(),
+        )
+        return jsonify({'data': data, 'error': None})
