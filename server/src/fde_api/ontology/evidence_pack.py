@@ -11,7 +11,9 @@ D30 四闸（黑名单废除后的物理等价物）：
   ``CSP: default-src 'none'; style-src 'unsafe-inline'; img-src data:``，
   渲染不含时间戳（同一内容两次导出逐位一致，M2 review_package 同款纪律）；
 - **服务端 HMAC 防伪**——独立密钥（``FDE_ONTOLOGY_EVIDENCE_PACK_HMAC_KEY``）
-  对 ``(org_id, package_id, pinned_version_id, pack_sha256)`` 四元组签名，
+  对 ``(org_id, package_id, pinned_version_id, pack_sha256)`` 签名（BH1 口径
+  校准：内容寻址使 package_id 与 pack_sha256 同值双传，防伪语义实为
+  ``(org_id, package_id, pinned_version_id)`` 三元组），
   废除裸 SHA-256 防伪（改包重算即失配）；密钥缺省 fail-closed（503 拒导出）；
 - **异人签收（SoD）**——客户线下签章后 FDE 拖入回执，服务端复核 HMAC 并硬拦
   「经办导出人 = acceptor」自批（导出人锚 = 导出审计事件）。
@@ -147,7 +149,13 @@ def sign_pack(
     pack_sha256: str,
     hmac_key: str,
 ) -> str:
-    """服务端 HMAC-SHA256（D30 四元组；hexdigest，离线重放同值）。"""
+    """服务端 HMAC-SHA256（D30 四参签名；hexdigest，离线重放同值）。
+
+    BH1 口径校准：调用点 ``package_id`` 与 ``pack_sha256`` 恒为同值
+    （内容寻址 ``compute_package_id`` 双传）——防伪语义实为
+    ``(org_id, package_id, pinned_version_id)`` 三元组；签名串不变，
+    离线重放兼容。
+    """
     message = _canonical_json(
         {
             "org_id": org_id,
@@ -168,7 +176,11 @@ def verify_pack_signature(
     signature: str,
     hmac_key: str,
 ) -> bool:
-    """重算四元组签名比对（常数时间；任一分量篡改即失配）。"""
+    """重算签名比对（常数时间；任一分量篡改即失配）。
+
+    BH1 校准：同 ``sign_pack``——``package_id`` 与 ``pack_sha256`` 同值双传，
+    有效防伪分量为 ``(org_id, package_id, pinned_version_id)`` 三元组。
+    """
     expected = sign_pack(
         org_id=org_id,
         package_id=package_id,
