@@ -289,7 +289,7 @@ def freeze_gate_receipt(
         gate_ready=bool(ontology_eval.get("checks", {}).get("gate_ready")),
         # D5 半接线补齐（S-12 运行时拦截件顺带）：breaker_state 列此前只读
         # 未写——自 checks 取值落列（观测值列，不进两级哈希口径）；checks
-        # 缺键（disabled/skipped 档）诚实 NULL。
+        # 无该键时诚实 NULL（disabled 早退档；enabled 全路径均带值）。
         breaker_state=ontology_eval.get("checks", {}).get("breaker_state"),
         disposition_closed=bool(
             (ontology_eval.get("checks", {}).get("candidate_disposition") or {}).get(

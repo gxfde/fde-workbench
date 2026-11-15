@@ -95,28 +95,27 @@ def is_dependency_downgrade(current: str, proposed: str) -> bool:
     return new < old
 
 
-def baseline_level_from_events(
-    events: Iterable[Mapping[str, Any]], current_level: str | None
-) -> str | None:
-    """回放 S-12 落值事件流，得该门禁的收紧锚（历史最严档；纯函数零 IO）。
+def baseline_level_from_events(events: Iterable[Mapping[str, Any]]) -> str | None:
+    """回放 S-12 落值事件流，得该门禁的基线档（纯函数零 IO）。
 
-    事件 = ``set_gate_dependency`` 经 ``record_event`` 留痕的 changes payload
-    （含 ``to_level``）。历史最严档 = max 严格度({事件 to_level} ∪ {当前值})
-    ——max 与事件顺序无关（免疫同秒 ``occurred_at`` 时序不确定）。无任何
-    有效档位（无事件且当前值缺省/非法）→ ``None``：无净放松证据，不虚构
-    更严档（ORM 直写/建档前历史缺失的门禁拦截不触发）。
+    基线语义（决策单 08 ③「基线以来净放松」的精确化）：锚 = **建档时点**
+    的承诺档——最早 ``action=="establish"`` 事件的 ``to_level``。此后经三闸
+    合法下调回落到基线档不视为净放松（主动收紧不构成永久承诺，沿
+    ``set_gate_dependency``「基线建档人不因收紧改变」的同源语义）；收紧只
+    改当前档，不改基线。事件流无 establish（ORM 直写建档/建档早于事件
+    通道）→ ``None``：无基线证据，不虚构更严档，拦截不触发。调用方保证
+    ``events`` 为 occurred_at 升序（:func:`_gate_hold_events`）——单门禁
+    establish 至多一次，取首个与序无关。
     """
-    candidates = [(current_level or "").strip()]
     for payload in events:
-        candidates.append(str((payload or {}).get("to_level") or "").strip())
-    ranked = {_LEVEL_STRICTNESS[c] for c in candidates if c in _LEVEL_STRICTNESS}
-    if not ranked:
-        return None
-    top = max(ranked)
-    for name, rank in _LEVEL_STRICTNESS.items():
-        if rank == top:
-            return name
-    return None  # pragma: no cover —— 三档枚举穷尽，不可达
+        if not isinstance(payload, Mapping):
+            continue
+        if (payload.get("action") or "").strip() != "establish":
+            continue
+        level = str(payload.get("to_level") or "").strip()
+        if level in _LEVEL_STRICTNESS:
+            return level
+    return None
 
 
 def s12_runtime_hold_target(
@@ -127,11 +126,11 @@ def s12_runtime_hold_target(
     返回回退执行档（拦截触发）或 ``None``（不拦）：
 
     - 窗口关闭（``breaker_open=False``）→ 下调生效如常；
-    - 无收紧锚（``baseline_level=None``）→ 不虚构更严档；
+    - 无基线档（``baseline_level=None``）→ 不虚构更严档；
     - ``tier`` 不在行值域（required|optional|none）→ 全局 strong/weak 直映档
       不经门禁行值通道，环境闸治理面不在 S-12 门禁域；
-    - 当前档严格度 ≥ 锚 → 无净放松；
-    - 否则返回锚档（求值按收紧档继续——required 档本体不可用即挂起）。
+    - 当前档严格度 ≥ 基线 → 无净放松；
+    - 否则返回基线档（求值按基线档继续——required 档本体不可用即挂起）。
     """
     if not breaker_open or baseline_level is None:
         return None
@@ -146,8 +145,10 @@ def _gate_hold_events(session: Session, gate: Any) -> list[dict[str, Any]]:
     """该门禁的 S-12 落值事件 payload（operation_events 只读回放，零出站）。
 
     OperationEvent 函数内导入（包级导入环冻结，沿 _load_active_binding 先例）。
-    排序仅求确定性（occurred_at, id）；收紧锚取 max 严格度，与序无关。
-    limit 200 为防御性上界（单门禁依赖变更频次天然有界）。
+    asc 全量回放**不设 limit**——基线锚取最早 establish 事件，截断任一侧都
+    可能丢建档（bmad-code-review blind-hunter/verification-gap/acceptance 三层
+    同指 asc+limit 保旧弃新缺陷）；单门禁依赖变更频次 = 档位变更次数，现实
+    量级个位数。非 dict payload 防御性跳过（JSON 列历史形状不信任）。
     """
     from fde_api.workbench.models import OperationEvent
 
@@ -159,9 +160,8 @@ def _gate_hold_events(session: Session, gate: Any) -> list[dict[str, Any]]:
             OperationEvent.target_id == gate.id,
         )
         .order_by(OperationEvent.occurred_at.asc(), OperationEvent.id.asc())
-        .limit(200)
     ).all()
-    return [dict(row.changes or {}) for row in rows]
+    return [dict(row.changes) for row in rows if isinstance(row.changes, dict)]
 
 
 def _ambient_breaker_open() -> bool:
@@ -181,6 +181,28 @@ def _ambient_breaker_open() -> bool:
         return client_from_settings().breaker_state != "closed"
     except Exception:
         return True
+
+
+def _ambient_breaker_state() -> str:
+    """缺省熔断态观察（细值 closed|open|half_open|unknown；零出站读内存）。
+
+    语义与 :func:`_ambient_breaker_open` 逐分支对齐：上下文外（内部直调/
+    脚本）与 D12 disabled → ``closed``（窗口关）；client 构建/读态异常 →
+    ``unknown``（调用方按 ``!= "closed"`` 判窗口开 = fail-closed 宁严勿松）。
+    观察通道的完整语义依赖 client 生命周期（见决策单 08 遗留登记：每次调用
+    新建实例时进程内无跨请求熔断记忆——既有架构议题，非本件引入）。"""
+    try:
+        from flask import current_app
+
+        settings = current_app.config["SETTINGS"]
+    except RuntimeError:
+        return "closed"
+    if not getattr(settings, "ontology_enabled", False):
+        return "closed"  # D12 disabled：零出站，无熔断窗口概念
+    try:
+        return str(client_from_settings().breaker_state)
+    except Exception:
+        return "unknown"
 
 
 def _load_active_binding(session: Session, project: Any) -> Any | None:
@@ -223,11 +245,14 @@ def evaluate_gate_ontology(
     optional/weak 两场景一律降级放行（degraded 标注），处置状态只进 checks。
 
     S-12 运行时激活拦截（混合形态，P1 2026-11-16 拍板；A 写值三闸不动）：
-    熔断窗口内，门禁生效档若为收紧锚（``operation_events`` 回放的历史最严
-    档）以来的净放松值，则不按放松档执行——按锚档继续求值（required 档
-    本体不可用即 409 挂起），并在 ``checks["s12_runtime_hold"]`` 显式标注
-    （随回执固化）。``breaker_open`` 沿写值闸先例支持显式快照（None = 缺省
-    请求上下文内存观察）。
+    熔断窗口内，门禁生效档若为基线档（建档 establish 事件经
+    ``operation_events`` 回放）以来的净放松值，则不按放松档执行——按基线
+    档继续求值（required 档本体不可用即 409 挂起），
+    ``checks["effective_dependency"]`` 改写为执行档（消费面单一事实源）、
+    ``checks["s12_runtime_hold"]`` 显式标注（随回执固化），
+    ``checks["breaker_state"]`` 细值全路径留痕（D5 回执列数据源）。
+    ``breaker_open`` 沿写值闸先例支持显式快照（None = 缺省请求上下文内存
+    观察）。窗口关闭时短路事件回放（零额外查询税）。
     """
     from flask import current_app
 
@@ -237,24 +262,32 @@ def evaluate_gate_ontology(
     tier = resolve_effective_dependency(
         settings.ontology_gate_dependency, gate.ontology_dependency
     )
-    observed_open = _ambient_breaker_open() if breaker_open is None else breaker_open
-    hold_target = s12_runtime_hold_target(
-        tier,
-        baseline_level_from_events(
-            _gate_hold_events(session, gate), gate.ontology_dependency
-        ),
-        observed_open,
-    )
-    checks: dict[str, Any] = {"effective_dependency": tier}
-    if hold_target is not None:
-        checks["s12_runtime_hold"] = {
-            "held": True,
-            "relaxed_level": tier,
-            "enforced_level": hold_target,
-            "breaker_open": True,
-            "reason": "breaker_window_suspends_relaxed_dependency",
-        }
-        tier = hold_target
+    if breaker_open is None:
+        observed_state = _ambient_breaker_state()
+        observed_open = observed_state != "closed"
+    else:
+        observed_state = "open" if breaker_open else "closed"
+        observed_open = breaker_open
+    checks: dict[str, Any] = {
+        "effective_dependency": tier,
+        "breaker_state": observed_state,
+    }
+    if observed_open:
+        hold_target = s12_runtime_hold_target(
+            tier,
+            baseline_level_from_events(_gate_hold_events(session, gate)),
+            observed_open,
+        )
+        if hold_target is not None:
+            checks["s12_runtime_hold"] = {
+                "held": True,
+                "relaxed_level": tier,
+                "enforced_level": hold_target,
+                "breaker_state": observed_state,
+                "reason": "breaker_window_suspends_relaxed_dependency",
+            }
+            checks["effective_dependency"] = hold_target  # 执行档（消费面单一事实源）
+            tier = hold_target
     if tier == "none":
         # per_gate none 档：跳过本体校验，零出站（回执照固留痕 skipped）
         return {"degradation": "skipped", "checks": checks}
@@ -276,9 +309,6 @@ def evaluate_gate_ontology(
     checks["pinned_version_id"] = binding.pinned_version_id
     try:
         client = client_from_settings()
-        # 熔断态只读锚进 checks（D5 receipt_annotation 数据源；回执
-        # breaker_state 列自本件起接线，观测值列不进两级哈希口径）
-        checks["breaker_state"] = str(getattr(client, "breaker_state", "unknown"))
         summary = client.get_version_governance_summary(
             actor_id=actor.id,
             org_id=project.org_id,
