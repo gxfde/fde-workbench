@@ -481,7 +481,7 @@ def test_receipt_accepts_other_person_and_lands_evidence(
     assert first["accepted"] == 1 and first["duplicated"] == 0
     row = db_session.scalar(
         select(ProjectEvidence).where(
-            ProjectEvidence.source_uri == annotation["source_uri"]
+            ProjectEvidence.source_uri == f"ontology_review:{exported['package_id']}|{annotation['source_uri']}"
         )
     )
     assert row is not None
@@ -702,6 +702,193 @@ def test_export_degraded_pack_carries_visible_annotation(
     assert projected["ontology"]["degraded"] is True
     # 渲染面：HTML 显式降级标注（客户离线打开即可见）
     assert "本体校验降级" in result["html"]
+    db_session.commit()
+
+
+# ------------------------------------------------- 回植前置评审 patch/dedentry
+
+
+def test_receipt_cross_package_same_file_not_folded(
+    gate_project, client, db_session, settings, monkeypatch
+):
+    """D1 跨包互踩：同 uri+sha 批注在两个不同包中签收 → 各自成行。
+
+    工作令 §1 条 1 明令规避 (project_id, source_uri, content_sha256) 唯一键
+    互踩——批注落库时 source_uri 编码包 ID 前缀，captured_from 与 source_uri
+    双锚各自指向其来源包（P1 拍板：零 DDL 方案）。
+    """
+    env = _pack_env(gate_project, client, db_session, settings, monkeypatch)
+    from fde_api.ontology.evidence_pack import export_evidence_pack, import_annotation_receipt
+
+    # 第一包：当前两条证据行
+    first_pack = export_evidence_pack(
+        db_session,
+        actor=env["admin_user"],
+        project_id=env["project"]["id"],
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    annotation = {"source_uri": "fdeops://m5/cross-file", "content_sha256": "a" * 64}
+    first_receipt = import_annotation_receipt(
+        db_session, actor=env["lead_user"], project_id=env["project"]["id"],
+        payload={
+            "review_package_id": first_pack["package_id"],
+            "pack_sha256": first_pack["pack_sha256"],
+            "pinned_version_id": first_pack["pinned_version_id"],
+            "signature": first_pack["signature"],
+            "annotations": [annotation],
+        },
+        settings=settings,
+    )
+    assert first_receipt["accepted"] == 1
+
+    # 第二包：新增一条证据行 → 包内容变化 → 不同 package_id
+    db_session.add(
+        ProjectEvidence(
+            project_id=env["project"]["id"],
+            kind="gate",
+            source_uri="fdeops://m5/second-pack-ev",
+            content_sha256="d" * 64,
+            captured_from="human",
+        )
+    )
+    db_session.commit()
+    second_pack = export_evidence_pack(
+        db_session,
+        actor=env["admin_user"],
+        project_id=env["project"]["id"],
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    assert second_pack["package_id"] != first_pack["package_id"]
+
+    second_receipt = import_annotation_receipt(
+        db_session, actor=env["lead_user"], project_id=env["project"]["id"],
+        payload={
+            "review_package_id": second_pack["package_id"],
+            "pack_sha256": second_pack["pack_sha256"],
+            "pinned_version_id": second_pack["pinned_version_id"],
+            "signature": second_pack["signature"],
+            "annotations": [annotation],  # 同 uri + 同 sha
+        },
+        settings=settings,
+    )
+    # 互踩修复后：第二包是独立签收（非折叠 duplicated）
+    assert second_receipt["accepted"] == 1, second_receipt
+    assert second_receipt["duplicated"] == 0
+    rows = db_session.scalars(
+        select(ProjectEvidence).where(
+            ProjectEvidence.source_uri.like("ontology_review:%|fdeops://m5/cross-file")
+        )
+    ).all()
+    assert len(rows) == 2  # 两包各自成行
+    assert {r.captured_from for r in rows} == {
+        f"ontology_review:{first_pack['package_id']}",
+        f"ontology_review:{second_pack['package_id']}",
+    }
+    db_session.commit()
+
+
+def test_pack_excludes_internal_compiler_telemetry(
+    gate_project, client, db_session, settings, monkeypatch
+):
+    """D2 古德哈特护栏：内部编译器遥测不出对客包（payload + HTML 双断言）。"""
+    env = _pack_env(gate_project, client, db_session, settings, monkeypatch)
+    from fde_api.ontology.evidence_pack import export_evidence_pack
+
+    result = export_evidence_pack(
+        db_session,
+        actor=env["admin_user"],
+        project_id=env["project"]["id"],
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    assert "compiler_telemetry" not in result["html"]
+    assert "unmodified_accept_rate" not in result["html"]
+    db_session.commit()
+
+
+def test_export_and_receipt_cross_tenant_are_404(
+    gate_project, client, db_session, settings, monkeypatch
+):
+    """P2 两 POST 防伪面跨租户隔离：外企业用户 → 404（S-01 同形）。"""
+    from fde_api.auth.models import User
+    from fde_api.ontology.evidence_pack import export_evidence_pack, import_annotation_receipt
+    from fde_api.orgs.models import ORG_TYPE_ENTERPRISE, Org
+
+    env = _pack_env(gate_project, client, db_session, settings, monkeypatch)
+    db_session.add(Org(id="org-outsider", org_type=ORG_TYPE_ENTERPRISE, name="外企业-证据包隔离"))
+    db_session.flush()
+    outsider = User(
+        username="wp3-pack-outsider",
+        role="project_lead",
+        org_id="org-outsider",
+        password_hash="x",
+        must_change_password=False,
+        is_active=True,
+    )
+    db_session.add(outsider)
+    db_session.commit()
+    pid = env["project"]["id"]
+    with pytest.raises(EvidencePackError) as excinfo:
+        export_evidence_pack(db_session, actor=outsider, project_id=pid, settings=settings)
+    assert excinfo.value.status == 404
+    with pytest.raises(EvidencePackError) as excinfo:
+        import_annotation_receipt(
+            db_session,
+            actor=outsider,
+            project_id=pid,
+            payload={"review_package_id": "d" * 64, "pack_sha256": "c" * 64,
+                     "pinned_version_id": "v", "signature": "s",
+                     "annotations": [{"source_uri": "u", "content_sha256": "1" * 64}]},
+            settings=settings,
+        )
+    assert excinfo.value.status == 404
+    db_session.rollback()
+
+
+def test_sod_anchors_first_export_not_latest(
+    gate_project, client, db_session, settings, monkeypatch
+):
+    """P3 SoD 锚定首次导出：重导出同一内容不换锚，首经办人仍被拦。
+
+    内容寻址使同包可被第二人幂等重导出——若锚取最新事件，首经办人 A 即可
+    经 B 重导出完成自签收（评审 P3：换锚洗 SoD）。
+    """
+    env = _pack_env(gate_project, client, db_session, settings, monkeypatch)
+    from fde_api.ontology.evidence_pack import export_evidence_pack, import_annotation_receipt
+
+    first = export_evidence_pack(
+        db_session,
+        actor=env["admin_user"],
+        project_id=env["project"]["id"],
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    second = export_evidence_pack(
+        db_session,
+        actor=env["lead_user"],  # 异人重导出同一内容 → 同 package_id
+        project_id=env["project"]["id"],
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    assert second["package_id"] == first["package_id"]
+    payload = {
+        "review_package_id": first["package_id"],
+        "pack_sha256": first["pack_sha256"],
+        "pinned_version_id": first["pinned_version_id"],
+        "signature": first["signature"],
+        "annotations": [
+            {"source_uri": "fdeops://m5/rewash", "content_sha256": "b" * 64}
+        ],
+    }
+    with pytest.raises(EvidencePackError) as excinfo:
+        import_annotation_receipt(
+            db_session, actor=env["admin_user"], project_id=env["project"]["id"],
+            payload=payload, settings=settings,
+        )
+    assert excinfo.value.code == "self_acceptance_forbidden"
+    db_session.rollback()
     db_session.commit()
 
 

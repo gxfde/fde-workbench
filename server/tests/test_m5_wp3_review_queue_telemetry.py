@@ -242,6 +242,46 @@ def test_telemetry_without_receipts_is_insufficient(
     assert metric["status"] == "insufficient_data"
 
 
+def test_telemetry_latest_degraded_receipt_excludes_key(
+    gate_project, db_session, settings, monkeypatch
+):
+    """P4（评审盲区）：最新一条是降级回执（无遥测键）→ 该键整体不计入。
+
+    指标定义「降级回执无该键不计入」的真实语义是**键级最新行判定**——
+    若实现只跳过降级行而保留更旧的带遥测行，等于拿旧快照冒充当前状态。
+    """
+    from fde_api.metrics.service import build_metrics_report
+
+    monkeypatch.setattr(settings, "ontology_enabled", False, raising=False)
+    project, _url, _leader = gate_project
+    _receipt(db_session, project["id"], "G5", 0.9, minutes=5)
+    # G5 最新一条：降级回执（checks_json 无 compiler_telemetry 键）
+    db_session.add(
+        GateEvaluationReceipt(
+            project_id=project["id"],
+            gate_key="G5",
+            ontology_id=SEED_ONTOLOGY_ID,
+            pinned_version_id=M5_SEED_VERSION_ID,
+            input_snapshot_sha256="d" * 64,
+            breaker_state="open",
+            disposition_closed=True,
+            revision=1,
+            result="pass",
+            input_snapshot_json={},
+            ontology_checks_json={"candidate_disposition": {"all_disposed": True}},
+            gate_ready=False,
+            decided_at=datetime.now(UTC).replace(minute=40),
+        )
+    )
+    _receipt(db_session, project["id"], "G9", 0.5, minutes=3)
+    db_session.commit()
+    report = build_metrics_report(db_session)
+    m5 = report["sections"]["m5_governance"]
+    metric = next(m for m in m5 if m["key"] == "ontology_compiler_unmodified_accept_rate")
+    assert metric["sample_size"] == 1  # 只有 G9——G5 最新为降级，整键不计入
+    assert metric["value"] == 0.5
+
+
 # ---------------------------------------------------------------- 路由烟测
 
 

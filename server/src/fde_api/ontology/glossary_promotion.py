@@ -82,6 +82,12 @@ def promote_glossary_terms(
 
     if not isinstance(term_ids, (list, tuple)) or not term_ids:
         raise GlossaryPromotionError("term_ids 必须为非空数组。")
+    # M5-WP3 P9（回植前置评审）：与 annotations ≤200 同款容量硬限 + 元素
+    # 类型校验（IN 列表撑爆 / 非 str 直达 SQL 的防御）。
+    if len(term_ids) > 200:
+        raise GlossaryPromotionError("term_ids 条目数超限（≤200）。")
+    if not all(isinstance(tid, str) and tid.strip() for tid in term_ids):
+        raise GlossaryPromotionError("term_ids 条目必须为非空字符串。")
     project = _load_promotion_project(session, actor, project_id)
     rows = session.scalars(
         select(OntologyTerm).where(OntologyTerm.id.in_(list(term_ids)))

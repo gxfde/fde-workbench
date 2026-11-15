@@ -18,6 +18,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
+from datetime import UTC, datetime
+
 from fde_api.ontology.models import OntologyChangeSet, OntologyTerm
 from fde_api.workbench.models import OperationEvent, Project
 
@@ -236,6 +238,99 @@ def test_change_set_update_term_on_promoted_term_is_blocked(
     assert db_session.scalar(
         select(OntologyChangeSet.status).where(OntologyChangeSet.id == change_set_id)
     ) in ("draft", "in_review", "confirmed", "rejected", "superseded")
+
+
+def test_change_set_merge_terms_on_promoted_source_is_blocked(
+    gate_project, db_session, settings, monkeypatch
+):
+    """P1（评审验证缺口）：merge_terms 物化触已晋升 source 同样被锁 + 回滚保原值。
+
+    merge 物化对 source 写 status='merged' + canonical_term_id——锁拦住后
+    「单向不可逆」在该用户路径与 update_term 同水位；若未来物化改走 Core
+    update 绕过 ORM 事件，本钉红。
+    """
+    monkeypatch.setattr(settings, "ontology_enabled", False, raising=False)
+    project, _url, leader = gate_project
+    project_row = db_session.get(Project, project["id"])
+    source = _confirmed_term(db_session, project_row, "晋升后被并词", definition="原口径")
+    _confirmed_term(db_session, project_row, "合并保留词", definition="保留口径")
+    _promote(db_session, leader.user, project, [source.id])
+    db_session.commit()
+
+    from fde_api.ontology.service import (
+        propose_project_change_set,
+        confirm_project_change_set,
+        submit_project_change_set,
+        OntologyServiceError,
+    )
+
+    cs = propose_project_change_set(
+        actor=leader.user,
+        project_id=project["id"],
+        payload={
+            "title": "试图并掉已晋升术语",
+            "proposed_json": [
+                {
+                    "action": "merge_terms",
+                    "source_term": "晋升后被并词",
+                    "target_term": "合并保留词",
+                }
+            ],
+        },
+    )
+    change_set_id = cs["change_set"]["id"]
+    submit_project_change_set(
+        actor=leader.user, project_id=project["id"], change_set_id=change_set_id
+    )
+    from fde_api.auth.models import User
+
+    admin_row = db_session.scalar(select(User).where(User.username == "gate.admin"))
+    assert admin_row is not None
+    with pytest.raises((RuntimeError, OntologyServiceError)):
+        confirm_project_change_set(
+            actor=admin_row,
+            project_id=project["id"],
+            change_set_id=change_set_id,
+        )
+    db_session.rollback()
+    db_session.expire_all()
+    locked = db_session.get(OntologyTerm, source.id)
+    assert locked.status == "confirmed"  # 全成全败：未翻 merged
+    assert locked.canonical_term_id is None  # 未重指 target
+    db_session.rollback()
+
+
+def test_promote_rejects_oversized_or_non_string_term_ids(
+    gate_project, db_session, settings, monkeypatch
+):
+    """P9（评审边界）：term_ids 条数 ≤200 且元素须非空字符串（与 ③ 对称）。"""
+    monkeypatch.setattr(settings, "ontology_enabled", False, raising=False)
+    project, _url, leader = gate_project
+    from fde_api.ontology.glossary_promotion import GlossaryPromotionError
+
+    with pytest.raises(GlossaryPromotionError) as excinfo:
+        _promote(db_session, leader.user, project, [f"t{i}" for i in range(201)])
+    assert "200" in str(excinfo.value)
+    with pytest.raises(GlossaryPromotionError):
+        _promote(db_session, leader.user, project, ["合法", 123])
+    db_session.rollback()
+
+
+def test_promotion_lock_blocks_promoted_at_rewrite(
+    gate_project, db_session, settings, monkeypatch
+):
+    """P8（评审边界）：已晋升行的 promoted_at 时间锚同入锁——单向不重置。"""
+    monkeypatch.setattr(settings, "ontology_enabled", False, raising=False)
+    project, _url, leader = gate_project
+    project_row = db_session.get(Project, project["id"])
+    term = _confirmed_term(db_session, project_row, "锚锁词")
+    _promote(db_session, leader.user, project, [term.id])
+    db_session.expire_all()
+    locked = db_session.get(OntologyTerm, term.id)
+    locked.promoted_at = datetime(1999, 1, 1, tzinfo=UTC)
+    with pytest.raises(RuntimeError, match="promoted_readonly"):
+        db_session.flush()
+    db_session.rollback()
 
 
 # ---------------------------------------------------------------- 路由烟测

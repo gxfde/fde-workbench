@@ -349,11 +349,17 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
         ).order_by(GateEvaluationReceipt.decided_at, GateEvaluationReceipt.id)
     ).all()
     latest_rates: dict[tuple[str, str], float] = {}
+    latest_rows: dict[tuple[str, str], Any] = {}
+    # 先取每 (project, gate) 的**最新一行**（升序扫描后者覆盖），再对该行判
+    # 遥测键——若只跳过降级行而保留更旧的带遥测行，等于拿旧快照冒充当前
+    # 状态（M5-WP3 P4 评审修正：键级最新行判定；bool 是 int 子类需排除）。
     for project_id, gate_key, checks_json, _decided_at, _rid in receipt_rows:
+        latest_rows[(str(project_id), str(gate_key))] = checks_json
+    for key, checks_json in latest_rows.items():
         telemetry = (checks_json or {}).get("compiler_telemetry")
         rate = telemetry.get("unmodified_accept_rate") if isinstance(telemetry, dict) else None
         if isinstance(rate, (int, float)) and not isinstance(rate, bool):
-            latest_rates[(str(project_id), str(gate_key))] = float(rate)
+            latest_rates[key] = float(rate)
     rate_values = list(latest_rates.values())
     compiler_rate = _metric(
         "ontology_compiler_unmodified_accept_rate",

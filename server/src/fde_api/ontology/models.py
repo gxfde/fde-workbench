@@ -146,7 +146,7 @@ def _promotion_no_content_change(
     already_promoted = bool(old_value) or bool(target.promoted_readonly)
     if not already_promoted:
         return
-    for attr in ("promoted_readonly", *_PROMOTION_LOCKED_COLUMNS):
+    for attr in ("promoted_readonly", "promoted_at", *_PROMOTION_LOCKED_COLUMNS):
         column_history = state.attrs[attr].history
         if column_history.has_changes() and column_history.deleted:
             raise RuntimeError(

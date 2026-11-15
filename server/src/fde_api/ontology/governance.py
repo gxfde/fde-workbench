@@ -109,7 +109,8 @@ def summarize_blast_radius(
                 len(bindings) > _DETAIL_SAMPLE_LIMIT
                 or len(evidence_refs) > _DETAIL_SAMPLE_LIMIT
                 or len(gate_receipts) > _DETAIL_SAMPLE_LIMIT
-                or len(workflow_runs) > _DETAIL_SAMPLE_LIMIT
+                or len([run for run in workflow_runs if run.get("snapshot_pinned_version_id") == pinned_version_id])
+                > _DETAIL_SAMPLE_LIMIT
             ),
         },
     }
@@ -192,7 +193,7 @@ def build_upgrade_blast_radius(
         )
     except Exception as exc:
         raise GovernanceError(
-            f"本体运行时不可达，无法聚合升级影响（{exc}）。",
+            "本体运行时不可达，无法聚合升级影响（请稍后重试或联系管理员）。",
             status=503,
             code="ontology_unavailable",
         ) from exc
@@ -325,7 +326,7 @@ def build_review_queue(
         )
     except Exception as exc:
         raise GovernanceError(
-            f"本体运行时不可达，无法生成分流队列（{exc}）。",
+            "本体运行时不可达，无法生成分流队列（请稍后重试或联系管理员）。",
             status=503,
             code="ontology_unavailable",
         ) from exc

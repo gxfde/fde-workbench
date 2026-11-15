@@ -67,7 +67,10 @@ _PACK_GATE_FIELDS = (
 )
 # 治理摘要对客白名单（D32 双指纹 + D31 处置闭环；undisposed 条目仅含
 # change_set_id/status，与 runtime 键同形；degraded 进白名单——工作令 §1
-# 条 4「对客透明标注本体校验在线/降级态」，party 评审 P2-C 修复）
+# 条 4「对客透明标注本体校验在线/降级态」，party 评审 P2-C 修复。
+# compiler_telemetry **不进**白名单：D31/§1 条 3 钉「平台内部编译器遥测
+# SLO」——内部健康度不向客户暴露，防免改率被客户当作验收 KPI（古德哈特）
+# ——P1 拍板 D2=移除）
 _PACK_GOVERNANCE_FIELDS = (
     "ontology_id",
     "version",
@@ -75,7 +78,6 @@ _PACK_GOVERNANCE_FIELDS = (
     "domain_schema_sha256",
     "site_binding_sha256",
     "candidate_disposition",
-    "compiler_telemetry",
     "sla_aging",
     "gate_ready",
     "degraded",
@@ -454,14 +456,19 @@ def _validate_annotations(annotations: Any) -> list[dict[str, Any]]:
 def _find_export_event(
     session: Session, project_id: str, package_id: str
 ) -> OperationEvent | None:
-    """按包 ID 找导出留痕（低频事件，Python 侧过滤避免 JSON 方言差异）。"""
+    """按包 ID 找导出留痕（低频事件，Python 侧过滤避免 JSON 方言差异）。
+
+    M5-WP3 P3（回植前置评审）：锚定**首次**导出（created_at 升序取首条命中）
+    ——内容寻址使同包可被第二人幂等重导出，若锚取最新事件，首经办人即可经
+    他人重导出洗掉 SoD 拦截（换锚自签收）。
+    """
     events = session.scalars(
         select(OperationEvent)
         .where(
             OperationEvent.project_id == project_id,
             OperationEvent.event_type == "ontology_evidence_pack_exported",
         )
-        .order_by(OperationEvent.id.desc())
+        .order_by(OperationEvent.created_at.asc(), OperationEvent.id.asc())
     ).all()
     for event in events:
         if str((event.changes or {}).get("package_id", "")) == package_id:
@@ -536,11 +543,19 @@ def import_annotation_receipt(
     duplicated = 0
     evidence_ids: list[str] = []
     for annotation in annotations:
+        # M5-WP3 D1（P1 拍板：零 DDL 方案）：source_uri 编码包 ID 前缀——
+        # 唯一键 (project, source_uri, content_sha256) 因此天然按包隔离，
+        # 跨包同文件批注各自成行；source_uri 与 captured_from 双锚同源。
+        scoped_uri = f"ontology_review:{package_id}|{annotation['source_uri']}"
+        if len(scoped_uri) > 500:
+            raise EvidencePackError(
+                "annotation.source_uri 与包 ID 组合后超长（≤500）。"
+            )
         row, created = upsert_evidence(
             session,
             project_id=project.id,
             kind="ontology_annotation",
-            source_uri=annotation["source_uri"],
+            source_uri=scoped_uri,
             content_sha256=annotation["content_sha256"],
             origin=annotation["origin"],
             captured_from=f"ontology_review:{package_id}",

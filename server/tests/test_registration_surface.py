@@ -31,7 +31,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from conftest import INITIAL_PASSWORD
+from conftest import INITIAL_PASSWORD, _FakeRedis
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
@@ -74,32 +74,6 @@ class _FakeSes:
             {"sender": sender, "recipient": recipient, "subject": subject, "body": body}
         )
         return f"ses-msg-{len(self.calls)}"
-
-
-class _FakeRedis:
-    """最小 incr/expire/ttl 语义（统一注册限流可测）。"""
-
-    def __init__(self) -> None:
-        self.counters: dict[str, int] = {}
-        self.ttls: dict[str, int] = {}
-
-    def incr(self, key: str) -> int:
-        self.counters[key] = self.counters.get(key, 0) + 1
-        return self.counters[key]
-
-    def expire(self, key: str, seconds: int) -> bool:
-        self.ttls[key] = seconds
-        return True
-
-    def ttl(self, key: str) -> int:
-        return self.ttls.get(key, 86400)
-
-    def delete(self, *keys: str) -> int:
-        removed = 0
-        for key in keys:
-            if self.counters.pop(key, None) is not None:
-                removed += 1
-        return removed
 
 
 class _BrokenRedis:

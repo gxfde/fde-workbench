@@ -150,6 +150,30 @@ def test_summarize_additive_only_without_refs_is_review_free() -> None:
     assert radius["requires_upgrade_review"] is False
 
 
+def test_summarize_truncated_counts_after_pinned_filter() -> None:
+    """P6（评审边界）：detail_truncated 按**钉版命中后**的明细数判定。
+
+    大量不命中当前钉版的 run 不构成明细截断——旗标语义与展示口径一致。
+    """
+    from fde_api.ontology.governance import summarize_blast_radius
+
+    unrelated = [
+        {"run_id": f"run-{i}", "snapshot_pinned_version_id": "ver-other"}
+        for i in range(25)
+    ]
+    report = summarize_blast_radius(
+        {"compat": "compatible", "breaking_changes": [], "additive_changes": []},
+        bindings=[],
+        evidence_refs=[],
+        gate_receipts=[],
+        workflow_runs=unrelated,
+        pinned_version_id=M5_SEED_VERSION_ID,
+    )
+    radius = report["blast_radius"]
+    assert radius["workflow_run_pinned_count"] == 0
+    assert radius["detail_truncated"] is False  # 25 条不命中 → 明细为空，非截断
+
+
 # ---------------------------------------------------------------- 服务层
 
 
@@ -216,6 +240,45 @@ def test_blast_radius_aggregates_local_references(
     assert radius["active_binding_count"] == 1
     # 衔接既有绑定升级审批流（当前无 pending → null）
     assert report["binding_upgrade"]["pending"] is None
+
+
+def test_blast_radius_counts_only_active_bindings(
+    gate_project, db_session, settings, monkeypatch
+):
+    """P5（评审审计）：非活跃（retired）绑定不计入爆炸半径（§1 条 5 活跃口径）。
+
+    字段名 active_binding_count 名实必须相符——历史/退役绑定虚增引用数会
+    误触 requires_upgrade_review 必审旗标。
+    """
+    from fde_api.integrations.models import ProjectOntologyBinding
+    from fde_api.ontology.governance import build_upgrade_blast_radius
+
+    env = _blast_env(gate_project, db_session, settings, monkeypatch)
+    project_row = env["project_row"]
+    db_session.add(
+        ProjectOntologyBinding(
+            org_id=project_row.org_id,
+            project_id=env["project"]["id"],
+            ontology_id=SEED_ONTOLOGY_ID,
+            pinned_version_id=SEED_VERSION_ID,
+            pinned_version="1.0.0",
+            binding_role="primary",
+            status="retired",
+            active_marker="retired-legacy",
+            bound_by_user_id=env["admin_user"].id,
+        )
+    )
+    db_session.commit()
+    report = build_upgrade_blast_radius(
+        db_session,
+        actor=env["admin_user"],
+        project_id=env["project"]["id"],
+        to_version="1.1.0",
+        settings=settings,
+        client=MockOntologyAdapter(),
+    )
+    assert report["blast_radius"]["active_binding_count"] == 1  # retired 行不计入
+    db_session.rollback()
 
 
 def test_blast_radius_runtime_unavailable_is_503(
