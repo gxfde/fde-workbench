@@ -127,6 +127,7 @@ def test_unit_hold_inactive_at_or_above_anchor() -> None:
 
 # ---------------------------------------------------------------- E2E（随套件跑，conftest 供测试库）
 
+from test_gates_api import gate_project  # noqa: E402,F401  (pytest fixture 供给方：m5_env 依赖链须在本模块命名空间可见——CI xdist per-file worker 的 fixture 依赖按测试模块解析)
 from test_m5_wp2_gate_governance import (  # noqa: E402  (pytest fixture 供给方，沿仓内先例)
     _decide,
     _settings_with,
