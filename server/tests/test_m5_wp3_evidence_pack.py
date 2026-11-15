@@ -211,7 +211,7 @@ def test_pack_html_escapes_and_zero_script_csp() -> None:
 
 
 def test_pack_id_and_signature_deterministic_and_tamper_evident() -> None:
-    """内容寻址包 ID + HMAC 四元组签名：确定性、离线重放、篡改即失配。"""
+    """内容寻址包 ID + HMAC 签名：确定性、离线重放、篡改即失配（BH1 校准：package_id 与 pack_sha256 同值双传，防伪语义=三元组）。"""
     payload_a = build_pack_payload(
         project_code="P",
         ontology_id="ont-1",
