@@ -217,7 +217,25 @@ def test_retire_blocks_new_but_keeps_existing_and_snapshot(db_session, admin_cli
     assert snapshot_after["subjects"]["vendor_site"][0]["id"] == subject.id
 
 
-def test_import_flow_with_registered_type(db_session, admin_client, published_template, leader_client):
+@pytest.fixture
+def _real_redis_commit_lease(app, settings):
+    """本文件 import commit 走 research commit-lease 真 Redis 原子 Lua（fence
+    分布式锁，进程内 _FakeRedis 无 eval 等价）——test_research_imports 豁免
+    先例同款；键清理自理防共享 Redis 跨轮污染。"""
+    from redis import Redis
+
+    app.extensions["fde_api_redis"] = Redis.from_url(settings.redis_url)
+    yield
+    with app.app_context():
+        redis = app.extensions["fde_api_redis"]
+        keys = list(redis.scan_iter(match="fde:research-import:*"))
+        if keys:
+            redis.delete(*keys)
+
+
+def test_import_flow_with_registered_type(
+    db_session, admin_client, published_template, leader_client, _real_redis_commit_lease
+):
     """导入三闸一致：authorize 带回值域 → preview/store 前置 → commit 原语复核。"""
     admin = admin_client.user
     project = _create_project(admin_client, published_template, leader_client.user)

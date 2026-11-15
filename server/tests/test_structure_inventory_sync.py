@@ -43,7 +43,7 @@ _EXTRA_TABLE_MODULES = (
 
 _REVISION_RE = re.compile(r'^revision(?::\s*str)?\s*=\s*["\']([\w]+)["\']', re.MULTILINE)
 _DOWN_RE = re.compile(
-    r'^down_revision(?::[^=]+)?\s*=\s*(["\'][\w]+["\']|None)', re.MULTILINE
+    r'^down_revision(?::[^=]+)?\s*=\s*(\([^)]*\)|["\'][\w]+["\']|None)', re.MULTILINE
 )
 
 _FIX_HINT = (
@@ -75,20 +75,25 @@ def _actual_table_count() -> int:
 
 
 def _migration_graph() -> tuple[dict[str, str | None], list[str], list[str]]:
-    """(revision → down_revision, heads, roots)。"""
+    """(revision → down_revision〔merge 迁移取首亲〕, heads, roots)。
+
+    M6-WP0 D11：merge 迁移的 down_revision 是元组（多亲）——heads 判定
+    必须用全亲集（每个双亲都算「有孩子」），否则双亲被误判为 head。
+    """
     downs: dict[str, str | None] = {}
+    all_parents: set[str] = set()
     for path in sorted(_MIGRATIONS_DIR.glob("*.py")):
         body = path.read_text(encoding="utf-8")
         revision_match = _REVISION_RE.search(body)
         if revision_match is None:
             continue
         down_match = _DOWN_RE.search(body)
-        down = None
+        parents: list[str] = []
         if down_match and down_match.group(1) != "None":
-            down = down_match.group(1).strip("\"'")
-        downs[revision_match.group(1)] = down
-    children = {down for down in downs.values() if down}
-    heads = sorted(rev for rev in downs if rev not in children)
+            parents = re.findall(r"['\"]([\w]+)['\"]", down_match.group(1))
+        downs[revision_match.group(1)] = parents[0] if parents else None
+        all_parents.update(parents)
+    heads = sorted(rev for rev in downs if rev not in all_parents)
     roots = sorted(rev for rev, down in downs.items() if down is None)
     return downs, heads, roots
 
@@ -135,3 +140,36 @@ def test_inventory_revision_count_and_heads_match_chain() -> None:
     assert sorted(inventory["roots"]) == roots, (
         f"inventory 的 roots 漂移（清单 {inventory['roots']} vs 实际 {roots}）——{_FIX_HINT}"
     )
+
+
+def test_down_revision_tuple_parsing_direct() -> None:
+    """merge 迁移元组解析的直接单测（M6-WP0 评审整改：解析分支不再只靠真链间接覆盖）。
+
+    合成夹具直接钉 _DOWN_RE 的三条分支：单亲字符串 / None / 元组多亲——
+    并核 inventory JSON 中 merge 迁移条目的 down_revisions 键与真链一致
+    （防止抽取器取错首亲或漏写亲集而聚合值凑巧对上的假绿）。
+    """
+    import json as _json
+
+    nl = chr(10)  # 合成迁移体行尾（避免源码内转义歧义）
+    single = 'down_revision = "abc123def456"' + nl
+    none_v = "down_revision: str | None = None" + nl
+    tuple_v = 'down_revision = ("e9c4b7a1d5f8", "a9f3e5c7b1d2")' + nl
+    for body, expected in (
+        (single, ["abc123def456"]),
+        (none_v, []),
+        (tuple_v, ["e9c4b7a1d5f8", "a9f3e5c7b1d2"]),
+    ):
+        m = _DOWN_RE.search(body)
+        assert m is not None, body
+        parents = (
+            []
+            if m.group(1) == "None"
+            else re.findall(r"['\"]([\w]+)['\"]", m.group(1))
+        )
+        assert parents == expected, (body, parents, expected)
+
+    inventory = _inventory()
+    merge_entry = inventory["revisions"]["c2a9e7d5b3f1"]
+    assert merge_entry["down_revision"] == "e9c4b7a1d5f8", merge_entry
+    assert merge_entry["down_revisions"] == ["e9c4b7a1d5f8", "a9f3e5c7b1d2"], merge_entry

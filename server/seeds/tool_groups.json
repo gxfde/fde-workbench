@@ -29,6 +29,16 @@
         "skill_read",
         "help_fetch"
       ]
+    },
+    {
+      "name": "ontology-agent",
+      "description": "本体智能体组（M4 D26）：已固定版本的只读理解 + Logic 计算 + Action 提议；执行档 ontology_action_execute 不入组（运行面恒剥，强授权单独放行）",
+      "is_active": true,
+      "tools": [
+        "ontology_read",
+        "ontology_logic_run",
+        "ontology_action_propose"
+      ]
     }
   ]
 }

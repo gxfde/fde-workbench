@@ -237,7 +237,10 @@ def test_task_decomposition_preview_commit_idempotent(db_session, d4_client, d4_
         target_type="delivery_plan", target_id=plan["id"], event_type="delivery_plan_tasks_created"
     ).all()
     assert len(events) == 2
-    assert events[0].changes["created"] == 1 and events[1].changes["created"] == 0
+    # 顺序无关断言（M6-WP0）：.all() 无 order_by 时 PG 返回序不保证——
+    # hook 慢全量（45-51 min）实测两度按物理序翻转为红、快环境恒绿的
+    # 假 flaky 根因；契约本意=两条留痕各在且 created 计数为 1/0。
+    assert sorted(e.changes["created"] for e in events) == [0, 1]
 
 
 def test_task_decomposition_module_and_access_gates(db_session, d4_client, d4_settings) -> None:

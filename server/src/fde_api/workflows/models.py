@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, event, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fde_api.auth.models import UTCDateTime
@@ -161,6 +161,29 @@ class WorkflowRun(Base, TimestampMixin):
     hops: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    # V3.3 M4-WP3 D27 / §9.3：发起时冻结的本体版本五元组快照（ontology_id /
+    # ontology_version / tool_logic_action_version / datasource_mapping_version /
+    # workflow_version）。写后不可变（before_update 守卫强制）——项目后续升级
+    # 绑定绝不影响既有 run 记录；无活跃绑定 run 落 NULL（诚实缺省）。
+    ontology_snapshot_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+@event.listens_for(WorkflowRun, "before_update")
+def _workflow_run_ontology_snapshot_immutable(
+    mapper: Any, connection: Any, target: "WorkflowRun"
+) -> None:
+    """§9.3 五元组快照写后不可变：已落值后再改动即在 flush 前响亮失败。"""
+    history = _db_inspect(target).attrs.ontology_snapshot_json.history
+    if history.has_changes() and history.deleted:
+        raise RuntimeError(
+            "workflow_runs.ontology_snapshot_json is immutable after insert (§9.3 D27)"
+        )
+
+
+def _db_inspect(target: Any) -> Any:
+    from sqlalchemy import inspect as sa_inspect
+
+    return sa_inspect(target)
 
 
 class WorkflowNodeRun(Base, TimestampMixin):

@@ -1,16 +1,25 @@
 {
- "route_count": 493,
- "blueprint_count": 52,
- "table_count": 155,
- "revision_count": 77,
+ "route_count": 512,
+ "blueprint_count": 54,
+ "table_count": 159,
+ "revision_count": 84,
  "heads": [
-  "a9f3e5c7b1d2"
+  "c2a9e7d5b3f1"
  ],
  "roots": [
   "ebb003a5c3a8"
  ],
  "tables_without_create_revision": [],
  "revisions": {
+  "9d4f2b7e8c1a": {
+   "file": "9d4f2b7e8c1a_project_ontology_bindings.py",
+   "down_revision": "c8e2a6f0b9d4",
+   "create_tables": [
+    "project_ontology_bindings",
+    "ontology_binding_upgrades"
+   ],
+   "add_column_tables": []
+  },
   "a1d3f5b7c9e2": {
    "file": "a1d3f5b7c9e2_p3_adoption_and_m10_evidence.py",
    "down_revision": "c5e9b3d7a1f5",
@@ -173,6 +182,14 @@
    "create_tables": [],
    "add_column_tables": []
   },
+  "b7d3f9a1c5e2": {
+   "file": "b7d3f9a1c5e2_ontology_annotation_evidence.py",
+   "down_revision": "c4a8f2e6b1d9",
+   "create_tables": [],
+   "add_column_tables": [
+    "ontology_binding_upgrades"
+   ]
+  },
   "b7d9f1a3c5e2": {
    "file": "b7d9f1a3c5e2_v3_workflow_runs.py",
    "down_revision": "f2a4c6e8b1d3",
@@ -265,6 +282,16 @@
     "skill_versions"
    ]
   },
+  "c2a9e7d5b3f1": {
+   "file": "c2a9e7d5b3f1_m6_wp0_merge_dual_heads.py",
+   "down_revision": "e9c4b7a1d5f8",
+   "create_tables": [],
+   "add_column_tables": [],
+   "down_revisions": [
+    "e9c4b7a1d5f8",
+    "a9f3e5c7b1d2"
+   ]
+  },
   "c3d5e7f9a1b4": {
    "file": "c3d5e7f9a1b4_discovery_tables.py",
    "down_revision": "e8b1d5f9a3c7",
@@ -291,6 +318,12 @@
    "add_column_tables": [
     "orgs"
    ]
+  },
+  "c4a8f2e6b1d9": {
+   "file": "c4a8f2e6b1d9_project_ontology_binding_org_backfill.py",
+   "down_revision": "9d4f2b7e8c1a",
+   "create_tables": [],
+   "add_column_tables": []
   },
   "c4f7a2d9e1b6": {
    "file": "c4f7a2d9e1b6_ai_call_audit_attribution.py",
@@ -321,6 +354,19 @@
    "down_revision": "d4e6f8a2c7b9",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "c7e1b3d9f4a2": {
+   "file": "c7e1b3d9f4a2_m5_wp2_gate_ontology_governance.py",
+   "down_revision": "e1a9d4c7b2f8",
+   "create_tables": [
+    "gate_evaluation_receipts",
+    "acceptance_contracts"
+   ],
+   "add_column_tables": [
+    "gates",
+    "ontology_terms",
+    "project_evidence"
+   ]
   },
   "c8d2f6a4e9b1": {
    "file": "c8d2f6a4e9b1_dispatch_five_seat_baseline.py",
@@ -488,6 +534,14 @@
    "create_tables": [],
    "add_column_tables": []
   },
+  "e1a9d4c7b2f8": {
+   "file": "e1a9d4c7b2f8_workflow_run_ontology_snapshot.py",
+   "down_revision": "b7d3f9a1c5e2",
+   "create_tables": [],
+   "add_column_tables": [
+    "workflow_runs"
+   ]
+  },
   "e1f3a5c7b9d2": {
    "file": "e1f3a5c7b9d2_v3_project_evidence.py",
    "down_revision": "c3e7a9b1d5f4",
@@ -608,6 +662,14 @@
     "training_entitlements"
    ],
    "add_column_tables": []
+  },
+  "e9c4b7a1d5f8": {
+   "file": "e9c4b7a1d5f8_m5_wp2_receipt_observability_backport.py",
+   "down_revision": "c7e1b3d9f4a2",
+   "create_tables": [],
+   "add_column_tables": [
+    "gate_evaluation_receipts"
+   ]
   },
   "ebb003a5c3a8": {
    "file": "ebb003a5c3a8_baseline_pg.py",

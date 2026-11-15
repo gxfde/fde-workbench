@@ -119,6 +119,18 @@ def published_template(db_session):
 
 
 @pytest.fixture(autouse=True)
+def use_real_redis_for_commit_lease(app, settings):
+    """M5-WP4④⑤：本域 commit-lease 是真 Redis 原子 Lua（fence 分布式锁，
+    imports.py _acquire_commit_lease）——进程内 _FakeRedis 无 eval 等价语义，
+    显式回接测试共享 Redis（16379/db2）。域内隔离由 clear_import_previews
+    的 scan_iter+delete 自理（键空间 fde:research-import:* 与注册限速键不同域，
+    无跨域污染）。"""
+    from redis import Redis
+
+    app.extensions["fde_api_redis"] = Redis.from_url(settings.redis_url)
+
+
+@pytest.fixture(autouse=True)
 def clear_import_previews(app):
     with app.app_context():
         redis = app.extensions["fde_api_redis"]

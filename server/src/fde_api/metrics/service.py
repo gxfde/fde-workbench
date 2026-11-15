@@ -32,6 +32,7 @@ from fde_api.ontology.models import OntologyChangeSet
 from fde_api.plans.models import DeliveryPlan, DeliveryPlanItem, DeliveryPlanTaskLink
 from fde_api.quality.models import TestExecution
 from fde_api.workbench.models import OperationEvent
+from fde_api.projects.gate_receipt import GateEvaluationReceipt
 from fde_api.workflows.models import WorkflowRun
 
 _TERMINAL_FAILED = ("failed", "timeout", "budget_exceeded")
@@ -332,6 +333,48 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
         definition="有执行的用例中首条执行为 passed 的占比（每用例只计首条——重试不重复计数；同 created_at 的批量执行按 result 字典序再按 id 取首条——CR-065 口径钉）",
     )
 
+    # ---- M5-WP3 D31：AI 编译免改可用率（后台内部 SLO，target=0.80）----
+    # 古德哈特护栏（D31）：本指标**绝不进项目 Gate 准入**——Gate 只查
+    # 低置信度/冲突候选 100% 处置闭环（WP2 enforce_dependency_before_decision）。
+    # 数据源 = GateEvaluationReceipt.ontology_checks_json 本地不可变快照（D29 口径）：
+    # 每 (project, gate) 取最新回执，零 runtime 依赖、免疫熔断震荡；checks_json
+    # 缺 compiler_telemetry 键（降级回执）的样本不计入分母。
+    receipt_rows = session.execute(
+        select(
+            GateEvaluationReceipt.project_id,
+            GateEvaluationReceipt.gate_key,
+            GateEvaluationReceipt.ontology_checks_json,
+            GateEvaluationReceipt.decided_at,
+            GateEvaluationReceipt.id,
+        ).order_by(GateEvaluationReceipt.decided_at, GateEvaluationReceipt.id)
+    ).all()
+    latest_rates: dict[tuple[str, str], float] = {}
+    latest_rows: dict[tuple[str, str], Any] = {}
+    # 先取每 (project, gate) 的**最新一行**（升序扫描后者覆盖），再对该行判
+    # 遥测键——若只跳过降级行而保留更旧的带遥测行，等于拿旧快照冒充当前
+    # 状态（M5-WP3 P4 评审修正：键级最新行判定；bool 是 int 子类需排除）。
+    for project_id, gate_key, checks_json, _decided_at, _rid in receipt_rows:
+        latest_rows[(str(project_id), str(gate_key))] = checks_json
+    for key, checks_json in latest_rows.items():
+        telemetry = (checks_json or {}).get("compiler_telemetry")
+        rate = telemetry.get("unmodified_accept_rate") if isinstance(telemetry, dict) else None
+        if isinstance(rate, (int, float)) and not isinstance(rate, bool):
+            latest_rates[key] = float(rate)
+    rate_values = list(latest_rates.values())
+    compiler_rate = _metric(
+        "ontology_compiler_unmodified_accept_rate",
+        "AI 编译免改可用率（平台内部 SLO）",
+        value=round(sum(rate_values) / len(rate_values), 4) if rate_values else None,
+        sample_size=len(rate_values),
+        definition=(
+            "各项目各门禁最新 GateEvaluationReceipt 快照的"
+            " compiler_telemetry.unmodified_accept_rate 均值（每 (project, gate) 只计"
+            "最新一条；降级回执无该键不计入）。后台编译器迭代内部 SLO，"
+            "与项目 Gate 准入完全解耦（D31 古德哈特护栏——绝不惩罚精修模型的工程师）"
+        ),
+        target=0.80,
+    )
+
     return {
         "generated_at": now.isoformat(),
         "sections": {
@@ -339,5 +382,6 @@ def build_metrics_report(session: Session) -> dict[str, Any]:
             "p1_pilot": [p1_lite, p1_first_pass, p1_degraded],
             "ongoing": [ongoing_cost, ongoing_intercept, ongoing_quota],
             "v31": [wf_done, wf_approval, wf_hops, req_rate, cand_rate, plan_rate, test_rate],
+            "m5_governance": [compiler_rate],
         },
     }

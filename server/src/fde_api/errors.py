@@ -1,6 +1,10 @@
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
+# 不存在面的 404 信封文案（单一真身）：「关闭的功能面」必须复用同一句，
+# 否则未鉴权探针可由文案差异反推该路径存在（存在性泄露，M8 红队扫描面）。
+NOT_FOUND_MESSAGE = "请求的接口不存在，请检查客户端与服务端版本是否一致。"
+
 
 def error_response(code: str, message: str, status: int, details=None):
     return (
@@ -19,11 +23,7 @@ def register_error_handlers(app: Flask) -> None:
     def handle_http_error(error: HTTPException):
         status = error.code or 500
         if status == 404:
-            return error_response(
-                "not_found",
-                "请求的接口不存在，请检查客户端与服务端版本是否一致。",
-                status,
-            )
+            return error_response("not_found", NOT_FOUND_MESSAGE, status)
         if status == 405:
             return error_response("method_not_allowed", "当前接口不支持该操作。", status)
         return error_response("http_error", "请求处理失败，请检查输入后重试。", status)

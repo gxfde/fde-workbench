@@ -315,7 +315,7 @@ for mapper in Base.registry.mappers:
 VERSIONS_DIR = REPO_ROOT / "server" / "migrations" / "versions"
 revision_re = re.compile(r'^revision(?::\s*str)?\s*=\s*["\']([\w]+)["\']', re.MULTILINE)
 down_re = re.compile(
-    r'^down_revision(?::[^=]+)?\s*=\s*(["\'][\w]+["\']|None)', re.MULTILINE
+    r'^down_revision(?::[^=]+)?\s*=\s*(\([^)]*\)|["\'][\w]+["\']|None)', re.MULTILINE
 )
 create_table_re = re.compile(r'op\.create_table\(\s*["\']([\w]+)["\']')
 add_column_re = re.compile(r'op\.add_column\(\s*["\']([\w]+)["\']')
@@ -330,15 +330,20 @@ for path in sorted(VERSIONS_DIR.glob("*.py")):
         continue
     rev = m_rev.group(1)
     m_down = down_re.search(text)
-    down = None
+    # M6-WP0 D11：merge 迁移 down_revision 为元组（多亲）——取首亲入表，
+    # 全亲集另存 down_revisions 供 head 判定（单亲迁移两值恒同）
+    parents: list[str] = []
     if m_down and m_down.group(1) != "None":
-        down = m_down.group(1).strip("'\"")
-    revisions[rev] = {
+        parents = re.findall(r'["\']([\w]+)["\']', m_down.group(1))
+    entry = {
         "file": path.name,
-        "down_revision": down,
+        "down_revision": parents[0] if parents else None,
         "create_tables": create_table_re.findall(text),
         "add_column_tables": sorted(set(add_column_re.findall(text))),
     }
+    if len(parents) > 1:
+        entry["down_revisions"] = parents
+    revisions[rev] = entry
     for t in create_table_re.findall(text):
         table_first_revision.setdefault(t, rev)
     for t in set(create_table_re.findall(text)) | set(add_column_re.findall(text)):
@@ -346,9 +351,12 @@ for path in sorted(VERSIONS_DIR.glob("*.py")):
 
 children: dict[str | None, list[str]] = {}
 for rev, info in revisions.items():
-    children.setdefault(info["down_revision"], []).append(rev)
-heads = [rev for rev in revisions if rev not in children or not children.get(rev)]
-downs = {info["down_revision"] for info in revisions.values() if info["down_revision"]}
+    # head 判定用全亲集：merge 迁移的每个双亲都算「有孩子」，不再是 head
+    for parent in info.get("down_revisions", []) or (
+        [info["down_revision"]] if info["down_revision"] else []
+    ):
+        children.setdefault(parent, []).append(rev)
+heads = [rev for rev in revisions if not children.get(rev)]
 roots = [rev for rev, info in revisions.items() if info["down_revision"] is None]
 
 VERSION_FIELD_RE = re.compile(r"(version|revision|hash|snapshot|parent)", re.IGNORECASE)

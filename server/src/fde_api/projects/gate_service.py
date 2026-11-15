@@ -36,6 +36,15 @@ from fde_api.auth.models import User
 from fde_api.evidence.models import ProjectEvidence
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
+# M5-WP2③④：本体治理模块在装配期导入——模型（回执/契约两表）必须随模块
+# 加载注册进 Base.metadata（清单生成器/一致性检查依赖 metadata 完整），
+# 不能等 decide 首次调用才 lazy import。与两模块零循环依赖。
+from fde_api.projects.gate_ontology import (
+    GateOntologyError,
+    assert_acceptance_contract,
+    evaluate_gate_ontology,
+)
+from fde_api.projects.gate_receipt import freeze_gate_receipt
 from fde_api.projects.permissions import project_access
 from fde_api.workbench.models import Gate, OperationEvent, Project, ProjectMember, SopNode
 
@@ -477,6 +486,21 @@ def decide_gate(
                         400,
                     )
 
+            # ---- V3.3 M5-WP2③④：本体辅助校验（S-16 档位降级/D31 处置闸）
+            # + 验收契约闸（acceptor 角色）。只卡工作令点名的两类（required/
+            # strong 档本体不可用挂起 + 低置信度/冲突候选未 100% 人工处置），
+            # Gate 状态机规则一概不动（Agent 无 Gate 写通道）；GateOntologyError
+            # → GateServiceError 透传 code/status（路由层零改动）。
+            try:
+                ontology_eval = evaluate_gate_ontology(
+                    session, project=project, gate=gate, actor=actor
+                )
+                contract_snapshot = assert_acceptance_contract(
+                    session, project_id=project.id, gate=gate, actor=actor
+                )
+            except GateOntologyError as error:
+                raise GateServiceError(error.code, error.message, error.status) from error
+
             checklist = [dict(item) for item in gate.evidence_checklist]
             previous_status = gate.status
             changes: dict[str, Any] = {
@@ -550,6 +574,18 @@ def decide_gate(
             # 只随模板 grammar 换代推进，拍板不触碰）。
             gate.version += 1
             changes["revision"] = gate.version
+            # D29：拍板生效瞬间固化不可变评估回执（输入快照哈希 + 当时本体
+            # 降级态 + 契约快照；ORM 守卫强制写后不可变，历史重放只验回执）。
+            freeze_gate_receipt(
+                session,
+                project_id=project.id,
+                gate=gate,
+                actor=actor,
+                result=result,
+                decision=decision,
+                ontology_eval=ontology_eval,
+                contract_snapshot=contract_snapshot,
+            )
             if note:
                 changes["note"] = note
             # P4 承接（设计 §6）：G8 stop 也按合同结算（SOP §S8 三态）——

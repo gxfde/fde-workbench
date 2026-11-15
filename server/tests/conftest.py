@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -71,15 +72,22 @@ class PerTestIPClient(FlaskClient):
 
 
 
-def _read_local_db_password() -> str:
+def _read_local_env_file() -> dict[str, str]:
+    """读仓根 .env 的键值对。
+
+    认三个键：``FDE_DB_PASSWORD``（口令）、``FDE_TEST_DATABASE_URL``（整条
+    URL，显式指定优先）、``FDE_TEST_DATABASE_NAME``（只给库名，口令仍走
+    .env——worktree 用它把自己钉在专属测试库上，见 D14）。
+    """
+    values: dict[str, str] = {}
     env_path = SERVER_ROOT.parent / ".env"
     if not env_path.exists():
-        return ""
+        return values
     for line in env_path.read_text(encoding="utf-8").splitlines():
         key, separator, value = line.partition("=")
-        if separator and key.strip() == "FDE_DB_PASSWORD":
-            return value.strip()
-    return ""
+        if separator:
+            values[key.strip()] = value.strip()
+    return values
 
 
 def resolve_test_database_url() -> str:
@@ -88,15 +96,28 @@ def resolve_test_database_url() -> str:
     Safety contract (goal prompt §0.6): tests must never fall back to the
     development/production FDE_DATABASE_URL, and the resolved database name
     must be an allowed test database before any migration (downgrade) runs.
+
+    现地治理（D14）：解析优先级 = 进程环境 FDE_TEST_DATABASE_URL
+    > 仓根 .env 的 FDE_TEST_DATABASE_URL > 仓根 .env 的 FDE_TEST_DATABASE_NAME
+    + FDE_DB_PASSWORD 合成 > 默认共享库 fde_workbench_test。
+    每个 worktree 用 .env 把自己钉在专属库上（库名仍
+    必须以 _test 结尾）——其他会话的外来戳“外来戳”
+    不再能抹掉本会话的 schema（见 05 清单 §0 第 2 步记录）。
     """
     url = os.environ.get("FDE_TEST_DATABASE_URL", "").strip()
+    local = _read_local_env_file()
     if not url:
-        password = _read_local_db_password()
+        url = local.get("FDE_TEST_DATABASE_URL", "").strip()
+    if not url:
+        password = local.get("FDE_DB_PASSWORD", "")
         if password:
+            database = local.get("FDE_TEST_DATABASE_NAME", "").strip()
+            database = database or "fde_workbench_test"
             url = (
                 "postgresql+psycopg://fde:"
                 + quote_plus(password)
-                + "@127.0.0.1:15432/fde_workbench_test"
+                + "@127.0.0.1:15432/"
+                + database
             )
     if not url:
         raise RuntimeError(
@@ -412,10 +433,139 @@ def seed_reference_data(database_url: str) -> None:
         engine.dispose()
 
 
+class _FakeRedis:
+    """M5-WP4④⑤（P1 批准）：进程内最小 incr/expire/ttl/delete 语义。
+
+    测试默认隔离 Redis——共享 Redis 16379 的 ``auth:register:{ip}`` 日限
+    计数跨进程跨轮累加（PerTestIPClient 每进程从头编号 → 低序 IP 撞日限
+    → fail-closed 429 污染全量，commercial 域三连挂实证）。app fixture
+    显式覆盖 extensions；真 Redis 行为的集成钉在各自专测自装配（同款
+    test_auth_rate_limit/test_research_imports 先例），不受默认覆盖影响。
+    """
+
+    def __init__(self) -> None:
+        self.counters: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+        self.strings: dict[str, str] = {}
+        self.lists: dict[str, list[str]] = {}
+
+    def incr(self, key: str) -> int:
+        self.counters[key] = self.counters.get(key, 0) + 1
+        return self.counters[key]
+
+    def expire(self, key: str, seconds: int) -> bool:
+        self.ttls[key] = seconds
+        return True
+
+    def ttl(self, key: str) -> int:
+        return self.ttls.get(key, 86400)
+
+    def delete(self, *keys: str) -> int:
+        removed = 0
+        for key in keys:
+            found = False
+            for space in (self.counters, self.strings, self.lists):
+                if space.pop(key, None) is not None:
+                    found = True
+            if found:
+                removed += 1
+        return removed
+
+    def scan_iter(self, match: str | None = None) -> Iterator[str]:
+        import fnmatch
+
+        pattern = match or "*"
+        for key in list(self.counters) + list(self.strings) + list(self.lists):
+            if fnmatch.fnmatchcase(key, pattern):
+                yield key
+
+    def ping(self) -> bool:
+        return True
+
+    def setex(self, key: str, seconds: int, value: str) -> bool:
+        self.strings[key] = value
+        self.ttls[key] = seconds
+        return True
+
+    def rpush(self, key: str, *values: str) -> int:
+        self.lists.setdefault(key, []).extend(values)
+        return len(self.lists[key])
+
+    def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
+
+    def lpop(self, key: str, count: int | None = None):
+        items = self.lists.get(key)
+        if not items:
+            return None
+        if count is None:
+            return items.pop(0)
+        popped = items[:count]
+        self.lists[key] = items[count:]
+        return popped
+
+    def lrange(self, key: str, start: int, end: int) -> list[str]:
+        items = self.lists.get(key, [])
+        n = len(items)
+        if start < 0:
+            start = max(n + start, 0)
+        if end < 0:
+            end = n + end + 1
+        else:
+            end = min(end + 1, n)
+        return items[start:max(end, start)] if end >= start else []
+
+    def ltrim(self, key: str, start: int, end: int) -> bool:
+        items = self.lrange(key, start, end)
+        self.lists[key] = items
+        return True
+
+    def lock(self, name: str, timeout: int | None = None,
+             blocking: bool = True) -> "_FakeRedisLock":
+        return _FakeRedisLock()
+
+    def get(self, key: str) -> str | None:
+        # 真 Redis 语义：incr 计数键同样可 GET 读回（整数以字符串形态返回）
+        if key in self.strings:
+            return self.strings[key]
+        if key in self.counters:
+            return str(self.counters[key])
+        return None
+
+    def set(self, key: str, value: str, ex: int | None = None,
+            nx: bool = False) -> bool | None:
+        # NX 语义（research 预览锁）：键已存在 → 不覆盖，返回 None（真 Redis 同款）
+        if nx and key in self.strings:
+            return None
+        self.strings[key] = value
+        if ex is not None:
+            self.ttls[key] = ex
+        return True
+
+
+class _FakeRedisLock:
+    """进程内无争用锁（redis-py Lock 同形最小面）：acquire 恒真。"""
+
+    def acquire(self, blocking: bool = True,
+                blocking_timeout: float | None = None) -> bool:
+        return True
+
+    def release(self) -> None:
+        return None
+
+    def __enter__(self) -> "_FakeRedisLock":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
 @pytest.fixture
 def app(settings):
     app = create_app(settings)
     app.config.update(TESTING=True)
+    # M5-WP4④⑤：测试默认进程内隔离 Redis（见 _FakeRedis docstring）。
+    app.extensions["fde_api_redis"] = _FakeRedis()
     # 限流键含来源 IP——每个用例一个独立来源 IP（计数落在共享 Redis 上，
     # 共用回环地址会让用例互相牵连）。见 PerTestIPClient。
     app.test_client_class = PerTestIPClient
@@ -516,6 +666,8 @@ def db_session(app) -> Session:
     )
 
     cleanup_models = (
+        __import__("fde_api.integrations.models", fromlist=["OntologyBindingUpgrade"]).OntologyBindingUpgrade,
+        __import__("fde_api.integrations.models", fromlist=["ProjectOntologyBinding"]).ProjectOntologyBinding,
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
         # 获客诊断 T-15：渠道链接注册表。``created_by`` 指向 users（**FK
         # SET NULL**）；与线索行零外键（channel_ref 是字符串列）——先于

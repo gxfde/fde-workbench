@@ -4,9 +4,9 @@ from alembic import context
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 
+from fde_api import system_configuration  # noqa: F401
 from fde_api.auth.models import Base
 from fde_api.config import Settings
-from fde_api import system_configuration  # noqa: F401
 from fde_api.workbench import models as workbench_models  # noqa: F401
 from fde_api.files import models as file_models  # noqa: F401
 from fde_api.jobs import models as job_models  # noqa: F401
@@ -20,8 +20,13 @@ from fde_api.mailing import models as mailing_models  # noqa: F401
 from fde_api.dispatch import models as dispatch_models  # noqa: F401
 from fde_api.translator import models as translator_models  # noqa: F401  (goal-d9)
 from fde_api.evidence import models as evidence_models  # noqa: F401  (V3 T-E1)
+from fde_api.projects.gate_receipt import (  # noqa: F401  (V3.3 M5-WP2 D29 回执+契约)
+    AcceptanceContract,
+    GateEvaluationReceipt,
+)
 from fde_api.workflows import models as workflow_models  # noqa: F401  (V3 T-W1)
 from fde_api.ontology import models as ontology_models  # noqa: F401  (V3 T-O1)
+from fde_api.integrations import models as ontology_binding_models  # noqa: F401  (V3.3 M2 WP4)
 from fde_api.transcripts import models as transcript_models  # noqa: F401  (T-A9)
 from fde_api.handover import models as handover_models  # noqa: F401  (T-B1)
 from fde_api.simulation import models as simulation_models  # noqa: F401  (V3.2 G2)
@@ -33,7 +38,6 @@ from fde_api.diagnostics import models as diagnostics_models  # noqa: F401  (获
 from fde_api.orgs import models as org_models  # noqa: F401  (多客户 M1)
 from fde_api.registration import models as registration_models  # noqa: F401  (多客户 M2)
 from fde_api.control import model_preferences, weixin_models, chat, lcsc_skills  # noqa: F401
-
 
 config = context.config
 

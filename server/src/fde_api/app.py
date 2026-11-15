@@ -79,6 +79,11 @@ _BLUEPRINT_SPECS: tuple[tuple[str, str], ...] = (
     ("fde_api.commercial.admin_routes", "admin_commercial_blueprint"),
     ("fde_api.diagnostics.routes", "diagnostics_blueprint"),
     ("fde_api.diagnostics.lead_routes", "diagnostics_leads_blueprint"),
+    # V3.3 M2（WP4/D12）：无条件进注册表（蓝图注册表单一真身机器闸 P2-5）；
+    # ontology_enabled=False ⇒ integrations.service.ensure_enabled() 全部路由
+    # 404 not_found——对齐 diagnostics_enabled「不确认面存在」先例。
+    ("fde_api.integrations.routes", "ontology_bindings_blueprint"),
+    ("fde_api.integrations.ingest_routes", "ontology_ingest_blueprint"),
 )
 
 

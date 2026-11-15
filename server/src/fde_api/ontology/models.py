@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -28,6 +29,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    inspect as sa_inspect,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -91,6 +94,65 @@ class OntologyTerm(Base, TimestampMixin, VersionedMixin):
     created_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+    # ---- V3.3 M5-WP2 改进单 4 单向晋升锚点（晋升写路径归 WP3 独立模块）----
+    # 晋升后词条成为只读投影（工作台不再接受词条编辑），promoted_at 记晋升
+    # 时刻；本迁移只落锚点列，零行为变化。
+    promoted_readonly: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+
+# ---- M5-WP3⑦ 单向晋升只读锁（party 评审 P2-1：装配点贴模型定义） ----
+# 注册在 models 层（先例：研究客体守卫 research/models.py:454/465/476 同款
+# 属性级 set 钩子 + before_insert）：任何 import OntologyTerm 的上下文
+# （含绕 create_app 的 CLI/维护进程）即武装——数据完整性锁不依赖路由
+# import 链。晋升流本体在 ontology/glossary_promotion.py（职责不动）。
+
+_PROMOTION_LOCKED_COLUMNS = (
+    "term",
+    "definition",
+    "term_type",
+    "canonical_term_id",
+    "status",
+)
+
+
+@event.listens_for(OntologyTerm, "before_update")
+def _promotion_no_content_change(
+    mapper: Any, connection: Any, target: "OntologyTerm"
+) -> None:
+    """已晋升行内容列改写 → flush 前响亮失败（单向只读投影锁）。
+
+    判定以 **history.deleted 的旧库值** 为权威：
+    - 旧值 False（本次即晋升转换 False→True）：放行窗口只允许锚点列本身
+      ——内容列同批混写仍拒绝（转换不捎带改写）；
+    - 旧值 True 或无变化且当前 True（库中已晋升）：锁定列任何改写拒绝
+      （含 promoted_readonly True→False 降级绕道）；
+    - 未晋升行：零影响，普通编辑照常。
+    """
+    state = sa_inspect(target)
+    history = state.attrs["promoted_readonly"].history
+    old_value = (history.deleted or [None])[-1]
+    if old_value is False:
+        for attr in _PROMOTION_LOCKED_COLUMNS:
+            column_history = state.attrs[attr].history
+            if column_history.has_changes() and column_history.deleted:
+                raise RuntimeError(
+                    "promotion transition must not carry content-column writes "
+                    f"(M5-WP3 单向晋升；column={attr})"
+                )
+        return
+    already_promoted = bool(old_value) or bool(target.promoted_readonly)
+    if not already_promoted:
+        return
+    for attr in ("promoted_readonly", "promoted_at", *_PROMOTION_LOCKED_COLUMNS):
+        column_history = state.attrs[attr].history
+        if column_history.has_changes() and column_history.deleted:
+            raise RuntimeError(
+                "promoted_readonly ontology_terms is immutable after promotion "
+                f"(M5-WP3 单向晋升；column={attr})"
+            )
 
 
 class OntologyTermAlias(Base, TimestampMixin):

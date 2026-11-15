@@ -347,7 +347,8 @@ def test_recover_fresh_window_and_terminal_states(db_session, d4_client, d4_app,
 def test_tool_group_seed_loads_and_rejects_unknown_tool(tmp_path) -> None:
     """真种子装载干净且全部组工具 ∈ 已知全集；组引用未知工具 fail-fast。"""
     groups = load_tool_groups()
-    assert set(groups) == {"research-readonly", "ops-readonly"}
+    # M4 D26：ontology-agent 组随 WP3 落地（read/计算/提议三档；执行档不入组）
+    assert set(groups) == {"research-readonly", "ops-readonly", "ontology-agent"}
     for name, tools in groups.items():
         assert tools, f"组 {name} 非空"
         assert set(tools) <= KNOWN_TOOL_NAMES, f"组 {name} 引用未知工具"

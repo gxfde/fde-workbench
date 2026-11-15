@@ -102,13 +102,20 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          闭集扩 published（受控发布通道；发布/回滚状态唯一承载列）
 # goal-sprint r2（QR-089 吸收）：agent_runs 加 frozen_tools 列（发起时刻
 #          白名单快照——「允许名单随 run 冻结」的结构化真身；additive 可空）
-# goal-crv-fix2 r3 批 D（QR-055/057/059）：active 席位到期非空 CHECK +
-#          兼任指针扩长 500 + 商机结算科目部分唯一索引（保单头 74→75）
-# 学习闭环 2.0 L4 迁移①：improvement_proposals 加 candidate_payload_json 列 +
-#          simulation_runs.adapter_mode 列宽 8→16 与 CHECK 扩 workbench（保单头 75→76）
-# 学习闭环 2.0 L5 迁移②：agent_lessons + prompt_overlays 两新表 +
-#          ai_call_audits 加 context_payload_json 列（overlay 归因；保单头 76→77）
-HEAD_REVISION = "a9f3e5c7b1d2"
+# V3.3 M2 WP4 段 1：项目本体绑定与升级留痕两表（9d4f2b7e8c1a；挂
+#          c8e2a6f0b9d4 之后保单头）
+# V3.3 M2 WP4 段 2 步 3+4：绑定 org_id 回填为项目归属并收紧 NOT NULL
+#          （b7d3f9a1c5e2；挂 c4a8f2e6b1d9 之后保单头；evidence kind 扩 ontology_annotation）
+# V3.3 M5 WP2：S-13 证据引用列 + Gate 评估回执/验收契约两表 + 本体依赖/晋升锚点
+#          （c7e1b3d9f4a2；挂 e1a9d4c7b2f8 之后保单头；WP2 唯一 DDL 收口）
+# V3.3 M5 WP2 合流回植：回执观测值列（双指纹/gate_ready/disposition_closed）
+#          （e9c4b7a1d5f8；挂 c7e1b3d9f4a2 之后保单头；源=并行评审版决策单步④）
+# M6-WP0 D11 缝合：fork 支链三增量并入（commercial batch D 加固零 DDL
+#          d4b8e1f6a9c3 + Loop2-L4 candidate payload d4b7e2f9a6c1 + Loop2-L5
+#          lessons/prompt_overlays 两表 a9f3e5c7b1d2；均挂 c8e2a6f0b9d4 分叉）+
+#          merge 收单头 c2a9e7d5b3f1（零 DDL，down_revision=双头元组；
+#          P1 §7④ merge 非 rebase；细则②）
+HEAD_REVISION = "c2a9e7d5b3f1"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -274,6 +281,39 @@ def test_head_projects_schema_is_codename_only(engine):
     assert "enterprise_code" in columns
     assert not (set(PLAINTEXT_ENTERPRISE_COLUMNS) & columns), (
         "plaintext enterprise columns must not reappear at head"
+    )
+
+
+# 审计零原文列集冻结（Vex 13:22 M6 放行条件(b)）：工作令所称 audit_events ≡
+# 本仓唯一审计事件表 operation_events（projects/gate_receipt.py 头注名实映射）。
+# 「审计零原文」依赖列集不扩——任何新列（如 detail TEXT）都可能被用来旁路落
+# 原文；此前迁移纪律只管链卫生（单头/清单覆盖），对 add_column 无闸。白名单
+# =现存全部 11 列（9 显式 + TimestampMixin 2）；新增列必须先走决策单再改本清单。
+OPERATION_EVENTS_FROZEN_COLUMNS = frozenset({
+    "id",
+    "actor_user_id",
+    "project_id",
+    "org_id",
+    "target_type",
+    "target_id",
+    "event_type",
+    "occurred_at",
+    "changes",
+    "created_at",
+    "updated_at",
+})
+
+
+def test_audit_operation_events_column_set_is_frozen(engine):
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("operation_events")}
+
+    unexpected = columns - OPERATION_EVENTS_FROZEN_COLUMNS
+    missing = OPERATION_EVENTS_FROZEN_COLUMNS - columns
+    assert not unexpected and not missing, (
+        "operation_events 列集漂移（审计表列集冻结闸，Vex 13:22 M6 条件(b)）："
+        f"多出={sorted(unexpected)} 缺失={sorted(missing)}——"
+        "审计零原文依赖列集不扩，任何新列先走决策单再改 OPERATION_EVENTS_FROZEN_COLUMNS"
     )
 
 
@@ -1172,16 +1212,20 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + 获客诊断 T-16 价格轮 f2a7c4e9b6d3（挂 T-15 之后保单头）之后 = 72；
     # + AI 原生化 N4 发布通道 b5d9e2f4a7c1（挂 T-16 之后保单头）之后 = 73；
     # + goal-sprint r2 白名单快照列 c8e2a6f0b9d4（挂 N4 之后保单头）之后 = 74；
-    # + goal-crv-fix2 r3 批 D 商业加固 d4b8e1f6a9c3（挂 c8e2a6f0b9d4 之后保单头）之后 = 75；
-    # + 学习闭环 2.0 L4 迁移① d4b7e2f9a6c1（三载体候选载荷列＋workbench
-    #   适配档扩值；挂 d4b8e1f6a9c3 之后保单头）之后 = 76；
-    # + 学习闭环 2.0 L5 迁移② a9f3e5c7b1d2（agent_lessons + prompt_overlays
-    #   两新表 + ai_call_audits.context_payload_json 列；挂 d4b7e2f9a6c1 之后
-    #   保单头）之后 = 77；
+    # + V3.3 M2 WP4 段 1 项目本体绑定 9d4f2b7e8c1a（挂 c8e2a6f0b9d4 之后保单头）之后 = 75；
+    # + V3.3 M2 WP4 段 2 绑定 org_id 回填 c4a8f2e6b1d9 之后 = 76；
+    # + V3.3 M2 WP4 段 2 步 5 evidence kind 扩 ontology_annotation b7d3f9a1c5e2 之后 = 77；
+    # + V3.3 M4 WP3 D27 workflow_runs 本体版本五元组快照 e1a9d4c7b2f8 之后 = 78；
+    # + V3.3 M5 WP2 Gate 本体治理（S-13/D29/S-16 锚点）c7e1b3d9f4a2 之后 = 79；
+    # + V3.3 M5 WP2 合流回植观测值列 e9c4b7a1d5f8 之后 = 80；
+    # + M6-WP0 D11 缝合 fork 支链三增量（d4b8e1f6a9c3 / d4b7e2f9a6c1 /
+    #   a9f3e5c7b1d2，挂 c8e2a6f0b9d4 分叉）之后 = 83；
+    # + M6-WP0 D11 merge 收单头 c2a9e7d5b3f1（零 DDL 双头元组）之后 = 84；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 77
-    # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
-    for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
+    assert len(known) == 84
+    # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
+    # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
+    for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):
         assert historical in known, historical
 
 
@@ -1333,3 +1377,213 @@ def test_p0_code_batch_columns_roundtrip_preserves_projects(alembic_config, engi
         )
         == "FDE-V3-P0-CODE-KEEP"
     )
+
+
+# --- V3.3 M2 WP4 段 2 步 3+4：c4a8f2e6b1d9 绑定 org_id 回填 + NOT NULL 收紧 ---
+
+
+def _seed_binding_project(engine, *, project_id, user_id, org_id):
+    """种一条项目（可指定 org 归属）+ 一条 org_id 为 NULL 的绑定行。"""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO projects (id, project_code, name, background, notes, status, "
+                "planned_start_date, leader_user_id, template_snapshot, research_snapshot, "
+                "enterprise_code, org_id) "
+                "VALUES (:id, :code, :name, '', '', 'active', '2026-01-01', :leader, "
+                "'{}'::json, '{}'::json, :ent, :org)"
+            ),
+            {
+                "id": project_id,
+                "code": f"MIG-ORG-{project_id}",
+                "name": f"迁移回填项目 {project_id}",
+                "leader": user_id,
+                "ent": "ENT-MIG",
+                "org": org_id,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO project_ontology_bindings (id, org_id, project_id, ontology_id, "
+                "pinned_version_id, pinned_version, binding_role, status, active_marker, "
+                "bound_by_user_id, version) "
+                "VALUES (:id, NULL, :project_id, 'ont-mig', 'ver-mig', '1.0.0', 'primary', "
+                "'active', 'active', :user_id, 1)"
+            ),
+            {
+                "id": f"bind-{project_id}",
+                "project_id": project_id,
+                "user_id": user_id,
+            },
+        )
+
+
+def _cleanup_binding_project(engine, *, project_id, ids):
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM project_ontology_bindings WHERE id = :id"),
+            {"id": f"bind-{project_id}"},
+        )
+        connection.execute(
+            text("DELETE FROM projects WHERE id = :id"), {"id": project_id}
+        )
+    cleanup_seeded_rows(engine, ids)
+
+
+def test_c4a8f2e6b1d9_backfills_binding_org_from_project(alembic_config, engine):
+    """绑定 org_id 回填为**项目归属**并收紧 NOT NULL（幂等可重放）。"""
+    from fde_api.orgs.models import INTERNAL_ORG_ID
+
+    command.downgrade(alembic_config, "9d4f2b7e8c1a")
+    ids = seed_user_and_template(engine, username="migration.org.backfill")
+    project_id = "mig-org-project"
+    _seed_binding_project(
+        engine, project_id=project_id, user_id=ids["user_id"], org_id=INTERNAL_ORG_ID
+    )
+
+    command.upgrade(alembic_config, "head")
+
+    assert (
+        scalar(
+            engine,
+            "SELECT org_id FROM project_ontology_bindings WHERE id = :id",
+            {"id": f"bind-{project_id}"},
+        )
+        == INTERNAL_ORG_ID
+    )
+    columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns("project_ontology_bindings")
+    }
+    assert columns["org_id"]["nullable"] is False
+    # 幂等：重放 upgrade 不炸、不改值
+    command.upgrade(alembic_config, "head")
+    assert (
+        scalar(
+            engine,
+            "SELECT org_id FROM project_ontology_bindings WHERE id = :id",
+            {"id": f"bind-{project_id}"},
+        )
+        == INTERNAL_ORG_ID
+    )
+    _cleanup_binding_project(engine, project_id=project_id, ids=ids)
+
+
+def test_c4a8f2e6b1d9_fails_loudly_on_orphan_binding(alembic_config, engine):
+    """项目无 org 归属 ⇒ 回填不完整 ⇒ 迁移**响亮失败**（不得静默留空）。"""
+    command.downgrade(alembic_config, "9d4f2b7e8c1a")
+    ids = seed_user_and_template(engine, username="migration.org.orphan")
+    project_id = "mig-orphan-project"
+    _seed_binding_project(engine, project_id=project_id, user_id=ids["user_id"], org_id=None)
+    try:
+        with pytest.raises(RuntimeError, match="c4a8f2e6b1d9"):
+            command.upgrade(alembic_config, "head")
+    finally:
+        # 失败的迁移已回滚（schema 仍在 9d4f2b7e8c1a）：清掉孤儿行后回到 head
+        _cleanup_binding_project(engine, project_id=project_id, ids=ids)
+        command.upgrade(alembic_config, "head")
+
+
+# --- V3.3 M2 WP4 段 2 步 5：b7d3f9a1c5e2 evidence kind 扩 ontology_annotation ---
+
+
+def _seed_evidence_project(engine, *, project_id, user_id, org_id):
+    """种一条项目（供 project_evidence 外键）。"""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO projects (id, project_code, name, background, notes, status, "
+                "planned_start_date, leader_user_id, template_snapshot, research_snapshot, "
+                "enterprise_code, org_id) "
+                "VALUES (:id, :code, :name, '', '', 'active', '2026-01-01', :leader, "
+                "'{}'::json, '{}'::json, :ent, :org)"
+            ),
+            {
+                "id": project_id,
+                "code": f"MIG-EV-{project_id}",
+                "name": f"迁移证据项目 {project_id}",
+                "leader": user_id,
+                "ent": "ENT-MIG",
+                "org": org_id,
+            },
+        )
+
+
+def _insert_evidence_row(engine, *, evidence_id, project_id, kind):
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project_evidence (id, project_id, kind, source_uri, "
+                "content_sha256, captured_from) "
+                "VALUES (:id, :pid, :kind, :uri, :sha, :cap)"
+            ),
+            {
+                "id": evidence_id,
+                "pid": project_id,
+                "kind": kind,
+                "uri": "ontology_review:pkg-1#意见-1",
+                "sha": "c" * 64,
+                "cap": "ontology_review:pkg-1",
+            },
+        )
+
+
+def _cleanup_evidence_rows(engine, *, project_id, ids):
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM project_evidence WHERE project_id = :pid"), {"pid": project_id}
+        )
+        connection.execute(
+            text("DELETE FROM projects WHERE id = :id"), {"id": project_id}
+        )
+    cleanup_seeded_rows(engine, ids)
+
+
+def test_b7d3f9a1c5e2_extends_evidence_kind_and_annotation_pointer(
+    alembic_config, engine
+):
+    """evidence kind 闭集扩 ontology_annotation + 升级留痕增批注指针（可回退可重放）。"""
+    from fde_api.orgs.models import INTERNAL_ORG_ID
+    from sqlalchemy.exc import IntegrityError
+
+    command.downgrade(alembic_config, "c4a8f2e6b1d9")
+    ids = seed_user_and_template(engine, username="migration.evidence.kind")
+    project_id = "mig-evidence-project"
+    _seed_evidence_project(
+        engine, project_id=project_id, user_id=ids["user_id"], org_id=INTERNAL_ORG_ID
+    )
+
+    # 回退态：闭集回到 7 种 ⇒ ontology_annotation 被 CHECK 拒
+    with pytest.raises(IntegrityError):
+        _insert_evidence_row(
+            engine, evidence_id="mig-evidence-row", project_id=project_id,
+            kind="ontology_annotation",
+        )
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("ontology_binding_upgrades")
+    }
+    assert "annotation_evidence_id" not in columns
+
+    command.upgrade(alembic_config, "head")
+
+    # 升级态：新 kind 被接受、指针列回归
+    _insert_evidence_row(
+        engine, evidence_id="mig-evidence-row", project_id=project_id,
+        kind="ontology_annotation",
+    )
+    assert (
+        scalar(
+            engine,
+            "SELECT kind FROM project_evidence WHERE id = :id",
+            {"id": "mig-evidence-row"},
+        )
+        == "ontology_annotation"
+    )
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("ontology_binding_upgrades")
+    }
+    assert "annotation_evidence_id" in columns
+
+    _cleanup_evidence_rows(engine, project_id=project_id, ids=ids)

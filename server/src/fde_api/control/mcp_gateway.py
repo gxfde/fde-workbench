@@ -46,6 +46,9 @@ TOOLS: dict[str, tuple[str, str | None, dict[str, Any], str, int]] = {
     "api_catalog": ("查看已审核的原子 API 操作目录，含操作标识、实体参数、写入、外部副作用与风险分级及确认要求。业务流程由技能组合，不执行目录外接口。", None, {"query": {"type": "string"}}, "read", 0),
     "api_execute": ("按操作目录执行现有工作台 API。添加编辑直接执行并审计；敏感操作返回等待确认，不代表完成。禁止传入密码或密钥。", None, {"operation": {"type": "string"}, "parameters": {"type": "object"}, "body": {"type": "object"}, "query": {"type": "object"}}, "write_db", 3),
     "ontology_read": ("读取工作台实体、关系、身份、状态与权限语义。组合业务操作前先理解本体；本体不是额外授权。", None, {}, "read", 0),
+    "ontology_logic_run": ("在项目绑定的已固定本体版本上执行声明的 Logic（受限声明式表达式，输入输出 Schema 强校验，只读确定性计算，零副作用）。", "ontology.read", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "logic_key": {"type": "string"}, "input": {"type": "object"}}, "read", 0),
+    "ontology_action_propose": ("对项目绑定的已固定本体版本提议受控受审动作（默认 dry-run 仿真，零副作用；真执行必须人工批准）。", "ontology.write", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "action_key": {"type": "string"}, "input": {"type": "object"}}, "write_db", 1),
+    "ontology_action_execute": ("执行已获人工批准的 ActionRequest（仅 approved 可执行；执行档默认被 Agent 运行面剥离，强授权单独放行）。", "ontology.write", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "action_key": {"type": "string"}, "request_id": {"type": "string"}}, "write_db", 3),
     "project_list": ("列出当前账号有权查看的项目，可按名称搜索。", "project.read", {"query": {"type": "string"}}, "read", 0),
     "project_read": ("读取授权项目的背景、模块、任务和调研资料；项目成员可读各成员的个人备忘。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
     "quote_list": ("读取授权项目的报价卡：档位、状态、输入系数、实算工时与成本、公式价与锚点区间、每个数字字段的回校状态。报价按《报价计算卡》程序化计算，不要自行编造价格。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
@@ -117,6 +120,15 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
     if name == "ontology_read":
         from fde_api.control.ontology import ONTOLOGY
         return ONTOLOGY
+    if name in ("ontology_logic_run", "ontology_action_propose", "ontology_action_execute"):
+        from fde_api.control.ontology_gateway import call_ontology_tool
+
+        execution_id = claims.get("execution_id")
+        if not isinstance(execution_id, str) or not execution_id:
+            raise ControlServiceError("invalid_request", "本次 AI 执行缺少可审计编号。", 400)
+        return call_ontology_tool(
+            session, user=user, name=name, arguments=arguments, execution_id=execution_id
+        )
     if name == "action_status":
         from fde_api.control.api_actions import action_status
         return action_status(user, str(arguments.get("action_id", "")))
