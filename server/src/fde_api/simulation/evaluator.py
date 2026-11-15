@@ -182,13 +182,45 @@ def evaluate_run(
 
         model_payload: dict[str, Any] | None = None
         if include_model:
-            model_adapter = build_model_evaluation(model_mode)
-            model_result = model_adapter.evaluate(
-                judge_view=judge_view,
-                artifacts=artifacts,
-                traces=traces,
-                rubric_version=RUBRIC_VERSION,
+            from contextvars import Token
+
+            from fde_api.ai.auditing import ai_actor_override
+            from fde_api.control.ai_server_client import ai_actor_id
+            from fde_api.simulation.ai_actor import resolve_simulation_ai_actor
+
+            # billing_actor_policy 机制化（L6 条款④）：真模型腿（server）把配置
+            # 的记账服务账号注入两个记账 ContextVar——直连腿读 ai_actor_override
+            # （预算闸＋审计同源）、DSH 腿读 ai_actor_id。开关关（未配置）返
+            # None：回落既有记账行为，对存量模拟零回归；stub 腿不解析（无真
+            # 模型调用，也不把 fail-closed 误伤到确定性腿）。
+            billing_actor = (
+                resolve_simulation_ai_actor(session)
+                if model_mode == "server"
+                else None
             )
+            override_token: Token | None
+            dsh_token: Token | None
+            if billing_actor:
+                override_token = ai_actor_override.set(billing_actor)
+                dsh_token = ai_actor_id.set(billing_actor)
+            else:
+                override_token = None
+                dsh_token = None
+            try:
+                model_adapter = build_model_evaluation(model_mode)
+                model_result = model_adapter.evaluate(
+                    judge_view=judge_view,
+                    artifacts=artifacts,
+                    traces=traces,
+                    rubric_version=RUBRIC_VERSION,
+                )
+            finally:
+                # 按 set 的逆序复位（translator/jobs.py 先例）：异常路径也不
+                # 把记账覆盖泄漏给后续调用。
+                if dsh_token is not None:
+                    ai_actor_id.reset(dsh_token)
+                if override_token is not None:
+                    ai_actor_override.reset(override_token)
             model_evaluator_id = f"{MODEL_EVALUATOR_PREFIX}{model_result.mode}"
             model_row = session.scalar(
                 select(SimulationEvaluation).where(

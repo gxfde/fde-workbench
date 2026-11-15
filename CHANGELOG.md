@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — billing_actor_policy 机制化轮：模拟域真模型评估记账主体服务账号（opt-in 配置＋双 ContextVar 注入＋fail-closed；零迁移零路由零表，2026-11-15）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` §挂账登记 Level 评审发现④「billing_actor_policy 机制化＝动生产记账链路，需独立轮立项」——L6 候选卡的 `billing_actor_policy: "service_account"` 此前只是**声明字段**（政策常量），无任何机制真正保证模拟域跑批的 token 计费归到服务账号；本轮把它落实为**代码机制**：
+
+- **独立配置键（拍板①）**：`Settings.simulation_ai_actor_username`（env `FDE_SIMULATION_AI_ACTOR_USERNAME`，`server/.env.example` 注释态留空）——模拟域专用记账服务账号，**与诊断域 `diagnostics_ai_actor_username` 隔离**（防跨域串账）。
+- **opt-in 语义（拍板②）**：留空＝机制关，真模型评估回落既有行为（请求腿记调用者／直接腿记 None，零回归，非硬闸）；配置了账号但不存在/停用 ⇒ `resolve_simulation_ai_actor` 抛 `ScenarioServiceError("simulation_ai_unavailable", 503)` **fail-closed**（与诊断域「配置了才 503」同款语义，空值不 503）。
+- **双 ContextVar 注入（③机制真身）**：`ai/auditing.py` 新增模块级 `ai_actor_override`；`current_actor_id()` 读序升级为 override→请求上下文→None。`evaluator.py` `include_model` 分支在 server 腿（stub 腿不解析）解析服务账号后，**同一值**同时 `set` 进 `ai_actor_override`（预算闸＋审计归因腿）与 `ai_actor_id`（DSH structured_completion 腿），`try/finally` 逆序 reset（异常路径不泄漏）。
+- **验证（测试 7 例＋变异双锚）**：开关关请求腿归调用者／直接腿归 None／开关开预算闸拦服务账号而回落调用者放行（判别力）／审计归服务账号且调用者零归因／账号不存在·停用两 fail-closed 503（注入点零调用）／无 ContextVar 串账。NEW `tests/test_simulation_billing_actor.py` 7 passed；变异 M1（删 `ai_actor_override.set`）与 M2（`current_actor_id` 不读 override）各 3 例真红→字节还原→复绿；ruff clean；官方 mypy 277 基线零新增。**未实施留痕**：Yui 第二笔（单文件拆分）＝抑制性警告；候选卡 provenance 字段保持政策常量 `service_account`（拍板③），机制另由上述测试证明。
+- 口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**。
+
 ## [未发布] — L6 挂账清偿轮：manifest O_EXCL 锁＋两遍配对（打平不漏检）＋importlib 单一真身（零迁移零路由零表，2026-11-15）
 
 承 party 评审追改轮（#479）遗留的三笔宿主域挂账，蔡工「按推荐执行」（选择题未答，留痕可推翻）一 PR 清偿：

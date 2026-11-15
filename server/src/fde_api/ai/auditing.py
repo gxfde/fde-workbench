@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import time
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -36,6 +37,12 @@ logger = logging.getLogger(__name__)
 
 # 入口漏传 purpose 时的兜底标记（DB CHECK 只要求非空串；此值让异常可见）
 UNATTRIBUTED_PURPOSE = "unattributed"
+
+# 显式记账主体覆盖（billing_actor_policy 机制化）：调用方（如模拟域 evaluator）
+# 在真模型评估期间 set 服务账号 id，直连腿的 ``current_actor_id`` 优先读它——
+# 预算闸与审计归因随之落到服务账号头上。默认 None＝不覆盖（存量行为零变化），
+# set 后必须按 token 复位（仿 translator/jobs.py 先例），不得跨调用泄漏。
+ai_actor_override: ContextVar[str | None] = ContextVar("ai_actor_override", default=None)
 
 
 def compute_prompt_fingerprint(
@@ -75,7 +82,15 @@ def compute_prompt_fingerprint(
 
 
 def current_actor_id() -> str | None:
-    """请求上下文里的当前用户 id；后台任务等无请求场景返回 None。"""
+    """当前记账主体 id；无主体场景返回 None。
+
+    读序：① ``ai_actor_override`` ContextVar（调用方显式覆盖，如模拟域
+    evaluator 注入服务账号）；② 请求上下文 ``g.current_user``；③ 均无 →
+    None（后台任务等无主体场景，预算闸 fail-open 放行）。
+    """
+    override = ai_actor_override.get()
+    if override is not None:
+        return override
     if has_app_context():
         actor = getattr(g, "current_user", None) or getattr(g, "_current_user", None)
         if actor is not None and getattr(actor, "id", None):
