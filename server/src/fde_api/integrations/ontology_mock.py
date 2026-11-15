@@ -53,6 +53,10 @@ def _ref_id(org_id: str, ontology_id: str, version_id: str, ot_key: str, pk_val:
 class MockOntologyAdapter:
     """与 OntologyClient 同签名的内存态契约适配器。"""
 
+    # 熔断态只读锚（与 OntologyClient.breaker_state 同名同语义）：缺省
+    # closed（非熔断窗）；S-12 运行时拦截用例 setattr "open" 模拟熔断窗口。
+    breaker_state = "closed"
+
     def __init__(self) -> None:
         self._fault_mode: str | None = None
         self._latency_ms: int = 0
