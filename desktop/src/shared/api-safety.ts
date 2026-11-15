@@ -65,7 +65,7 @@ const MAX_MULTIPART_FILE_BYTES = 100 * 1024 * 1024
 const MAX_MULTIPART_FIELDS = 20
 const MAX_FIELD_VALUE_BYTES = 10_000
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
@@ -264,4 +264,107 @@ export function serializeBodyString(body: unknown): string {
   }
   JSON.parse(serialized)
   return serialized
+}
+
+// ---------------------------------------------------------------------------
+// QR-112（goal-crv-fix2 批 R7）：API 响应信封解析与脱敏的**双桥共用纯函数**。
+//
+// 桌面桥（main/api-ipc.ts::parseApiResponse）与 web 桥
+// （renderer/src/fde-web-bridge.ts）此前对响应面四处不等价：
+//   ①ok∧error 拒 ②!ok∧¬error 拒 ③!ok data 置空 ④错误体形态校验＋脱敏全缺
+// （等价性静态钉 63 样本只护请求面、响应面零钉）。本节把四条不变量与错误体
+// 脱敏提为纯函数单点，双桥各自消费 verdict（桌面抛 ApiIpcError＋脱敏、web 返
+// 回 fail 桥结果），判定恒同——响应面样本入 tests/shared 等价性钉双侧钉死。
+// ---------------------------------------------------------------------------
+
+export const RESPONSE_REDACTED = "[REDACTED]"
+
+export type EnvelopeInvalidReason =
+  | "not_envelope_shape" // 非对象 / 缺 data / error 键
+  | "error_body_shape" // error 非 null 但形态不合法
+  | "ok_with_error" // ok∧error
+  | "not_ok_without_error" // !ok∧¬error
+
+export type EnvelopeVerdict =
+  | { kind: "ok"; data: unknown }
+  | { kind: "error"; error: Record<string, unknown> }
+  | { kind: "invalid"; reason: EnvelopeInvalidReason }
+
+export function isSensitiveKey(key: string): boolean {
+  return /password|token|secret|authorization|credential/i.test(key)
+}
+
+export function redactSensitiveString(value: string, secrets: string[]): string {
+  return secrets.reduce(
+    (result, secret) => (secret ? result.split(secret).join(RESPONSE_REDACTED) : result),
+    value,
+  )
+}
+
+export function collectEnvelopeSensitiveValues(value: unknown, depth = 0): string[] {
+  if (depth > 5 || ArrayBuffer.isView(value) || !isRecord(value)) {
+    return []
+  }
+  return Object.entries(value).flatMap(([key, item]) => {
+    if (isSensitiveKey(key) && typeof item === "string" && item) {
+      return [item]
+    }
+    if (Array.isArray(item)) {
+      return item.flatMap((entry) => collectEnvelopeSensitiveValues(entry, depth + 1))
+    }
+    return collectEnvelopeSensitiveValues(item, depth + 1)
+  })
+}
+
+export function sanitizeEnvelopeDetails(value: unknown, secrets: string[], depth = 0): unknown {
+  if (depth > 5) return "[TRUNCATED]"
+  if (typeof value === "string") return redactSensitiveString(value, secrets)
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((item) => sanitizeEnvelopeDetails(item, secrets, depth + 1))
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 50)
+        .map(([key, item]) => [
+          key,
+          isSensitiveKey(key)
+            ? RESPONSE_REDACTED
+            : sanitizeEnvelopeDetails(item, secrets, depth + 1),
+        ]),
+    )
+  }
+  if (value === null || typeof value === "number" || typeof value === "boolean") {
+    return value
+  }
+  return undefined
+}
+
+/** 响应信封四条不变量的单一判定（双桥共用；纯函数零 IO）。 */
+export function parseApiEnvelope(value: unknown, status: number): EnvelopeVerdict {
+  if (!isRecord(value) || !("data" in value) || !("error" in value)) {
+    return { kind: "invalid", reason: "not_envelope_shape" }
+  }
+  let error: Record<string, unknown> | null = null
+  if (value.error !== null) {
+    if (
+      !isRecord(value.error) ||
+      typeof value.error.code !== "string" ||
+      typeof value.error.message !== "string"
+    ) {
+      return { kind: "invalid", reason: "error_body_shape" }
+    }
+    error = value.error
+  }
+  const isOk = status >= 200 && status < 300
+  if (isOk && error !== null) {
+    return { kind: "invalid", reason: "ok_with_error" }
+  }
+  if (!isOk && error === null) {
+    return { kind: "invalid", reason: "not_ok_without_error" }
+  }
+  if (error !== null) {
+    return { kind: "error", error }
+  }
+  return { kind: "ok", data: value.data }
 }

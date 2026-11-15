@@ -110,7 +110,12 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          （c7e1b3d9f4a2；挂 e1a9d4c7b2f8 之后保单头；WP2 唯一 DDL 收口）
 # V3.3 M5 WP2 合流回植：回执观测值列（双指纹/gate_ready/disposition_closed）
 #          （e9c4b7a1d5f8；挂 c7e1b3d9f4a2 之后保单头；源=并行评审版决策单步④）
-HEAD_REVISION = "e9c4b7a1d5f8"
+# M6-WP0 D11 缝合：fork 支链三增量并入（commercial batch D 加固零 DDL
+#          d4b8e1f6a9c3 + Loop2-L4 candidate payload d4b7e2f9a6c1 + Loop2-L5
+#          lessons/prompt_overlays 两表 a9f3e5c7b1d2；均挂 c8e2a6f0b9d4 分叉）+
+#          merge 收单头 c2a9e7d5b3f1（零 DDL，down_revision=双头元组；
+#          P1 §7④ merge 非 rebase；细则②）
+HEAD_REVISION = "c2a9e7d5b3f1"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1213,10 +1218,14 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + V3.3 M4 WP3 D27 workflow_runs 本体版本五元组快照 e1a9d4c7b2f8 之后 = 78；
     # + V3.3 M5 WP2 Gate 本体治理（S-13/D29/S-16 锚点）c7e1b3d9f4a2 之后 = 79；
     # + V3.3 M5 WP2 合流回植观测值列 e9c4b7a1d5f8 之后 = 80；
+    # + M6-WP0 D11 缝合 fork 支链三增量（d4b8e1f6a9c3 / d4b7e2f9a6c1 /
+    #   a9f3e5c7b1d2，挂 c8e2a6f0b9d4 分叉）之后 = 83；
+    # + M6-WP0 D11 merge 收单头 c2a9e7d5b3f1（零 DDL 双头元组）之后 = 84；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 80
-    # 链内任意已落戳都在集内（下探若干历史 revision 抽样）
-    for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8"):
+    assert len(known) == 84
+    # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
+    # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
+    for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):
         assert historical in known, historical
 
 

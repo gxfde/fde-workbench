@@ -44,7 +44,35 @@ interface ChangeSetDto {
   base_snapshot_sha256: string | null
   captured_from: string | null
   rejected_reason: string | null
+  created_by_user_id: string | null
   created_at: string | null
+}
+
+// 候选生成来源（discovery 抽取；仅 review_required 可生成——服务端闸
+// extraction_not_ready 409 的前端预筛）。字段投影＝serialize_extraction 子集。
+interface ExtractionDto {
+  id: string
+  source_type: string
+  status: string
+  completed_at: string | null
+}
+
+// POST /candidates/generate 响应（键闭集＝generate_discovery_candidates 返回）
+interface SkippedEntry {
+  term: string
+  reason: string
+}
+
+interface CrossProjectConflict {
+  term: string
+  project_ids: string[]
+}
+
+interface CandidateGenerateResult {
+  change_set: ChangeSetDto
+  created: boolean
+  skipped: SkippedEntry[]
+  cross_project_conflicts: CrossProjectConflict[]
 }
 
 interface ChangeSetListDto {
@@ -105,6 +133,56 @@ const CHANGE_SET_STATUS_LABEL: Record<string, string> = {
 
 const CHANGE_SET_STATUSES = ["draft", "in_review", "confirmed", "rejected", "superseded"] as const
 
+// 术语类型值域唯一权威＝服务端 `ontology/models.py::TERM_TYPES`
+const TERM_TYPES = ["entity", "attribute", "metric", "alias_target", "generic"] as const
+const TERM_TYPE_LABEL: Record<string, string> = {
+  entity: "实体",
+  attribute: "属性",
+  metric: "度量",
+  alias_target: "别名指向",
+  generic: "通用",
+}
+
+const RELATION_KIND_LABEL: Record<string, string> = {
+  subject_type: "对象类型",
+  link_type: "关系类型",
+}
+
+// 与服务端 `ontology/service._normalize_code` 同尺：小写字母开头，仅小写字母/
+// 数字/下划线，≤60 字符（RELATION_TYPE_CODE_MAX_LENGTH）。
+const RELATION_CODE_PATTERN = /^[a-z][a-z0-9_]*$/
+
+// 手工变更集条目草稿（表单形态；提交前按动作折算成闭集键载荷）
+interface DraftItem {
+  action: "create_term" | "update_term" | "merge_terms"
+  term: string
+  definition: string
+  term_type: string
+  new_term: string
+  source_term: string
+  target_term: string
+}
+
+const EMPTY_DRAFT_ITEM: DraftItem = {
+  action: "create_term",
+  term: "",
+  definition: "",
+  term_type: "entity",
+  new_term: "",
+  source_term: "",
+  target_term: "",
+}
+
+const EMPTY_RELATION_DRAFT = {
+  kind: "subject_type",
+  code: "",
+  label: "",
+  description: "",
+  scope: "project",
+  sources: "",
+  targets: "",
+}
+
 function statusLabel(map: Record<string, string>, value: string): string {
   return map[value] ?? value
 }
@@ -135,8 +213,9 @@ interface GlossaryPageProps {
 }
 
 export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
   const base = `/api/v1/projects/${encodeURIComponent(projectId)}/ontology`
+  const discoveryBase = `/api/v1/projects/${encodeURIComponent(projectId)}/discovery`
   const [terms, setTerms] = useState<TermDto[]>([])
   const [termQuery, setTermQuery] = useState("")
   const [relationTypes, setRelationTypes] = useState<RelationTypeDto[]>([])
@@ -160,6 +239,25 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
   const [impactLoading, setImpactLoading] = useState(false)
   const [impactError, setImpactError] = useState("")
   const impactSequence = useRef(0)
+  // —— 桌面第三批 ops3：canManage 写面（候选生成 / 手工变更集 / 关系类型新停）——
+  const isAdmin = user?.role === "admin"
+  // ① 候选生成（懒加载：展开面板才拉抽取清单，不进首屏）
+  const [candOpen, setCandOpen] = useState(false)
+  const [extractions, setExtractions] = useState<ExtractionDto[] | null>(null)
+  const [candError, setCandError] = useState("")
+  const [candBusyId, setCandBusyId] = useState<string | null>(null)
+  const [candResult, setCandResult] = useState<CandidateGenerateResult | null>(null)
+  // ② 手工提变更集（body 闭集 {title, description?, proposed_json}——captured_from 是 AI 通道专用）
+  const [csFormOpen, setCsFormOpen] = useState(false)
+  const [csTitle, setCsTitle] = useState("")
+  const [csDescription, setCsDescription] = useState("")
+  const [csItems, setCsItems] = useState<DraftItem[]>([{ ...EMPTY_DRAFT_ITEM }])
+  const [csNotice, setCsNotice] = useState("")
+  // ③ 关系类型登记与停用
+  const [rtFormOpen, setRtFormOpen] = useState(false)
+  const [rtDraft, setRtDraft] = useState({ ...EMPTY_RELATION_DRAFT })
+  const [rtNotice, setRtNotice] = useState("")
+  const [rtConfirmId, setRtConfirmId] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<number> => {
     const requestSequence = ++sequence.current
@@ -268,6 +366,196 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
       )
       if (detail?.id === changeSet.id) setDetail(data.change_set)
       setRejectReason("")
+    } catch (caught) {
+      setActionError(actionMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 禁自审：in_review 行若由当前账号创建，确认/否决必须由另一管理员执行
+  // （服务端强制 ≠ 提交人——前端禁点只省一次注定 403 的往返）。
+  function isSelfSubmitted(changeSet: ChangeSetDto): boolean {
+    return (
+      changeSet.status === "in_review" &&
+      changeSet.created_by_user_id != null &&
+      changeSet.created_by_user_id === user?.id
+    )
+  }
+
+  // —— ① 候选生成：展开才拉抽取清单（懒加载，不进首屏、不碰只读面）——
+  async function openCandidates(): Promise<void> {
+    if (candOpen) {
+      setCandOpen(false)
+      return
+    }
+    setCandOpen(true)
+    setCandError("")
+    if (extractions !== null) return
+    try {
+      const data = await apiRequest<{ items: ExtractionDto[] }>(
+        `${discoveryBase}/extractions?limit=50`,
+        { method: "GET" },
+      )
+      setExtractions(
+        Array.isArray(data.items)
+          ? data.items.filter((row) => row.status === "review_required")
+          : [],
+      )
+    } catch (caught) {
+      setCandError(actionMessage(caught))
+    }
+  }
+
+  async function generateCandidates(extraction: ExtractionDto): Promise<void> {
+    setActionError("")
+    setCandError("")
+    setCandResult(null)
+    setCandBusyId(extraction.id)
+    try {
+      // 全字面量路径（不经 base 拼接）：打包产物特征串核验需要连续的
+      // "ontology/candidates/generate" 字节序列（r48 asar 四特征串闸）。
+      const data = await apiRequest<CandidateGenerateResult>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/ontology/candidates/generate`,
+        { method: "POST", body: { extraction_id: extraction.id } },
+      )
+      setCandResult(data)
+      await load()
+    } catch (caught) {
+      setCandError(actionMessage(caught))
+    } finally {
+      setCandBusyId(null)
+    }
+  }
+
+  // —— ② 手工变更集：按动作折算闭集键载荷（值非法返回文案，不发请求）——
+  function buildProposedItem(item: DraftItem): Record<string, unknown> | string {
+    const term = item.term.trim()
+    const definition = item.definition.trim()
+    if (item.action === "create_term") {
+      if (!term || !definition) return "create_term 条目需要术语名与定义。"
+      return { action: "create_term", term, definition, term_type: item.term_type }
+    }
+    if (item.action === "update_term") {
+      if (!term || !definition) return "update_term 条目需要术语名与定义。"
+      const payload: Record<string, unknown> = { action: "update_term", term, definition }
+      if (item.term_type) payload.term_type = item.term_type
+      if (item.new_term.trim()) payload.new_term = item.new_term.trim()
+      return payload
+    }
+    const source = item.source_term.trim()
+    const target = item.target_term.trim()
+    if (!source || !target) return "merge_terms 条目需要来源与目标术语名。"
+    if (source === target) return "不能把术语合并到它自己（同名合并被禁止）。"
+    return { action: "merge_terms", source_term: source, target_term: target }
+  }
+
+  async function submitChangeSet(): Promise<void> {
+    setActionError("")
+    setCsNotice("")
+    const title = csTitle.trim()
+    if (!title) {
+      setActionError("变更集标题必填。")
+      return
+    }
+    const proposed: Array<Record<string, unknown>> = []
+    for (const item of csItems) {
+      const built = buildProposedItem(item)
+      if (typeof built === "string") {
+        setActionError(built)
+        return
+      }
+      proposed.push(built)
+    }
+    // body 闭集 {title, description?, proposed_json}：description 留空不传；
+    // 绝不传 captured_from（AI 通道专用，服务端对人工路径显式 400）。
+    const body: Record<string, unknown> = { title, proposed_json: proposed }
+    const description = csDescription.trim()
+    if (description) body.description = description
+    setBusy(true)
+    try {
+      await apiRequest<{ change_set: ChangeSetDto }>(`${base}/change-sets`, {
+        method: "POST",
+        body,
+      })
+      setCsTitle("")
+      setCsDescription("")
+      setCsItems([{ ...EMPTY_DRAFT_ITEM }])
+      setCsNotice("变更集已创建（草稿）：提交评审后由另一管理员确认物化。")
+      await load()
+    } catch (caught) {
+      setActionError(actionMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // —— ③ 关系类型：登记（link_type 必须声明端点约束——服务端硬闸）与停用 ——
+  async function submitRelationType(): Promise<void> {
+    setActionError("")
+    setRtNotice("")
+    const code = rtDraft.code.trim()
+    if (!RELATION_CODE_PATTERN.test(code) || code.length > 60) {
+      setActionError("code 需小写字母开头，仅含小写字母/数字/下划线，且 ≤60 字符。")
+      return
+    }
+    const scope = rtDraft.scope === "global" ? "global" : "project"
+    if (scope === "global" && !isAdmin) {
+      setActionError("只有管理员可以登记全局类型。")
+      return
+    }
+    // body 闭集 {kind, code, label?, description?, scope}；link_type 另附端点
+    // 约束两键（服务端必填：缺 sources/targets 即 400 invalid_request）。
+    const body: Record<string, unknown> = { kind: rtDraft.kind, code, scope }
+    const label = rtDraft.label.trim()
+    if (label) body.label = label
+    const description = rtDraft.description.trim()
+    if (description) body.description = description
+    if (rtDraft.kind === "link_type") {
+      const parseList = (raw: string) =>
+        raw
+          .split(/[,，;\s]+/)
+          .map((part) => part.trim())
+          .filter(Boolean)
+      const sources = parseList(rtDraft.sources)
+      const targets = parseList(rtDraft.targets)
+      if (!sources.length || !targets.length) {
+        setActionError("关系类型必须声明源/目标对象类型约束（先登记对象类型再登记引用它的关系类型）。")
+        return
+      }
+      body.allowed_source_types = sources
+      body.allowed_target_types = targets
+    }
+    setBusy(true)
+    try {
+      await apiRequest(`${base}/relation-types`, { method: "POST", body })
+      setRtDraft({ ...EMPTY_RELATION_DRAFT })
+      setRtFormOpen(false)
+      setRtNotice(scope === "global" ? "全局类型已登记。" : "项目类型已登记。")
+      await load()
+    } catch (caught) {
+      setActionError(actionMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 停用资格：非 retired 行才可停；全局行仅 admin（服务端同尺 403）
+  function retireAllowed(rt: RelationTypeDto): boolean {
+    return rt.status !== "retired" && (rt.scope !== "global" || isAdmin)
+  }
+
+  async function retireRelationType(rt: RelationTypeDto): Promise<void> {
+    setActionError("")
+    setRtNotice("")
+    setBusy(true)
+    try {
+      await apiRequest(`${base}/relation-types/${encodeURIComponent(rt.id)}/retire`, {
+        method: "POST",
+      })
+      setRtConfirmId(null)
+      setRtNotice(`类型「${rt.label || rt.code}」已停用：禁新边，存量边只读。`)
+      await load()
     } catch (caught) {
       setActionError(actionMessage(caught))
     } finally {
@@ -398,13 +686,179 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
         )}
       </section>
 
+      {canManage ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>候选生成</h2>
+              <p>从已完成审阅（review_required）的抽取事实生成本体候选：只创建变更集草稿，采纳仍走提交 → 确认人工管线。</p>
+            </div>
+            <button className="secondary-button" onClick={() => void openCandidates()}>
+              {candOpen ? "收起" : "展开候选来源"}
+            </button>
+          </div>
+          {candOpen ? (
+            candError ? (
+              <p className="empty-copy" role="alert">{candError}</p>
+            ) : extractions === null ? (
+              <p className="empty-copy" role="status">正在加载抽取清单…</p>
+            ) : (
+              <div className="page-stack">
+                {candResult ? (
+                  <article className="extension-item">
+                    <div>
+                      <strong>{candResult.created ? "已创建候选变更集" : "复用既有活跃候选变更集"}</strong>
+                      <span className="extension-scope">
+                        {statusLabel(CHANGE_SET_STATUS_LABEL, candResult.change_set.status)}
+                      </span>
+                    </div>
+                    <p>{candResult.change_set.title}</p>
+                    {candResult.skipped.length ? (
+                      <p>
+                        <small>
+                          跳过 {candResult.skipped.length} 项：
+                          {candResult.skipped.map((row) => `${row.term}（${row.reason}）`).join("；")}
+                        </small>
+                      </p>
+                    ) : null}
+                    {candResult.cross_project_conflicts.length ? (
+                      <p>
+                        <small>
+                          跨项目同名告警（只读提示，不阻断）：
+                          {candResult.cross_project_conflicts
+                            .map((row) => `${row.term} → ${row.project_ids.join("、")}`)
+                            .join("；")}
+                        </small>
+                      </p>
+                    ) : null}
+                  </article>
+                ) : null}
+                {extractions.length ? (
+                  extractions.map((extraction) => (
+                    <div key={extraction.id} className="plugin-actions">
+                      <code>{extraction.id}</code>
+                      <span> {extraction.source_type}</span>
+                      <button
+                        className="secondary-button"
+                        disabled={candBusyId !== null}
+                        onClick={() => void generateCandidates(extraction)}
+                      >
+                        {candBusyId === extraction.id ? "生成中…" : "生成候选"}
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="empty-copy">没有待处理的抽取（仅 review_required 状态可生成候选）。</p>
+                )}
+              </div>
+            )
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="panel">
         <div className="panel-heading">
           <div>
             <h2>关系类型</h2>
-            <p>登记与停用走管理通道（全局行需系统运维员），此处只读呈现。</p>
+            <p>
+              {canManage
+                ? "登记项目类型或全局类型（全局行需系统运维员）；停用后禁新边、存量边只读。"
+                : "登记与停用走管理通道（全局行需系统运维员），此处只读呈现。"}
+            </p>
           </div>
+          {canManage ? (
+            <button className="secondary-button" onClick={() => { setRtFormOpen(!rtFormOpen); setActionError(""); setRtNotice("") }}>
+              {rtFormOpen ? "收起登记表单" : "登记类型"}
+            </button>
+          ) : null}
         </div>
+        {rtNotice ? <p className="empty-copy" role="status">{rtNotice}</p> : null}
+        {canManage && rtFormOpen ? (
+          <form
+            className="page-stack"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void submitRelationType()
+            }}
+          >
+            <div className="plugin-actions">
+              <label className="field">
+                <span>种类</span>
+                <select
+                  aria-label="类型种类"
+                  value={rtDraft.kind}
+                  onChange={(event) => setRtDraft({ ...rtDraft, kind: event.target.value })}
+                >
+                  <option value="subject_type">对象类型</option>
+                  <option value="link_type">关系类型</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>code</span>
+                <input
+                  aria-label="类型 code"
+                  placeholder="如 delivery_role"
+                  value={rtDraft.code}
+                  onChange={(event) => setRtDraft({ ...rtDraft, code: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>名称（可选）</span>
+                <input
+                  aria-label="类型名称"
+                  value={rtDraft.label}
+                  onChange={(event) => setRtDraft({ ...rtDraft, label: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>范围</span>
+                <select
+                  aria-label="类型范围"
+                  value={rtDraft.scope}
+                  onChange={(event) => setRtDraft({ ...rtDraft, scope: event.target.value })}
+                >
+                  <option value="project">项目内</option>
+                  {isAdmin ? <option value="global">全局（仅管理员）</option> : null}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>说明（可选）</span>
+              <input
+                aria-label="类型说明"
+                value={rtDraft.description}
+                onChange={(event) => setRtDraft({ ...rtDraft, description: event.target.value })}
+              />
+            </label>
+            {rtDraft.kind === "link_type" ? (
+              <div className="plugin-actions">
+                <label className="field">
+                  <span>源对象类型（逗号分隔）</span>
+                  <input
+                    aria-label="源对象类型"
+                    placeholder="如 project, department"
+                    value={rtDraft.sources}
+                    onChange={(event) => setRtDraft({ ...rtDraft, sources: event.target.value })}
+                  />
+                </label>
+                <label className="field">
+                  <span>目标对象类型（逗号分隔）</span>
+                  <input
+                    aria-label="目标对象类型"
+                    placeholder="如 role, process"
+                    value={rtDraft.targets}
+                    onChange={(event) => setRtDraft({ ...rtDraft, targets: event.target.value })}
+                  />
+                </label>
+              </div>
+            ) : null}
+            <div className="plugin-actions">
+              <button className="primary-button" type="submit" disabled={busy}>
+                确认登记
+              </button>
+            </div>
+          </form>
+        ) : null}
         {relationTypes.length ? (
           <div className="extension-card-grid">
             {relationTypes.map((relationType) => (
@@ -414,13 +868,42 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
                     {relationType.scope === "global" ? "全局" : "项目"}
                   </span>
                   <strong>{relationType.label}</strong>
-                  <small> <code>{relationType.code}</code> · {relationType.kind}</small>
+                  <small> <code>{relationType.code}</code> · {RELATION_KIND_LABEL[relationType.kind] ?? relationType.kind}</small>
                 </div>
                 <p>{relationType.description || "暂无说明"}</p>
                 <small>
                   源 {relationType.allowed_source_types.join("/") || "—"} → 目标 {relationType.allowed_target_types.join("/") || "—"}
                   {relationType.status !== "active" ? ` · ${relationType.status}` : ""}
                 </small>
+                {canManage && retireAllowed(relationType) ? (
+                  <div className="plugin-actions">
+                    {rtConfirmId === relationType.id ? (
+                      <>
+                        <button
+                          className="primary-button"
+                          disabled={busy}
+                          onClick={() => void retireRelationType(relationType)}
+                        >
+                          确认停用
+                        </button>
+                        <button className="secondary-button" disabled={busy} onClick={() => setRtConfirmId(null)}>
+                          取消
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="secondary-button"
+                        disabled={busy}
+                        onClick={() => { setRtConfirmId(relationType.id); setActionError(""); setRtNotice("") }}
+                      >
+                        停用
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+                {canManage && relationType.scope === "global" && !isAdmin && relationType.status !== "retired" ? (
+                  <small>全局类型仅系统运维员可停用。</small>
+                ) : null}
               </article>
             ))}
           </div>
@@ -435,21 +918,189 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
             <h2>变更集评审</h2>
             <p>AI 候选与人工提案的唯一落点：draft → in_review → confirmed/rejected；确认前不物化。</p>
           </div>
-          <label className="field">
-            <span>状态过滤</span>
-            <select
-              aria-label="按状态过滤变更集"
-              value={csFilter}
-              onChange={(event) => setCsFilter(event.target.value)}
-            >
-              <option value="">全部</option>
-              {CHANGE_SET_STATUSES.map((status) => (
-                <option key={status} value={status}>{statusLabel(CHANGE_SET_STATUS_LABEL, status)}</option>
-              ))}
-            </select>
-          </label>
+          <div className="plugin-actions">
+            {canManage ? (
+              <button className="secondary-button" onClick={() => { setCsFormOpen(!csFormOpen); setActionError(""); setCsNotice("") }}>
+                {csFormOpen ? "收起起草表单" : "手工提变更集"}
+              </button>
+            ) : null}
+            <label className="field">
+              <span>状态过滤</span>
+              <select
+                aria-label="按状态过滤变更集"
+                value={csFilter}
+                onChange={(event) => setCsFilter(event.target.value)}
+              >
+                <option value="">全部</option>
+                {CHANGE_SET_STATUSES.map((status) => (
+                  <option key={status} value={status}>{statusLabel(CHANGE_SET_STATUS_LABEL, status)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
         {actionError ? <p role="alert" className="empty-copy">{actionError}</p> : null}
+        {csNotice ? <p className="empty-copy" role="status">{csNotice}</p> : null}
+        {canManage && csFormOpen ? (
+          <form
+            className="page-stack"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void submitChangeSet()
+            }}
+          >
+            <div className="plugin-actions">
+              <label className="field">
+                <span>标题</span>
+                <input
+                  aria-label="变更集标题"
+                  placeholder="如 术语口径季度修订"
+                  value={csTitle}
+                  onChange={(event) => setCsTitle(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>说明（可选）</span>
+                <input
+                  aria-label="变更集说明"
+                  value={csDescription}
+                  onChange={(event) => setCsDescription(event.target.value)}
+                />
+              </label>
+            </div>
+            {csItems.map((item, index) => (
+              <div key={index} className="page-stack">
+                <div className="plugin-actions">
+                  <label className="field">
+                    <span>动作 {index + 1}</span>
+                    <select
+                      aria-label={`条目 ${index + 1} 动作`}
+                      value={item.action}
+                      onChange={(event) =>
+                        setCsItems((current) =>
+                          current.map((row, at) =>
+                            at === index ? { ...row, action: event.target.value as DraftItem["action"] } : row,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="create_term">新建术语</option>
+                      <option value="update_term">修订术语</option>
+                      <option value="merge_terms">合并术语</option>
+                    </select>
+                  </label>
+                  {item.action === "merge_terms" ? (
+                    <>
+                      <label className="field">
+                        <span>来源术语</span>
+                        <input
+                          aria-label={`条目 ${index + 1} 来源术语`}
+                          value={item.source_term}
+                          onChange={(event) =>
+                            setCsItems((current) =>
+                              current.map((row, at) => (at === index ? { ...row, source_term: event.target.value } : row)),
+                            )
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>目标术语</span>
+                        <input
+                          aria-label={`条目 ${index + 1} 目标术语`}
+                          value={item.target_term}
+                          onChange={(event) =>
+                            setCsItems((current) =>
+                              current.map((row, at) => (at === index ? { ...row, target_term: event.target.value } : row)),
+                            )
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label className="field">
+                        <span>术语名</span>
+                        <input
+                          aria-label={`条目 ${index + 1} 术语名`}
+                          value={item.term}
+                          onChange={(event) =>
+                            setCsItems((current) =>
+                              current.map((row, at) => (at === index ? { ...row, term: event.target.value } : row)),
+                            )
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>定义</span>
+                        <input
+                          aria-label={`条目 ${index + 1} 定义`}
+                          value={item.definition}
+                          onChange={(event) =>
+                            setCsItems((current) =>
+                              current.map((row, at) => (at === index ? { ...row, definition: event.target.value } : row)),
+                            )
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>类型</span>
+                        <select
+                          aria-label={`条目 ${index + 1} 术语类型`}
+                          value={item.term_type}
+                          onChange={(event) =>
+                            setCsItems((current) =>
+                              current.map((row, at) => (at === index ? { ...row, term_type: event.target.value } : row)),
+                            )
+                          }
+                        >
+                          {TERM_TYPES.map((termType) => (
+                            <option key={termType} value={termType}>{TERM_TYPE_LABEL[termType]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {item.action === "update_term" ? (
+                        <label className="field">
+                          <span>新名（可选，改名即行级取代）</span>
+                          <input
+                            aria-label={`条目 ${index + 1} 新名`}
+                            value={item.new_term}
+                            onChange={(event) =>
+                              setCsItems((current) =>
+                                current.map((row, at) => (at === index ? { ...row, new_term: event.target.value } : row)),
+                              )
+                            }
+                          />
+                        </label>
+                      ) : null}
+                    </>
+                  )}
+                  {csItems.length > 1 ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setCsItems((current) => current.filter((_, at) => at !== index))}
+                    >
+                      移除条目
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+            <div className="plugin-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => setCsItems((current) => [...current, { ...EMPTY_DRAFT_ITEM, action: current.at(-1)?.action ?? "create_term" }])}
+              >
+                添加条目
+              </button>
+              <button className="primary-button" type="submit" disabled={busy}>
+                创建变更集（草稿）
+              </button>
+            </div>
+          </form>
+        ) : null}
         {changeSets.length ? (
           <div className="page-stack">
             {changeSets.map((changeSet) => (
@@ -476,13 +1127,16 @@ export function GlossaryPage({ projectId, canManage }: GlossaryPageProps) {
                       提交评审
                     </button>
                   ) : null}
-                  {canManage && changeSet.status === "in_review" ? (
+                  {canManage && changeSet.status === "in_review" && !isSelfSubmitted(changeSet) ? (
                     <button className="primary-button" disabled={busy} onClick={() => void actChangeSet(changeSet, "confirm")}>
                       确认物化
                     </button>
                   ) : null}
                 </div>
-                {canManage && changeSet.status === "in_review" ? (
+                {canManage && isSelfSubmitted(changeSet) ? (
+                  <p className="empty-copy">此变更集由当前账号提交——确认或否决须由另一管理员审阅。</p>
+                ) : null}
+                {canManage && changeSet.status === "in_review" && !isSelfSubmitted(changeSet) ? (
                   <div className="plugin-actions">
                     <input
                       aria-label="否决理由"

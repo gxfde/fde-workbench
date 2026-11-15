@@ -10,7 +10,7 @@
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
+      "revision": "8c297a125db8ae11dc40e150a462108104202d9b"
     }
   },
   "lanes": [
@@ -201,20 +201,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/transcripts/service.py",
-          "line": 248,
-          "end_line": 266,
+          "line": 262,
+          "end_line": 313,
           "label": "create_draft"
         },
         {
           "path": "server/src/fde_api/transcripts/service.py",
-          "line": 354,
-          "end_line": 380,
+          "line": 372,
+          "end_line": 428,
           "label": "promote_draft"
         },
         {
           "path": "server/src/fde_api/transcripts/service.py",
-          "line": 337,
-          "end_line": 352,
+          "line": 351,
+          "end_line": 369,
           "label": "discard_draft"
         }
       ]
@@ -232,19 +232,19 @@
         {
           "path": "server/src/fde_api/plans/service.py",
           "line": 74,
-          "end_line": 90,
+          "end_line": 178,
           "label": "generate_plan"
         },
         {
           "path": "server/src/fde_api/plans/service.py",
           "line": 185,
-          "end_line": 200,
+          "end_line": 221,
           "label": "review_plan"
         },
         {
           "path": "server/src/fde_api/plans/service.py",
           "line": 224,
-          "end_line": 248,
+          "end_line": 260,
           "label": "publish_plan + supersede"
         }
       ]
@@ -264,7 +264,7 @@
         {
           "path": "server/src/fde_api/projects/gate_service.py",
           "line": 231,
-          "end_line": 310,
+          "end_line": 359,
           "label": "submit_gate_evidence"
         }
       ]
@@ -284,13 +284,13 @@
         {
           "path": "server/src/fde_api/projects/gate_service.py",
           "line": 362,
-          "end_line": 430,
+          "end_line": 455,
           "label": "decide_gate"
         },
         {
           "path": "server/src/fde_api/projects/gate_service.py",
-          "line": 430,
-          "end_line": 445,
+          "line": 565,
+          "end_line": 585,
           "label": "G8 收款联动"
         }
       ]
@@ -367,20 +367,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 946,
-          "end_line": 954,
+          "line": 1004,
+          "end_line": 1013,
           "label": "T1 gate"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 842,
-          "end_line": 847,
+          "line": 454,
+          "end_line": 468,
           "label": "T2 gate"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 560,
-          "end_line": 570,
+          "line": 524,
+          "end_line": 525,
           "label": "自动开 pending"
         }
       ]
@@ -406,7 +406,7 @@
         {
           "path": "server/src/fde_api/solutions/service.py",
           "line": 320,
-          "end_line": 357,
+          "end_line": 415,
           "label": "resolve_signoff"
         }
       ]
@@ -423,8 +423,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 1121,
-          "end_line": 1160,
+          "line": 1179,
+          "end_line": 1213,
           "label": "handoff_run"
         }
       ],
@@ -442,14 +442,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/solutions/service.py",
-          "line": 676,
-          "end_line": 693,
+          "line": 713,
+          "end_line": 811,
           "label": "export_sow"
         },
         {
           "path": "server/src/fde_api/solutions/service.py",
-          "line": 639,
-          "end_line": 660,
+          "line": 676,
+          "end_line": 710,
           "label": "_signoff_gate_detail"
         }
       ]
@@ -469,19 +469,19 @@
         {
           "path": "server/src/fde_api/handover/service.py",
           "line": 286,
-          "end_line": 300,
+          "end_line": 329,
           "label": "seal_package"
         },
         {
           "path": "server/src/fde_api/handover/service.py",
           "line": 353,
-          "end_line": 366,
+          "end_line": 371,
           "label": "deliver_package"
         },
         {
           "path": "server/src/fde_api/handover/service.py",
           "line": 121,
-          "end_line": 150,
+          "end_line": 146,
           "label": "manifest 规范化哈希"
         }
       ]
@@ -493,26 +493,26 @@
       "yOffset": -62,
       "type": "backend",
       "label": "交付包发布接单",
-      "sublabel": "draft → published → accepted",
+      "sublabel": "快照哈希 · AI推荐返件 · 就近扩圈",
       "tag": "前置 报价 finalized",
       "width": 168,
       "sources": [
         {
           "path": "server/src/fde_api/dispatch/packages.py",
-          "line": 165,
-          "end_line": 232,
+          "line": 180,
+          "end_line": 257,
           "label": "create_package"
         },
         {
           "path": "server/src/fde_api/dispatch/packages.py",
-          "line": 235,
-          "end_line": 302,
+          "line": 260,
+          "end_line": 359,
           "label": "publish_package"
         },
         {
           "path": "server/src/fde_api/dispatch/packages.py",
-          "line": 332,
-          "end_line": 380,
+          "line": 362,
+          "end_line": 410,
           "label": "transition accept"
         }
       ]
@@ -524,7 +524,7 @@
       "yOffset": 78,
       "type": "database",
       "label": "收款与结算",
-      "sublabel": "draft → accrued → payable → paid",
+      "sublabel": "G8 放开尾款 · 五席位分账 · 进项票闸",
       "tag": "G8 验收联动 · 凭证只存指针",
       "width": 178,
       "sources": [
@@ -536,14 +536,14 @@
         },
         {
           "path": "server/src/fde_api/dispatch/settlements.py",
-          "line": 159,
-          "end_line": 217,
+          "line": 678,
+          "end_line": 750,
           "label": "record_receipt_settlements"
         },
         {
           "path": "server/src/fde_api/dispatch/settlements.py",
-          "line": 315,
-          "end_line": 372,
+          "line": 893,
+          "end_line": 954,
           "label": "payable → paid"
         }
       ]

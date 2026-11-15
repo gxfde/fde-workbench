@@ -20,10 +20,13 @@ import {
 } from "./api"
 import { ScenarioEditor } from "./ScenarioEditor"
 import {
+  INDUSTRY_LABEL,
+  SCENARIO_INDUSTRIES,
   SPLIT_LABEL,
   STATUS_LABEL,
   VARIANT_LABEL,
   type ScenarioDto,
+  type ScenarioIndustry,
   type ScenarioSplit,
   type ScenarioStatus,
   type ScenarioVariant,
@@ -49,6 +52,21 @@ const STATUS_OPTIONS: Array<{ value: ScenarioStatus | ""; label: string }> = [
   { value: "active", label: STATUS_LABEL.active },
   { value: "archived", label: STATUS_LABEL.archived },
 ]
+
+const INDUSTRY_OPTIONS: Array<{ value: ScenarioIndustry | ""; label: string }> = [
+  { value: "", label: "全部分类" },
+  ...SCENARIO_INDUSTRIES.map((key) => ({ value: key, label: INDUSTRY_LABEL[key] })),
+]
+
+/** 分类下拉选项文案：有可靠计数时追加「（N）」，未导入的行业显示「（0）」。 */
+export function industryOptionLabel(
+  key: ScenarioIndustry,
+  counts: Record<string, number>,
+  reliable: boolean,
+): string {
+  if (!reliable) return INDUSTRY_LABEL[key]
+  return `${INDUSTRY_LABEL[key]}（${counts[key] ?? 0}）`
+}
 
 function errorText(caught: unknown): string {
   if (caught instanceof ApiClientError) return caught.message
@@ -95,8 +113,12 @@ export function ScenarioLibrary(): ReactElement {
   const [actionError, setActionError] = useState("")
   const [variant, setVariant] = useState<ScenarioVariant | "">("")
   const [split, setSplit] = useState<ScenarioSplit | "">("")
+  const [industry, setIndustry] = useState<ScenarioIndustry | "">("")
   const [status, setStatus] = useState<ScenarioStatus | "">("")
   const [keyword, setKeyword] = useState("")
+  /** 全量有效版本计数（含未导入的行业=0），用于分类下拉旁的数量提示；truncated 时降级隐藏。 */
+  const [industryCounts, setIndustryCounts] = useState<Record<string, number>>({})
+  const [countsReliable, setCountsReliable] = useState(true)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<ScenarioDto | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -109,6 +131,7 @@ export function ScenarioLibrary(): ReactElement {
       const payload = await listScenarios(apiRequest, {
         variant: variant || undefined,
         split: split || undefined,
+        industry: industry || undefined,
         status: status || undefined,
         q: keyword.trim() || undefined,
       })
@@ -125,7 +148,7 @@ export function ScenarioLibrary(): ReactElement {
         setLoading(false)
       }
     }
-  }, [apiRequest, keyword, split, status, variant])
+  }, [apiRequest, industry, keyword, split, status, variant])
 
   useEffect(() => {
     let active = true
@@ -139,11 +162,31 @@ export function ScenarioLibrary(): ReactElement {
     }
   }, [load])
 
+  const refreshCounts = useCallback(async () => {
+    // 单独拉一次全量（独立于列表筛选），统计各分类已导入数量；失败静默降级（隐藏数字，不影响主列表）。
+    try {
+      const payload = await listScenarios(apiRequest, { limit: 200 })
+      const counts: Record<string, number> = {}
+      for (const item of payload.items) {
+        counts[item.industry] = (counts[item.industry] ?? 0) + 1
+      }
+      setIndustryCounts(counts)
+      setCountsReliable(!payload.truncated)
+    } catch {
+      setCountsReliable(false)
+    }
+  }, [apiRequest])
+
+  useEffect(() => {
+    void refreshCounts()
+  }, [refreshCounts])
+
   async function handleCreate(payload: ScenarioWritePayload): Promise<void> {
     const created = await createScenario(apiRequest, payload)
     setEditorOpen(false)
     setEditing(null)
     await load()
+    void refreshCounts()
     setActionError(`已创建场景「${created.name}」（版本 ${created.version}）。`)
   }
 
@@ -153,6 +196,7 @@ export function ScenarioLibrary(): ReactElement {
     setEditorOpen(false)
     setEditing(null)
     await load()
+    void refreshCounts()
     setActionError(`已保存为新版本 v${updated.version}（旧版本保持不可变）。`)
   }
 
@@ -162,6 +206,7 @@ export function ScenarioLibrary(): ReactElement {
     try {
       await duplicateScenario(apiRequest, scenario.id, key.trim())
       await load()
+      void refreshCounts()
       setActionError(`已复制为「${key.trim()}」。`)
     } catch (caught) {
       setActionError(errorText(caught))
@@ -172,6 +217,7 @@ export function ScenarioLibrary(): ReactElement {
     try {
       await archiveScenario(apiRequest, scenario.id)
       await load()
+      void refreshCounts()
       setActionError(`已归档「${scenario.name}」（历史版本仍可运行）。`)
     } catch (caught) {
       setActionError(errorText(caught))
@@ -211,6 +257,7 @@ export function ScenarioLibrary(): ReactElement {
         setActionError(`已导入 ${result.created_count} 个场景。`)
       }
       await load()
+      void refreshCounts()
     } catch (caught) {
       setActionError(errorText(caught))
     }
@@ -221,6 +268,7 @@ export function ScenarioLibrary(): ReactElement {
     try {
       const updated = await updateScenario(apiRequest, scenario.id, { status: next })
       await load()
+      void refreshCounts()
       const filterHint =
         status && status !== next
           ? `当前正在按「${STATUS_LABEL[status]}」筛选，该行已移入「${STATUS_LABEL[next]}」视图（切到「全部状态」即可查看）。`
@@ -272,6 +320,21 @@ export function ScenarioLibrary(): ReactElement {
 
       <div className="simulation-filters" role="group" aria-label="案例筛选">
         <label>
+          <span>分类</span>
+          <select
+            value={industry}
+            onChange={(event) => setIndustry(event.target.value as ScenarioIndustry | "")}
+          >
+            {INDUSTRY_OPTIONS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.value
+                  ? industryOptionLabel(option.value, industryCounts, countsReliable)
+                  : option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           <span>客户行为</span>
           <select
             value={variant}
@@ -319,7 +382,7 @@ export function ScenarioLibrary(): ReactElement {
             onChange={(event) => setKeyword(event.target.value)}
           />
         </label>
-        <UiButton onClick={() => void load()}>刷新</UiButton>
+        <UiButton onClick={() => { void load(); void refreshCounts() }}>刷新</UiButton>
       </div>
 
       {actionError ? (
@@ -338,7 +401,11 @@ export function ScenarioLibrary(): ReactElement {
       {!loading && items.length === 0 ? (
         <EmptyState
           title="案例库为空"
-          description="还没有场景。可以先新建一个，或导入案例 JSON。"
+          description={
+            industry
+              ? "该分类下暂无已导入案例。可切换其他分类，或导入对应案例 JSON。"
+              : "还没有场景。可以先新建一个，或导入案例 JSON。"
+          }
         />
       ) : null}
 

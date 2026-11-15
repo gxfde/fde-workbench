@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # V3.2 G9：模拟训练场的**独立模型评估层**槽位（按用途独立，不与生产管道
     # 换档互牵连）。缺 API Key 时该层返回 unavailable（不产生分数）。
     deepseek_simulation_evaluation_model: str = "deepseek-v4-pro"
+    # 学习闭环 2.0 L4：训练场 workbench 执行面（API 内真模型跑题）槽位——
+    # 空 = 回落评估槽位；缺端点/密钥 ⇒ 运行诚实失败（不静默退回 mock）。
+    deepseek_simulation_workbench_model: str = ""
     # 诊断报告科目评分模型（T-08）：空 = 沿用训练场评估模型槽位；评分模型
     # 与生成模型分档是常态，独立槽位便于单独校准。
     diagnostic_judge_model: str = ""
@@ -303,6 +306,15 @@ class Settings(BaseSettings):
     # AI 用量与审计如实记在它头上。**留空 = 报告功能不可用**（受理时 503
     # fail-closed，不静默降级成「没有报告」）。
     diagnostics_ai_actor_username: str = ""
+    # ── 模拟域 L-B 模型评估：AI 记账服务账号（billing_actor_policy 机制化） ──
+    # 模拟域真模型评估（学习闭环 2.0 L6 条款④）的政策是**以平台服务账号
+    # 记账**（候选卡 provenance.billing_actor_policy=service_account 声明），
+    # 本键把声明落成机制：配置后，模拟模型评估的预算闸与 ai_call_audits
+    # 归因落到该既有用户名头上（与诊断域键隔离，防跨域串账）。
+    # **留空＝机制关（opt-in）**：行为与现状完全一致——请求腿记调用者、
+    # 无主背景腿 fail-open（零回归）；配置了账号不存在/已停用 ⇒ fail-closed
+    # 503（仿 diagnostics_ai_actor_username 先例），不静默降级。
+    simulation_ai_actor_username: str = ""
     # ── 获客诊断工具（T-16 价格轮）：转化费比例（**配置面**） ───────────
     # 三档归因的转化费为**比例制**（蔡工 2026-11-12 拍板④，按推荐执行＋留痕
     # 可推翻）：A 渠道报备缺省 20%、B 认领转化缺省 10%（C 平台留存零转化费，

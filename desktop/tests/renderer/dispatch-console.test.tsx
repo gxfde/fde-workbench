@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import React from "react"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
@@ -92,6 +92,7 @@ function stubApi(options: {
   profiles?: unknown[]
   offers?: Record<string, unknown[]>
   matchResult?: unknown
+  matchAiResult?: unknown
 }) {
   const posts: { path: string; body: unknown }[] = []
   mocks.apiRequest.mockImplementation(
@@ -101,6 +102,9 @@ function stubApi(options: {
         posts.push({ path, body: init?.body })
         if (path.endsWith("/match") && options.matchResult !== undefined) {
           return Promise.resolve(options.matchResult)
+        }
+        if (path.endsWith("/match-ai") && options.matchAiResult !== undefined) {
+          return Promise.resolve(options.matchAiResult)
         }
         return Promise.resolve(null)
       }
@@ -335,3 +339,131 @@ it("renders offer trail and accepts on behalf of offered candidate", async () =>
     expect(call?.body).toEqual({ delivery_user_id: "fde-1" })
   })
 })
+
+it("runs AI match on published package, adopts suggestions with strict 3-key body, checks candidate boxes without auto-creating offers", async () => {
+  const user = userEvent.setup()
+  const sha = "a".repeat(64)
+  const posts = stubApi({
+    packages: [packageRow({ dispatch_status: "published" })],
+    profiles: [
+      profileRow({ user_id: "fde-1", display_name: "张三" }),
+      profileRow({ user_id: "fde-2", display_name: "李四" }),
+    ],
+    matchAiResult: {
+      scenario: "B",
+      rule_result: {
+        offers: [{ candidate_user_id: "fde-1", rank: 1, explanation: "加权 0.85" }],
+        rejected: [],
+        rule_version: 3,
+      },
+      ai_suggestions: [
+        { candidate_user_id: "fde-2", rank: 1, rationale: "具备跨境外贸同行业交付经验" },
+        { candidate_user_id: "fde-1", rank: 2, rationale: "历史准时率高" },
+      ],
+      recommendation_sha256: sha,
+      ai_called: true,
+      model: "deepseek-chat",
+      prompt_version: "dispatch-recommend-prompt-v1",
+      truncated: false,
+    },
+  })
+
+  render(<ConsolePage />)
+  await screen.findByText("PKG-B2CON-01")
+  const checkbox1 = screen.getByRole("checkbox", { name: /张三/ }) as HTMLInputElement
+  const checkbox2 = screen.getByRole("checkbox", { name: /李四/ }) as HTMLInputElement
+  expect(checkbox1.checked).toBe(false)
+  expect(checkbox2.checked).toBe(false)
+
+  await user.click(await screen.findByText("PKG-B2CON-01"))
+  await user.click(screen.getByRole("button", { name: "AI 撮合建议" }))
+
+  await waitFor(() => {
+    const matchAiCall = posts.find(
+      (item) => item.path === "/api/v1/dispatch/packages/pkg-1/match-ai",
+    )
+    expect(matchAiCall).toBeDefined()
+    expect(matchAiCall?.body).toEqual({})
+  })
+
+  const aiPanel = await screen.findByLabelText("AI 撮合建议结果")
+  expect(aiPanel).toHaveTextContent("场景 B（远程·加权排序）")
+  expect(aiPanel).toHaveTextContent("模型 deepseek-chat")
+  expect(aiPanel).toHaveTextContent("提示词 dispatch-recommend-prompt-v1")
+  expect(aiPanel).toHaveTextContent("Top1 · 候选 fde-2（李四） · 理由：具备跨境外贸同行业交付经验")
+  expect(aiPanel).toHaveTextContent("Top2 · 候选 fde-1（张三） · 理由：历史准时率高")
+
+  await user.click(within(aiPanel).getByRole("button", { name: "采纳建议" }))
+
+  await waitFor(() => {
+    const decisionCall = posts.find(
+      (item) => item.path === "/api/v1/dispatch/packages/pkg-1/match-ai/decision",
+    )
+    expect(decisionCall).toBeDefined()
+    expect(Object.keys(decisionCall?.body as Record<string, unknown>).sort()).toEqual([
+      "adopted_candidate_ids",
+      "decision",
+      "recommendation_sha256",
+    ])
+    expect(decisionCall?.body).toEqual({
+      decision: "adopted",
+      recommendation_sha256: sha,
+      adopted_candidate_ids: ["fde-2", "fde-1"],
+    })
+  })
+
+  // 采纳后勾选推荐候选人，但绝不自动调用 /offers（指派仍走人工按钮）
+  expect(checkbox1.checked).toBe(true)
+  expect(checkbox2.checked).toBe(true)
+  expect(posts.find((item) => item.path.endsWith("/offers"))).toBeUndefined()
+  expect(screen.getByRole("button", { name: "指派 offer（已选 2 候选）" })).toBeInTheDocument()
+})
+
+it("handles ai_called=false honestly and sends rejected decision with empty adopted_candidate_ids", async () => {
+  const user = userEvent.setup()
+  const sha = "c".repeat(64)
+  const posts = stubApi({
+    packages: [packageRow({ dispatch_status: "published" })],
+    profiles: [profileRow({ user_id: "fde-1", display_name: "张三" })],
+    matchAiResult: {
+      scenario: "C",
+      rule_result: { offers: [], rejected: ["fde-1"], rule_version: 3 },
+      ai_suggestions: [],
+      recommendation_sha256: sha,
+      ai_called: false,
+      model: null,
+      prompt_version: "dispatch-recommend-prompt-v1",
+      truncated: false,
+    },
+  })
+
+  render(<ConsolePage />)
+  await screen.findByText("PKG-B2CON-01")
+  await user.click(await screen.findByText("PKG-B2CON-01"))
+  await user.click(screen.getByRole("button", { name: "AI 撮合建议" }))
+
+  const aiPanel = await screen.findByLabelText("AI 撮合建议结果")
+  expect(aiPanel).toHaveTextContent("场景 C（资格门全拒·人工兜底）")
+  expect(aiPanel).toHaveTextContent("未调用 AI 模型")
+  // ai_suggestions 为空时，采纳按钮禁用，防止提交空数组的非法 adopted 请求
+  expect(within(aiPanel).getByRole("button", { name: "采纳建议" })).toBeDisabled()
+
+  await user.click(within(aiPanel).getByRole("button", { name: "驳回建议" }))
+  await waitFor(() => {
+    const decisionCall = posts.find(
+      (item) => item.path === "/api/v1/dispatch/packages/pkg-1/match-ai/decision",
+    )
+    expect(decisionCall).toBeDefined()
+    expect(Object.keys(decisionCall?.body as Record<string, unknown>).sort()).toEqual([
+      "adopted_candidate_ids",
+      "decision",
+      "recommendation_sha256",
+    ])
+    expect(decisionCall?.body).toEqual({
+      decision: "rejected",
+      recommendation_sha256: sha,
+      adopted_candidate_ids: [],
+    })
+  })
+})
+

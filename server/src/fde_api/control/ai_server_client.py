@@ -166,7 +166,8 @@ def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str,
                      model: str, used_fallback: bool, duration_ms: int,
                      usage: dict[str, Any] | None, status: str, error_code: str | None,
                      prompt_version: str | None = None,
-                     prompt_fingerprint: str | None = None) -> None:
+                     prompt_fingerprint: str | None = None,
+                     context_payload_json: dict[str, Any] | None = None) -> None:
     """CR-006 统一记账腿：DSH 主路径/降级直连路径统一落 ``ai_call_audits``（E7）。
 
     此前这两条路径零记账——``dsh_enabled=true`` 时平台月度预算对 skill 节点/
@@ -189,6 +190,7 @@ def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str,
             error_code=error_code,
             prompt_version=prompt_version,
             prompt_fingerprint=prompt_fingerprint,
+            context_payload_json=context_payload_json,
         )
     except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
         logger.warning("AI execution audit dispatch failed request_id=%s", request_id, exc_info=True)
@@ -329,6 +331,15 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
     from fde_api.ai.auditing import compute_prompt_fingerprint
 
     fingerprint = compute_prompt_fingerprint(system_prompt=system_prompt, prompt=prompt)
+    # 学习闭环 2.0 L5：PromptOverlay 两点共用装载（唯一读面 ai.overlays.load_overlays）。
+    # 注入在指纹之后——指纹仍按注册表常量算（模板身份不变），overlay 归因走
+    # context_payload_json；仅追加式，既有指令源零触碰（N6 受控例外）。软失败：
+    # 设施故障回落空列表，业务不中断。
+    from fde_api.ai.overlays import apply_overlays_to_system_prompt, load_overlays
+
+    _overlay_fragments, overlay_payload = load_overlays(purpose, prompt_version)
+    if _overlay_fragments:
+        system_prompt = apply_overlays_to_system_prompt(system_prompt, _overlay_fragments)
     settings = current_app.config["SETTINGS"]
     runtime = dsh_runtime.current.primary
     dsh_usable = runtime.enabled
@@ -373,7 +384,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
 
         audit_budget_blocked(request_id=identifier, actor_id=user_id, purpose=purpose,
                              model=str(model.get("model") or ""),
-                             prompt_version=prompt_version, prompt_fingerprint=fingerprint)
+                             prompt_version=prompt_version, prompt_fingerprint=fingerprint,
+                             context_payload_json=overlay_payload)
         raise DSHRuntimeError("ai_budget_exceeded", "本月 AI 用量已达预算上限，请联系管理员调整或下月再试。", retryable=False)
     if not dsh_usable:
         # 没有部署 DSH 运行时：直接走供应商直连降级路径（带本地工具循环）。
@@ -383,7 +395,9 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             reason="dsh_not_enabled", return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
             use_tools=use_tools, purpose=purpose,
-            prompt_version=prompt_version, prompt_fingerprint=fingerprint)
+            prompt_version=prompt_version, prompt_fingerprint=fingerprint,
+            capabilities=capabilities,
+            context_payload_json=overlay_payload)
     body = {"schema_version": "fde-dsh-v1", "execution_id": identifier,
             "actor": {"user_id": user_id}, "scope": {"project_id": project_id},
             "agent_profile": "fde-assistant" if use_tools else "fde-structured",
@@ -404,7 +418,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                              model=str(model.get("model") or ""), used_fallback=False,
                              duration_ms=elapsed_ms, usage=None, status="failed", error_code=error.code,
                              prompt_version=prompt_version,
-                             prompt_fingerprint=fingerprint)
+                             prompt_fingerprint=fingerprint,
+                             context_payload_json=overlay_payload)
             raise
         logger.warning("DSH runtime unusable, degrading to direct provider call code=%s", error.code)
         return _degraded_direct_result(
@@ -413,7 +428,9 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             reason=error.code, return_metadata=return_metadata,
             user_id=user_id, project_id=project_id, execution_id=identifier,
             use_tools=use_tools, purpose=purpose,
-            prompt_version=prompt_version, prompt_fingerprint=fingerprint)
+            prompt_version=prompt_version, prompt_fingerprint=fingerprint,
+            capabilities=capabilities,
+            context_payload_json=overlay_payload)
     if response.status_code >= 400:
         service_error = runtime._service_error(response.status_code)
         _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
@@ -421,7 +438,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                          duration_ms=int((time.monotonic() - started) * 1000), usage=None,
                          status="failed", error_code=service_error.code,
                          prompt_version=prompt_version,
-                         prompt_fingerprint=fingerprint)
+                         prompt_fingerprint=fingerprint,
+                         context_payload_json=overlay_payload)
         raise service_error
     result = runtime._json_object(response)
     text = result.get("output", {}).get("text")
@@ -431,7 +449,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                          duration_ms=int((time.monotonic() - started) * 1000), usage=None,
                          status="failed", error_code="ai_output_invalid",
                          prompt_version=prompt_version,
-                         prompt_fingerprint=fingerprint)
+                         prompt_fingerprint=fingerprint,
+                         context_payload_json=overlay_payload)
         raise DSHRuntimeError("ai_output_invalid", "AI Server 未返回有效结果。", retryable=True)
     provider_usage = result.get("provider_usage") or {"complete": False, "calls": []}
     _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
@@ -439,7 +458,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                      duration_ms=int((time.monotonic() - started) * 1000), usage=provider_usage,
                      status="succeeded", error_code=None,
                      prompt_version=prompt_version,
-                     prompt_fingerprint=fingerprint)
+                     prompt_fingerprint=fingerprint,
+                     context_payload_json=overlay_payload)
     if return_metadata:
         return {"text": text, "model": {"provider": model.get("provider", ""), "name": model.get("model", "")},
                 "provider_usage": provider_usage}
@@ -452,7 +472,9 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                             project_id: str | None = None, execution_id: str | None = None,
                             use_tools: bool = True, purpose: str,
                             prompt_version: str | None = None,
-                            prompt_fingerprint: str | None = None) -> str | dict:
+                            prompt_fingerprint: str | None = None,
+                            capabilities: list[str] | None = None,
+                            context_payload_json: dict[str, Any] | None = None) -> str | dict:
     """Run the direct provider call and shape it like a normal AI Server result.
 
     When tools are wanted, the provider is called with the workbench tool
@@ -475,21 +497,24 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                         model=model, prompt=prompt, user=user, project_id=project_id,
                         execution_id=request_identifier,
                         system_prompt=system_prompt, max_tokens=max_tokens,
-                        timeout_seconds=timeout_seconds)
+                        timeout_seconds=timeout_seconds,
+                        capabilities=capabilities)
                 except DSHRuntimeError as error:
                     _audit_execution(request_id=request_identifier, actor_id=user_id,
                                      purpose=purpose, model=model_name, used_fallback=True,
                                      duration_ms=int((time.monotonic() - started) * 1000),
                                      usage=None, status="failed", error_code=error.code,
                                      prompt_version=prompt_version,
-                                     prompt_fingerprint=prompt_fingerprint)
+                                     prompt_fingerprint=prompt_fingerprint,
+                                     context_payload_json=context_payload_json)
                     raise
                 _audit_execution(request_id=request_identifier, actor_id=user_id,
                                  purpose=purpose, model=model_name, used_fallback=True,
                                  duration_ms=int((time.monotonic() - started) * 1000),
                                  usage=usage, status="succeeded", error_code=None,
                                  prompt_version=prompt_version,
-                                 prompt_fingerprint=prompt_fingerprint)
+                                 prompt_fingerprint=prompt_fingerprint,
+                                 context_payload_json=context_payload_json)
                 if not return_metadata:
                     return text
                 return {
@@ -512,14 +537,16 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                          duration_ms=int((time.monotonic() - started) * 1000),
                          usage=None, status="failed", error_code=error.code,
                          prompt_version=prompt_version,
-                         prompt_fingerprint=prompt_fingerprint)
+                         prompt_fingerprint=prompt_fingerprint,
+                         context_payload_json=context_payload_json)
         raise
     _audit_execution(request_id=request_identifier, actor_id=user_id,
                      purpose=purpose, model=model_name, used_fallback=True,
                      duration_ms=int((time.monotonic() - started) * 1000),
                      usage=usage, status="succeeded", error_code=None,
                      prompt_version=prompt_version,
-                     prompt_fingerprint=prompt_fingerprint)
+                     prompt_fingerprint=prompt_fingerprint,
+                     context_payload_json=context_payload_json)
     if not return_metadata:
         return text
     return {

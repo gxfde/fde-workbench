@@ -119,6 +119,20 @@ PROMPT_REGISTRATIONS: tuple[PromptRegistration, ...] = (
         version="dispatch-recommend-prompt-v1",
         content_sha256="59d134126e34df723b89de83e6f9770e3ca59cba15847d07ea0931c660768983",
     ),
+    PromptRegistration(
+        key="simulation.workbench",
+        module="fde_api.simulation.adapters.workbench",
+        constant="WORKBENCH_SYSTEM_PROMPT",
+        version="simulation-workbench-prompt-v1",
+        content_sha256="2cce0765d33d4c2e7730771a145d3406085b01eb0323ec72c33ba24bdf927baf",
+    ),
+    PromptRegistration(
+        key="simulation.improvement_draft",
+        module="fde_api.simulation.improvement_draft",
+        constant="IMPROVEMENT_DRAFT_SYSTEM_PROMPT",
+        version="simulation-improvement-draft-prompt-v1",
+        content_sha256="8cec4edef64a2b2f50c6edb644406716ffdd85ce85f061919b2ec87b1296e831",
+    ),
 )
 
 _LOOKUP: dict[tuple[str, str], PromptRegistration] = {

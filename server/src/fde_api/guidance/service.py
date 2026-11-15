@@ -21,6 +21,13 @@ from fde_api.guidance.models import (
     ProjectPresurveySource,
     REDACTION_EVENT_TYPE,
 )
+from fde_api.guidance.enterprise_dict import RedactionConfigError
+from fde_api.guidance.redaction import (
+    SensitiveCredentialDetected,
+    redaction_name_hash,
+    redact_text_detailed,
+    resolve_redaction_display,
+)
 from fde_api.jobs.outbox import enqueue_outbox, subject_org_of_project
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
@@ -107,45 +114,64 @@ def get_analysis(*, actor: User, project_id: str, analysis_id: str) -> dict[str,
         data = serialize_analysis(row, session.get(ProjectPresurveySource, project_id))
         # T-A2 复核读面：复核清单是 #160 落的 operation_events 派生投影——
         # 方案审核人复核的可见入口（桌面呈现随 T-A4/B#9 面接线）。
-        data["redaction_review"] = _redaction_review_entries(session, row.id)
+        # QR-133 指纹化读面：聚合＋词典反解（name 可 None）＋疑似聚合计数。
+        data["redaction_review"] = _review_projection(
+            session.scalars(
+                select(OperationEvent).where(
+                    OperationEvent.target_type == "project_guidance_analysis",
+                    OperationEvent.target_id == row.id,
+                    OperationEvent.event_type == REDACTION_EVENT_TYPE,
+                )
+            ).all()
+        )
         return data
     finally:
         session.close()
 
 
-def _merge_review_entries(events: Any) -> list[dict[str, Any]]:
-    """复核条目聚合（单一口径）：同名跨事件 occurrences 累加、matched_dict 求并，
-    按名称排序输出——写入条目形状（name/occurrences/matched_dict）不在此二次
-    推导文本。分析面（_redaction_review_entries）与翻译采纳交接（D2）共用。"""
+def _split_review_events(events: Any) -> tuple[list[dict[str, Any]], int]:
+    """复核事件聚合（单一口径，QR-133 指纹化后形状）。
+
+    返回（确证命中条目, 疑似聚合计数）：
+    - 条目账只含 matched_dict=True 指纹条目（name_hash 聚合、occurrences 累加）；
+    - 疑似一律折算聚合计数：新形状 suspect_count 直加，历史 name 形状
+      matched=False 条目 occurrences 折算（投影语义统一零真名）。
+    分析读面（_review_projection）、confirm 复核闸与采纳交接（D2）共用。
+    """
     merged: dict[str, dict[str, Any]] = {}
+    suspect_total = 0
     for event in events:
-        for item in (event.changes or {}).get("entries", []):
+        changes = event.changes or {}
+        suspect_total += int(changes.get("suspect_count", 0) or 0)
+        for item in changes.get("entries", []):
+            if not bool(item.get("matched_dict")):
+                # 历史形状疑似条目：不进条目账，折算计数（零真名投影）。
+                suspect_total += int(item.get("occurrences", 1) or 0)
+                continue
             name = str(item.get("name", ""))
-            if not name:
+            name_hash = str(item.get("name_hash", "")) or (redaction_name_hash(name) if name else "")
+            if not name_hash:
                 continue
             slot = merged.setdefault(
-                name, {"name": name, "occurrences": 0, "matched_dict": bool(item.get("matched_dict"))}
+                name_hash,
+                {"name_hash": name_hash, "occurrences": 0, "matched_dict": True},
             )
             slot["occurrences"] += int(item.get("occurrences", 1) or 0)
-            slot["matched_dict"] = slot["matched_dict"] or bool(item.get("matched_dict"))
-    return [merged[key] for key in sorted(merged)]
+    return [merged[key] for key in sorted(merged)], suspect_total
 
 
-def _redaction_review_entries(session: Any, analysis_id: str) -> list[dict[str, Any]]:
-    """按分析聚合复核清单（消费 #160 落的 guidance.redaction_review 事件）。"""
-    events = session.scalars(
-        select(OperationEvent).where(
-            OperationEvent.target_type == "project_guidance_analysis",
-            OperationEvent.target_id == analysis_id,
-            OperationEvent.event_type == REDACTION_EVENT_TYPE,
-        )
-    ).all()
-    return _merge_review_entries(events)
+def _review_projection(events: Any) -> list[dict[str, Any]]:
+    """复核读面投影：确证命中聚合（指纹形状）＋词典反解（name 软失败可 None）
+    ＋疑似聚合计数项殿后。"""
+    entries, suspect_count = _split_review_events(events)
+    displayed = resolve_redaction_display(entries)
+    if suspect_count:
+        displayed.append({"suspect_count": suspect_count})
+    return displayed
 
 
-def _translation_redaction_entries(session: Any, translation_id: str) -> list[dict[str, Any]]:
-    """翻译链复核条目：translator 创建/落库两阶段落在 translator_translation
-    目标上的 guidance.redaction_review 事件（架构评估 2026-11-07 D2 交接源）。"""
+def _translation_redaction_changes(session: Any, translation_id: str) -> list[dict[str, Any]]:
+    """搬运流原始 changes（QR-133 指纹形状原样交接，零反解零聚合失真）。"""
     events = session.scalars(
         select(OperationEvent).where(
             OperationEvent.target_type == "translator_translation",
@@ -153,14 +179,41 @@ def _translation_redaction_entries(session: Any, translation_id: str) -> list[di
             OperationEvent.event_type == REDACTION_EVENT_TYPE,
         )
     ).all()
-    return _merge_review_entries(events)
+    return [dict(event.changes or {}) for event in events]
+
+
+def _merge_carried_changes(changes_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """搬运 changes 合并（指纹条目拼接＋疑似计数求和；形状零真名）。"""
+    entries: list[dict[str, Any]] = []
+    suspect_count = 0
+    for changes in changes_list:
+        entries.extend(changes.get("entries", []) or [])
+        suspect_count += int(changes.get("suspect_count", 0) or 0)
+    merged: dict[str, Any] = {"entries": entries}
+    if suspect_count:
+        merged["suspect_count"] = suspect_count
+    return merged
+
+
+def _rescan_list(value: list[Any], field: str, rescan_str: Any) -> list[Any]:
+    """列表字段复扫（QR-134）：list[dict] 每个条目的 str 值过同一 rescan 闸，
+    替换结果原地写回（结构与非 str 值零改动）。"""
+    out: list[Any] = []
+    for item in value:
+        if isinstance(item, dict):
+            out.append({k: rescan_str(v, field) if isinstance(v, str) else v for k, v in item.items()})
+        elif isinstance(item, str):
+            out.append(rescan_str(item, field))
+        else:
+            out.append(item)
+    return out
 
 
 def update_analysis(*, actor: User, project_id: str, analysis_id: str, expected_version: int, changes: Mapping[str, Any]) -> dict[str, Any]:
     session = db.session()
     try:
         with session.begin():
-            _project(session, actor, project_id, manage=True)
+            project = _project(session, actor, project_id, manage=True)
             row = session.get(ProjectGuidanceAnalysis, analysis_id, with_for_update=True)
             if row is None or row.project_id != project_id:
                 raise GuidanceServiceError("guidance_not_found", "项目指引版本不存在。", 404)
@@ -168,20 +221,62 @@ def update_analysis(*, actor: User, project_id: str, analysis_id: str, expected_
                 raise GuidanceServiceError("guidance_not_editable", "只有分析完成的草稿可以修改。", 409)
             if row.version != expected_version:
                 raise GuidanceServiceError("stale_version", "项目指引已被他人更新，请刷新后重试。", 409)
+            # QR-134（拍板 #7A）输出端复扫：人工编辑可把真名重新引入已脱敏
+            # 草稿（confirm 闸只聚合 AI 阶段清单）——保存时对编辑文本复扫：
+            # 词典确证命中即拒（fail-closed，用户先替换为客户代号）；疑似名
+            # 替换为代号放行＋manual_edit 复核事件（仅聚合计数，零真名）。
+            # presurvey 录入卡（customer_vision/notes 原始自述）维持豁免
+            # （用户自填自述≠AI 加工面，拍板 #7A 登记 AGENTS.md）。
+            project_code = (project.enterprise_code or "").strip() or "客户代号"
+            suspect_total = 0
+
+            def _rescan(value: str, field: str) -> str:
+                nonlocal suspect_total
+                try:
+                    result = redact_text_detailed(value, project_code=project_code)
+                except RedactionConfigError as error:
+                    raise GuidanceServiceError(
+                        "pseudonym_dict_unavailable",
+                        "企业名词典不可用，为守住「客户名不入库」红线已阻断本次保存，请联系管理员修复词典配置。",
+                        422,
+                    ) from error
+                except SensitiveCredentialDetected as error:
+                    raise GuidanceServiceError("sensitive_credential_detected", str(error), 422) from error
+                if result.replaced:
+                    raise GuidanceServiceError(
+                        "redaction_name_detected",
+                        f"{field} 含企业名词典命中 {len(result.replaced)} 处，请先替换为客户代号再保存。",
+                        422,
+                    )
+                suspect_total += sum(s.occurrences for s in result.suspects)
+                return result.text
+
             for field in ("customer_vision", "current_phase_objective", "executive_summary"):
                 if field in changes:
                     value = changes[field]
                     if not isinstance(value, str) or not value.strip():
                         raise GuidanceServiceError("invalid_guidance", f"{field} 不能为空。", 400)
-                    setattr(row, field, value.strip())
+                    setattr(row, field, _rescan(value.strip(), field))
             for field in LIST_FIELDS:
                 if field in changes:
                     value = changes[field]
                     if not isinstance(value, list):
                         raise GuidanceServiceError("invalid_guidance", f"{field} 格式不正确。", 400)
-                    setattr(row, f"{field}_json", value)
+                    setattr(row, f"{field}_json", _rescan_list(value, field, _rescan))
             row.version += 1
             session.flush()
+            if suspect_total:
+                session.add(
+                    OperationEvent(
+                        actor_user_id=actor.id,
+                        project_id=project_id,
+                        target_type="project_guidance_analysis",
+                        target_id=row.id,
+                        event_type=REDACTION_EVENT_TYPE,
+                        changes={"stage": "manual_edit", "suspect_count": suspect_total},
+                    )
+                )
+                session.flush()
             return serialize_analysis(row, session.get(ProjectPresurveySource, project_id))
     finally:
         session.close()
@@ -252,11 +347,19 @@ def confirm_analysis(
             # 补齐 #160 缺口）：复核清单从写入方同一事件源聚合取得；清单非空且
             # 请求未显式 redaction_reviewed=true（路由只认字面 true，fail 向
             # 安全侧）→ 409 拦下。复核动作随确认事件留痕，不新增状态面。
-            review = _redaction_review_entries(session, row.id)
-            if review and not redaction_reviewed:
+            # QR-133 投影换代：确证命中=指纹聚合条目、疑似=聚合计数项。
+            review_events = session.scalars(
+                select(OperationEvent).where(
+                    OperationEvent.target_type == "project_guidance_analysis",
+                    OperationEvent.target_id == row.id,
+                    OperationEvent.event_type == REDACTION_EVENT_TYPE,
+                )
+            ).all()
+            review, suspect_count = _split_review_events(review_events)
+            if (review or suspect_count) and not redaction_reviewed:
                 raise GuidanceServiceError(
                     "redaction_review_required",
-                    f"存在 {len(review)} 个企业名替换待复核：请查看复核清单确认替换恰当，或修改正文后重试。",
+                    f"存在 {len(review) + (1 if suspect_count else 0)} 个企业名替换待复核：请查看复核清单确认替换恰当，或修改正文后重试。",
                     409,
                 )
             for old in session.scalars(select(ProjectGuidanceAnalysis).where(ProjectGuidanceAnalysis.project_id == project_id, ProjectGuidanceAnalysis.status == "confirmed")).all():
@@ -305,11 +408,12 @@ def confirm_analysis(
                 "source_file_version_id": row.source_file_version_id,
                 "source_kind": row.source_kind,
                 "redaction_reviewed": redaction_reviewed,
-                "redaction_review_hits": len(review),
+                # QR-133 hits 口径 = 投影长度（确证命中条目＋疑似聚合计数项）。
+                "redaction_review_hits": len(review) + (1 if suspect_count else 0),
             })
             session.flush()
             data = serialize_analysis(row, source)
-            data["redaction_review"] = review
+            data["redaction_review"] = _review_projection(review_events)
             return data
     finally:
         session.close()
@@ -394,8 +498,11 @@ def adopt_translator_draft(*, actor: User, project_id: str, translation_id: str)
             # T-A2 复核闸交接（架构评估 2026-11-07 D2）：翻译创建/落库两阶段
             # 落在 translator_translation 上的复核条目，采纳时搬到本分析——
             # confirm 闸按分析聚合，无需知道翻译链的存在即自动覆盖。
-            carried = _translation_redaction_entries(session, translation.id)
-            if carried:
+            # QR-133 指纹形状原样交接（零反解零聚合失真，零真名）。
+            carried = _merge_carried_changes(
+                _translation_redaction_changes(session, translation.id)
+            )
+            if carried["entries"] or carried.get("suspect_count"):
                 session.add(
                     OperationEvent(
                         actor_user_id=actor.id,
@@ -403,12 +510,20 @@ def adopt_translator_draft(*, actor: User, project_id: str, translation_id: str)
                         target_type="project_guidance_analysis",
                         target_id=row.id,
                         event_type=REDACTION_EVENT_TYPE,
-                        changes={"stage": "adopted", "entries": carried},
+                        changes={"stage": "adopted", **carried},
                     )
                 )
                 session.flush()
             data = serialize_analysis(row, session.get(ProjectPresurveySource, project.id))
-            data["redaction_review"] = _redaction_review_entries(session, row.id)
+            data["redaction_review"] = _review_projection(
+                session.scalars(
+                    select(OperationEvent).where(
+                        OperationEvent.target_type == "project_guidance_analysis",
+                        OperationEvent.target_id == row.id,
+                        OperationEvent.event_type == REDACTION_EVENT_TYPE,
+                    )
+                ).all()
+            )
             return data
     except IntegrityError:
         # 并发双击走到唯一约束：与预检查同语义（409，不泄露约束名）。

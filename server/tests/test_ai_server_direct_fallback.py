@@ -377,3 +377,35 @@ def test_structured_completion_maps_control_errors_to_non_retryable(app, db_sess
     # 模型未配置是确定性配置问题：重试也不会好。
     assert caught.value.code == "model_not_configured"
     assert caught.value.retryable is False
+
+
+def test_execute_ai_prompt_degraded_forwards_capabilities(app, db_session, ai_user, monkeypatch):
+    """execute_ai_prompt 走直连降级腿时必须把调用方 capabilities 原样收窄传给 direct_tool_completion。"""
+    monkeypatch.setattr(
+        "fde_api.control.ai_server_client.resolve_model_preference",
+        lambda *_args, **_kwargs: provider_model(),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_direct_tool_completion(**kwargs):
+        captured["capabilities"] = kwargs.get("capabilities")
+        return "降级结果", {"complete": True, "calls": []}, []
+
+    monkeypatch.setattr(
+        "fde_api.control.ai_tool_loop.direct_tool_completion",
+        fake_direct_tool_completion,
+    )
+
+    with app.app_context():
+        app.config["SETTINGS"].dsh_enabled = False
+        automation_runtime = __import__("fde_api.control.dsh_runtime", fromlist=["dsh_runtime"]).dsh_runtime
+        monkeypatch.setattr(automation_runtime.current.primary, "enabled", False)
+        result = execute_ai_prompt(
+            user_id=ai_user.id,
+            prompt="只读摘要",
+            capabilities=["project.read"],
+            purpose="dsh_runtime_execute",
+        )
+
+    assert result == "降级结果"
+    assert captured["capabilities"] == ["project.read"]

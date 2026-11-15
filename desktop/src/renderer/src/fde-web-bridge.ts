@@ -24,13 +24,16 @@ import {
 // CR-071（夜审 r8 设计稿推荐 A）：校验族提升 shared/api-safety.ts 纯函数单点。
 // web 桥与桌面 main/api-ipc.ts 消费同一实现——method 白名单／auth 路径排除／
 // 编码结构逃逸（raw+decoded 双查）／multipart 严格 schema（非法显式拒绝、
-// 不再降级）／body 可序列化，与桌面恒等价（tests 等价性静态钉防再漂移）。
+// 不再降级），与桌面恒等价（tests 等价性静态钉防再漂移）。
+// QR-112（批 R7）：响应面信封判定（parseApiEnvelope）同点共用——四条不变量
+// 双桥恒同，补齐 web 桥响应面校验缺口。
 import {
   isAllowedMethod,
   isAuthExcludedPath,
   isBodySerializable,
   isMultipartFileShape,
   isSafeApiPath,
+  parseApiEnvelope,
   validateCustomHeaders,
   type MultipartFileBodyShape,
 } from "../../shared/api-safety"
@@ -292,11 +295,21 @@ async function apiRequest<T>(
   }
   let payload: unknown = null
   try { payload = await response.json() } catch { /* handled below */ }
-  if (!isRecord(payload) || !("data" in payload) || !("error" in payload)) {
+  // QR-112（goal-crv-fix2 批 R7）：响应面四条不变量改由 shared/api-safety::
+  // parseApiEnvelope 单点判定（与桌面桥恒同）——补齐 ok∧error 拒／!ok∧¬error
+  // 拒／!ok data 置空／错误体形态校验四处不等价缺口；错误体形态经同一判定。
+  const verdict = parseApiEnvelope(payload, response.status)
+  if (verdict.kind === "invalid") {
     return fail({ code: "invalid_api_response", message: "服务返回了无效响应。" })
   }
-  const error = payload.error === null ? null : toApiError(payload.error, "请求失败，请稍后重试。")
-  return ok({ status: response.status, data: payload.data as T, error })
+  if (verdict.kind === "error") {
+    return ok({
+      status: response.status,
+      data: null as T,
+      error: toApiError(verdict.error, "请求失败，请稍后重试。"),
+    })
+  }
+  return ok({ status: response.status, data: verdict.data as T, error: null })
 }
 
 const bridge: FdeBridge = {
@@ -314,7 +327,7 @@ const bridge: FdeBridge = {
     capture: async () => fail({ code: "bridge_platform", message: "浏览器版无宿主计划任务，无法手动采集。" }),
   },
   app: {
-    version: async () => "0.3.0-web",
+    version: async () => "0.3.0-r52-web",
     setLcscEnabled: async () => {},
     openLcscBrowser: async (url: string) => {
       // CR-070：与桌面 main 层 allowsLcscUrl 同尺三域 https 白名单——

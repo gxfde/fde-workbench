@@ -248,3 +248,108 @@ def test_degraded_surface_failure_is_reported_not_swallowed(app, db_session, mak
     # 降级痕迹仍留痕（可追查「曾经尝试降级」）
     assert stored.output_json["degraded"] is True
     assert stored.output_json["degraded_reason"] == "dsh_unavailable"
+
+
+def test_real_api_task_with_dotted_capabilities_degrades_and_narrows_tools(
+    app, db_session, make_account, monkeypatch
+):
+    """经真实 POST /task-center/automations 创建的点分能力任务，在 DSH 未启用时走通只读降级并收窄白名单。"""
+    from datetime import date
+    from fde_api.control import automation_jobs
+    from fde_api.control.service import DEFAULT_AUTOMATION_CAPABILITIES
+    from fde_api.workbench.models import Project
+
+    admin = make_account("admin")
+    project = Project(
+        project_code=f"E8-R6-{uuid4().hex[:8]}",
+        name="E8 R6 Degrade Project",
+        enterprise_code="pilot-001",
+        planned_start_date=date(2026, 11, 1),
+        leader_user_id=admin.user.id,
+        status="active",
+        template_snapshot={},
+    )
+    db_session.add(project)
+    db_session.commit()
+
+    created = admin.post(
+        "/api/v1/task-center/automations",
+        json={
+            "title": "只读项目巡检",
+            "project_id": project.id,
+            "source": "desktop",
+            "schedule_kind": "once",
+            "schedule_expression": "2026-11-20T09:00:00+08:00",
+            "timezone": "Asia/Shanghai",
+            "prompt": "汇总项目门禁与风险项。",
+            "requested_capabilities": list(DEFAULT_AUTOMATION_CAPABILITIES) + ["workbench.write"],
+        },
+    )
+    assert created.status_code == 201, created.json
+    task_id = created.json["data"]["id"]
+    queued = admin.client.post(
+        f"/api/v1/task-center/automations/{task_id}/runs",
+        headers={**admin.headers, "Idempotency-Key": f"r6-real-api-{task_id}"},
+    )
+    assert queued.status_code == 202, queued.json
+    run_id = queued.json["data"]["id"]
+
+    captured: dict[str, object] = {}
+
+    def fake_direct_tool_completion(
+        *,
+        model,
+        prompt,
+        user,
+        project_id,
+        execution_id,
+        system_prompt=None,
+        max_tokens=16384,
+        timeout_seconds=300,
+        session=None,
+        capabilities=None,
+        allowed_tools=None,
+    ):
+        captured["capabilities"] = list(capabilities) if capabilities is not None else None
+        captured["allowed_tools"] = tuple(allowed_tools) if allowed_tools is not None else None
+        captured["execution_id"] = execution_id
+        captured["project_id"] = project_id
+        return "只读核查完成：共 2 项风险。", {"complete": True, "calls": []}, [{"tool": "project_read", "ok": True}]
+
+    monkeypatch.setattr(
+        "fde_api.control.model_preferences.resolve_model_preference",
+        lambda *_args, **_kwargs: {
+            "id": "pref-r6",
+            "provider": "openai-compatible",
+            "base_url": "https://api.minimaxi.com/v1",
+            "model": "MiniMax-M3.1-Flash",
+            "api_key": "sk-r6-test",
+            "supports_tools": True,
+        },
+    )
+    monkeypatch.setattr(
+        "fde_api.control.ai_tool_loop.direct_tool_completion",
+        fake_direct_tool_completion,
+    )
+
+    with patch.object(
+        automation_jobs.dsh_runtime.current,
+        "execute",
+        side_effect=DSHRuntimeError("dsh_not_enabled", "DSH 服务尚未启用。", retryable=False),
+    ):
+        automation_jobs.execute_automation_run(_job(run_id))
+
+    db_session.expire_all()
+    stored = db_session.get(AutomationTaskRun, run_id)
+    assert stored is not None
+    assert stored.status == "succeeded", (stored.error_code, stored.error_message, stored.output_json)
+    assert stored.output_json["degraded"] is True
+    assert stored.output_json["degraded_reason"] == "dsh_not_enabled"
+    assert stored.output_json["degraded_confirmation_required"] is True
+    assert stored.output_json["degraded_tools_used"] == ["project_read"]
+    assert captured["project_id"] == project.id
+    assert captured["capabilities"] == list(DEFAULT_AUTOMATION_CAPABILITIES) + ["workbench.write"]
+    assert captured["allowed_tools"] is not None
+    assert "project_read" in captured["allowed_tools"]
+    assert "system_status" not in captured["allowed_tools"]
+    assert "api_execute" not in captured["allowed_tools"]

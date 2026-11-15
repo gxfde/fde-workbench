@@ -9,7 +9,7 @@
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
-      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
+      "revision": "8c297a125db8ae11dc40e150a462108104202d9b",
       "link_mode": "local-only"
     },
     "views": [
@@ -68,15 +68,15 @@
       "sources": [
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 114,
-          "end_line": 129,
+          "line": 181,
+          "end_line": 197,
           "label": "run 列表 GET"
         },
         {
           "path": "desktop/src/renderer/src/workflows/WorkflowConsole.tsx",
-          "line": 165,
-          "end_line": 179,
-          "label": "cancel / resume POST"
+          "line": 378,
+          "end_line": 411,
+          "label": "cancel / resume / launch POST"
         }
       ]
     },
@@ -88,14 +88,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/routes.py",
-          "line": 80,
-          "end_line": 105,
+          "line": 81,
+          "end_line": 107,
           "label": "发起运行路由"
         },
         {
           "path": "server/src/fde_api/workflows/routes.py",
-          "line": 150,
-          "end_line": 160,
+          "line": 151,
+          "end_line": 162,
           "label": "cancel / resume 路由"
         }
       ]
@@ -109,13 +109,13 @@
         {
           "path": "server/src/fde_api/workflows/executor.py",
           "line": 186,
-          "end_line": 285,
+          "end_line": 288,
           "label": "start_run 服务层"
         },
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 324,
-          "end_line": 394,
+          "line": 327,
+          "end_line": 399,
           "label": "cancel_run / resume_run"
         }
       ]
@@ -141,7 +141,7 @@
         {
           "path": "server/src/fde_api/jobs/outbox.py",
           "line": 29,
-          "end_line": 48,
+          "end_line": 59,
           "label": "事务性 outbox"
         }
       ]
@@ -155,13 +155,13 @@
         {
           "path": "server/src/fde_api/jobs/worker.py",
           "line": 65,
-          "end_line": 128,
+          "end_line": 142,
           "label": "run_job 认领租约"
         },
         {
           "path": "server/src/fde_api/jobs/outbox.py",
-          "line": 50,
-          "end_line": 91,
+          "line": 92,
+          "end_line": 135,
           "label": "dispatch_pending"
         },
         {
@@ -180,20 +180,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 435,
-          "end_line": 489,
+          "line": 441,
+          "end_line": 495,
           "label": "run_workflow_run 调度主循环"
         },
         {
           "path": "server/src/fde_api/workflows/dispatch.py",
           "line": 42,
-          "end_line": 97,
+          "end_line": 96,
           "label": "_execute_node 独立事务"
         },
         {
           "path": "server/src/fde_api/workflows/dispatch.py",
           "line": 155,
-          "end_line": 173,
+          "end_line": 172,
           "label": "_dispatch 分派入口"
         }
       ]
@@ -206,20 +206,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/control/api_actions.py",
-          "line": 128,
-          "end_line": 189,
+          "line": 196,
+          "end_line": 256,
           "label": "execute_api 同一闸"
         },
         {
           "path": "server/src/fde_api/control/ai_server_client.py",
-          "line": 186,
-          "end_line": 240,
+          "line": 319,
+          "end_line": 375,
           "label": "execute_ai_prompt"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 852,
-          "end_line": 1030,
+          "line": 910,
+          "end_line": 1035,
           "label": "agents.start_run 同闸"
         }
       ]
@@ -232,20 +232,20 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/dispatch.py",
-          "line": 405,
-          "end_line": 503,
+          "line": 406,
+          "end_line": 504,
           "label": "_dispatch_human_approval"
         },
         {
           "path": "server/src/fde_api/control/service.py",
-          "line": 723,
-          "end_line": 800,
+          "line": 729,
+          "end_line": 805,
           "label": "decide_automation_approval"
         },
         {
           "path": "server/src/fde_api/control/routes.py",
-          "line": 289,
-          "end_line": 305,
+          "line": 292,
+          "end_line": 309,
           "label": "任务中心拍板路由"
         }
       ]

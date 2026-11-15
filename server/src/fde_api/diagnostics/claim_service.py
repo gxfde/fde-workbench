@@ -49,6 +49,7 @@ from fde_api.diagnostics.models import (
 from fde_api.diagnostics.service import (
     MAX_REGION_CHARS,
     DiagnosticsServiceError,
+    _enforce_retention as _enforce_retention_for_lead,
     _error,
     _redact_text,
     ensure_enabled,
@@ -177,10 +178,10 @@ def create_claim(
         lead = session.get(LeadDiagnosticSession, session_id)
         if lead is None:
             raise _error("lead_not_found", "线索不存在。", 404)
-        # ①认领窗口：过期即拒（窗口是机制，不是提示）
+        # ①认领窗口与 30 天留存期：过期即拒并懒清空匿名内容（QR-042）
         if now >= lead.claim_window_expires_at:
             raise _error("claim_window_expired", "该线索已过认领窗口。", 409)
-        if lead.status == "expired":
+        if _enforce_retention_for_lead(session, lead, now=now):
             raise _error("lead_expired", "该线索已过期。", 409)
         if lead.status == "claimed":
             raise _error("lead_already_claimed", "该线索已被认领。", 409)
@@ -294,6 +295,8 @@ def accept_claim(
                     raise _error("lead_not_found", "线索不存在。", 404)
                 if now >= lead.claim_window_expires_at:
                     raise _error("claim_window_expired", "该线索已过认领窗口。", 409)
+                if _enforce_retention_for_lead(session, lead, now=now):
+                    raise _error("lead_expired", "该线索已过期。", 409)
                 accepted_other = session.scalar(
                     select(LeadDiagnosticClaim.id).where(
                         LeadDiagnosticClaim.session_id == lead.id,
@@ -478,6 +481,7 @@ def list_leads(
         stmt = select(LeadDiagnosticSession).where(
             LeadDiagnosticSession.status.in_(("submitted", "report_ready")),
             LeadDiagnosticSession.claim_window_expires_at > now,
+            LeadDiagnosticSession.expires_at > now,
             LeadDiagnosticSession.lead_contact.isnot(None),
         )
         if claimant_kind == "r4_partner" and not is_platform:
@@ -603,13 +607,60 @@ def list_claims(
         ]
 
 
-def get_claim(claim_id: str) -> LeadDiagnosticClaim:
-    """读认领单（不存在 ⇒ 404）。"""
+def get_claim(*, actor: Any, claim_id: str) -> LeadDiagnosticClaim:
+    """读认领单（admin 全量；非 admin 仅本人申请；不存在或越权一律 ⇒ 404）。"""
+    ensure_enabled()
+    is_platform = getattr(actor, "role", "") == "admin"
     with db.session() as session:
         row = session.get(LeadDiagnosticClaim, claim_id)
         if row is None:
             raise _error("claim_not_found", "认领申请不存在。", 404)
+        if not is_platform and row.claimant_user_id != getattr(actor, "id", None):
+            raise _error("claim_not_found", "认领申请不存在。", 404)
         return row
+
+
+def reveal_claimed_lead_contact(*, actor: Any, claim_id: str) -> dict[str, Any]:
+    """受控读取已接受认领线索的留资联系方式并留痕（QR-041，#1A）：
+
+    仅平台 ``admin`` 或该 ``accepted`` 认领单的 ``claimant_user_id == actor.id`` 可读；
+    每次读取写入 ``operation_events``（``diagnostic_lead_contact_revealed``，不落明文联系方式）。
+    """
+    ensure_enabled()
+    is_platform = getattr(actor, "role", "") == "admin"
+    with db.session() as session:
+        claim = session.get(LeadDiagnosticClaim, claim_id)
+        if claim is None:
+            raise _error("claim_not_found", "认领申请不存在。", 404)
+        if not is_platform and (
+            claim.claimant_user_id != getattr(actor, "id", None)
+            or claim.status != "accepted"
+        ):
+            raise _error("claim_not_found", "认领申请不存在。", 404)
+        lead = session.get(LeadDiagnosticSession, claim.session_id)
+        if lead is None or not lead.lead_contact:
+            raise _error("lead_not_captured", "该线索无可用留资记录。", 404)
+        from fde_api.workbench.models import OperationEvent
+
+        session.add(
+            OperationEvent(
+                actor_user_id=actor.id,
+                project_id=None,
+                target_type="lead_diagnostic_claim",
+                target_id=claim.id,
+                event_type="diagnostic_lead_contact_revealed",
+                occurred_at=datetime.now(UTC),
+                changes={"session_id": lead.id, "claim_status": claim.status},
+            )
+        )
+        session.commit()
+        return {
+            "claim_id": claim.id,
+            "session_id": lead.id,
+            "contact": lead.lead_contact.get("contact"),
+            "name": lead.lead_contact.get("name"),
+            "captured_at": lead.lead_contact.get("captured_at"),
+        }
 
 
 __all__ = [
@@ -623,6 +674,7 @@ __all__ = [
     "list_claims",
     "list_leads",
     "reject_claim",
+    "reveal_claimed_lead_contact",
     "serialize_claim",
     "serialize_claim_entry",
     "serialize_lead",

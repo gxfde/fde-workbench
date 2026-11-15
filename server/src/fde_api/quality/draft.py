@@ -37,7 +37,11 @@ from fde_api.ai.prompt_registry import version_of
 from fde_api.control.ai_server_client import DSHRuntimeError, execute_ai_prompt
 from fde_api.extensions import db
 from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
-from fde_api.guidance.redaction import SensitiveCredentialDetected, redact_text_detailed
+from fde_api.guidance.redaction import (
+    SensitiveCredentialDetected,
+    fingerprint_review_payload,
+    redact_text_detailed,
+)
 from fde_api.quality.models import TestCase, TestPlan
 from fde_api.quality.service import QualityServiceError, _require_project, serialize_plan
 from fde_api.workbench.models import OperationEvent, ProjectTask
@@ -393,7 +397,7 @@ def draft_ai_test_plan(*, actor, project_id: str, payload: dict[str, Any]) -> di
                     target_type="test_plan",
                     target_id=plan.id,
                     event_type="quality.redaction_review",
-                    changes={"entries": redaction_entries},
+                    changes={"entries": fingerprint_review_payload(redaction_entries)},
                 ))
             session.flush()
             return {

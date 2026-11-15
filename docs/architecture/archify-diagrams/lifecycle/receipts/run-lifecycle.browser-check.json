@@ -6,10 +6,10 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "8fcafeb3-74d6-4c78-ac19-7533e634eede",
+  "deliveryReceiptId": "0a847784-e582-402b-bcc0-cbb934475022",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
-    "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "84ae7cfd1c81daa6257e863e799503434bd6a72d238b085bd99d28b29c97cd4f",
     "bytes": 847851
   },
   "state": {
@@ -691,7 +691,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts",
+    "directory": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts",
     "receipt": "run-lifecycle.browser-check.json",
     "files": []
   }

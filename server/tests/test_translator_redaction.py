@@ -17,6 +17,7 @@ T-A2（#160/#171）三道防线原只覆盖 presurvey DOCX 腿；translator 腿�
 
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 import pytest
@@ -34,6 +35,7 @@ from fde_api.guidance.enterprise_dict import (
     reset_dict_cache,
 )
 from fde_api.guidance.models import ProjectGuidanceAnalysis, REDACTION_EVENT_TYPE
+from fde_api.guidance.redaction import redaction_name_hash
 from fde_api.guidance.service import GuidanceServiceError, confirm_analysis, get_analysis
 from fde_api.jobs.models import BackgroundJob
 from fde_api.translator.jobs import handle_translator_translate
@@ -132,7 +134,12 @@ def test_create_replaces_seed_names_before_persist(db_session, d4_client, d4_set
     events = _redaction_events(db_session, "translator_translation", row.id)
     assert len(events) == 1
     assert events[0].changes["stage"] == "input"
-    assert any(item["name"] == SEED_NAME and item["matched_dict"] for item in events[0].changes["entries"])
+    # QR-133 指纹化：确证命中只存 sha256 指纹，事件账零真名。
+    assert any(
+        item["name_hash"] == redaction_name_hash(SEED_NAME) and item["matched_dict"]
+        for item in events[0].changes["entries"]
+    )
+    assert SEED_NAME not in json.dumps(events[0].changes, ensure_ascii=False, default=str)
 
 
 def test_create_suspect_name_replaced_and_flagged(db_session, d4_client, d4_settings) -> None:
@@ -146,7 +153,13 @@ def test_create_suspect_name_replaced_and_flagged(db_session, d4_client, d4_sett
     assert "客户代号" in row.phase_objective
     events = _redaction_events(db_session, "translator_translation", row.id)
     entries = [item for event in events for item in event.changes["entries"]]
-    assert any(item["name"] == SUSPECT_NAME and not item["matched_dict"] for item in entries)
+    # QR-133：疑似名不入条目账——只留聚合计数（零原文），替换照常落库。
+    assert entries == []
+    suspect_counts = [event.changes.get("suspect_count", 0) for event in events]
+    assert sum(suspect_counts) >= 1
+    assert SUSPECT_NAME not in json.dumps(
+        [event.changes for event in events], ensure_ascii=False, default=str
+    )
 
 
 def test_create_generic_words_untouched(db_session, d4_client, d4_settings) -> None:
@@ -199,7 +212,12 @@ def test_job_output_echo_redacted_with_output_event(db_session, d4_app, d4_clien
     output_events = [event for event in _redaction_events(db_session, "translator_translation", row.id)
                      if event.changes.get("stage") == "output"]
     assert len(output_events) == 1
-    assert any(item["name"] == SEED_NAME and item["matched_dict"] for item in output_events[0].changes["entries"])
+    # QR-133 指纹化：确证命中只存 sha256 指纹，事件账零真名。
+    assert any(
+        item["name_hash"] == redaction_name_hash(SEED_NAME) and item["matched_dict"]
+        for item in output_events[0].changes["entries"]
+    )
+    assert SEED_NAME not in json.dumps(output_events[0].changes, ensure_ascii=False, default=str)
 
 
 # ---------- 采纳交接：confirm 复核闸自动覆盖翻译链 ----------
@@ -221,10 +239,10 @@ def test_adopt_carries_entries_and_confirm_gate_blocks_without_ack(db_session, d
         db_session, d4_app, d4_client, d4_settings, owner, project,
         _payload_with(customer_vision=f"和{SUSPECT_NAME}聊过，他们要良率看板。"),
     )
-    # 采纳响应直接携带复核清单（跨阶段聚合）
+    # 采纳响应直接携带复核清单（跨阶段聚合）——QR-133 投影：疑似名=聚合计数项。
     review = adopted["redaction_review"]
     assert review, "采纳响应应携带复核清单"
-    assert any(item["name"] == SUSPECT_NAME for item in review)
+    assert review == [{"suspect_count": 1}]
 
     analysis_id = adopted["id"]
     analysis = db_session.get(ProjectGuidanceAnalysis, analysis_id)

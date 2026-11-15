@@ -377,4 +377,192 @@ it("T-A10：非 canManage 无预览/下载按钮（服务端 can_manage 同尺�
   await screen.findByText("未复核")
   expect(screen.queryByRole("button", { name: "预览" })).toBeNull()
   expect(screen.queryByRole("button", { name: "下载" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "采纳为方案" })).toBeNull()
 })
+
+it("产物采纳为方案：canManage 在终态展示「采纳为方案」，POST adopt-solution 空 body 后回显「查看方案」并按 allowNextHashNavigation 跳转；幂等与非终态边界覆盖", async () => {
+  const user = userEvent.setup()
+  const {
+    canAcceptHashNavigation,
+    registerHashNavigationGuard,
+  } = await import("../../src/renderer/src/routing/navigationGuard")
+  const unregisterGuard = registerHashNavigationGuard(() => false)
+  let linkedSolutionId: string | null = null
+  const adoptCalls: { path: string; body: unknown }[] = []
+
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string; body?: unknown }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({
+        items: [
+          runRow({ id: "run-term-1", status: "succeeded_but_receipt_invalid" }),
+          runRow({ id: "run-running-2", status: "running" }),
+        ],
+        truncated: false,
+      })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/agents/runs/run-term-1" && options?.method === "GET") {
+      return Promise.resolve(
+        runRow({
+          id: "run-term-1",
+          status: "succeeded_but_receipt_invalid",
+          agent: { name: "ZCode 沙箱智能体", kind: "zcode" },
+          artifacts: [
+            {
+              id: "art-adopt-1",
+              kind: "doc",
+              storage_ref: "output/solution.md",
+              sha256: "b".repeat(64),
+              reviewed: true,
+              linked_solution_id: linkedSolutionId,
+            },
+          ],
+        }),
+      )
+    }
+    if (path === "/api/v1/agents/runs/run-term-1/tool-calls" && options?.method === "GET") {
+      return Promise.resolve({ items: [], denied_count: 0 })
+    }
+    if (path === "/api/v1/agents/runs/run-running-2" && options?.method === "GET") {
+      return Promise.resolve(
+        runRow({
+          id: "run-running-2",
+          status: "running",
+          agent: { name: "ZCode 沙箱智能体", kind: "zcode" },
+          artifacts: [
+            {
+              id: "art-running-1",
+              kind: "doc",
+              storage_ref: "output/wip.md",
+              sha256: "c".repeat(64),
+              reviewed: false,
+              linked_solution_id: null,
+            },
+          ],
+        }),
+      )
+    }
+    if (path === "/api/v1/agents/runs/run-running-2/tool-calls" && options?.method === "GET") {
+      return Promise.resolve({ items: [], denied_count: 0 })
+    }
+    if (
+      path === "/api/v1/agents/runs/run-term-1/artifacts/art-adopt-1/adopt-solution" &&
+      options?.method === "POST"
+    ) {
+      adoptCalls.push({ path, body: options?.body })
+      linkedSolutionId = "sol-adopted-99"
+      return Promise.resolve({
+        solution_id: "sol-adopted-99",
+        run_id: "run-term-1",
+        artifact_id: "art-adopt-1",
+        adopted: true,
+        duplicate: false,
+        solution: { id: "sol-adopted-99", name: "AI 产物采纳方案·doc" },
+      })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+
+  window.location.hash = `#projects/${projectId}?tab=agents`
+  render(<AgentsConsole projectId={projectId} canManage />)
+
+  const detailButtons = await screen.findAllByRole("button", { name: "详情" })
+  // 先展开 running 态：非终态不应出现「采纳为方案」
+  await user.click(detailButtons[1])
+  await screen.findByText("output/wip.md")
+  expect(screen.queryByRole("button", { name: "采纳为方案" })).toBeNull()
+
+  // 再展开 succeeded_but_receipt_invalid 终态：出现「采纳为方案」
+  await user.click(detailButtons[0])
+  await screen.findByText("output/solution.md")
+  const adoptBtn = screen.getByRole("button", { name: "采纳为方案" })
+  await user.click(adoptBtn)
+
+  await waitFor(() => expect(adoptCalls).toHaveLength(1))
+  expect(adoptCalls[0]).toEqual({
+    path: "/api/v1/agents/runs/run-term-1/artifacts/art-adopt-1/adopt-solution",
+    body: {},
+  })
+
+  expect(await screen.findByText(/已将该产物采纳为交付方案/)).toBeInTheDocument()
+  expect(screen.queryByRole("button", { name: "采纳为方案" })).toBeNull()
+
+  const viewBtn = screen.getByRole("button", { name: "查看方案" })
+  try {
+    await user.click(viewBtn)
+    const expectedHash = `#projects/${projectId}?tab=delivery&solution=sol-adopted-99`
+    expect(window.location.hash).toBe(expectedHash)
+    // 在 activeGuard 恒返 false 下，仅当 allowNextHashNavigation 已放行该目标时 canAcceptHashNavigation 才返回 true
+    expect(canAcceptHashNavigation(expectedHash)).toBe(true)
+  } finally {
+    unregisterGuard()
+  }
+})
+
+it("产物采纳幂等回执与只读跳转：linked_solution_id 非空在非 canManage 下仍展示「查看方案」；duplicate=true 展示幂等提示", async () => {
+  const user = userEvent.setup()
+  let linkedSolutionId: string | null = null
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string; body?: unknown }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [runRow({ id: "run-linked-1", status: "completed" })], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/agents/runs/run-linked-1" && options?.method === "GET") {
+      return Promise.resolve(
+        runRow({
+          id: "run-linked-1",
+          status: "completed",
+          agent: { name: "ZCode 沙箱智能体", kind: "zcode" },
+          artifacts: [
+            {
+              id: "art-linked-1",
+              kind: "doc",
+              storage_ref: "output/linked.md",
+              sha256: "d".repeat(64),
+              reviewed: true,
+              linked_solution_id: linkedSolutionId,
+            },
+          ],
+        }),
+      )
+    }
+    if (path === "/api/v1/agents/runs/run-linked-1/tool-calls" && options?.method === "GET") {
+      return Promise.resolve({ items: [], denied_count: 0 })
+    }
+    if (
+      path === "/api/v1/agents/runs/run-linked-1/artifacts/art-linked-1/adopt-solution" &&
+      options?.method === "POST"
+    ) {
+      linkedSolutionId = "sol-existing-1"
+      return Promise.resolve({
+        solution_id: "sol-existing-1",
+        run_id: "run-linked-1",
+        artifact_id: "art-linked-1",
+        adopted: false,
+        duplicate: true,
+        solution: { id: "sol-existing-1", name: "既有方案" },
+      })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+
+  // 1) canManage 下触发 duplicate=true 幂等回执
+  const { unmount } = render(<AgentsConsole projectId={projectId} canManage />)
+  await user.click(await screen.findByRole("button", { name: "详情" }))
+  await user.click(await screen.findByRole("button", { name: "采纳为方案" }))
+  expect(await screen.findByText(/该产物已关联交付方案（幂等回执）/)).toBeInTheDocument()
+  unmount()
+
+  // 2) 非 canManage 下 linked_solution_id 非空仍可点击「查看方案」
+  render(<AgentsConsole projectId={projectId} />)
+  await user.click(await screen.findByRole("button", { name: "详情" }))
+  const viewBtn = await screen.findByRole("button", { name: "查看方案" })
+  expect(screen.queryByRole("button", { name: "采纳为方案" })).toBeNull()
+  await user.click(viewBtn)
+  expect(window.location.hash).toBe(`#projects/${projectId}?tab=delivery&solution=sol-existing-1`)
+})
+

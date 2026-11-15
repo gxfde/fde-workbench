@@ -287,6 +287,14 @@ def test_ai_draft_redaction_and_credential_fail_closed(db_session, d4_client, d4
         target_type="delivery_plan", target_id=plan["id"], event_type="delivery_plan_redaction_review"
     ).count()
     assert redaction_events == 1
+    # 盲审追批零真名换代：事件账条目只存指纹（＋疑似哨兵），零真名原文。
+    review_event = db_session.query(OperationEvent).filter_by(
+        target_type="delivery_plan", target_id=plan["id"], event_type="delivery_plan_redaction_review"
+    ).first()
+    from fde_api.guidance.redaction import redaction_name_hash as _rnh
+
+    assert any(e.get("name_hash") == _rnh(_DICT_NAME) for e in review_event.changes["entries"])
+    assert all(not e.get("name") for e in review_event.changes["entries"]), "复核事件账零真名"
 
     # 凭据串命中 ⇒ 422 整批拒绝＋零写入（fail-closed：凭据不落库）
     cred_item = _ai_item([key], detail="部署时使用密钥: abcdefghijkl1234")

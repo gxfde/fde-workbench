@@ -16,23 +16,52 @@ export interface GuidanceAnalysisDto {
   assumptions: GuidanceItemDto[]; open_questions: GuidanceItemDto[]; next_actions: GuidanceItemDto[]
   failure_code: string; failure_message: string; source_is_stale: boolean; version: number
   // T-A2 复核读面（#171 派生投影，服务端唯一权威；旧服务端载荷无此键——可选）。
-  redaction_review?: GuidanceRedactionReviewEntry[]
+  redaction_review?: GuidanceRedactionReviewItem[]
 }
-// 复核清单条目：形状由服务端 `_redaction_review_entries` 单一投影（#160 写入方
-// 同源），前端不二次推导文本；旧载荷缺键/畸形条目一律整组丢弃（fail 向保守）。
+// 复核清单条目（盲审追批换代）：服务端投影含两类项——
+// ① 指纹条目（#463 确证命中）：name_hash 必在；name 为词典反解结果（可
+//    null/缺省＝词典故障或词目已删，UI 显示指纹前 8 位占位）；
+// ② 疑似聚合哨兵 {suspect_count}（拍板 #6A 零真名：疑似名不逐条入账，
+//    聚合计数殿后一条）。
+// 旧形状（#160 name/occurrences/matched_dict）仍宽容接受（历史载荷）。
+// 守卫整组语义不变：任一项形状非法 ⇒ 整组丢弃（fail 向保守）。
 export interface GuidanceRedactionReviewEntry {
+  name_hash: string
+  name?: string | null
+  occurrences: number
+  matched_dict: true
+}
+export interface GuidanceRedactionSuspectAggregate {
+  suspect_count: number
+}
+export type GuidanceRedactionReviewItem =
+  | GuidanceRedactionReviewEntry
+  | GuidanceRedactionSuspectAggregate
+  | LegacyRedactionReviewEntry
+export interface LegacyRedactionReviewEntry {
   name: string
   occurrences: number
   matched_dict: boolean
 }
-export function isRedactionReviewEntries(value: unknown): value is GuidanceRedactionReviewEntry[] {
-  return Array.isArray(value) && value.every((item) => {
-    if (!item || typeof item !== "object") return false
-    const entry = item as Record<string, unknown>
-    return typeof entry.name === "string" && entry.name.length > 0
-      && typeof entry.occurrences === "number" && Number.isFinite(entry.occurrences)
-      && typeof entry.matched_dict === "boolean"
-  })
+function isRedactionReviewItem(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false
+  const entry = value as Record<string, unknown>
+  const finiteCount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+  // 疑似聚合哨兵：仅 suspect_count 一个数据键。
+  if (finiteCount(entry.suspect_count) && entry.suspect_count > 0
+    && entry.name === undefined && entry.name_hash === undefined
+    && entry.occurrences === undefined && entry.matched_dict === undefined) return true
+  // 指纹条目（#463 新形状）。
+  if (typeof entry.name_hash === "string" && entry.name_hash.length > 0
+    && finiteCount(entry.occurrences) && entry.matched_dict === true
+    && (entry.name === undefined || entry.name === null || typeof entry.name === "string")) return true
+  // 旧形状条目（#160，历史载荷宽容）。
+  if (typeof entry.name === "string" && entry.name.length > 0
+    && finiteCount(entry.occurrences) && typeof entry.matched_dict === "boolean") return true
+  return false
+}
+export function isRedactionReviewEntries(value: unknown): value is GuidanceRedactionReviewItem[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isRedactionReviewItem)
 }
 // goal-d2：售前轻量录入卡（S0-1 API 的桌面入口；S1–S2 阶段即可填写，无门禁要求）。
 export type InterviewMode = "onsite" | "remote" | "hybrid"

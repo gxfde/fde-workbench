@@ -9,10 +9,14 @@ import { useAuth } from "../auth/AuthProvider"
 // 本地文本读进表单，原件本身不上传；转写文本入库前已过服务端 T-A2 代号化
 // 管线（复核条目回显供人工校对）；晋升须带客户确认三要素，无确认不进正式库。
 
+// 复核账条目（盲审追批零真名换代）：同 guidance/discovery 双形状——指纹条目
+// （name 词典反解可空）＋疑似聚合哨兵；旧形状宽容兼容。
 interface RedactionEntryDto {
-  name: string
-  occurrences: number
-  matched_dict: boolean
+  name?: string | null
+  name_hash?: string
+  occurrences?: number
+  matched_dict?: boolean
+  suspect_count?: number
 }
 
 interface TranscriptDraftRowDto {
@@ -372,12 +376,27 @@ export function TranscriptDraftsPanel({ projectId, canManage }: TranscriptDrafts
               <fieldset>
                 <legend>企业名替换复核清单</legend>
                 <ul className="redaction-list">
-                  {draftDetail.redaction_entries.map((entry) => (
-                    <li key={entry.name}>
-                      <strong>{entry.name}</strong> × {entry.occurrences}
-                      {entry.matched_dict ? <span className="badge">词典命中</span> : <span className="badge">疑似</span>}
-                    </li>
-                  ))}
+                  {draftDetail.redaction_entries.map((entry, index) => {
+                    const label = entry.suspect_count !== undefined
+                      ? "疑似企业名（未收录词典）"
+                      : typeof entry.name === "string" && entry.name
+                        ? entry.name
+                        : entry.name_hash
+                          ? `${entry.name_hash.slice(0, 8)}…`
+                          : "未知条目"
+                    const count = entry.suspect_count ?? entry.occurrences ?? 0
+                    const badge = entry.suspect_count !== undefined
+                      ? <span className="badge">疑似聚合</span>
+                      : entry.matched_dict
+                        ? <span className="badge">词典命中</span>
+                        : <span className="badge">疑似</span>
+                    return (
+                      <li key={entry.name_hash || `entry-${index}`}>
+                        <strong>{label}</strong> × {count}
+                        {badge}
+                      </li>
+                    )
+                  })}
                 </ul>
               </fieldset>
             ) : null}

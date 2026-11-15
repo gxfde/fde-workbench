@@ -74,7 +74,20 @@ def test_draft_create_redacts_via_t2_pipeline(db_session, d4_client, d4_settings
     assert _DICT_NAME not in data["content"], "词典命中名必须已替换（放行=不留库）"
     assert "文档企业" in data["content"], "替换目标=enterprise_code 首段代号"
     entries = data["redaction_entries"]
-    assert entries and any(entry["name"] == _DICT_NAME and entry["matched_dict"] for entry in entries)
+    # 盲审追批零真名换代：读面经词典反解（name=词目原文，仅显示不落库）；
+    # 行内账只存指纹（＋疑似哨兵）。
+    from fde_api.guidance.redaction import redaction_name_hash as _rnh
+
+    assert entries and any(
+        entry.get("name") == _DICT_NAME and entry.get("name_hash") == _rnh(_DICT_NAME)
+        for entry in entries
+    )
+    from fde_api.transcripts.models import TranscriptDraft as _TD
+
+    draft_row_raw = db_session.get(_TD, data["id"])
+    assert all(
+        not item.get("name") for item in (draft_row_raw.redaction_entries or [])
+    ), "行内复核账零真名"
     # T+7：expires_at ≈ created_at + 保留天数
     expires = datetime.fromisoformat(data["expires_at"])
     created = datetime.fromisoformat(data["created_at"])

@@ -40,7 +40,11 @@ from fde_api.ai.prompt_registry import version_of
 from fde_api.control.ai_server_client import DSHRuntimeError, execute_ai_prompt
 from fde_api.extensions import db
 from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
-from fde_api.guidance.redaction import SensitiveCredentialDetected, redact_text_detailed
+from fde_api.guidance.redaction import (
+    SensitiveCredentialDetected,
+    fingerprint_review_payload,
+    redact_text_detailed,
+)
 from fde_api.plans.models import ITEM_TYPES, DeliveryPlan, DeliveryPlanItem
 from fde_api.plans.service import PlansServiceError, _next_version, _require_project, serialize_plan
 from fde_api.workbench.models import OperationEvent
@@ -442,7 +446,7 @@ def draft_ai_delivery_plan(*, actor, project_id: str, payload: dict[str, Any]) -
                     target_type="delivery_plan",
                     target_id=plan.id,
                     event_type="delivery_plan_redaction_review",
-                    changes={"entries": redaction_entries},
+                    changes={"entries": fingerprint_review_payload(redaction_entries)},
                 ))
             session.flush()
             return {

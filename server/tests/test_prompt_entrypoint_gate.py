@@ -33,8 +33,12 @@ GATED_FUNCTIONS = {
 # - instructions：executor skill 节点 = 治理面发布版本行（白名单④）。
 _ALLOWED_PARAM_NAMES = {"system_prompt", "instructions"}
 
-# 允许的组装函数（白名单③：chat 系统提示词 = 常量+config+内置手册目录）。
-_ALLOWED_CALL_NAMES = {"_workbench_system_prompt"}
+# 允许的组装函数：
+# - _workbench_system_prompt：白名单③ chat 系统提示词 = 常量+config+内置手册目录；
+# - _simulation_workbench_system_prompt：学习闭环 2.0 L4 训练场 workbench 适配器
+#   ＝注册表常量 WORKBENCH_SYSTEM_PROMPT + run config 受控候选 overlay 追加条款
+#   （≤200 字，N6 受控例外拍板 2026-11-13 登记）。
+_ALLOWED_CALL_NAMES = {"_workbench_system_prompt", "_simulation_workbench_system_prompt"}
 
 # 允许的提示词权威常量名（白名单①「内部权威常量」的具名形态）：
 # - DISCOVERY_SYSTEM_PROMPT：V3.1 P0-1 discovery 抽取（discovery/prompt.py
@@ -61,6 +65,8 @@ _ALLOWED_PROMPT_CONSTANTS = {
     "DELIVERY_PLAN_DRAFT_SYSTEM_PROMPT",
     "WORKFLOW_DAG_DRAFT_SYSTEM_PROMPT",
     "DISPATCH_RECOMMENDATION_SYSTEM_PROMPT",
+    "WORKBENCH_SYSTEM_PROMPT",
+    "IMPROVEMENT_DRAFT_SYSTEM_PROMPT",
 }
 
 

@@ -852,6 +852,10 @@ def db_session(app) -> Session:
         __import__("fde_api.quality.models", fromlist=["TestExecution"]).TestExecution,
         __import__("fde_api.quality.models", fromlist=["TestCase"]).TestCase,
         __import__("fde_api.quality.models", fromlist=["TestPlan"]).TestPlan,
+        # F 线 T4：兼任承载表（assigned_by_user_id RESTRICT 引用 users，先于 users 清理）
+        __import__(
+            "fde_api.commercial.models", fromlist=["CommercialRoleAssignment"]
+        ).CommercialRoleAssignment,
         # 商业化 G1：权益两表（均引用 users RESTRICT，先于 users 清理；
         # training 行与 entitlement 行互不引用，子表先清）
         __import__(

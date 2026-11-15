@@ -30,6 +30,48 @@ export const STATUS_LABEL: Record<ScenarioStatus, string> = {
   archived: "已归档",
 }
 
+export type ScenarioIndustry =
+  | "energy"
+  | "finance"
+  | "general"
+  | "government"
+  | "healthcare"
+  | "logistics"
+  | "manufacturing"
+  | "media"
+  | "professional_services"
+  | "retail"
+  | "software"
+
+/** 行业分类清单：与 `交付场景导入包/round2/industry-batches-20261113` 下 11 个行业 JSON 同名。 */
+export const SCENARIO_INDUSTRIES: ScenarioIndustry[] = [
+  "energy",
+  "finance",
+  "general",
+  "government",
+  "healthcare",
+  "logistics",
+  "manufacturing",
+  "media",
+  "professional_services",
+  "retail",
+  "software",
+]
+
+export const INDUSTRY_LABEL: Record<ScenarioIndustry, string> = {
+  energy: "能源",
+  finance: "金融",
+  general: "通用",
+  government: "政务",
+  healthcare: "医疗健康",
+  logistics: "物流",
+  manufacturing: "制造业",
+  media: "媒体",
+  professional_services: "专业服务",
+  retail: "零售",
+  software: "软件/互联网",
+}
+
 export interface HiddenFactDto {
   fact_id: string
   text: string
@@ -189,7 +231,7 @@ export interface SimulationRunDto {
   scenario_version: number
   split: "train" | "regression" | "blind"
   status: RunStatus
-  adapter_mode: "real" | "mock"
+  adapter_mode: "real" | "mock" | "workbench"
   seed: number
   attempt: number
   actor_set: Record<string, { actor_id: string; display_name: string }>
@@ -278,6 +320,74 @@ export interface FindingDto {
   status: string
 }
 
+export interface ProposalRollbackDto {
+  rolled_back_at: string
+  rolled_back_by_user_id: string
+  rollback_note: string
+  retired_payload?: {
+    lesson?: string[]
+    overlay?: string[]
+  }
+}
+
+export interface ProposalReleaseMaterializedDto {
+  lesson?: { entry_id: string; text_sha256: string }
+  overlay?: { overlay_id: string; content_sha256: string }
+  skill?: {
+    skill_ref: string
+    test_report_regression_id: string | null
+    publish_via: string
+    note: string
+  }
+}
+
+export interface ProposalReleaseDto {
+  released_at: string
+  released_by_user_id: string
+  released_version: string
+  release_note: string
+  materialized?: ProposalReleaseMaterializedDto
+  rollback: ProposalRollbackDto | null
+}
+
+export interface OverlayPreviewDto {
+  purpose_key: string
+  purpose_allowed: boolean
+  prompt_version: string | null
+  base_prompt: string
+  existing_overlay_count: number
+  candidate_fragment: string
+  effective_prompt: string
+  syntax_violation: string | null
+  ngram_overlap_ratio: number
+  ngram_blocked: boolean
+  calls_last_30d: number
+}
+
+export interface ProposalReleasePreviewDto {
+  proposal_id: string
+  proposal_key: string
+  status: string
+  overfit_blocked: boolean
+  latest_regression_id: string | null
+  latest_regression_verdict: string | null
+  branches: string[]
+  overlay_preview: OverlayPreviewDto | null
+  lesson_preview: {
+    entry_id: string
+    text: string
+    text_sha256: string
+    capability_tags: string[]
+    industries: string[]
+  } | null
+  skill_preview: {
+    skill_ref?: string
+    summary?: string
+    instructions_delta?: string
+    test_report_regression_id: string | null
+  } | null
+}
+
 export interface ProposalDto {
   id: string
   proposal_key: string
@@ -293,11 +403,49 @@ export interface ProposalDto {
   impact_scope: string[]
   regression_plan: Record<string, unknown>
   override_json: Record<string, unknown>
-  status: "draft" | "in_review" | "approved" | "rejected"
+  candidate_payload?: Record<string, unknown>
+  status: "draft" | "in_review" | "approved" | "rejected" | "published"
+  release?: ProposalReleaseDto | null
   decided_by_user_id: string | null
   decided_at: string | null
   note: string | null
   created_at: string | null
+}
+
+export interface DraftLessonEntryDto {
+  text: string
+  tier: string
+  industries: string[]
+  rationale: string
+}
+
+export interface DraftSkillVersionDto {
+  skill_ref: string
+  summary: string
+  instructions_delta: string
+}
+
+export interface DraftPromptOverlayDto {
+  purpose_key: string
+  fragment: string
+  rationale: string
+}
+
+export interface DraftAiGroupDto {
+  code: string
+  lesson_entry: DraftLessonEntryDto
+  skill_version_draft: DraftSkillVersionDto
+  prompt_overlay_fragment: DraftPromptOverlayDto
+}
+
+export interface DraftAiResponseDto {
+  draft: {
+    groups: DraftAiGroupDto[]
+  }
+  finding_ids: string[]
+  payload_sha256: string
+  zero_persistence: boolean
+  adoption: string
 }
 
 export interface RegressionSuiteDto {
@@ -310,12 +458,14 @@ export interface RegressionSuiteDto {
   created_at: string | null
 }
 
+export type ModelVerdict = "improved" | "regressed" | "within_noise" | "insufficient_data"
+
 export interface RegressionResultDto {
   id: string
   suite_id: string
   proposal_id: string | null
-  before: { runs: number; mean_total: number; hard_failures?: string[] }
-  after: { runs: number; mean_total: number; hard_failures?: string[] }
+  before: { runs: number; mean_total: number; mean_model_total?: number | null; hard_failures?: string[] }
+  after: { runs: number; mean_total: number; mean_model_total?: number | null; hard_failures?: string[] }
   deltas: {
     total_delta?: number
     dimension_deltas?: Record<string, number>
@@ -324,6 +474,10 @@ export interface RegressionResultDto {
     cost_delta?: Record<string, number>
     train_gain?: number
     blind_gain?: number
+    model_verdict?: ModelVerdict
+    model_total_delta?: number | null
+    noise_band?: number
+    noise_band_axis?: string
   }
   new_hard_failures: string[]
   resolved_hard_failures: string[]
@@ -332,6 +486,29 @@ export interface RegressionResultDto {
   verdict: "improved" | "regressed" | "mixed" | "no_change" | "inconclusive"
   note: string | null
   created_at: string | null
+  created?: boolean
+}
+
+export interface RegressionAsyncQueuedDto {
+  queued_async: true
+  job_id: string
+  outbox_event_id: string
+  job_status: string
+  suite_id: string
+  proposal_id: string | null
+  adapter_mode: string
+  model_mode: string
+}
+
+export type RunRegressionResponseDto = RegressionResultDto | RegressionAsyncQueuedDto
+
+export interface RegressionJobStatusDto {
+  job_id: string
+  suite_id: string
+  status: string
+  attempts: number
+  last_error: string | null
+  latest_result: RegressionResultDto | null
 }
 
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {

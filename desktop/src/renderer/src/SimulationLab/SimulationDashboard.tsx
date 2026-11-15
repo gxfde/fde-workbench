@@ -7,12 +7,15 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from "rea
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
-import { EmptyState, Loading } from "../components/ui"
+import { EmptyState, Loading, UiButton } from "../components/ui"
 import { listScenarios } from "./api"
 import {
+  INDUSTRY_LABEL,
+  SCENARIO_INDUSTRIES,
   SPLIT_LABEL,
   VARIANT_LABEL,
   type ScenarioDto,
+  type ScenarioIndustry,
   type ScenarioSplit,
   type ScenarioVariant,
 } from "./types"
@@ -34,11 +37,21 @@ function countBy(items: ScenarioDto[], pick: (item: ScenarioDto) => string): Buc
     .sort((left, right) => left.key.localeCompare(right.key))
 }
 
+/** 行业键 → 中文标签；未知键（历史数据/测试数据）原样显示。 */
+function industryLabel(key: string): string {
+  return (SCENARIO_INDUSTRIES as string[]).includes(key)
+    ? INDUSTRY_LABEL[key as ScenarioIndustry]
+    : key
+}
+
 export function SimulationDashboard(): ReactElement {
   const { apiRequest } = useAuth()
   const [items, setItems] = useState<ScenarioDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  /** 总览页的行业筛选（客户端过滤；与服务端 industry 参数同语义的等值匹配）。 */
+  const [industryFilter, setIndustryFilter] = useState<ScenarioIndustry | "">("")
+  const [keyword, setKeyword] = useState("")
   const sequence = useRef(0)
 
   const load = useCallback(async () => {
@@ -72,15 +85,28 @@ export function SimulationDashboard(): ReactElement {
     }
   }, [load])
 
-  const variantBuckets = countBy(items, (item) => VARIANT_LABEL[item.variant])
-  const splitBuckets = countBy(items, (item) => SPLIT_LABEL[item.split as ScenarioSplit])
-  const caseBuckets = countBy(items, (item) => item.scenario_key)
+  const allIndustryBuckets = countBy(items, (item) => item.industry)
   const variantTotals: Record<ScenarioVariant, number> = {
     normal: 0,
     vague: 0,
     complex: 0,
   }
-  for (const item of items) variantTotals[item.variant] += 1
+
+  // 筛选作用面：KPI 卡与「按客户行为/按数据集/案例」分布随筛选收敛；「按分类」始终展示全量口径（作分类导航）。
+  const filtered =
+    industryFilter || keyword.trim()
+      ? items.filter(
+          (item) =>
+            (!industryFilter || item.industry === industryFilter) &&
+            (!keyword.trim() ||
+              item.name.toLowerCase().includes(keyword.trim().toLowerCase()) ||
+              item.scenario_key.toLowerCase().includes(keyword.trim().toLowerCase())),
+        )
+      : items
+  for (const item of filtered) variantTotals[item.variant] += 1
+  const variantBuckets = countBy(filtered, (item) => VARIANT_LABEL[item.variant])
+  const splitBuckets = countBy(filtered, (item) => SPLIT_LABEL[item.split as ScenarioSplit])
+  const caseBuckets = countBy(filtered, (item) => item.scenario_key)
 
   return (
     <section className="simulation-dashboard" aria-label="模拟训练场总览">
@@ -109,10 +135,49 @@ export function SimulationDashboard(): ReactElement {
 
       {items.length > 0 ? (
         <>
+          <div className="simulation-filters" role="group" aria-label="总览筛选">
+            <label>
+              <span>分类</span>
+              <select
+                value={industryFilter}
+                onChange={(event) =>
+                  setIndustryFilter(event.target.value as ScenarioIndustry | "")
+                }
+              >
+                <option value="">全部分类</option>
+                {SCENARIO_INDUSTRIES.map((key) => (
+                  <option key={key} value={key}>
+                    {industryLabel(key)}
+                  </option>
+                ))}
+                {/* 历史数据里可能存在清单外的行业键，动态补入选项避免筛不出来 */}
+                {allIndustryBuckets
+                  .filter((bucket) => !(SCENARIO_INDUSTRIES as string[]).includes(bucket.key))
+                  .map((bucket) => (
+                    <option key={bucket.key} value={bucket.key}>
+                      {bucket.key}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              <span>关键字</span>
+              <input
+                type="search"
+                value={keyword}
+                placeholder="案例名或业务键"
+                onChange={(event) => setKeyword(event.target.value)}
+              />
+            </label>
+            {industryFilter || keyword.trim() ? (
+              <UiButton onClick={() => { setIndustryFilter(""); setKeyword("") }}>清除筛选</UiButton>
+            ) : null}
+          </div>
+
           <div className="simulation-kpi-row">
             <article className="simulation-kpi">
               <h3>案例分支</h3>
-              <p className="simulation-kpi-value">{items.length}</p>
+              <p className="simulation-kpi-value">{filtered.length}</p>
             </article>
             <article className="simulation-kpi">
               <h3>案例数</h3>
@@ -133,6 +198,17 @@ export function SimulationDashboard(): ReactElement {
           </div>
 
           <div className="simulation-bucket-grid">
+            <section aria-label="按分类分布">
+              <h3>按分类</h3>
+              <ul>
+                {allIndustryBuckets.map((bucket) => (
+                  <li key={bucket.key}>
+                    <span>{industryLabel(bucket.key)}</span>
+                    <strong>{bucket.count}</strong>
+                  </li>
+                ))}
+              </ul>
+            </section>
             <section aria-label="按客户行为分布">
               <h3>按客户行为</h3>
               <ul>

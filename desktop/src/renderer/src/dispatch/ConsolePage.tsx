@@ -62,6 +62,33 @@ export function isMatchResultView(value: unknown): value is MatchResultView {
   return typeof row.scenario === "string" && Array.isArray(row.offers)
 }
 
+export interface AiSuggestionRow {
+  candidate_user_id: string
+  rank: number
+  rationale: string
+}
+
+export interface AiMatchResultView {
+  scenario: string
+  ai_suggestions: AiSuggestionRow[]
+  recommendation_sha256: string
+  ai_called: boolean
+  model: string | null
+  prompt_version: string
+  truncated: boolean
+}
+
+export function isAiMatchResultView(value: unknown): value is AiMatchResultView {
+  if (typeof value !== "object" || value === null) return false
+  const row = value as Record<string, unknown>
+  return (
+    typeof row.scenario === "string" &&
+    Array.isArray(row.ai_suggestions) &&
+    typeof row.recommendation_sha256 === "string" &&
+    typeof row.ai_called === "boolean"
+  )
+}
+
 export const PACKAGE_STATUS_LABELS: Record<string, string> = {
   draft: "草稿",
   published: "已发布",
@@ -102,6 +129,10 @@ export function ConsolePage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [trail, setTrail] = useState<Record<string, OfferTrailView[]>>({})
   const [matchResults, setMatchResults] = useState<Record<string, MatchResultView>>({})
+  const [aiMatchResults, setAiMatchResults] = useState<Record<string, AiMatchResultView>>({})
+  const [aiDecisionState, setAiDecisionState] = useState<
+    Record<string, { decision: "adopted" | "rejected"; recommendation_sha256: string }>
+  >({})
   const [overrideDraft, setOverrideDraft] = useState<{
     packageId: string
     level: string
@@ -220,6 +251,64 @@ export function ConsolePage() {
         setMatchResults((prev) => ({ ...prev, [row.id]: payload }))
       }
     })
+
+  const runAiMatch = (row: DispatchPackageView) =>
+    runAction(`match-ai:${row.id}`, async () => {
+      const payload = await apiRequest<unknown>(
+        `/api/v1/dispatch/packages/${row.id}/match-ai`,
+        { method: "POST", body: {} }
+      )
+      if (isAiMatchResultView(payload)) {
+        setAiMatchResults((prev) => ({ ...prev, [row.id]: payload }))
+        setAiDecisionState((prev) => {
+          const next = { ...prev }
+          delete next[row.id]
+          return next
+        })
+      }
+    })
+
+  const submitAiDecision = (
+    row: DispatchPackageView,
+    decision: "adopted" | "rejected",
+  ) => {
+    const aiResult = aiMatchResults[row.id]
+    if (!aiResult) return
+    const suggestedIds = Array.from(
+      new Set(
+        aiResult.ai_suggestions
+          .map((item) => item.candidate_user_id)
+          .filter((id) => Boolean(id)),
+      ),
+    )
+    const adoptedIds = decision === "adopted" ? suggestedIds : []
+    runAction(`match-ai-decision:${row.id}`, async () => {
+      await apiRequest(`/api/v1/dispatch/packages/${row.id}/match-ai/decision`, {
+        method: "POST",
+        body: {
+          decision,
+          recommendation_sha256: aiResult.recommendation_sha256,
+          adopted_candidate_ids: adoptedIds,
+        },
+      })
+      if (decision === "adopted") {
+        setSelected((prev) => {
+          const next = new Set(prev)
+          for (const candidateId of adoptedIds) {
+            next.add(candidateId)
+          }
+          return next
+        })
+      }
+      setAiDecisionState((prev) => ({
+        ...prev,
+        [row.id]: {
+          decision,
+          recommendation_sha256: aiResult.recommendation_sha256,
+        },
+      }))
+    })
+  }
 
   const assignOffers = (row: DispatchPackageView) =>
     runAction(`assign:${row.id}`, async () => {
@@ -488,6 +577,14 @@ export function ConsolePage() {
                       </button>
                       <button
                         type="button"
+                        className="secondary-button"
+                        disabled={busyKey !== null}
+                        onClick={() => runAiMatch(row)}
+                      >
+                        {busyKey === `match-ai:${row.id}` ? "AI 撮合中…" : "AI 撮合建议"}
+                      </button>
+                      <button
+                        type="button"
                         className="primary-button"
                         disabled={busyKey !== null || selectedIds.length === 0}
                         onClick={() => assignOffers(row)}
@@ -507,6 +604,73 @@ export function ConsolePage() {
                     </>
                   ) : null}
                 </div>
+
+                {aiMatchResults[row.id] ? (
+                  <div className="dispatch-breakdown" aria-label="AI 撮合建议结果">
+                    <strong>
+                      AI 撮合建议 ·{" "}
+                      {SCENARIO_LABELS[aiMatchResults[row.id].scenario] ||
+                        `场景 ${aiMatchResults[row.id].scenario}`}
+                      {aiMatchResults[row.id].model
+                        ? ` · 模型 ${aiMatchResults[row.id].model}`
+                        : ""}
+                      {aiMatchResults[row.id].prompt_version
+                        ? ` · 提示词 ${aiMatchResults[row.id].prompt_version}`
+                        : ""}
+                    </strong>
+                    {!aiMatchResults[row.id].ai_called ? (
+                      <p className="muted">
+                        未调用 AI 模型（资格门无候选过闸，零模型消耗，请走人工兜底）。
+                      </p>
+                    ) : null}
+                    {aiMatchResults[row.id].ai_suggestions.length > 0 ? (
+                      <ul>
+                        {aiMatchResults[row.id].ai_suggestions.map((suggestion) => {
+                          const matchedProfile = profiles.find(
+                            (p) => p.user_id === suggestion.candidate_user_id,
+                          )
+                          return (
+                            <li key={`${suggestion.rank}-${suggestion.candidate_user_id}`}>
+                              Top{suggestion.rank} · 候选 {suggestion.candidate_user_id}
+                              {matchedProfile ? `（${matchedProfile.display_name}）` : ""}
+                              {suggestion.rationale ? ` · 理由：${suggestion.rationale}` : ""}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : aiMatchResults[row.id].ai_called ? (
+                      <p className="muted">AI 未返回候选建议。</p>
+                    ) : null}
+                    <div className="dispatch-offer-actions">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={
+                          busyKey !== null ||
+                          aiMatchResults[row.id].ai_suggestions.length === 0
+                        }
+                        onClick={() => submitAiDecision(row, "adopted")}
+                      >
+                        {busyKey === `match-ai-decision:${row.id}` ? "记录中…" : "采纳建议"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={busyKey !== null}
+                        onClick={() => submitAiDecision(row, "rejected")}
+                      >
+                        {busyKey === `match-ai-decision:${row.id}` ? "记录中…" : "驳回建议"}
+                      </button>
+                      {aiDecisionState[row.id] ? (
+                        <span className="muted">
+                          {aiDecisionState[row.id].decision === "adopted"
+                            ? "已记录采纳并勾选推荐候选人，请点击「指派 offer」人工派单。"
+                            : "已记录驳回建议。"}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 {matchResults[row.id] ? (
                   <div className="dispatch-breakdown" aria-label="撮合结果">

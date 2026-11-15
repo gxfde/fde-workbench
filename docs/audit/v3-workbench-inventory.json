@@ -1,10 +1,10 @@
 {
- "route_count": 509,
+ "route_count": 512,
  "blueprint_count": 54,
- "table_count": 157,
- "revision_count": 80,
+ "table_count": 159,
+ "revision_count": 84,
  "heads": [
-  "e9c4b7a1d5f8"
+  "c2a9e7d5b3f1"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -105,6 +105,17 @@
    "down_revision": "a5e9c3f1b7d4",
    "create_tables": [],
    "add_column_tables": []
+  },
+  "a9f3e5c7b1d2": {
+   "file": "a9f3e5c7b1d2_loop2_l5_agent_lessons_prompt_overlays.py",
+   "down_revision": "d4b7e2f9a6c1",
+   "create_tables": [
+    "agent_lessons",
+    "prompt_overlays"
+   ],
+   "add_column_tables": [
+    "ai_call_audits"
+   ]
   },
   "b2c4d6e8f1a3": {
    "file": "b2c4d6e8f1a3_dispatch_p1_closeout.py",
@@ -271,6 +282,16 @@
     "skill_versions"
    ]
   },
+  "c2a9e7d5b3f1": {
+   "file": "c2a9e7d5b3f1_m6_wp0_merge_dual_heads.py",
+   "down_revision": "e9c4b7a1d5f8",
+   "create_tables": [],
+   "add_column_tables": [],
+   "down_revisions": [
+    "e9c4b7a1d5f8",
+    "a9f3e5c7b1d2"
+   ]
+  },
   "c3d5e7f9a1b4": {
    "file": "c3d5e7f9a1b4_discovery_tables.py",
    "down_revision": "e8b1d5f9a3c7",
@@ -397,6 +418,20 @@
    "add_column_tables": [
     "gates"
    ]
+  },
+  "d4b7e2f9a6c1": {
+   "file": "d4b7e2f9a6c1_loop2_l4_candidate_payload.py",
+   "down_revision": "d4b8e1f6a9c3",
+   "create_tables": [],
+   "add_column_tables": [
+    "improvement_proposals"
+   ]
+  },
+  "d4b8e1f6a9c3": {
+   "file": "d4b8e1f6a9c3_commercial_batch_d_hardening.py",
+   "down_revision": "c8e2a6f0b9d4",
+   "create_tables": [],
+   "add_column_tables": []
   },
   "d4e6f8a2c7b9": {
    "file": "d4e6f8a2c7b9_v5_subject_merge.py",

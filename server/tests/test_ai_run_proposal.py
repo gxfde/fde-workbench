@@ -360,13 +360,14 @@ def test_guard_source_order_pins():
     """源级钉：propose 闸在 _authorized 之后（先权限后形状）；confirm 闸在
     verify_password 之后（先验人再判状态）；复活拒因字面量在场。"""
     source = (SERVER_ROOT / "src" / "fde_api" / "control" / "api_actions.py").read_text(encoding="utf-8")
-    assert source.index("_authorized(user, spec, parameters, claims.get(\"project_id\"))") < source.index("    _require_run_start_idempotency_key(operation, body)")
+    assert source.index("_authorized(user, spec, parameters, claims.get(\"project_id\"), operation=operation, body=body)") < source.index("    _require_run_start_idempotency_key(operation, body)")
     assert source.index("verify_password(current.password_hash, password)") < source.index("    _run_start_confirm_guard(session, data)")
     assert "run_cancelled_not_revivable" in source
     assert "run_start_idempotency_required" in source
     assert RUN_START_OPERATIONS == frozenset({"workflows.run_start", "agents.run_start"})
-    # 安全评审 C 项源钉：票据绑定闸在 propose 与 confirm 两侧都在场。
-    assert source.count("_require_run_start_scope_binding(") >= 3  # def + propose 调用 + confirm 调用
+    # 安全评审 C 项 / QR-003 源钉：票据绑定闸并入 _authorized 单点，propose 与 confirm 双侧必经。
+    assert source.count("_require_run_start_scope_binding(") >= 2  # def + _authorized 单点调用
+    assert source.count("operation=") >= 3  # _authorized def + propose 调用 + confirm 调用
     # 源级复钉：目录行确实是确认类（CONFIRMATION_KEYS 的两个新键）。
     catalog_source = (SERVER_ROOT / "src" / "fde_api" / "control" / "api_catalog.py").read_text(encoding="utf-8")
     assert catalog_source.count('"workflows.run_start"') == 2  # ENTRIES + CONFIRMATION_KEYS

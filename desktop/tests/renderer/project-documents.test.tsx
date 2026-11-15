@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import { AuthProvider, useAuth } from "../../src/renderer/src/auth/AuthProvider"
 import { DangerConfirmProvider } from "../../src/renderer/src/common/DangerConfirmProvider"
+import { plainToRichText, richTextToPlain } from "../../src/renderer/src/documents/DocumentEditor"
 import { ProjectDocuments } from "../../src/renderer/src/documents/ProjectDocuments"
 import type { DocumentSummaryDto } from "../../src/renderer/src/documents/types"
 import type { ApiResponse, BridgeResult, UserDto } from "../../src/shared/contracts"
@@ -332,11 +333,114 @@ describe("project documents workspace", () => {
       expect.objectContaining({ method: "GET" }),
     ])
   })
+
+  it("QR-117: serializes canonical paragraph content keys and reloads server-rendered rich_text arrays", async () => {
+    expect(plainToRichText("甲段\n乙段")).toEqual({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: "甲段" },
+        { type: "paragraph", content: "乙段" },
+      ],
+    })
+    expect(
+      richTextToPlain([
+        { type: "paragraph", content: "服务端存量第一段", marks: [] },
+        { type: "heading", content: "服务端存量第二段", marks: ["bold"] },
+      ]),
+    ).toBe("服务端存量第一段\n服务端存量第二段")
+    expect(
+      richTextToPlain({
+        type: "doc",
+        content: [{ type: "paragraph", text: "兼容旧版文本段" }],
+      }),
+    ).toBe("兼容旧版文本段")
+
+    const editableDoc: DocumentSummaryDto = {
+      ...draftContract,
+      id: "doc-1",
+      document_type: "sow",
+      business_code: "SOW-EDIT-1",
+    }
+    const apiRequest = baseRequest({
+      documents: {
+        list: () => [editableDoc],
+        detail: () => ({
+          ...editableDoc,
+          current_version_id: null,
+          current_version: null,
+          draft: {
+            id: "draft-1",
+            document_id: "doc-1",
+            version: 2,
+            field_overrides: { scope_note: "原说明" },
+            rich_text: [
+              { type: "paragraph", content: "已入库第一段", marks: [] },
+              { type: "paragraph", content: "已入库第二段", marks: [] },
+            ],
+            list_selections: {},
+            created_at: "2026-08-25T09:00:00+08:00",
+            updated_at: "2026-08-25T09:00:00+08:00",
+          },
+          history: [],
+        }),
+        patchDraft: () => ({
+          version: 3,
+          document_id: "doc-1",
+          id: "draft-1",
+          field_overrides: { scope_note: "原说明" },
+          rich_text: [
+            { type: "paragraph", content: "修订后第一段", marks: [] },
+            { type: "paragraph", content: "修订后第二段", marks: [] },
+          ],
+          list_selections: {},
+          created_at: "2026-08-25T09:00:00+08:00",
+          updated_at: "2026-08-25T09:10:00+08:00",
+        }),
+        generate: () => ({
+          version_id: "ver-sow-4",
+          version_number: 4,
+          job_id: "job-gen-4",
+          status: "queued",
+        }),
+      },
+    })
+
+    const user = userEvent.setup()
+    renderDocumentsTab(apiRequest, { role: "admin" })
+
+    await user.click(await screen.findByRole("button", { name: "编辑：SOW-EDIT-1" }))
+    const richTextarea = (await screen.findByLabelText("富文本正文")) as HTMLTextAreaElement
+    expect(richTextarea.value).toBe("已入库第一段\n已入库第二段")
+
+    await user.clear(richTextarea)
+    await user.type(richTextarea, "修订后第一段{enter}修订后第二段")
+    await user.click(screen.getByRole("button", { name: "保存并重新生成" }))
+
+    await waitFor(() =>
+      expect(apiRequest.mock.calls).toContainEqual([
+        `${documentsPath}/doc-1/draft`,
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.objectContaining({
+            version: 2,
+            rich_text: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: "修订后第一段" },
+                { type: "paragraph", content: "修订后第二段" },
+              ],
+            },
+          }),
+        }),
+      ]),
+    )
+  })
 })
 
 function baseRequest(options: {
   documents?: {
     list?: (category?: string) => DocumentSummaryDto[]
+    detail?: () => unknown
     create?: () => unknown
     generate?: () => unknown
     revise?: () => unknown
@@ -359,6 +463,9 @@ function baseRequest(options: {
     }
     if (path === documentsPath && requestOptions.method === "POST") {
       return Promise.resolve(apiOk(options.documents?.create?.() ?? {}))
+    }
+    if (path === `${documentsPath}/doc-1` && requestOptions.method === "GET") {
+      return Promise.resolve(apiOk(options.documents?.detail?.() ?? {}))
     }
     if (path === `${documentsPath}/doc-1/generate` && requestOptions.method === "POST") {
       return Promise.resolve(apiOk(options.documents?.generate?.() ?? {}))

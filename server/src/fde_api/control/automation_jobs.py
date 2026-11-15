@@ -126,6 +126,7 @@ def execute_automation_run(job: BackgroundJob) -> None:
             prompt=execution["prompt"],
             actor_user_id=execution["actor_user_id"],
             project_id=execution["project_id"],
+            capabilities=execution["allowed_tools"],
         )
         return
 
@@ -156,6 +157,7 @@ def _record_degraded_execution(
     prompt: str,
     actor_user_id: str,
     project_id: str | None,
+    capabilities: list[str] | tuple[str, ...] | None = None,
 ) -> None:
     """把一次 A 轨执行落成**只读降级**（E8）：标 `degraded=true` 并留痕。
 
@@ -175,6 +177,8 @@ def _record_degraded_execution(
             actor_user_id=actor_user_id,
             project_id=project_id,
             run_id=run_id,
+            capabilities=capabilities,
+            allowed_tools=plan.allowed_tools,
         )
     except DSHRuntimeError as error:
         # 降级面自身失败（模型未配置／AI 服务不可达）⇒ 诚实失败，不假装降级成功。
@@ -219,6 +223,8 @@ def _run_degraded_readonly(
     actor_user_id: str,
     project_id: str | None,
     run_id: str,
+    capabilities: list[str] | tuple[str, ...] | None = None,
+    allowed_tools: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[str, list[str]]:
     """执行降级态的只读产出，返回（产出正文，只读工具清单）。
 
@@ -251,6 +257,8 @@ def _run_degraded_readonly(
                 "只读降级执行：仅可使用只读工具查询事实，"
                 "不得修改任何状态、不得发起审批、不得代替人工确认。"
             ),
+            capabilities=capabilities if capabilities else None,
+            allowed_tools=allowed_tools,
         )
         used = [
             str(item.get("tool") or "")

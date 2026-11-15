@@ -361,6 +361,9 @@ def allocate_five_seats(
     settlement.region_amount = amounts["province"]
     settlement.city_amount = amounts["county"]
     settlement.delivery_amount = amounts["delivery"]
+    settlement.seat_delivery_user_id = (
+        None if "delivery" in vacant else seat_payees["delivery"]
+    )
     mirror_sum = (
         settlement.platform_amount
         + settlement.region_amount
@@ -733,6 +736,8 @@ def record_receipt_settlements(
             row.region_amount = amounts["region"]
             row.city_amount = amounts["city"]
             row.delivery_amount = amounts["delivery"]
+            if row.seat_delivery_user_id is None and package.seat_delivery is not None:
+                row.seat_delivery_user_id = package.seat_delivery
         session.flush()
         record_event(
             session,
@@ -790,15 +795,30 @@ def accrue_settlements_for_project(
                 continue
             # 先算后改：compute_withholding 内的 SELECT 会触发 autoflush，
             # 若先把本行置 accrued，本行会混进「累计已计提」口径被双计。
+            delivery_payee = row.seat_delivery_user_id
+            if delivery_payee is None:
+                delivery_payee = (
+                    session.scalar(
+                        select(DispatchSettlementAllocation.payee_user_id).where(
+                            DispatchSettlementAllocation.settlement_id == row.id,
+                            DispatchSettlementAllocation.seat_key == "delivery",
+                            DispatchSettlementAllocation.status == "paid",
+                        )
+                    )
+                    or package.seat_delivery
+                    or package.accepted_user_id
+                )
+                if delivery_payee is not None:
+                    row.seat_delivery_user_id = delivery_payee
             withholding = Decimal(0)
-            if row.seat_delivery_user_id is not None:
+            if delivery_payee is not None:
                 withholding = compute_withholding(
                     session,
-                    delivery_user_id=row.seat_delivery_user_id,
+                    delivery_user_id=delivery_payee,
                     # T6 多收款主体：本结算内该收款人的个人席位合计（兼任
                     # lead/county 一并进当期基数；存量行回退 delivery 列）。
                     current_amount=_payee_settlement_base(
-                        session, row, row.seat_delivery_user_id
+                        session, row, delivery_payee
                     ),
                     now=passed_at,
                 )

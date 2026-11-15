@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useState } from "react"
 import { MemoMarkdown } from "../research/MemoMarkdown"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { allowNextHashNavigation } from "../routing/navigationGuard"
 
 // T-A8 智能体控制台（台账「售前主线登记」节）：run 列表 → 详情 → 工具调用 →
 // 项目成本汇总。页面仅呈现（拍板 6⑥：与 B#9 执行事实面板界面分离——本页是
@@ -45,6 +46,10 @@ interface AgentRunRowDto {
 interface AgentRunDetailDto extends AgentRunRowDto {
   agent: { name: string; kind: string } | null
   artifacts: AgentArtifactDto[] | null
+  // 宿主通道溯源面（PR #435 起 detail 面透出；列表面不透出）。
+  execution_provider?: string | null
+  host_claimed_at?: string | null
+  host_receipt_at?: string | null
 }
 
 interface AgentToolCallDto {
@@ -66,6 +71,15 @@ interface ArtifactContentDto {
   mime: string
   reviewed: boolean
   content_base64: string
+}
+
+interface ArtifactAdoptionResultDto {
+  solution_id: string
+  run_id: string
+  artifact_id: string
+  adopted: boolean
+  duplicate: boolean
+  solution?: { id: string; name?: string } | null
 }
 
 interface RunListDto {
@@ -101,12 +115,20 @@ interface ArtifactPreviewState {
 const RUN_STATUS_LABEL: Record<string, string> = {
   queued: "排队中",
   running: "运行中",
+  host_running: "宿主执行中",
   completed: "已完成",
   succeeded_but_receipt_invalid: "成功但回执无效",
   failed: "失败",
   timeout: "超时",
   budget_exceeded: "预算超限",
 }
+
+// 采纳闸的成功终态集合（仅 completed / succeeded_but_receipt_invalid 允许采纳为方案；
+// queued/running/host_running/failed/timeout/budget_exceeded 一律不可）。
+const RUN_ADOPTABLE_STATUSES = new Set([
+  "completed",
+  "succeeded_but_receipt_invalid",
+])
 
 const DECISION_LABEL: Record<string, string> = {
   allowed: "放行",
@@ -183,6 +205,8 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
   const [previews, setPreviews] = useState<Record<string, ArtifactPreviewState>>({})
   const [openPreviews, setOpenPreviews] = useState<Set<string>>(new Set())
   const [downloadBusyId, setDownloadBusyId] = useState<string | null>(null)
+  // —— 采纳为方案（PR #435 人工采纳入口；canManage + completed/succeeded_but_receipt_invalid + 未采纳才可点）——
+  const [adoptBusyId, setAdoptBusyId] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setError("")
@@ -392,6 +416,38 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
     }
   }
 
+  function jumpToSolution(solutionId: string): void {
+    const nextHash = `#projects/${encodeURIComponent(projectId)}?tab=delivery&solution=${encodeURIComponent(solutionId)}`
+    allowNextHashNavigation(nextHash)
+    window.location.hash = nextHash
+  }
+
+  async function adoptArtifactAsSolution(runId: string, artifact: AgentArtifactDto): Promise<void> {
+    setAdoptBusyId(artifact.id)
+    setArtifactNotice("")
+    setDetailError("")
+    try {
+      const result = await apiRequest<ArtifactAdoptionResultDto>(
+        `/api/v1/agents/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifact.id)}/adopt-solution`,
+        { method: "POST", body: {} },
+      )
+      const runDetail = await apiRequest<AgentRunDetailDto>(
+        `/api/v1/agents/runs/${encodeURIComponent(runId)}`,
+        { method: "GET" },
+      )
+      setDetail(runDetail)
+      setArtifactNotice(
+        result.duplicate
+          ? "该产物已关联交付方案（幂等回执），点击「查看方案」即可前往。"
+          : "已将该产物采纳为交付方案，点击「查看方案」即可前往编辑。",
+      )
+    } catch (caught) {
+      setDetailError(actionMessage(caught))
+    } finally {
+      setAdoptBusyId(null)
+    }
+  }
+
   async function toggleRunDetail(run: AgentRunRowDto): Promise<void> {
     if (expandedRunId === run.id) {
       setExpandedRunId(null)
@@ -426,8 +482,9 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
   }
 
   if (loading) return <p className="empty-copy" role="status">正在加载智能体运行…</p>
-  if (error) return <p className="empty-copy" role="alert">{error}</p>
-
+  // QR-113（goal-crv r7）：顶层 error 不再整页早返回——单件复核 PATCH 409/
+  // 下载失败此前把整个控制台坍缩为一行且无恢复路径。改为页内错误条＋重试
+  //（load 可重入），与 detailError/queueError 就地呈现语义一致。
   const previewActions = (runId: string, artifact: AgentArtifactDto) => (
     <>
       <button
@@ -448,6 +505,14 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
 
   return (
     <div className="page-stack">
+      {error && (
+        <p className="empty-copy" role="alert">
+          {error}{" "}
+          <button className="secondary-button" onClick={() => { void load() }}>
+            重试
+          </button>
+        </p>
+      )}
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -609,6 +674,9 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
                 {detail?.agent ? `${detail.agent.name}（${detail.agent.kind}）` : <code>{shortId(expandedRunId)}</code>}
                 {detail?.fallback_level ? ` · 降级链 ${detail.fallback_level}` : ""}
                 {detail?.degraded_reason ? ` · ${detail.degraded_reason}` : ""}
+                {detail?.execution_provider ? ` · 通道 ${detail.execution_provider}` : ""}
+                {detail?.host_claimed_at ? ` · 宿主领取 ${detail.host_claimed_at.slice(0, 19).replace("T", " ")}` : ""}
+                {detail?.host_receipt_at ? ` · 宿主回执 ${detail.host_receipt_at.slice(0, 19).replace("T", " ")}` : ""}
               </p>
             </div>
           </div>
@@ -617,6 +685,13 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
           {detailLoading ? <p className="empty-copy" role="status">正在加载详情…</p> : null}
           {detail && !detailLoading ? (
             <div className="page-stack">
+              {(() => {
+                const isTerminalAdoptable = RUN_ADOPTABLE_STATUSES.has(detail.status)
+                const showActionColumn = Boolean(
+                  canManage || detail.artifacts?.some((item) => Boolean(item.linked_solution_id)),
+                )
+                const colCount = showActionColumn ? 6 : 5
+                return (
               <table className="data-table">
                 <thead>
                   <tr>
@@ -624,7 +699,8 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
                     <th scope="col">类型</th>
                     <th scope="col">指纹 (sha256)</th>
                     <th scope="col">复核</th>
-                  {canManage ? <th scope="col">操作</th> : null}
+                    <th scope="col">方案</th>
+                    {showActionColumn ? <th scope="col">操作</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -642,22 +718,55 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
                               <small> · {Object.entries(artifact.derived_summary).map(([key, value]) => `${key}=${value}`).join(" / ")}</small>
                             ) : null}
                           </td>
-                          {canManage ? (
+                          <td>
+                            {artifact.linked_solution_id ? (
+                              <small>已采纳 <code>{artifact.linked_solution_id.slice(0, 8)}…</code></small>
+                            ) : (
+                              <small>—</small>
+                            )}
+                          </td>
+                          {showActionColumn ? (
                             <td>
-                              <button
-                                className="secondary-button"
-                                disabled={artifactBusyId === artifact.id}
-                                onClick={() => { void toggleArtifactReview(expandedRunId ?? "", artifact.id, !artifact.reviewed) }}
-                              >
-                                {artifactBusyId === artifact.id ? "正在提交…" : artifact.reviewed ? "撤回复核" : "标记复核"}
-                              </button>{" "}
-                              {previewActions(expandedRunId ?? "", artifact)}
+                              {canManage ? (
+                                <>
+                                  <button
+                                    className="secondary-button"
+                                    disabled={artifactBusyId === artifact.id}
+                                    onClick={() => { void toggleArtifactReview(expandedRunId ?? "", artifact.id, !artifact.reviewed) }}
+                                  >
+                                    {artifactBusyId === artifact.id ? "正在提交…" : artifact.reviewed ? "撤回复核" : "标记复核"}
+                                  </button>{" "}
+                                  {previewActions(expandedRunId ?? "", artifact)}
+                                </>
+                              ) : null}
+                              {artifact.linked_solution_id ? (
+                                <>
+                                  {canManage ? " " : null}
+                                  <button
+                                    className="secondary-button"
+                                    onClick={() => jumpToSolution(artifact.linked_solution_id ?? "")}
+                                  >
+                                    查看方案
+                                  </button>
+                                </>
+                              ) : canManage && isTerminalAdoptable ? (
+                                <>
+                                  {" "}
+                                  <button
+                                    className="primary-button"
+                                    disabled={adoptBusyId === artifact.id}
+                                    onClick={() => { void adoptArtifactAsSolution(expandedRunId ?? "", artifact) }}
+                                  >
+                                    {adoptBusyId === artifact.id ? "正在采纳…" : "采纳为方案"}
+                                  </button>
+                                </>
+                              ) : null}
                             </td>
                           ) : null}
                         </tr>
                         {canManage && openPreviews.has(artifact.id) ? (
                           <tr>
-                            <td colSpan={canManage ? 5 : 4}>
+                            <td colSpan={colCount}>
                               <PreviewBlock state={previews[artifact.id] ?? { status: "loading" }} kind={artifact.kind} />
                             </td>
                           </tr>
@@ -665,10 +774,12 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
                       </Fragment>
                     ))
                   ) : (
-                    <tr><td colSpan={canManage ? 5 : 4}>该运行暂无产物。</td></tr>
+                    <tr><td colSpan={colCount}>该运行暂无产物。</td></tr>
                   )}
                 </tbody>
               </table>
+                )
+              })()}
               <table className="data-table">
                 <thead>
                   <tr>

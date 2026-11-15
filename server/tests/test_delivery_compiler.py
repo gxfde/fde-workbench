@@ -13,6 +13,7 @@ from fde_api.solutions.service import _normalize as normalize_solution_payload
 from fde_api.workflows.compiler import DeliveryCompileError, compile_delivery_preview
 from fde_api.workflows.definition_service import (
     APPROVAL_CAPABILITIES,
+    catalog_call_contracts,
     catalog_call_effects,
     catalog_call_refs,
     validate_dag,
@@ -165,8 +166,11 @@ EXPECTED = {
                     "output": "solution_draft",
                     "max_retries": 0,
                     "params": {
-                        **EXPECTED_SKELETON,
-                        "opportunity_ids": "{{research_brief.opportunity_ids}}",
+                        "project_id": "{{project_id}}",
+                        "body": {
+                            **EXPECTED_SKELETON,
+                            "opportunity_ids": "{{research_brief.opportunity_ids}}",
+                        },
                     },
                 },
                 {
@@ -198,6 +202,7 @@ def test_compiled_dag_passes_catalog_whitelist_without_warnings():
         agent_refs=frozenset(),
         capabilities=APPROVAL_CAPABILITIES,
         call_effects=catalog_call_effects(),
+        call_contracts=catalog_call_contracts(),
     )
     assert validation.ok, [issue.as_dict() for issue in validation.errors]
     assert not validation.warnings
@@ -259,6 +264,7 @@ def test_compile_without_template_or_gates_falls_back_to_placeholders():
         agent_refs=frozenset(),
         capabilities=APPROVAL_CAPABILITIES,
         call_effects=catalog_call_effects(),
+        call_contracts=catalog_call_contracts(),
     )
     assert validation.ok
 

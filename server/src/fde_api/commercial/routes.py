@@ -439,6 +439,25 @@ def register_enterprise_route():
     初始角色按 ADR-M2 §2 矩阵（viewer→project_lead）；URL 与 K8 IP 限流保持
     不变（存量公开契约不破坏，语义单一化）。载荷新增必填 ``email``。
     """
+    # 多客户 M2（QR-043）：部署闸先于一切限流判定——未开闸一律 404 不确认面存在，
+    # 即使限流超限或 Redis 故障也不得返回 429 暴露存在性。
+    # （注册面模块函数内导入：commercial.routes 顶层导入 registration 会与
+    # registration.service→commercial.enterprise_service 构成包环，purity 冻结闸。）
+    from fde_api.registration.models import ENTRY_ENTERPRISE
+    from fde_api.registration.routes import _register_throttle as _unified_register_throttle
+    from fde_api.registration.service import (
+        RegistrationError,
+        _ensure_surface_open,
+        dispatch_verification_email,
+        register_account,
+    )
+
+    settings = current_app.config["SETTINGS"]
+    try:
+        _ensure_surface_open(settings)
+    except RegistrationError as error:
+        return error_response(error.code, error.message, error.status)
+
     retry_after = _registration_throttle(request.remote_addr)
     if retry_after is not None:
         return error_response(
@@ -446,12 +465,6 @@ def register_enterprise_route():
             f"注册尝试过于频繁，请约 {retry_after // 60 + 1} 分钟后再试。",
             429,
         )
-    # 多客户 M2：统一注册限流（auth:register:{ip}）与既有 K8（commercial:register:{ip}）
-    # 并行生效——legacy URL 与统一四入口共用同一桶，不因收拢出现限流旁路。
-    # （注册面模块函数内导入：commercial.routes 顶层导入 registration 会与
-    # registration.service→commercial.enterprise_service 构成包环，purity 冻结闸。）
-    from fde_api.registration.routes import _register_throttle as _unified_register_throttle
-
     unified_retry_after = _unified_register_throttle(request.remote_addr)
     if unified_retry_after is not None:
         return error_response(
@@ -459,16 +472,9 @@ def register_enterprise_route():
             "注册尝试过于频繁，请明日再试（每 IP 每日上限见部署配置）。",
             429,
         )
-    from fde_api.registration.models import ENTRY_ENTERPRISE
-    from fde_api.registration.service import (
-        RegistrationError,
-        dispatch_verification_email,
-        register_account,
-    )
 
     payload = request.get_json(silent=True)
     payload = payload if isinstance(payload, dict) else {}
-    settings = current_app.config["SETTINGS"]
     try:
         with db.session() as session, session.begin():
             data, raw_token = register_account(

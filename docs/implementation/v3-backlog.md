@@ -720,6 +720,7 @@
     - **操作指引**：NEW `docs/audit/首个run亲手操作指引-2026-11-13.md`（建项目五必填 → 配 `default` 凭据 → 开宿主通道 → AI 对话 → `awaiting_confirmation` → 输密码 → 只读采集 → D7 复审轮；附 N2 实测带出的两条实施级前置）。
     - **验证**：NEW 36 例全绿 ＋ 邻域回归 88 例全绿 ＋ ruff 全绿 ＋ mypy 279→**277**（顺带消掉存量 2 条 arg-type）＋ 变异三连全红→还原绿（sha256 逐位一致）。
     - ~~**口径差待拍板**：`agent_pilot_max_runs` 默认 **20** vs 文档拍板 **10**~~ **✅ 已收口（2026-11-13 4A 轮，OWNER 拍板「保守值优先」）**：代码默认已改 10（`config.py` Field 默认＋`pilot.py` getattr 回落双处同步；`agent_pilot_enabled` 默认 False ⇒ 闸不开无运行时副作用）。
+    - **【2026-11-14 goal-sprint r6 意图↔实现验收与三处真缺口闭合】**：蔡工显式令开闸验收 `#414`——E11 凭据面 19 例逐条吻合；E8 对照 N3 五问抓出并修复三处潜伏缺口：① `automation_fallback.py` 由 `mcp_gateway.TOOLS` 单一真身建立点分能力→只读工具映射（修复真实 API 任务 `["project.read", "project.summarize", "file.search"]` 与下划线工具名零交集致 100% 无法降级的断层，保留直传工具名兼容与纯写能力 `None` 失败语义）；② `automation_jobs.py` 与 `ai_server_client.py` 降级分支向 `direct_tool_completion` 显式透传 `capabilities` 与 `plan.allowed_tools` 收窄；③ `ai_tool_loop._run_tools` 增加执行期 `READ_ONLY_TOOLS` 白名单硬闸（封死 `capability=None` 的 `api_execute` 等写工具被模型幻觉/注入触发）。新增回归 +6 例、M1–M3 变异三连真红→字节级还原→209 例邻域全绿，零迁移零新表零新路由。
 
 ### 售前主线的度量口径（登记即声明，防「看起来达标」）
 
@@ -874,7 +875,7 @@ T-E1 ── T-E2 ── T-G1 ──(gate 候选闭环)
 **待补字段清单（人工，Agent 不代填）**
 1. ~~**D3**：回执原件本地路径 + sha256 + 回执日期~~ ⇒ **已解除 2026-11-12**（不做商用申请），不再需要回填。
 2. **N1**：授权人、首个 run 发起人（**必须为人**）、试点项目与范围；**N2**：真机窗口日期、检查单两表 PASS/FAIL + 证据 sha256（全表 PASS 才算签核）。
-3. **N3**：五问已于 2026-11-12 拍定（H1/H11 不自动收敛，E8 代码已合入 #414 待 r6 验收）；**D7**：四口径复审报告已于 2026-11-13 r4 出齐（`docs/audit/D7-四口径运行证据复审报告-2026-11-13.md`），**阈值拍板位现态＝待蔡工拍板（零预支数值，闸态变更=0）**。
+3. **N3**：五问已于 2026-11-12 拍定（H1/H11 不自动收敛，**E8/E11 已合入 #414 并于 2026-11-14 goal-sprint r6 完成意图↔实现验收与三处只读收窄缺口闭合**）；**D7**：四口径复审报告已于 2026-11-13 r4 出齐（`docs/audit/D7-四口径运行证据复审报告-2026-11-13.md`），**阈值拍板位现态＝待蔡工拍板（零预支数值，闸态变更=0）**。
 
 **交互方式**：`AskUserQuestion` 两轮共 5 题（第一轮 4 题、第二轮 1 题补参）；依据／收益／代价／推荐理由写在正文表格、卡片只用 A/B/C 编号（交互选择卡片规范）。20:08 与 20:38 原文全部保留作决策沿革。
 
@@ -924,7 +925,7 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 
 ## 交付案例学习闭环登记（2026-11-11，来源：设计稿 `docs/audit/交付案例学习闭环-三缺口设计稿-2026-11-11.md`，PR #350）
 
-### T-L0 交付案例学习闭环（案例摄取管线＋交付线可判定读数＋agent 知识片段接线）— **L1/L2/L3 全部已实施（PR #360 `f2f8c86`／PR #374 `ecba5c0`／PR #377 `8b858d7`，2026-11-12）**（§6 四项拍板＝按推荐执行＋留痕可推翻；L1 摄取管线＋L2 分布读数＋L3 lessons 接线全销；L2 模型层评估侧噪声带挂账——MiniMax Token Plan 配额外部闸，消解条件见 ✅ L2 节）
+### T-L0 交付案例学习闭环与 AI 原生化学习闭环 2.0（案例摄取管线＋交付线可判定读数＋agent 知识片段接线＋workbench 执行面/返件蒸馏＋三载体热生效/回归真化）— **L1/L2/L3/L4/L5 全部已实施（PR #360 `f2f8c86`／PR #374 `ecba5c0`／PR #377 `8b858d7`／PR #455 `7e99b658`＋#467 `ce4a9bde`／L5 实施轮，2026-11-14）**（L2 模型层噪声带 `0.1049` 已实测并随 L5 机械化；余 L6 真实交付反哺轮按 goal-l2.0 任务书推进）
 - 目标：把「学习交付案例 → 交付能力提升」从诊断线（已实证：生成 0/6→3/6→6/6）扩展到训练场与 agent 上下文。三缺口与推荐/否决方案全量见设计稿 §2；本行只登记状态与拍板入口。
 - 现测事实锚（2026-11-11，fork/main `49c14e4`）：训练场摄取存储面已预留（`SimulationScenario.source_kind='import'`＋`import_scenarios` 路由 `simulation/routes.py:136`＋三视图泄漏自检 `scenarios/loader.py:82-88`）；agent 知识片段段预留未接线（`render_masked_context` 支持、唯一调用点 `agents/service.py:390` 硬编码空元组）；污染钉扫描面＝`server/src/fde_api`＋`server/seeds`＋`desktop/src`＋fixtures（`test_diagnostic_eval_contamination.py:37-41`），`scripts/` 在面外。
 - 待拍板四项（设计稿 §6）：①Goal 线归属（推荐独立 L 线，勿并入 N 线）②首批案例源（推荐 somwyn 复盘代号化＋FDE-case-library 抽象重写 2 例〔MIT 已核〕＋诊断案例集复用 1 例验证单向阀）③污染单向阀裁定（推荐确认：判卷基准进训练场 judge 参考面、禁止流向诊断生成器＋静态钉）④lessons 来源边界（推荐允许展示面提炼，判卷基准侧永不进）。
@@ -959,6 +960,13 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - 内容纪律静态钉 NEW `server/tests/test_lessons_wiring.py` 11 例（schema 闭集／逐条 sha256 一致——改 text 必留 diff／答案字段词汇零命中／能力域闭集）。
 - ★CI 真红与裁决：初版种子含 4 条诊断展示面提炼条目 ⇒ 污染钉 N2/N3 真红（2 failed/3206 passed）；以评测集污染隔离红线为准（展示产物目录不得被生成器检索路径引用 ⇒ lessons.json 禁进），种子收敛 SOP-only（text 未改指纹不变）；「双来源」拍板让位机械闸、留痕可推翻。
 - 活体验证：容器内 10 条装载＋tier=agent.module.acceptance 非空选中 LESS-SOP-008。
+
+#### ✅ T-L0 L4/L5 实施轮（AI 原生化学习闭环 2.0，2026-11-14，状态：**已实施**——L4 PR #455 `7e99b658`＋PR #467 `ce4a9bde`；L5 迁移② `a9f3e5c7b1d2` 76→77 单头）
+
+**落地实现**：
+
+- **L4（执行面/归因面/蒸馏面）**：NEW `simulation/adapters/workbench.py` 第三执行档（走 `execute_ai_prompt` 单一入口＋异步 `simulation.run`＋直连四元组）＋`analyze_run` 三源化（L-A confirmed／L-B `model:server` likely／L-C 最新人工行 confirmed＋答案句黑名单洗刷）＋NEW `simulation/improvement_draft.py` 返件式蒸馏（5 字段允许名单投影＋输出答案键禁入＋`candidate_payload_json` 加列＋指纹 `payload_sha256`）＋`lessons.py` 键名错配修复＋桌面「失败→AI 起草→建案」与场景选择器。
+- **L5（三载体热生效＋回归真化＋噪声带四钉）**：迁移 `a9f3e5c7b1d2` 新建 `agent_lessons` 与 `prompt_overlays` 表、`ai_call_audits` 加 `context_payload_json`；动态 Lessons（seeds∪published 零缓存＋跨层防撞＋宿主事件快照留痕）、Prompt Overlay（NEW `ai/overlays.py` 两点共用在指纹后追加＋五件套注入闸＋审批并排终文预览＋沙箱同尺）、Skill 双闸链（禁 personal scope＋`release_channel` 记账 `skill_ref`）；`release_proposal` 拦截 `overfit_risk=True`（409）＋两表写面静态钉；回归参数化 `adapter_mode/model_mode`＋`DEFAULT_NOISE_BAND=0.1049` 与 L2 底册双锚＋独立 `model_verdict`＋轴比对 409 `noise_band_axis_mismatch`＋202 异步作业 `simulation.regression`；`AGENTS.md` §6-5 红线升格＋§6-6 平台级登记；桌面并排预览/真载荷回执/异步轮询接线。
 
 ### T-M7 商机数据归属权与区域服务商（M7-1 轮）— **结构就绪·待授权**（2026-11-12）
 

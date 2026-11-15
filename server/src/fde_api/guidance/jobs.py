@@ -82,7 +82,16 @@ def _redact_content(content: str, *, project_code: str) -> tuple[str, list[dict[
 def _write_redaction_event(
     session: Session, analysis: ProjectGuidanceAnalysis, entries: list[dict[str, Any]], actor_id: str
 ) -> None:
+    """复核事件落账（QR-133 指纹化：确证命中只存指纹、疑似只留计数，零真名）。"""
     if not entries:
+        return
+    from fde_api.guidance.redaction import fingerprint_review_entries
+
+    fingerprinted, suspect_count = fingerprint_review_entries(entries)
+    changes: dict[str, Any] = {"entries": fingerprinted}
+    if suspect_count:
+        changes["suspect_count"] = suspect_count
+    if not fingerprinted and not suspect_count:
         return
     session.add(
         OperationEvent(
@@ -91,7 +100,7 @@ def _write_redaction_event(
             target_type="project_guidance_analysis",
             target_id=analysis.id,
             event_type=REDACTION_EVENT_TYPE,
-            changes={"entries": entries},
+            changes=changes,
         )
     )
 

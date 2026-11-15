@@ -993,3 +993,58 @@ class AICallAudit(Base, TimestampMixin):
     error_code: Mapped[str | None] = mapped_column(String(60))
     prompt_version: Mapped[str | None] = mapped_column(String(60))
     prompt_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # 学习闭环 2.0 L5（迁移②）：动态 PromptOverlay 归因列。
+    # 值形如 ``{"overlay_ids": [...], "overlay_sha256": [...]}``——发布后注入
+    # 本调用点的 overlay 行身份（PG JSON 包含查询可反查）；未使用 overlay 的
+    # 调用行留 NULL（零回归，既有构造点零改动）。
+    context_payload_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=True, default=None
+    )
+
+
+class PromptOverlay(Base, TimestampMixin):
+    """提示词覆层行（学习闭环 2.0 L5）——追加式条款，≤200 字，陈述式。
+
+    由改进提案（``candidate_payload_json.prompt_overlay_fragment``）采纳后经
+    release_channel 创建；status 走 ``draft -> published``（热生效）→
+    ``retired``（回滚）。``content_sha256`` 服务端写入侧现算，行不可变——
+    改内容＝开新行（同 AgentLesson 纪律）。
+
+    **两点共用装载读面**（``ai/overlays.py::load_overlays(purpose)``）：
+    - ``control/ai_server_client.py::execute_ai_prompt``（DSH/降级分叉**之前**
+      注入，防降级路径丢 overlay）；
+    - ``DeepSeekClient.complete_json`` 直连腿头部（DSH 关闭部署下全覆盖）。
+
+    注入发生在 ``compute_prompt_fingerprint`` **之后**——指纹仍按
+    ``prompt_registry`` 常量算（N6 纪律零触碰），overlay 归因走
+    ``AICallAudit.context_payload_json``。
+    """
+
+    __tablename__ = "prompt_overlays"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'retired')",
+            name="ck_prompt_overlays_status",
+        ),
+        Index("ix_prompt_overlays_purpose", "purpose_key"),
+        Index("ix_prompt_overlays_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # purpose_key ≡ prompt_registry purpose 字面值的下划线风格闭集；
+    # 发布时闭集校验——未登记 purpose 拒发布。
+    purpose_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    # 追加式条款正文（≤200 字纪律；注入闸五件套句式静态闸拦截祈使/第二人称）
+    fragment: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 服务端写入侧现算（fragment 不可变）
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 数字尾缀解析防 v10<v2（如 v3 ⇒ 3，v10 ⇒ 10，字符串比较会错位）
+    min_prompt_version: Mapped[str | None] = mapped_column(String(20))
+    # 产生本条的改进提案（软链，ondelete SET NULL 允许提案归档）
+    source_proposal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("improvement_proposals.id", ondelete="SET NULL")
+    )
+    # draft / published / retired
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft", server_default="draft"
+    )

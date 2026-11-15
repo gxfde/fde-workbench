@@ -197,6 +197,8 @@ def handle_diagnostic_report(job) -> None:
         row = session.get(LeadDiagnosticSession, job.target_id)
         if row is None:
             return
+        if service._enforce_retention(session, row):
+            return
         # 终态直接跳过：重复投递不得二次调 AI 覆盖已有结论。
         if row.status in {"report_ready", "claimed", "expired"} or row.report:
             return

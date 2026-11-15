@@ -460,3 +460,58 @@ def test_tool_loop_does_not_inflate_reasoning_budget(app, db_session, ai_user):
         model=provider_model(model="deepseek-v4"), prompt="你好", user=ai_user,
         project_id=None, execution_id="exec-keep2", session=session2, max_tokens=2048)
     assert session2.calls[0][1]["json"]["max_tokens"] == 2048
+
+
+def test_direct_loop_blocks_write_tool_call_even_for_admin(app, db_session, ai_user, monkeypatch):
+    """N3-Q4 硬闸：即便模型在 tool_calls 里伪造 api_execute / file_send_wechat，执行层也必须直接拒绝且不进 call_tool。"""
+    called = []
+    monkeypatch.setattr(
+        "fde_api.control.ai_tool_loop.call_tool",
+        lambda *args, **kwargs: called.append((args, kwargs)) or {"unexpected": True},
+    )
+    session = FakeSession([
+        tool_call_response("api_execute", {"operation_key": "projects.create", "body": {"name": "bad"}}),
+        final_response("已拒绝写操作。"),
+    ])
+
+    text, _usage, trace = direct_tool_completion(
+        model=provider_model(),
+        prompt="尝试写入",
+        user=ai_user,
+        project_id=None,
+        execution_id="exec-block-write",
+        session=session,
+    )
+
+    assert text == "已拒绝写操作。"
+    assert called == []
+    assert trace == [{"tool": "api_execute", "ok": False}]
+    second_messages = session.calls[1][1]["json"]["messages"]
+    tool_msg = [m for m in second_messages if m.get("role") == "tool"][0]
+    assert json.loads(tool_msg["content"])["error"] == "forbidden"
+
+
+def test_direct_loop_narrows_capabilities_and_allowed_tools(app, db_session, ai_user):
+    """传入 capabilities 与 allowed_tools 时，暴露 schema 与执行期白名单同步收窄（且 api_catalog 不含写操作）。"""
+    session = FakeSession([
+        tool_call_response("system_status", {}, call_id="call-denied"),
+        final_response("只读受限回答。"),
+    ])
+
+    text, _usage, trace = direct_tool_completion(
+        model=provider_model(),
+        prompt="检查状态",
+        user=ai_user,
+        project_id=None,
+        execution_id="exec-narrow",
+        session=session,
+        capabilities=["project.read"],
+        allowed_tools=["project_read", "api_catalog"],
+    )
+
+    assert text == "只读受限回答。"
+    offered_names = {
+        item["function"]["name"] for item in session.calls[0][1]["json"]["tools"]
+    }
+    assert offered_names == {"project_read", "api_catalog"}
+    assert trace == [{"tool": "system_status", "ok": False}]

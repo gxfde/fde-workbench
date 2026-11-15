@@ -6,10 +6,10 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "7e7de308-d5f3-48e0-9241-66409c5cdf77",
+  "deliveryReceiptId": "77276aaa-d79c-4fed-ab86-19087fed5e75",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
-    "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+    "sha256": "1332dd73aea5875f7f7fef7f247d948ae7cf31570cc0b1d9f45c0568dccd1f3b",
     "bytes": 829693
   },
   "state": {
@@ -691,7 +691,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\receipts",
+    "directory": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\dataflow\\receipts",
     "receipt": "bridge-evidence-dataflow.browser-check.json",
     "files": []
   }

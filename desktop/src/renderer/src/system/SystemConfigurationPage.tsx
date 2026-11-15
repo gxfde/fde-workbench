@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { useAuth } from "../auth/AuthProvider"
+import { PlatformGovernancePanel } from "./PlatformGovernancePanel"
 
 type Values = Record<string, string | number | boolean | null>
 interface Configuration { values: Values; secrets_configured: Record<string, boolean>; version: number; bootstrap_fields: string[] }
@@ -65,6 +66,8 @@ export function SystemConfigurationPage() {
       </ConfigSection>
       <div className="form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "正在保存…" : "保存系统配置"}</button></div>
     </form>
+    {/* 运行治理卡在 <form> 外下方：独立数据加载，失败不阻保存 */}
+    <PlatformGovernancePanel />
   </section>
 }
 

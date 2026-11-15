@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "7e7de308-d5f3-48e0-9241-66409c5cdf77",
+  "receiptId": "77276aaa-d79c-4fed-ab86-19087fed5e75",
   "status": "current",
   "command": "deliver",
   "type": "dataflow",
-  "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
-  "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
+  "input": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\dataflow\\candidate.json",
+  "output": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\dataflow\\bridge-evidence-dataflow.html",
   "specification": {
-    "sha256": "79a8da7324fb5cea1fab392ad7ece74dd7553f09b5a60def2d4fdabe3a39dff8",
+    "sha256": "bb51e987a362c36e75ebbe924290b3a56498a24a4cb1c3da55d30bf340b92029",
     "bytes": 12106
   },
   "artifact": {
-    "sha256": "bc1d0ed4efaab6422b8564f43370f7cd45435c8ece300f99a5414d200826b095",
+    "sha256": "1332dd73aea5875f7f7fef7f247d948ae7cf31570cc0b1d9f45c0568dccd1f3b",
     "bytes": 829693
   }
 }

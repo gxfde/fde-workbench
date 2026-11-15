@@ -10,11 +10,17 @@ import { useAuth } from "../auth/AuthProvider"
 import { AsyncButton, EmptyState, Loading, UiButton } from "../components/ui"
 import {
   createRegressionSuite,
+  getRegressionJobStatus,
   listRegressionResults,
   listRegressionSuites,
   runRegression,
 } from "./api"
-import type { RegressionResultDto, RegressionSuiteDto } from "./types"
+import type {
+  ModelVerdict,
+  RegressionAsyncQueuedDto,
+  RegressionResultDto,
+  RegressionSuiteDto,
+} from "./types"
 
 const VERDICT_LABEL: Record<RegressionResultDto["verdict"], string> = {
   improved: "有改进",
@@ -22,6 +28,22 @@ const VERDICT_LABEL: Record<RegressionResultDto["verdict"], string> = {
   mixed: "有得有失",
   no_change: "无变化",
   inconclusive: "结论不可靠",
+}
+
+const MODEL_VERDICT_LABEL: Record<ModelVerdict, string> = {
+  improved: "模型层有改进（超噪声带）",
+  regressed: "模型层有退化（超噪声带）",
+  within_noise: "落在噪声带内（不可判改进）",
+  insufficient_data: "样本不足（n<3）",
+}
+
+function isAsyncQueued(value: unknown): value is RegressionAsyncQueuedDto {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>).queued_async === true &&
+      typeof (value as Record<string, unknown>).job_id === "string",
+  )
 }
 
 function errorText(caught: unknown): string {
@@ -39,6 +61,7 @@ export function RegressionDashboard(): ReactElement {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
+  const [activeJob, setActiveJob] = useState<{ jobId: string; suiteId: string; status: string } | null>(null)
   const sequence = useRef(0)
 
   const load = useCallback(async () => {
@@ -67,6 +90,39 @@ export function RegressionDashboard(): ReactElement {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!activeJob) return undefined
+    let cancelled = false
+    const timer = setInterval(() => {
+      void getRegressionJobStatus(apiRequest, activeJob.jobId)
+        .then(async (statusPayload) => {
+          if (cancelled) return
+          if (statusPayload.status === "succeeded") {
+            setActiveJob(null)
+            setNotice("后台回归作业已完成。")
+            await load()
+          } else if (statusPayload.status === "failed" || statusPayload.status === "cancelled") {
+            setActiveJob(null)
+            setNotice(
+              `后台回归作业结束（${statusPayload.status}）：${statusPayload.last_error || "请检查运行日志"}`,
+            )
+            await load()
+          } else {
+            setActiveJob((prev) =>
+              prev && prev.jobId === activeJob.jobId ? { ...prev, status: statusPayload.status } : prev,
+            )
+          }
+        })
+        .catch(() => {
+          // 轮询瞬态失败静默待下一跳
+        })
+    }, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [activeJob, apiRequest, load])
+
   async function handleCreateSuite(): Promise<void> {
     setBusy(true)
     try {
@@ -83,11 +139,18 @@ export function RegressionDashboard(): ReactElement {
   async function handleRun(suiteId: string): Promise<void> {
     setBusy(true)
     try {
-      const result = await runRegression(apiRequest, suiteId)
+      const response = await runRegression(apiRequest, suiteId)
+      if (isAsyncQueued(response)) {
+        setActiveJob({ jobId: response.job_id, suiteId: response.suite_id, status: response.job_status })
+        setNotice(
+          `真模型回归已转入后台作业（Job #${response.job_id.slice(0, 8)}，执行面 ${response.adapter_mode} / 评估 ${response.model_mode}），正在轮询结果…`,
+        )
+        return
+      }
       setNotice(
-        result.overfit_risk
+        response.overfit_risk
           ? "回归完成——检出过拟合风险，不得进入发布审批。"
-          : `回归完成：${VERDICT_LABEL[result.verdict]}。`,
+          : `回归完成：${VERDICT_LABEL[response.verdict]}。`,
       )
       await load()
     } catch (caught) {
@@ -119,6 +182,11 @@ export function RegressionDashboard(): ReactElement {
       {notice ? (
         <p className="simulation-notice" role="status">
           {notice}
+        </p>
+      ) : null}
+      {activeJob ? (
+        <p className="simulation-hint" role="status">
+          后台回归执行中：Job #{activeJob.jobId.slice(0, 8)} · 状态 {activeJob.status}
         </p>
       ) : null}
       {error ? (
@@ -167,6 +235,14 @@ export function RegressionDashboard(): ReactElement {
                   {result.after.mean_total?.toFixed(2)}
                 </span>
                 <span>总分 Δ {result.deltas.total_delta?.toFixed(2) ?? "—"}</span>
+                {result.deltas.model_verdict ? (
+                  <span>
+                    L-B 模型层：{MODEL_VERDICT_LABEL[result.deltas.model_verdict]}
+                    {result.deltas.noise_band !== undefined
+                      ? `（噪声带 ±${result.deltas.noise_band}）`
+                      : ""}
+                  </span>
+                ) : null}
               </header>
               {result.overfit_risk ? (
                 <p className="simulation-warning" role="alert">

@@ -2,6 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { webBridgeSessionState } from "../../src/renderer/src/fde-web-bridge"
+// QR-112 换代注记：version 断言与 CR-058 对账钉同源——动态读 package.json version
+//（打包轮次 bump 后两侧恒同步，不再硬编码字面量）。
+import pkg from "../../package.json"
+const pkgVersion = pkg.version as string
 
 const authPayload = {
   data: {
@@ -21,10 +25,10 @@ const authPayload = {
   error: null,
 }
 
-function stubFetch(payload: unknown) {
+function stubFetch(payload: unknown, status = 200) {
   const fetchMock = vi.fn(async () => ({
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
     json: async () => payload,
   }))
   vi.stubGlobal("fetch", fetchMock)
@@ -44,7 +48,8 @@ describe("浏览器版 window.fde 桥", () => {
     expect(typeof window.fde.api.request).toBe("function")
     expect(typeof window.fde.bridge.capture).toBe("function")
     expect(typeof window.fde.app.version).toBe("function")
-    expect(await window.fde.app.version()).toBe("0.3.0-web")
+    expect(await window.fde.app.version()).toBe(`${pkgVersion}-web`)
+    
 
     stubFetch(authPayload)
     await window.fde.auth.login({ username: "guest-a", password: "x", deviceLabel: "test" })
@@ -88,8 +93,10 @@ describe("浏览器版 window.fde 桥", () => {
   })
 
   it("合法路径透传 Bearer 与 JSON body，并保留服务端错误信封", async () => {
+    // QR-112 换代注记：错误信封真实形态是 4xx（200+error 属违约形态，由
+    // shared parseApiEnvelope 四不变量拒绝——等价性钉样本另有覆盖）。
     const payload = { data: null, error: { code: "password_change_required", message: "请先修改密码" } }
-    const fetchMock = stubFetch(payload)
+    const fetchMock = stubFetch(payload, 409)
     const result = await window.fde.api.request("/api/v1/projects", {
       method: "POST",
       accessToken: "access-1",
@@ -97,7 +104,7 @@ describe("浏览器版 window.fde 桥", () => {
     })
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.data.status).toBe(200)
+      expect(result.data.status).toBe(409)
       expect(result.data.error?.code).toBe("password_change_required")
     }
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]

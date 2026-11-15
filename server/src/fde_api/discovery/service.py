@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from fde_api.extensions import db
+from fde_api.guidance.redaction import resolve_redaction_display
 from fde_api.projects.permissions import project_access
 from fde_api.transcripts.models import InterviewMinutes, TranscriptDraft
 from fde_api.workbench.models import OperationEvent, Project
@@ -383,7 +384,8 @@ def serialize_extraction(row: DiscoveryExtraction) -> dict[str, Any]:
         "completed_at": row.completed_at.isoformat() if row.completed_at else None,
         "failure_code": row.failure_code,
         "failure_message": row.failure_message,
-        "redaction_entries": row.redaction_entries or [],
+        # 读面词典反解（软失败 name=None → UI 指纹前 8 位占位）。
+        "redaction_entries": resolve_redaction_display(row.redaction_entries or []),
     }
 
 

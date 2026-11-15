@@ -39,8 +39,30 @@
 
 ### r1 待办（收口条件）
 
-- [x] 蔡工发起首个 run（窗口 11-19 止）→ 2026-11-13 活库核实 `FDE-20261112-5CFF4FA2`（`pilot-001` 承载项目）已完跑 2 条生产 `host_poll` `agent_runs`（`b647945e…` 3 件产物 3/3 已人工复核＋#435 逐字节 sha256 自证 200；`347fb585…` 5 件待复核）→ **窗口内闭环已兑现**（详记 r4 复审报告 §3.3）
+- [x] 蔡工发起首个 run（窗口 11-19 止）→ 2026-11-13/14 活库核实 `FDE-20261112-5CFF4FA2`（`pilot-001` 承载项目）已完跑 2 条生产 `host_poll` `agent_runs`（run-001 `b647945e…` 3/3＋run-002 `347fb585…` 5/5 **共 8/8 产物全部人工复核**＋#435 逐字节 sha256 自证 200）→ **窗口内闭环已兑现**（详记下方「r1 证据登记」与 r4 复审报告 §3.3）
 - [ ] ~~或窗口关闭未跑成 → 如实登记「部分完成」转 r2~~（不适用：已在窗口内跑成）
+
+### r1 证据登记（2026-11-14，AI 双侧现测后落账）
+
+**run 面（项目 pilot-001 `7e931c55-42e7-4320-be7a-4a35f8ab3bb9` · 发起人 admin＝H4 亲手执行成立 · 售前智能体 `4410538c-17a1-499d-817e-cb8060a90795`／能力 `agent.module.presales`）**：
+
+**run-001** `b647945e-4b6e-4010-a8da-e4913fe7430b`（idempotency `pilot-001-hostpoll-run-001` · 北京时 11-13 11:46 · completed/exit 0/无降级 · host_poll claim+receipt 齐 · 185s）：
+- `output/manifest.json` sha256 `337df4624229273e1ea0abf4a4730e5f7ef052150275fba0cfc16801beb338ad`
+- `output/presales-proposal-draft.md` sha256 `27019a85905f292d8e3f7bd364be2732689ef319db373aba2ecdf390f98eaedc`
+- `output/requirement-clarification.md` sha256 `77d82fda1fcd7d936f2bc8257a23b3adf810a1930077186bffc2bc04437f5c30`
+- 产物复核 **3/3**（reviewed_by=admin，2026-11-13 13:59）
+
+**run-002** `347fb585-29d6-4bf8-a6e5-789bf80cfc9a`（idempotency `pilot-001-hostpoll-run-002` · 北京时 11-13 16:40 · completed/exit 0/无降级 · host_poll claim+receipt 齐 · 256s）：
+- `output/presales-brief.md` sha256 `9fba8b489085bfa7898b12331fd2c2eb6523279f6b9c317f0af829f742efc118`
+- `output/assumptions-and-gaps.md` sha256 `dc3f01ac83dc9c390d233ca947cd8ca159284d96858fd033f2d4453588347071`
+- `output/solution-directions.md` sha256 `5cb5b17b2e3cc7d4725a6eea33dfe7d34d2aeb0f222e155f500bf731dfe54bc3`
+- `output/delivery-plan.md` sha256 `38e6ae86428c6a96f1610d793ddb75fd781eda588f14aad66643d8833504f1b9`
+- `output/discovery-questionnaire.md` sha256 `8f97c60a3b1361665a9f157992581a462e91852aa85a368fe07303e958cc8492`
+- 产物复核 **5/5**（reviewed_by=admin，2026-11-14 00:14）
+
+**核验方式**：磁盘原件（`D:/test/agent-workspaces/platform/<RUN_ID>/output/`）逐文件 `sha256sum` 与 `agent_artifacts.sha256` 库内指纹逐字一致（2026-11-13/14 两次现测）；原件已存仓库参考样板 `docs/售前产物参考/run-002-20261113/`（README 含 run-002 全量指纹）。
+
+**证据闸快照**（verify-run-evidence.sql，2026-11-13 现测）：approval_rows=2 / reviewed=2 → **HAS_RUN_EVIDENCE**；审批时效 p50=85.5s / p90=104.3s、人工否决率 0.0000；C 口径 2 条 11-08 落空行待 r4 裁决；D 口径确认失败锁 0 行。→ r4 D7 复审轮数据前提达成。
 
 ### r1 变更面
 
@@ -58,6 +80,7 @@
 - PR **#411** squash 合并 `5a3f276`；CI 四 job 全绿（权威 run **43291551524**：server-tests 12m20s／desktop 2m26s／pseudonymization 58s／secrets-scan 9s）。
 - main 追平 fork/main＝`5a3f276`（主树被并发线检出 feat 分支 ⇒ 用 `git fetch fork main:main` 只推 ref 不动检出——共享树 HEAD 争用面新配方）；`goal-sprint-r1` 分支本地（树 diff 空＝squash 零漂移证明）＋远端均已删；sprint worktree 现 detached @ `5a3f276` 待 r2。
 - r1 遗留：蔡工发起首个 run（窗口 11-19 止）后补证据 sha256 登记；未发起则窗口关闭如实登记转 r2。
+  - ✅ **遗留清偿（2026-11-14）**：run ×2 窗口内完成 + 8/8 产物人工复核 + sha256 双侧现测一致 → 见「r1 证据登记」。**r1 全部收口，无遗留。**
 
 ## r2 · P2′ 服务端咬合面收口（2026-11-13，生产代码轮）
 
@@ -175,3 +198,99 @@ P2′① 咬合半**已于 #204/#215（2026-11-08）落地**（迁移 `f6d3a9c1e
 - [x] 按推进包 §4 骨架出具真实四口径复审报告（含 C/B 口径源码级裁决与 N1 窗口实况）
 - [x] 阈值拍板位状态明确落档为「待蔡工拍板」（零预支数值，闸态变更数 = 0）
 - [x] 静态防预支机械钉 + 台账同步钉本地实跑全绿（PR 与 CI 四绿见收口回执，回填式）
+
+---
+
+## r5 · T-14b 收尾（`diag.fde18.com` 443 上线＋官网 CTA 锚点切换＋线上复测，2026-11-13）
+
+### 开工前检查单与两条潜伏线上真缺陷修复
+
+- `git fetch fork` 对齐 `fork/main` `67c0c867`（#440）；在途 open PR（`#443`/`#442`/`#441`/`#439`/`#424`）均与 T-14b 部署及台账面无冲突。
+- **★真机缺陷 1（远端 `diag.fde18.com.conf` 漏写 `server` 级 `root`/`index`）**：SSH 预检 `141.95.33.198` 时发现 `/www/server/panel/vhost/nginx/diag.fde18.com.conf` 仅在 `location ^~ /.well-known/acme-challenge/` 内写了 `root`，`server` 级缺失 `root /www/wwwroot/diag.fde18.com; index index.html;`，导致 `/` 落入宝塔默认目录返回 **58,286B 的 `<title>Sorry, the website has been stopped</title>`**（状态码同为 200，前序只测 `%{http_code}` 漏检）。备份 `/root/diag.fde18.com.conf.bak-20261113-r5` 后补齐重载，恢复为 `1,246B` 工作台 SPA。
+- **★真机缺陷 2（线上 `fde18.com/contact/` 的 `PUBLIC_FORM_KEY` 被前序部署截断）**：部署官网前提取线上联系页 `formKey` 时发现 `185827` 次部署因解析正则失误把残串 `formKey = \` 烤入线上页面导致表单回退失效；从远端历史备份 `/www/wwwroot/fde18.com.bak-20261110-140044/contact/index.html` 找回完整 36 位真 UUID 并随本次部署恢复（校验 `formKey_is_valid_uuid=True`，密钥全文零入库零打印）。
+
+### 执行链与线上实测回执（任务书 §3 r5 行＋§9 硬指标 4 全兑现）
+
+1. **DNS 前置（人工，蔡工亲手完成）**：阿里云云解析添加 `diag.fde18.com → 141.95.33.198` A 记录；权威 NS（`dns31/32.hichina.com`）与 `1.1.1.1`/`8.8.8.8` 实测全部命中 `141.95.33.198`。
+2. **certbot 443 签证与 vhost 升级**：`certbot certonly --webroot -w /www/wwwroot/diag.fde18.com -d diag.fde18.com` 签发成功（Issuer `Let's Encrypt YR1`，有效期 `2026-11-13` 至 `2027-02-11`）；备份 `/root/diag.fde18.com.conf.bak-pre443-r5` 后升级为 80→`301 https://$host$request_uri`（保留 ACME challenge）＋443 SSL HTTP/2（CSP/X-Frame-Options/覆盖写 XFF 同主站）。
+3. **`diag.fde18.com` 公网 HTTPS 7 项冒烟全绿**：①`http://diag.fde18.com/` → `301 https://diag.fde18.com/`；②`https://diag.fde18.com/` → `200`（SPA + CSP）；③JS 资产 `200`（`1,499,257B`，`x-diagnostic-token`/`#diagnostics` 在位）；④`health/ready` & `live` `200`；⑤`questionnaire` `200`（`7,233B`）；⑥`POST /api/v1/diagnostics/sessions` 真建匿名会话 `200`（`sid=8ab84475…`）；⑦闸隔离：`diag` 注册面 `404`、`app.fde18.com` 诊断面 `404`。
+4. **官网仓 `caishide/fde-ops` 切换 CTA 与部署上线**：
+   - PR **#55**（squash **`04f4220`**，`website-ci` runs `43423553682`/`43423561348` 全绿）：`/diagnosis-samples/` 主 CTA 切 `https://diag.fde18.com/#diagnostics`（政策补贴测算·免注册）、次 CTA 切 `https://diag.fde18.com/#diagnostics/sample`、辅助行保留初诊入口；E38 正式收回 `_APP_LINK_OK` 过渡豁免（`app.fde18.com` 全站零容忍）、E39 持 `diag` 双直链；变异 M1/M2 双红→字节级还原→绿；口径表升 v2.3（§4.18）、运营台账升 v1.6（row 21）。
+   - 部署：`deploy-ovh-fde18.sh` STAMP **`20261113-201958`** exit 0（**99/99 PASS**＋85 文件＋IndexNow 50 URL 200×2）→ 推送部署 tag **`deploy-20261113-2019`** → 台账回执补记 PR **#56**（squash **`a2b40f1`**，CI 双绿）。
+5. **本仓公网只读校验器与台账同步**：NEW `scripts/verify/verify_diag_public_live.py` 实跑 `VERIFY-R5-DIAG-PUBLIC-LIVE PASS`（6/6 全绿）；同步 `docs/architecture/获客诊断工具实施任务书-v1.md`（T-14 → ✅ 全收口，R-A 止损线起算日锚定 `2026-11-13`→`2027-02-13`）、`CHANGELOG.md` r5 节、`AGENTS.md` 当前状态头。**零后端/桌面生产代码改动・零迁移・零新路由**（490/52/153/74 不变）。
+
+### r5 待办（收口条件）
+
+- [x] 蔡工配齐 `diag.fde18.com` A 记录 → Let's Encrypt 443 签证生效＋nginx 80→301/443 上线
+- [x] `fde-ops` 官网 CTA 切换 `diag.fde18.com` 双锚点＋收回 `app.fde18.com` 豁免（PR #55 `04f4220`＋tag `deploy-20261113-2019`＋PR #56 `a2b40f1`）
+- [x] 公网 HTTPS 线上复测全绿（`verify_diag_public_live.py` 6/6 PASS；本仓 PR #445 `2bf8da42` 四绿收口）
+
+---
+
+## r6 · E8 实施与降级验收轮（E8/E11 意图↔实现逐条核对＋三处真缺口闭合修复＋台账同步，2026-11-14）
+
+### 开工闸与并发吸收核对（任务书 §1 吸收条款＋§3 r6 行）
+
+- **开工闸两项齐备**：① D7 四口径运行证据复审报告已于 r4 出齐合并（`#438` `05581872`）；② 蔡工显式下达开工令「继续推进 r6」（不跨闸不自动跳轮）。
+- **`goal-crv` 吸收扫描**：遍历 `docs/goal-crv-r1..r10-*.md` 与 `docs/audit/全面代码审查报告-2026-11-13.md` 全量 147 条 QR 台账，检索 `automation_fallback` / `automation_jobs` / `credentials.py` / `dsh_runtime` / `AutomationTaskRun` / `DEGRADABLE_DSH_CODES` / `READ_ONLY_TOOLS`，仅 `goal-crv-r1:46` 正向确认 `DSHRuntimePool.execute` 开发态合法路径——**与 E8/E11 交集的 P0/P1 缺陷＝0 条**。
+- **并发基线盘点**：PR `#414`（`8cbb21b`）已先行合入 E8 骨架（`control/automation_fallback.py`＋`control/automation_jobs.py`）与 E11 凭据管理面（`agents/credentials.py`＋三路由＋7 个 zcode 种子赋 `credential_ref="default"`）；`#440`（`67c0c867`）已对齐 `agent_pilot_max_runs=10`；`#441`（`d1126d3c`）＋`#446`（`4f4639fb`）已完成 `ai-eval` 四槽凭据接线并产出首份非 `insufficient_data` 报告（`pass` / `kpi=1.0` / `live 9/9`）。按台账 §12 与 `v3-backlog` 指派，本轮对 `#414` 执行 **N3 五问＋E11 意图↔实现（intended-vs-implemented）逐条验收**（注：同名外部技能已迁 `phuryn/product-engineering`，按其指引直接对规格与源码/测试逐行对账）。
+
+### E8/E11 意图↔实现逐条对账与三处潜伏真缺口修复
+
+1. **E11 智能体凭据管理面（100% 吻合，零生产改动）**：
+   - `agents/credentials.py`＋`GET/POST/DELETE /api/v1/agents/credentials`：`is_platform_operator` 平台身份＋`system_operator` 双轴硬闸；凭据名正则 `^[A-Za-z0-9_]{1,120}$` 封死 `FDE_AGENT_<NAME>` 环境变量名注入；Fernet 加密派生链与 `agents/service.py::_decrypt_credential` 逐字节同源；响应仅回 `credential_configured: bool`（零明文零密文回显），且不进 `api_catalog`（98 ENTRIES 不变）；`seeds/agents.json` 7 个 `zcode` 型赋 `"default"`、3 个 `persona` 型保 `null`。`test_agent_credentials.py` 19 例全绿。
+2. **E8 A 轨只读降级层（N3 五问核对抓出三处「测试绿而生产断/漏」真缺口并当场闭合）**：
+   - **N3-Q1 任务封闭集** ✅：`DEGRADABLE_TASK_TYPES = frozenset({"ai"})`，`system` 任务与已成功任务恒返 `None` 不降级；`automation.execute` 不在 `RECOVERABLE_JOB_TYPES` 中，H4 不自动重试红线保持。
+   - **N3-Q2/Q3/Q5 产出物、人工确认与诚实失败语义** ✅：降级不伪造宿主工作区 `sha256` 产物指针，落 `output_json.degraded=True`、`degraded_reason=error.code`、`degraded_confirmation_required=True`（蔡工逐件确认，H1/H11 不自动收敛）与显式只读产出描述；降级面自身再抛 `DSHRuntimeError` 时 `status="failed"` 且保留 `degraded=True` 留痕。
+   - **★真缺口 1（N3-Q4 命名空间断层致真实任务 100% 无法降级）**：`control/service.py:281,418-425` 创建桌面端/ClawBot `AutomationTask` 时强制校验并持久化非空点分能力名（默认 `DEFAULT_AUTOMATION_CAPABILITIES = ["project.read", "project.summarize", "file.search"]`），而 `#414` 的 `automation_fallback._read_only_tools_for` 在 `capabilities` 非空时仅与下划线工具名 `READ_ONLY_TOOLS` 做字面相等匹配（交集为空 `()` ⇒ 恒返 `None`；原接线测试直接 ORM 塞 `requested_capabilities=[]` 掩盖了断层）。**修复**：`automation_fallback.py` 由 `mcp_gateway.TOOLS` 单一真身派生 `CAPABILITY_READ_ONLY_TOOLS` 与 `UNSCOPED_READ_ONLY_TOOLS`（`project.summarize` 共享项目只读工具集，命中点分只读能力时附带 5 项无能力门槛通用只读工具；直传下划线只读工具名保持精确同名兼容；纯写/编排能力集仍返 `()` → `None`）。
+   - **★真缺口 2（N3-Q4 降级调用未收窄任务能力与工具白名单）**：`automation_jobs._record_degraded_execution` 虽把 `plan.allowed_tools` 写入 `output_json["degraded_allowed_tools"]`，但 `_run_degraded_readonly` 与 `ai_server_client._degraded_direct_result` 调 `direct_tool_completion` 时未传 `capabilities` 与 `allowed_tools`，导致模型实际拿到用户档位全量能力工具集，与审计留痕声称的白名单不一致。**修复**：`ai_tool_loop.tool_definitions` / `direct_tool_completion` 新增可选关键字参数 `capabilities` 与 `allowed_tools`；`automation_jobs` 显式透传 `capabilities=execution["allowed_tools"]`、`allowed_tools=plan.allowed_tools`，`ai_server_client.execute_ai_prompt` 两处降级分支透传 `capabilities=capabilities`。
+   - **★真缺口 3（N3-Q4 执行期缺二次只读硬闸）**：`ai_tool_loop._run_tools` 原先只靠 `tool_definitions` 在模型 schema 层过滤 `READ_ONLY_TOOLS`，模型返回 `tool_calls` 时直接调 `call_tool`；因 `mcp_gateway.TOOLS["api_execute"]` 的 `capability=None`（内部靠 `workbench.write` 鉴权），一旦高权限账号在直连/降级循环中遇提示词注入或模型幻觉返回 `api_execute`，写库操作会被直接执行。**修复**：`_run_tools` 新增 `permitted_tools = _permitted_read_only_tools(allowed_tools)`（恒 `<= READ_ONLY_TOOLS`）执行前硬拦截，任何非只读或未授权工具（如 `api_execute` / `file_send_wechat` / `lcsc_search`）一律返回 `{"error": "forbidden", "message": "本次执行未开放该工具。"}`，绝不触达 `call_tool`。
+
+### 验证回执
+
+- **新增测试 +6 例**：`test_automation_fallback.py` +2（11→13：点分能力展开＋`project.summarize` 映射）、`test_automation_fallback_wiring.py` +1（5→6：真实 `POST /api/v1/task-center/automations` 点分能力创建→降级落账→工具收窄端到端）、`test_ai_tool_loop.py` +2（admin 身份写工具 `api_execute` 硬拦截＋能力与白名单双重收窄）、`test_ai_server_direct_fallback.py` +1（`execute_ai_prompt` 降级透传 `capabilities`）。
+- **变异三连全真红→字节级还原（sha256 一致）→复绿**：M1 移除点分能力映射（`3b1fb920b3c9`，2 红）／M2 移除 `automation_jobs` 的 `allowed_tools` 透传（`a4fa3b3a5d99`，1 红）／M3 移除 `_run_tools` 执行期只读硬闸（`7dab87995c89`，2 红）。
+- **广域回归与静态闸**：控制面与安全邻域 13 套件 **209 passed**＋`ruff check` 全绿＋`scripts/check-python-types.py` **OK（277 occurrences / 102 distinct 基线不变）**＋`check_archify_diagram_freshness.py` OK＋台账钉/D7 报告钉全绿。**零迁移・零新表・零新路由・零桌面改动**（现测结构口径 **490 路由 / 52 蓝图 / 153 表 / 75 rev 单头 `d4b8e1f6a9c3` / 98 ENTRIES** 不变）。
+
+### r6 待办（收口条件）
+
+- [x] 开工闸（D7 报告出齐＋蔡工显式令）与 `goal-crv` 吸收条款扫描确认（0 交集缺陷）
+- [x] E8/E11 对照 N3 五问逐条意图↔实现核对，闭合 E8 三处真缺口（点分能力映射／降级收窄透传／`_run_tools` 执行期只读硬闸）并通过 +6 例回归与 M1–M3 变异三连
+- [x] 台账同步（本文件＋下一步实施台账＋`v3-backlog.md`＋`CHANGELOG.md`＋`AGENTS.md`；PR 四绿合并与活体容器追平三验随合并闭环）
+
+---
+
+## 收口 · 上线就绪终扫（2026-11-14，任务书 §8/§9）
+
+### §8 逐项终扫（对照 `docs/deployment/对外试用部署方案-v1.md` §8 十三项清单——技术判据引用 2026-11-09 T6 现测＋本轮只读复测，业务闸不代拍）
+
+- **本轮新只读复测全绿**：①`https://app.fde18.com/api/v1/health/ready`＝`200`、`/live`＝`200`、官网 `https://fde18.com/`＝`200`；②证书有效（`app` 至 `2027-02-07`、`diag` 至 `2027-02-11`）；③公网 `8010/5432/6379` 三端口外探全部 `TimeoutError`（不可达，只 443 开放）；④四 compose 服务 healthy；⑤`VERIFY-R5-DIAG-PUBLIC-LIVE` 复跑 **PASS**（6/6）。
+- **十三项技术判据**＝2026-11-09 T6 组现测 13/13 具备（含 R-T6-1 XFF 根治 PR #250）+ 本轮复测项无回归 ⇒ **维持具备**；`G-B`/`G-C` 闸未签、试用账号未发放 ⇒ 依原文纪律**不得发放任何登录信息**（待授权，见 BLOCKED.md #2）。
+- **清单外现测发现两项共享活体风险**（跨栈 Redis 别名轮询＋healthcheck 探针 FAIL exit=0 无判别力）＝既有拓扑/代码问题，不属本线改动面 ⇒ 如实登记 `docs/goal-sprint-BLOCKED.md` #4/#5，处置待拍板。
+
+### §9 六条硬指标终核（逐条贴证据）
+
+1. **adapter_missing 解除** ✅：台账 §12 r3 回执在场（grep 命中 15 处；①实装＋N2 签核两项齐备，VERIFY-R3 PASS）。
+2. **N1 试点窗口终态** ✅：活库现测 2 条 `host_poll` run 全 `completed`（`b647945e…` 3 件、`347fb585…` 5 件），**8/8 产物全部人工复核**（r4 时第二批 5 件待复核，本轮现测已清零）；sha256 指针纪律（`9fba8b48…`/`dc3f01ac…`/`5cb5b17b…` 等 8 枚指纹，原件永不入库）；窗口 11-19 止，到期处置归蔡工（BLOCKED.md #3）。
+3. **D7 复审报告出齐＋拍板位明确** ✅：报告 r4 出齐（`docs/audit/D7-四口径运行证据复审报告-2026-11-13.md`），拍板位＝「待蔡工拍板」（零预支，闸态变更=0）。
+4. **T-14b 终态** ✅：r5 全兑现，本轮 `verify_diag_public_live.py` 复跑 PASS。
+5. **全部轮 PR 四 CI job 绿** ✅：r1 #411／r2 #422／r3 #433（#434 补记）／r4 #438／r5 #445／r6 #459 各自合并时四绿（r6 贴 run `43492400743` 一次四绿＋`43492413946` 复跑四绿）；活体三验绿（r6：url_map 490／alembic `d4b8e1f6a9c3 (head)`／三镜像 `ae558917…`/`936dfd58…`/`199d798e…` 逐位一致）；`git diff 35ffbea..fork/main --stat` 现测 201 files/+39262/−1362——含并行线（goal-crv、桌面、L 线等）按开工拍板并行条款并入的改动面，各轮自身宣称面已在本轮 PR diff 逐次核验。
+6. **全程纪律** ✅：零闸代拍、零阈值预支、零证据造假；台账三同步见下。
+
+### 台账三同步（§8）
+
+- `CHANGELOG.md` 新增本收口节；`AGENTS.md` 新增本线收口行（动前验锚唯一性：r6 锚 count=1）；`docs/audit/下一步实施台账-2026-11-07.md` §12 追加收口行；本文件至此为**终态**（r1–r6＋收口全 ✅，冲刺线收官）。
+
+### 收口待办
+
+- [x] 部署方案 §8 验收清单逐项终扫（技术判据复测＋业务闸如实列待授权）
+- [x] §9 六条硬指标逐条贴证据核验
+- [x] `docs/goal-sprint-BLOCKED.md` 落盘（待授权 3 项＋共享活体风险 2 项）
+- [x] 台账三同步＋本文件终态（随收口 PR 合并闭环）
+
+---
+
+## 收口拍板回写（2026-11-14，交互选择卡四项全按推荐项落定）
+
+1. **D7 阈值**＝维持待拍板（`insufficient_for_unfreeze`，样本达标后再拍）；2. **G-C 签署与发放**＝整理签署材料包（NEW `docs/deployment/对外受控试用-G-C签署材料包-2026-11-14.md`；口径更正：G-B 已于 2026-11-10 有效签署，未签仅 G-C，剩余 `OWNER`/`HOST` 亲自项＝T5-7 外部真机登录＋改密＋写操作）；3. **N1 试点窗口**＝2026-11-19 按期关闭；4. **两项共享活体风险**＝单独立项一次修两项（NEW `docs/goal-liveinfra-活体基础设施修复-任务书-v1.md`，排期≠实施授权）。
+拍板留痕全文见 `docs/goal-sprint-BLOCKED.md` 各条「拍板回写」行；本轮零代码零迁移零路由。

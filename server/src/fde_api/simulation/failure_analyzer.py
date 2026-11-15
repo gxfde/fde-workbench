@@ -300,3 +300,169 @@ def analyze_failures(
         if current is None or order[finding.severity] < order[current.severity]:
             best[finding.code] = finding
     return list(best.values())
+
+
+def analyze_model_layer(
+    *,
+    evaluation: dict[str, Any],
+    failure_threshold: float = 0.6,
+) -> list[Finding]:
+    """L-B（模型层，真模型评估行）⇒ ``likely`` 发现（学习闭环 2.0 L4 断点②）。
+
+    查询口径由调用方钉死（``layer=="model" AND evaluator_id=="model:server"``，
+    stub 替身行不进）；本函数只做纯归因：
+    - 低分判据按 L-A 同款映射产 FA 码发现，根因置信**恒 likely**（不解锁提案——
+      只有 confirmed 根因可建提案，噪声带内 verdict 翻转实录 ⇒ 不直接 confirmed）；
+    - **不采信模型自写 evidence/reason**（模型看过 judge_view，其自证可复述
+      rubric 关键句）⇒ evidence_refs 恒空、description 只含判据键与分数。
+    """
+    criteria = (evaluation.get("scores") or {}).get("criteria") or []
+    findings: list[Finding] = []
+    for item in criteria:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "")
+        mapped = CRITERION_TO_FAILURE.get(key)
+        if not mapped:
+            continue
+        score = float(item.get("score") or 0.0)
+        if score >= failure_threshold:
+            continue
+        meta = FAILURE_CATEGORIES[mapped]
+        findings.append(
+            Finding(
+                code=mapped,
+                title=meta["title"],
+                severity=_severity(score, failure_threshold),
+                dimension=str(item.get("dimension") or ""),
+                description=(
+                    f"模型层判据 {key} 得分 {score:.2f}（独立第二意见，"
+                    f"阈值 {failure_threshold}）⇒ {meta['title']}"
+                ),
+                evidence_refs=(),
+                root_causes=(
+                    RootCause(
+                        code=meta["root_cause"],
+                        title=meta["root_cause"],
+                        confidence="likely",
+                        analysis=(
+                            f"真模型层（model:server）独立判分 {key} 低分，与规则层并列"
+                            "不合并——待人工复核。"
+                        ),
+                        evidence_refs=(),
+                    ),
+                ),
+                detail={"criterion": key, "score": score, "source": "model_server"},
+            )
+        )
+    best: dict[str, Finding] = {}
+    order = {"high": 0, "medium": 1, "low": 2}
+    for finding in findings:
+        current = best.get(finding.code)
+        if current is None or order[finding.severity] < order[current.severity]:
+            best[finding.code] = finding
+    return list(best.values())
+
+
+def scrub_answer_sentences(
+    text: str, blacklist: tuple[str, ...] | list[str]
+) -> tuple[str, list[str]]:
+    """答案句黑名单洗刷：命中参考答案句（rubric 三桶/期望结果/验收标准原文）
+    的片段替换为占位符。返回 (洗刷后文本, 命中句清单)。过短句子（<6 字）不拦
+    （误伤面大于防护面）。
+
+    用途（L-C 人工终裁 note）：终裁人看过 reference，note 可能整句抄答案——
+    洗刷后 note 才允许进 finding description（评审 C-1 修补③）。
+    """
+    scrubbed = str(text or "")
+    hits: list[str] = []
+    for sentence in blacklist:
+        sentence = str(sentence).strip()
+        if len(sentence) < 6 or sentence not in scrubbed:
+            continue
+        hits.append(sentence[:60])
+        scrubbed = scrubbed.replace(sentence, "［答案句已洗刷］")
+    return scrubbed, hits
+
+
+def analyze_human_layer(
+    *,
+    evaluation: dict[str, Any],
+    blacklist: tuple[str, ...] | list[str] = (),
+) -> list[Finding]:
+    """L-C（人工终裁最新行）⇒ ``confirmed`` 发现（学习闭环 2.0 L4 断点②）。
+
+    - 硬性失败按既有映射产 confirmed 发现；
+    - verdict ∈ (fail, hard_fail) ⇒ 附加 ``FA-C1 人工终裁不通过``（confirmed
+      根因——最高置信来源，可解锁提案）；
+    - note 全文先过答案句黑名单（未过 ⇒ description 落占位文并记
+      ``note_redacted``，原 note 留在评估行供人工复核，不进 finding）。
+    """
+    verdict = str(evaluation.get("verdict") or "")
+    note = str(evaluation.get("note") or "")
+    findings: list[Finding] = []
+    for failure in evaluation.get("hard_failures") or []:
+        if not isinstance(failure, dict):
+            continue
+        code = str(failure.get("code") or "")
+        mapped = HARD_FAILURE_TO_FAILURE.get(code)
+        if not mapped:
+            continue
+        meta = FAILURE_CATEGORIES[mapped]
+        findings.append(
+            Finding(
+                code=mapped,
+                title=meta["title"],
+                severity="high",
+                dimension="hard_failure",
+                description=f"人工终裁确认硬性失败 {code}：{meta['title']}",
+                evidence_refs=(),
+                root_causes=(
+                    RootCause(
+                        code=meta["root_cause"],
+                        title=meta["root_cause"],
+                        confidence="confirmed",
+                        analysis=f"人工终裁（L-C）确认硬性失败 {code} 直接命中。",
+                        evidence_refs=(),
+                    ),
+                ),
+                detail={"hard_failure": code, "source": "human"},
+            )
+        )
+    if verdict in ("fail", "hard_fail"):
+        scrubbed, hits = scrub_answer_sentences(note, blacklist)
+        description = (
+            scrubbed.strip()[:400]
+            if scrubbed.strip()
+            else "人工终裁结论为不通过（终裁批注含参考答案句，已洗刷）。"
+        )
+        findings.append(
+            Finding(
+                code="FA-C1",
+                title="人工终裁不通过",
+                severity="high",
+                dimension="human",
+                description=description,
+                evidence_refs=(),
+                root_causes=(
+                    RootCause(
+                        code="human_final_review",
+                        title="人工终裁（L-C）",
+                        confidence="confirmed",
+                        analysis="人工终裁（L-C）判不通过——三层中最高置信来源。",
+                        evidence_refs=(),
+                    ),
+                ),
+                detail={
+                    "source": "human",
+                    "note_redacted": bool(hits),
+                    "blacklist_hits": hits[:10],
+                },
+            )
+        )
+    best: dict[str, Finding] = {}
+    for finding in findings:
+        current = best.get(finding.code)
+        if current is None:
+            best[finding.code] = finding
+    return list(best.values())

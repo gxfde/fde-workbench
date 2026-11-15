@@ -86,4 +86,11 @@ describe("CR-057 打包物 CSP 注入静态钉（防写死值回归）", () => {
     expect(VITE_CONFIG).toMatch(/apply:\s*["']build["']/)
     expect(VITE_CONFIG).toMatch(/buildCspConnectSrc\(/)
   })
+
+  it("桌面与 Web 入口 HTML 的 CSP img-src 均包含 blob:（防 FilePreview 图片预览白屏回归）", () => {
+    const indexHtml = readFileSync(join(DESKTOP_ROOT, "src/renderer/index.html"), "utf-8")
+    const webHtml = readFileSync(join(DESKTOP_ROOT, "src/renderer/web.html"), "utf-8")
+    expect(indexHtml).toContain("img-src 'self' data: blob:;")
+    expect(webHtml).toContain("img-src 'self' data: blob:;")
+  })
 })

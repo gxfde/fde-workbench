@@ -21,6 +21,7 @@ import {
   METHOD_SAMPLES,
   PATH_SAMPLES,
 } from "../shared/api-safety-samples"
+import { ENVELOPE_SAMPLES } from "../shared/api-envelope-samples"
 
 function stubFetch(payload: unknown) {
   const fetchMock = vi.fn(async () => ({
@@ -80,6 +81,47 @@ async function webFetchHeaders(
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+// ---------------------------------------------------------------------------
+// QR-112（goal-crv-fix2 批 R7）：响应面信封判定 web 侧镜像钉——与桌面侧
+// tests/main/api-envelope-equivalence.test.ts 消费同一 ENVELOPE_SAMPLES，
+// 两桥 parseApiEnvelope 判定恒同（ok∧error 拒／!ok∧¬error 拒／!ok data 置空／
+// 错误体形态校验四处旧缺口封堵后的防再漂移钉）。
+// ---------------------------------------------------------------------------
+describe("QR-112 响应面信封判定（web 桥侧镜像逐样本）", () => {
+  function stubEnvelope(payload: unknown, status: number) {
+    const fetchMock = vi.fn(async () => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => payload,
+    }))
+    vi.stubGlobal("fetch", fetchMock)
+    return fetchMock
+  }
+
+  for (const sample of ENVELOPE_SAMPLES) {
+    it(`[${sample.status}] ${sample.note}`, async () => {
+      stubEnvelope(sample.payload, sample.status)
+      const result = await window.fde.api.request("/api/v1/ping", {
+        method: "GET",
+        accessToken: "equivalence-probe",
+      } as unknown as Parameters<typeof window.fde.api.request>[1])
+      if (sample.expected.kind === "ok") {
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.data.error).toBeNull()
+      } else if (sample.expected.kind === "error") {
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.data.error).not.toBeNull()
+          expect(result.data.data).toBeNull()
+        }
+      } else {
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.error.code).toBe("invalid_api_response")
+      }
+    })
+  }
 })
 
 describe("CR-071 web 桥等价性判定（共享样本集，与桌面恒同）", () => {

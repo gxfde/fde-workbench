@@ -246,9 +246,9 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
     session = db.session()
     try:
         with session.begin():
-            project = _load_project(session, actor, project_id, manage=True)
-            # P2-4 私单封堵（派单设计 §8.5）H2：直签线项目 × 池内企业 → 报价
-            # 同样封堵（成交从报价开始；存量直签项目的防御纵深）。
+            project = _load_project(session, actor, project_id, manage=True, for_update=True)
+            # P2-4 私单封堵（派单设计 §8.5）H2＋QR-018：行锁并重读 Project 后再判渠道闸，
+            # 防止并发 PATCH enterprise_code 用锁前快照绕过，同时串行化 quote_key 生成。
             try:
                 ensure_enterprise_channel(
                     session,
@@ -260,10 +260,6 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
                 raise QuoteServiceError(
                     error.code, error.message, error.status
                 ) from None
-            # 串行化同项目的报价创建（quote_key 按 count+1 生成，防并发撞唯一键）
-            session.execute(
-                select(Project.id).where(Project.id == project.id).with_for_update()
-            )
             preset = payload.get("preset")
             if preset is not None and preset != FIRST_ORDER_PRESET:
                 raise QuoteServiceError("invalid_request", "未知的报价预设。", 400)
@@ -896,8 +892,20 @@ def _recent_quote_events(session: Session, project_id: str) -> list[dict[str, An
     ]
 
 
-def _load_project(session: Session, actor: User, project_id: str, *, manage: bool) -> Project:
-    project = session.get(Project, project_id)
+def _load_project(
+    session: Session,
+    actor: User,
+    project_id: str,
+    *,
+    manage: bool,
+    for_update: bool = False,
+) -> Project:
+    project = session.get(
+        Project,
+        project_id,
+        with_for_update=for_update,
+        populate_existing=for_update,
+    )
     if project is None:
         raise QuoteServiceError("project_not_found", "项目不存在或已被删除。", 404)
     access = project_access(actor, project)

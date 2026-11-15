@@ -155,6 +155,16 @@ def _json_payload() -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _require_platform_operator_read() -> None:
+    """QR-067（BLOCKED §5 #3A）：商业治理配置读面只认平台管理操作者（M3b ①-a 单一判定）。"""
+    from fde_api.control.access import is_platform_operator
+
+    if not is_platform_operator(g.current_user):
+        raise CommercialServiceError(
+            "commercial_admin_required", "商业化治理面仅平台管理操作者可用。", 403
+        )
+
+
 @admin_commercial_blueprint.post("/users/<user_id>/role")
 @require_auth
 def set_role_route(user_id: str):
@@ -291,7 +301,8 @@ def complete_quota_route(subject_key: str):
 @admin_commercial_blueprint.get("/fee-configs")
 @require_auth
 def list_fee_configs_route():
-    """费用/周期配置位读面（admin）——本期全部 unset（缺省不可用）。"""
+    """费用/周期配置位读面（平台管理操作者）——本期全部 unset（缺省不可用）。"""
+    _require_platform_operator_read()
     with db.session() as session:
         rows = list_fee_configs(session)
         return jsonify(
@@ -322,7 +333,8 @@ def configure_fee_config_route(key: str):
 @admin_commercial_blueprint.get("/split-rules")
 @require_auth
 def list_split_rules_route():
-    """分成比例配置结构读面（admin）——本期零行（比例不定数）。"""
+    """分成比例配置结构读面（平台管理操作者）——本期零行（比例不定数）。"""
+    _require_platform_operator_read()
     with db.session() as session:
         rows = list_split_rules(session)
         return jsonify(
@@ -427,7 +439,8 @@ def record_certification_route():
 @admin_commercial_blueprint.get("/opportunity-rules")
 @require_auth
 def list_opportunity_rules_route():
-    """规则位读面（admin）——本期五个槽位**全部 unset**（规则数值未定数）。"""
+    """规则位读面（平台管理操作者）——本期五个槽位**全部 unset**（规则数值未定数）。"""
+    _require_platform_operator_read()
     with db.session() as session:
         rows = list_rules(session)
         return jsonify(
@@ -637,7 +650,8 @@ def commercial_readiness_route():
 @admin_commercial_blueprint.get("/regional-sale-gate")
 @require_auth
 def get_regional_sale_gate_route():
-    """售卖开关读面（状态 + 四项合规条件登记态，只出指针）。"""
+    """售卖开关读面（平台管理操作者：状态 + 四项合规条件登记态，只出指针）。"""
+    _require_platform_operator_read()
     with db.session() as session:
         return jsonify({"data": serialize_gate(get_or_create_gate(session)), "error": None})
 

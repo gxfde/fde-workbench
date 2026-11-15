@@ -47,7 +47,7 @@ class AdapterContext:
 class SimulationAdapter(Protocol):
     """被测执行面的统一契约。"""
 
-    mode: Literal["real", "mock"]
+    mode: Literal["real", "mock", "workbench"]
 
     def probe(self, ctx: AdapterContext, *, round_index: int) -> str:
         """产出下一轮追问（顾问侧）。"""

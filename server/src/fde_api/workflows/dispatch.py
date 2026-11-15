@@ -325,6 +325,13 @@ def _dispatch_skill(
         ) from error
     if not isinstance(answer, str):
         answer = json.dumps(answer, ensure_ascii=False)
+    parsed_fields: dict[str, Any] = {}
+    try:
+        decoded = json.loads(answer)
+    except (TypeError, ValueError):
+        decoded = None
+    if isinstance(decoded, dict):
+        parsed_fields = {k: v for k, v in decoded.items() if k != "text"}
     # V3 T-S2：pinned 版本完成一次确定性调用即消费——独立微事务计数，
     # 节点失败（AI 异常/重试）不计；attempt 代际各自计一次（每次都真消费了）。
     # CR-013：计数侧故障不升级消费侧——AI 已成功，计数失败只记 warning 不冒泡
@@ -340,7 +347,7 @@ def _dispatch_skill(
             "workflow skill usage count failed node=%s skill=%s error_type=%s",
             node_id, skill_id, type(error).__name__,
         )
-    return {"text": answer}
+    return {**parsed_fields, "text": answer}
 
 
 def _dispatch_agent(

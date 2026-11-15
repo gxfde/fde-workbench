@@ -22,6 +22,10 @@ if (!asarPath || !existsSync(asarPath)) {
 const asar = readFileSync(asarPath)
 const headerSize = asar.readUInt32LE(12)
 const header = JSON.parse(asar.subarray(16, 16 + headerSize).toString("utf8"))
+// asar 规范：数据区起点 = 8 + u32(4)（header pickle 总长，含字符串对齐填充）。
+// 旧公式 16 + headerSize 在 header 长度非 4 字节对齐时差 1–3 字节 → 全部文件误判 FAIL
+// （2026-11-14 r46 打包实测抓到：62 项同字节数假失败，逐文件哈希对照定位）。
+const dataBase = 8 + asar.readUInt32LE(4)
 
 function walk(node, prefix = "") {
   const out = new Map()
@@ -42,7 +46,7 @@ const sha256 = (buf) => createHash("sha256").update(buf).digest("hex")
 function readAsarFile(path) {
   const entry = entries.get(path)
   if (!entry || entry.unpacked) return null
-  const start = 16 + headerSize + Number(entry.offset)
+  const start = dataBase + Number(entry.offset)
   return asar.subarray(start, start + entry.size)
 }
 

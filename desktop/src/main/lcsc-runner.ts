@@ -1,6 +1,6 @@
 import { app, BrowserWindow, type Session } from 'electron'
 import {showLcscFinishDialog} from './lcsc-finish-dialog'
-import { pointAt, OBSERVE_BROWSER, type BrowserObservation } from './lcsc-browser-ui'
+import { pointAt, OBSERVE_BROWSER, DENIED_ACTION_SOURCE, type BrowserObservation } from './lcsc-browser-ui'
 import { PRODUCT_NAME } from '../shared/brand'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -190,7 +190,10 @@ export async function executeDesktopLcsc(input: { accessToken: string; body: unk
               const point=await evaluate<{x:number;y:number}>(`(() => {const e=${target};if(!e)throw Error('控件已变化');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
               win!.webContents.sendInputEvent({type:'mouseMove',x:point.x,y:point.y})
             }
-            else await evaluate(`(() => {const e=${target};if(!e)throw Error('页面控件已变化');e.click()})()`)
+            // QR-111：点击前对目标元素当前文案/语义复验 denied 名单（观察时刻的
+            // 过滤只守观察瞬间——TOCTOU 窗口内 DOM 变化或 AI 误点敏感控件；执行窗
+            // 与手动内置浏览器共享 partition，登录态共享放大误点后果）。
+            else await evaluate(`(() => {const e=${target};if(!e)throw Error('页面控件已变化');const t=((e.innerText||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||''));if(new RegExp(${JSON.stringify(DENIED_ACTION_SOURCE)},'i').test(t))throw Error('控件语义复核未通过（疑似敏感操作），已停止');if(e.closest('form'))throw Error('目标控件位于表单内，已停止');e.click()})()`)
           }
           await new Promise(resolve=>setTimeout(resolve,450))
         })

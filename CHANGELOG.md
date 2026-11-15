@@ -2,6 +2,222 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — billing_actor_policy 机制化轮：模拟域真模型评估记账主体服务账号（opt-in 配置＋双 ContextVar 注入＋fail-closed；零迁移零路由零表，2026-11-15）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` §挂账登记 Level 评审发现④「billing_actor_policy 机制化＝动生产记账链路，需独立轮立项」——L6 候选卡的 `billing_actor_policy: "service_account"` 此前只是**声明字段**（政策常量），无任何机制真正保证模拟域跑批的 token 计费归到服务账号；本轮把它落实为**代码机制**：
+
+- **独立配置键（拍板①）**：`Settings.simulation_ai_actor_username`（env `FDE_SIMULATION_AI_ACTOR_USERNAME`，`server/.env.example` 注释态留空）——模拟域专用记账服务账号，**与诊断域 `diagnostics_ai_actor_username` 隔离**（防跨域串账）。
+- **opt-in 语义（拍板②）**：留空＝机制关，真模型评估回落既有行为（请求腿记调用者／直接腿记 None，零回归，非硬闸）；配置了账号但不存在/停用 ⇒ `resolve_simulation_ai_actor` 抛 `ScenarioServiceError("simulation_ai_unavailable", 503)` **fail-closed**（与诊断域「配置了才 503」同款语义，空值不 503）。
+- **双 ContextVar 注入（③机制真身）**：`ai/auditing.py` 新增模块级 `ai_actor_override`；`current_actor_id()` 读序升级为 override→请求上下文→None。`evaluator.py` `include_model` 分支在 server 腿（stub 腿不解析）解析服务账号后，**同一值**同时 `set` 进 `ai_actor_override`（预算闸＋审计归因腿）与 `ai_actor_id`（DSH structured_completion 腿），`try/finally` 逆序 reset（异常路径不泄漏）。
+- **验证（测试 7 例＋变异双锚）**：开关关请求腿归调用者／直接腿归 None／开关开预算闸拦服务账号而回落调用者放行（判别力）／审计归服务账号且调用者零归因／账号不存在·停用两 fail-closed 503（注入点零调用）／无 ContextVar 串账。NEW `tests/test_simulation_billing_actor.py` 7 passed；变异 M1（删 `ai_actor_override.set`）与 M2（`current_actor_id` 不读 override）各 3 例真红→字节还原→复绿；ruff clean；官方 mypy 277 基线零新增。**未实施留痕**：Yui 第二笔（单文件拆分）＝抑制性警告；候选卡 provenance 字段保持政策常量 `service_account`（拍板③），机制另由上述测试证明。
+- 口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**。
+
+## [未发布] — L6 挂账清偿轮：manifest O_EXCL 锁＋两遍配对（打平不漏检）＋importlib 单一真身（零迁移零路由零表，2026-11-15）
+
+承 party 评审追改轮（#479）遗留的三笔宿主域挂账，蔡工「按推荐执行」（选择题未答，留痕可推翻）一 PR 清偿：
+
+- **manifest 并发锁（挂账②清偿）**：`candidate_manifest.json` 读-改-写段入 `O_EXCL` 独占锁（`_acquire_dir_lock`，跨平台 Windows 宿主适用）——并发双实例单方 `manifest_lock_busy` fail-closed（不等待不轮询，人工脚本重跑即可）；锁 mtime 超 `LOCK_STALE_SECONDS`（30s）视为崩溃残留强拆重试一次；卡文件本体幂等语义不变，锁只护登记簿。两钉：持锁拒写／陈旧强拆（`os.utime` 回拨构造）。
+- **两遍配对算法（③排序残界清偿）**：门禁迁移链从顺序扫描升级为纯函数 `pair_gate_transitions`——第一遍按 `gate_key` 收集 fail 池，第二遍按 `occurred_at` 升序消费 pass，每个 pass 配对**未消费且 `occurred_at <= pass`** 的最晚 fail（最近前因，等价旧栈式 pop 的正常时序形态）。同事务批量代录全打平（PG 同事务 `now()` 恒定）时 `<=` 仍成立 ⇒ **只可能错配 fail note，不可能漏检迁移链**；fail 严格晚于 pass 不配对。全打平确定性钉（1 fail＋1 pass 全字段相等＋pass id 字典序在前，变异 `<=`→`<` 必红）。
+- **importlib 单一真身（Yui 第一笔清偿）**：`IMPORT_CASES_PATH` 提为模块级常量＋在场钉（L1 `import_cases.py` 挪位未同步即红）＋加载失败转 `CaseExtractionError("import_cases_unavailable")`（裸 ImportError 堆栈不再外泄）＋加载器 `sys.modules` 先注册再 exec（与测试加载器同纪律）。
+- **验证**：L6 套件 9 例（+4 钉）＋污染钉/台账钉 9 例全绿；变异三连（锁 busy 吞掉／`<=` 退化 `<`／真身路径改错）全真红→字节级 sha256 还原→复绿；ruff clean；官方 mypy 277 基线零新增。**未实施留痕**：Yui 第二笔（单文件拆分）＝抑制性警告非指令；`billing_actor_policy` 机制化＝动生产记账链路需独立轮立项。
+- 口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**。
+
+## [未发布] — L6 party 评审追改轮：三裁定落地——`occurred_at` 破平局钉＋发起权裁定登记＋manifest 锁挂账（零迁移零路由零表，2026-11-15）
+
+承 party mode 专家评审会（Code Review Crew＋红线特聘两名圆桌，蔡工拍板「按建议处理」）：
+
+- **排序修复（评审③，Boundary 发现）**：`scripts/extract_case_from_project.py` 门禁事件排序 `created_at, id` 双键升级为 `created_at, occurred_at, id` 三键——`created_at` 打平（如同秒/同事务批量代录）时由 `occurred_at` 破平局，杜绝 UUID 字典序随机兜底导致的**静默假阴性**（pass 先于 fail 被消费 ⇒ 迁移链漏检）；NEW 确定性测试钉 `test_same_created_at_events_use_occurred_at_tiebreak`（显式固定事件 id 使字典序把 pass 排前，变异拆掉 `occurred_at` 键必红——不依赖 UUID 随机），变异验证红→sha256 字节还原→绿。已知残界登记：同事务批量代录两事件 `occurred_at` 仍打平（PG 同事务 `now()` 恒定），生产双拍板为独立事务不受影响。
+- **发起权裁定登记（评审①，Vex 提案）**：L6 真机实证由 AI 会话持用户当轮指令执行真相层写入，裁定为 `lead_ledger_append` 先例「人工显式发起」的合法形态（授权措辞＝用户当轮指令＋当轮汇报＋留痕可推翻）；后续宿主写面操作须在轮次回执显式登记发起语境（任务书挂账登记 #1）。
+- **manifest 并发无锁挂账（评审②，Dana 口径）**：`candidate_manifest.json` 读-改-写无文件锁，并发双实例同目录会丢登记条目（卡文件本体幂等不丢）；单机单人竞态窗口可忽略，挂账不排期（任务书挂账登记 #2）。
+- **信号有效性置信度登记（评审④，Level 提案）**：「管线可用」＝高（真机 n=1）；「反哺信号有效」＝未知，待首批候选卡人工激活进训练场跑分后升格（任务书挂账登记 #3）。
+- **草稿质量教训（评审⑤，Grumbal）**：跨会话交接的「ready 草稿」须先空跑 import smoke——L6 草稿三处 import 级错误（`auth/security`→`auth/passwords`、`ProjectSolution` 域归属、动态加载未注册 `sys.modules`）全部在实施轮当场抓出，零漏入 main，但烧的是同一轮 token。
+
+口径不变：**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**；测试 L6 套件 5 例（+1 钉）＋污染钉/台账钉 9 例全绿，ruff clean。
+
+## [未发布] — AI 原生化学习闭环 2.0 L6 实施轮：真实交付反哺宿主侧只读抽取脚本（门禁 fail→pass 迁移＋产物拒收 → 真相层 `import_card_v1` 候选卡；零迁移零路由零表，2026-11-14）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L6 条款①②④⑤（条款③ L-C 原文核对视图挂账顺延，见任务书挂账登记）：
+
+- **NEW 宿主侧只读脚本 `scripts/extract_case_from_project.py`**：只读扫描 `operation_events` 的 `gate_decided` fail→pass/conditional_pass 真实驳回修正链与四类拒收信号（`business_facts`/`requirements` 审阅拒收、`agent_artifacts` 人工撤回、`solution_review_checkpoints` 驳回），以已接受事实/需求为骨架装配脱敏 `import_card_v1` 候选卡；**宿主通道五边界先例裁定**（沿 `scripts/lead_ledger_append.py`：人工发起＋数据库只读事务 `SET TRANSACTION READ ONLY`＋真相层只插不改＋确定性 `card_id`〔信号指纹 sha256〕幂等＋登记面缺失 fail-closed 不自动建目录），服务端容器不直连宿主 CLI。
+- **脱敏与隔离红线**：全部自由文本字段强制经 T-A2 `redact_text_detailed`（企业名→代号、PII 掩码；凭据串命中 `SensitiveCredentialDetected` / 词典故障 `RedactionConfigError` 即 fail-closed 中止、零落盘）；输出目录双闸（落本仓内 `out_dir_inside_repo` / 目录不存在 `out_dir_missing` 一律拒绝——候选卡含判卷基准，永不入仓、不入被扫面）；写出前强制过 L1 `import_cases.build_payload`＋`gate_payload` 生产四重闸（卡 schema 允许名单＋`validate_scenario` 八规则＋`load_view` 三视图泄漏自检），激活仍复用 L1 人工链（导入→桌面核对→启用），零自动入库路径。
+- **预算记账主体写明**（任务书条款④）：脚本纯确定性 SQL 只读，零 AI 调用零 token 消耗；候选卡后续训练场运行/回归的 AI 记账统一归发起运行的平台服务/操作员账号（`provenance.billing_actor_policy='service_account'`），不伪造匿名主体。
+- **验证**：NEW `server/tests/test_extract_case_from_project.py` 4 例（输出目录安全双闸／信号抽取→脱敏→幂等落盘→L1 衔接／凭据串 fail-closed／源码零答案键静态钉）全绿；污染隔离钉＋L1 管线＋lessons 装载邻域回归 34 passed；ruff clean；变异四连（幂等短路／仓库内落盘闸／凭据 fail-closed／目录缺席闸）全真红→字节级 sha256 逐位核对还原→复绿。**真机反哺实证（收口轮补记）**：PR #476 squash `55ff1187` 后自主树实跑——试点项目 `FDE-20261025-9BF8E4AE` 真实门禁/拒收信号产出候选卡 `IMP-PRJ-FDE-20261025-9BF-98C9CE`（sha256 `f51feff15197f80616ebb459aa94b86b190f6499faffffc8bc611c847c7c3829`），过 T-A2 脱敏＋L1 四重闸后落真相层 `D:\test\FDE\knowledge\案例候选\l6-candidates\`（人工预建目录，不入仓不入被扫面），幂等复跑 `already_exists` 同指纹＝**只插不改活体实证**；激活仍走 L1 人工链。**便携版 r52（收口轮）**：三源 bump（RELEASE-COUNTER 51→52＋`desktop/package.json` `0.3.0-r52`＋web 桥 `0.3.0-r52-web`），asar sha256 `bd309b15b18301aa88f6df437f482b0b97eec6f90501869ed97087c7a887d605`，L5 marker「三载体发布并排预览」正向 1／r51 asar 负对照 0（独立输出目录 `release-r52` 绕句柄锁），归档 `release/蔡工FDE-0.3.0-便携版-r52`——本包同时承载 L5 桌面改动（发布并排预览＋真载荷回执＋异步回归轮询）。零迁移零路由零表——口径 **493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`** 不变，审计清单三件套与 archify 图沿用 L5 刷新态。
+
+## [未发布] — AI 原生化学习闭环 2.0 L5 实施轮：三载体热生效（动态 Lessons＋Prompt Overlay 两点共用＋Skill 双闸链）＋回归真化噪声带四钉＋异步 BackgroundJob（迁移 `a9f3e5c7b1d2` 76→77 单头，路由 491→493，表 153→155，2026-11-14）
+
+承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` L5 与设计稿 v1.1（§6 六条拍板全裁决），打通验证面与回流面全链机械化闭环：
+
+- **迁移②（NEW `server/migrations/versions/a9f3e5c7b1d2_loop2_l5_agent_lessons_prompt_overlays.py`，76→77 单头）**：新建 `agent_lessons` 表（`LESS-DYN-` 前缀、`status ∈ (draft,published,retired)` CHECK、`text_sha256` 唯一索引）与 `prompt_overlays` 表（`purpose_key`、`fragment` ≤200 字、`content_sha256`、`min_prompt_version`、`status` CHECK），`ai_call_audits` 加 `context_payload_json` 归因列（无覆层调用保持 `NULL`）。
+- **三载体协同热生效与热回滚**：①**动态 Lessons**（`agents/lessons.py`＋`agents/service.py`）：`seeds/lessons.json` 底座 ∪ `agent_lessons(status='published')` 零模块缓存每次现查（top_k 竞争时 seed 优先），发布前拦截动态 ID/sha256 与底座碰撞，宿主 `agent_run_created` 事件 `changes.dynamic_lesson_ids` 快照留痕；②**Prompt Overlay**（NEW `ai/overlays.py`＋`control/ai_server_client.py`＋`ai/deepseek.py`＋`ai/auditing.py`）：`load_overlays(purpose)` 在 `execute_ai_prompt` 与 `DeepSeekClient.complete_json` 直连腿两点共用并在 `compute_prompt_fingerprint` **之后**追加（`prompt_registry` 常量零触碰），归因落 `AICallAudit.context_payload_json`，注入闸五件套齐全（禁祈使句/第二人称/中英注入模式词黑名单＋≤200 字／12-gram 重叠率 >50% 防洗稿拦截／NEW `GET /api/v1/simulation/proposals/<id>/release-preview` 审批并排呈现基座提示词 vs 注入终文＋近 30 天调用量／蒸馏数据框定／v1 白名单 13 key 排除公网 `diagnostics_report`）且 `WorkbenchAdapter` 沙箱同尺；③**Skill 双闸链**（`improvement_service.py`＋`release_channel.py`）：AI 草稿提案拒绝 `personal` scope（防保存即 published 绕闸），`release_channel` 仅记账 `skill_ref` 与回归报告 ID，热生效走既有 `publish_skill`／`rollback_skill` 滚版本指针。
+- **发布闸与回归真化＋噪声带四钉＋异步回归**：`release_proposal` 机械拦截最近一次 `RegressionResult.overfit_risk=True`（409 `conflict`），`_materialize_payload`／`_retire_payload_rows` 承载发布落表与回滚 `retired`（两新表写面 AST 静态钉收敛）；`regression_runner.py` 新增 `DEFAULT_NOISE_BAND = 0.1049`（与 L2 底册 `docs/audit/训练场分布读数-L2底册-1.md` 双锚）、`RunSummary` 可选 `model_total/evaluator_axis`、`compare()` keyword-only `noise_band/noise_band_axis` 输出独立 `model_verdict`（不动顶层 `verdict` 闭集），套件存档轴与现算轴 `f"{RUBRIC_VERSION}|model:{mode}"` 不符 fail-closed 409 `noise_band_axis_mismatch`；`adapter_mode=workbench` 或 `model_mode=server` 转 202 后台作业（NEW `simulation/regression_jobs.py` 注册 `simulation.regression` 入 `RECOVERABLE_JOB_TYPES`＋NEW `GET /api/v1/simulation/regression/jobs/<job_id>` 状态读面，零额外迁移）。
+- **红线升格与桌面接线**：`AGENTS.md` 写入 §6-5 N6 受控例外红线条款与 §6-6 平台级生效登记；桌面 `ImprovementProposals.tsx` 发布确认弹层接入并排终文预览＋30 天调用量展示与发布/回滚真载荷回执，`RegressionDashboard.tsx` 接入 202 异步回归轮询与 `model_verdict` 徽标。
+- **验证与口径**：服务端定向套件 114 passed＋机械闸 48 passed、桌面 `typecheck` 零错＋`simulation-lab-console.test.tsx` 19 passed、官方 mypy 277 基线零新增、ruff clean；变异四连 M1–M4 全真红→`try/finally` sha256 逐位核对还原→72 passed 全绿；审计清单三件套重生成（**493 路由 / 52 蓝图 / 155 表 / 77 迁移单头 `a9f3e5c7b1d2`**）＋`architecture` 架构图四件套刷新与 1440×2119 整页 `preview.png` 实拍过防陈旧闸。便携版随 L6 收口轮对齐最新 `RELEASE-COUNTER` 统一打包验证。
+
+## [未发布] — goal-liveinfra R1 清退轮：diag 孤儿栈清退消解跨栈 Redis 别名轮询＋R2 探针缺陷判定不成立（纯运维清退零代码零迁移零路由，2026-11-14）
+
+承接 `docs/goal-sprint-BLOCKED.md` #4/#5 与 `docs/goal-liveinfra-活体基础设施修复-任务书-v1.md` 立项，经蔡工交互拍板（R1 修法＝清退 diag 孤儿栈；时点＝立即开工）实修收口：
+
+- **R1 已消解**：因 本机 diag 部署源树 `D:/test/fde-wt-deploy-diag` 已删、diag 栈 4 容器成孤儿（api 卡 `created` 因外部端口 8010 被主栈占用），实修＝`docker stop`＋`docker rm` 全 4 个 diag 容器（本机孤儿 diag 容器零残留；远端 diag.fde18.com 公网部署不在本次处置范围；diag redis volume 保留 dangling 不越界；主机侧 `fde-redis-forward`/`fde-pg-forward` 独立常驻 forwarder 保留，现随 alias `redis` 唯一解析回归主栈）。活体验证全绿：`redis` alias 唯一解析 `172.18.0.4`（`getent hosts redis`×8 全 `.4`，不再 .4/.14 轮询）；`fde:health:{worker,scheduler}` 键回归主栈 redis；worker `fail` 1→0 恢复 healthy；主栈 4 容器全 healthy、ID 不变（**主栈零 recreate**，`compose.yaml`/`.env`/`FDE_REDIS_URL` 零改动）。
+- **R2 判定反转，缺陷不成立**：现测活体镜像 `server/src/fde_api/health/heartbeat.py:97 return 0 if healthy else 1`＋`:102 raise SystemExit(main())`，absent-key exit=1、present-key exit=0（crv2 源码与镜像逐字一致）；早期收口终扫「FAIL 却 exit=0」观测未能复现，疑似 shell 引号或退出码捕获问题，具体成因未证实；`heartbeat.py` 零改动、无需新增探针测试用例。
+- 台账同步：`docs/goal-sprint-BLOCKED.md` #4/#5 实修回执回写；`docs/goal-liveinfra-活体基础设施修复-任务书-v1.md` 补 §终态；`docs/audit/下一步实施台账-2026-11-07.md` §12 追加 goal-liveinfra R1 清退更新块。本线零代码零迁移零路由零桌面改动。
+
+## [未发布] — 盲审追批修复轮：桌面复核投影双形状守卫消解死锁＋同族复核账零真名扩线（quality/plans/discovery/transcripts，2026-11-14）
+
+`fix3` 盲审（重装真身 code-review＋intended-vs-implemented）两项发现的当轮修复：
+
+- **发现①（P1 跨端契约断裂→复核死锁）**：`#463` 服务端复核投影换代（指纹条目 `name` 可空＋疑似聚合哨兵 `{suspect_count}`）后，桌面守卫 `isRedactionReviewEntries` 仍要求每项 `name` 非空 string ⇒ 新形状整组丢弃 → 复核框消失 → confirm 永远 409 `redaction_review_required` 死锁。修法：`guidance/types.ts` 守卫换代为三形状联合（指纹条目/疑似哨兵/旧形状宽容），`GuidanceReview.tsx` 渲染分派（词典反解缺失显示指纹前 8 位占位＋疑似聚合行），ack 语义不变。
+- **发现②（意图↔实现同族漏网）**：`#463`「复核账零真名」只接线 guidance/translator 四锚，同族四面仍落真名原文。扩线：`redaction.py` 新增 `fingerprint_review_payload` 单一真身（指纹条目＋疑似哨兵单数组，与 guidance 读面投影同形状）；`discovery/jobs.py`（行内账＋事件账）、`transcripts/service.py`（草稿行内账）、`quality/draft.py` 与 `plans/draft_ai.py`（事件账）四写入点全接线；`discovery/service.py` 与 `transcripts/service.py` 两读面接 `resolve_redaction_display` 词典反解（软失败 name=None）。桌面 `DiscoveryPanel.tsx` tooltip 与 `TranscriptDraftsPanel.tsx` 复核清单同步适配双形状。
+- **测试与验证**：服务端 9 套件 101 passed（discovery/transcript/quality/plans 断言换代为指纹＋零真名）；桌面 guidance-redaction-review 新增 2 例（新形状渲染＋ack／畸形整组丢弃 409 回读路径）全绿；变异两连真红（M1 桌面哨兵分支删除／M2 discovery 写入回退真名）→`try/finally` 字节还原→复绿；mypy 277 基线零新增；ruff F401/F841 零告警。零迁移零新路由零新表；便携版 **r51**（`0.3.0-r51`，asar `52c0d542221ddee8ac5bf8ffaf2a81774a7f0305c03a7784a3a25ce3b19625aa`，正向 marker 命中 3／反向 0／asar 字节 6/6 全过），同时补齐 `scripts/release-version.mjs` 三源同步（`RELEASE-COUNTER`＋`desktop/package.json`＋`fde-web-bridge.ts`，根治 CR-058 web 桥版本字面量每次 bump 漂移必红问题）。
+
+
+## [未发布] — N1 试点落地证据收口＋6 张架构图刷新＋Top-12 技能工作流嵌闸＋打包契约修复（2026-11-14）
+
+**N1 窗口内闭环全量证据归档（窗口 2026-11-12~11-19，提前达成）**：pilot-001 两条正式 run 经宿主代理裸跑通道完成（completed/exit 0/无降级/claim+receipt 齐；185s/256s；宿主单次代理与产物读取/采纳服务端实现已于 #433/#435 合并），**8 份产物全部完成人工复核**（run-001 3/3＋run-002 5/5，`reviewed_by=admin`），磁盘原件 sha256 与库内指纹双侧现测逐字一致——r1 全量 sha256 清单补登 `docs/goal-sprint-PROGRESS.md`「r1 证据登记」节并消解 r1 遗留。证据闸 `HAS_RUN_EVIDENCE`（审批 p50=85.5s/p90=104.3s、否决率 0）。
+
+- **售前五件套资产**：run-002 产物存为参考样板 `docs/售前产物参考/run-002-20261113/`（README 含全量 sha256 对照）；手册新增「§15 智能体产物（run 产出）与售前五件套参考」（`docs/工作台操作使用手册.md` 与 `server/src/fde_api/control/bundled/help_manual.md` 两副本逐字一致）；`desktop/src/renderer/src/help/HelpPage.tsx` 新增同名章节（桌面端「使用帮助」）。
+- **修复**：`scripts/verify-asar-bytes.mjs` 数据区起点按 asar 规范改 `8 + u32(4)`——旧公式漏算 header pickle 对齐填充（1–3 字节），header 长度一变即全量同字节数假失败（r46 打包实测 62 项假失败 → 修复后全过）；`tests/operations/packaging-contract.test.mjs` 对齐 `desktop/src/shared/brand.ts` 单点 `PRODUCT_NAME` 与 `0.3.0-rN` 列车轮次版本后缀（`npm run test:operations` 14/14 全绿）。
+- **架构图与技能工作流**：全套 6 张 `docs/architecture/archify-diagrams/` 刷新对齐最新口径（52 蓝图 / 491 路由 / 153 表 / 76 迁移，四道 archify 门禁与整页 `preview.png` 全过）；新增 `docs/audit/项目12大高价值技能评估与使用指南-2026-11-14.md` 并在 `.agents/skills/fde-delivery-flow/SKILL.md` 嵌入审查/证伪/实证/洁癖四道关卡。
+- **归档**：`docs/goal-crv-全面代码审查-任务书.md`、`docs/goal-crv-评审会纪要-2026-11-13.md`、`docs/goal-ks1-知识库技能首批入库-任务书.md` 落库。
+
+## [未发布] — goal-crv 修复收官：fix2 总循环七轮一 PR 全合并＋统一活体部署三验绿（收口轮·纯文档零代码零迁移，2026-11-14）
+
+`docs/goal-crv-fix2-剩余批次总循环-任务书.md` 七轮全部收官：批 A/C/D/E/G/R7（`#444`/`#451`/`#456`/`#462`/`#463`/`#466`）＋本收口轮。147 条 QR 台账 P1×18 与拍板 8 项全部清零；总报告 v1.0 正文零改动、末加 `§修复销号节`；`docs/goal-crv-BLOCKED.md` / `docs/goal-crv-PROGRESS.md` 终态回写；`AGENTS.md` 独立 bullet 登记。统一活体部署三验实测全绿（`url_map` non-static `491`≡`v3-workbench-inventory.json`／`alembic current` `d4b7e2f9a6c1 (head)` 76 rev≡单头／三镜像 ID≡本树构建 `api:4e3daf1f9f09`·`worker:6b5f05014f7a`·`scheduler:b8013143bfea` MATCH，四容器 healthy＋`:8010/api/v1/health/{live,ready}` 200；`migrations` 挂载源回归收口树 `/mnt/d/test/fde-wt-crv2/server/migrations`）。本节为收口轮自身记录：零代码零迁移零路由。
+
+## [未发布] — AI 原生化学习闭环 2.0 L4 桌面收口＋workbench 直连四元组修复（桌面「失败→AI 起草→建案」＋场景选择器＋workbench 执行面选项，零迁移零新路由＝491/52/153/76 rev 单头 `d4b7e2f9a6c1` 不变，2026-11-14）
+
+承接 L4 服务端（PR #455 → `7e99b658`），补齐训练场桌面端 L4-⑦ 全套操作面并闭合活体真机冒烟检出的直连四元组缺口：
+
+- **L4-⑦ 桌面「失败→AI 起草→建案」闭环（`FailureAnalysis.tsx`＋`ImprovementProposals.tsx`＋`api.ts`＋`types.ts`）**：失败发现列表支持多选与 L-B `likely` 标记文案（「L-B 模型建议 · 根因未确认——完成 L-C 人工复核确认后方可建正式提案」，按 §6-4 拍板仅列表提示不建审批流）；点击「AI 起草改进候选」调 `POST /api/v1/simulation/findings/draft-ai`（返件式零落库），就地展开三载体候选编辑器（`lesson_entry` 经验卡／`skill_version_draft` 技能草稿／`prompt_overlay_fragment` 提示词追加片段），人工审阅修订后对含 `confirmed` 发现点击「创建改进提案」调 `POST /api/v1/simulation/proposals` 落 `candidate_payload_json`；提案列表同步展示结构化候选载荷。
+- **场景选择器＋`workbench` 执行面选项（`SimulationRunDetail.tsx`）**：新增「目标场景」`<select>` 选择器取代硬编码 `scenarios[0]`；「执行面」选择器与运行徽标新增 `workbench`（工作台内嵌模型）并对 `queued`/`running` 态每 3 秒自动轮询刷新详情。
+- **服务端 `WorkbenchAdapter` 直连四元组修复（`simulation/adapters/workbench.py`）**：活体真机冒烟检出 DSH 未启用时降级直连腿 `direct_provider_completion` 要求 `model_override` 完整携带 `{provider, model, base_url, api_key}` 四元组（仅传 `{model}` 报 `ai_model_not_configured`）；`_resolve_model_override` 补齐四元组并对缺 `base_url` 同样 fail-closed 抛 `AdapterUnavailable("workbench_model_slot_incomplete")`。
+- **验证**：桌面 `npm run typecheck` 零错＋`simulation-lab-console.test.tsx` 新增 2 例（17 passed，全量 vitest 102 文件全过）；服务端 `test_simulation_workbench_adapter` 12 passed＋污染/单向阀/纯净度/预算 17 passed＋mypy 277 基线不变＋ruff 零错；变异三连全红→字节级 sha256 还原→复绿（M1 删 `base_url`／M2 退回 `scenarios[0]`／M3 删 `candidate_payload`）。便携版在 L5/L6 全链完成后对齐主树 `release/` 最新序号统一交付。
+
+## [未发布] — goal-sprint 收口拍板回写轮：四项交互拍板落档＋G-C 签署材料包＋活体基础设施修复立项（纯文档零代码零迁移零路由，2026-11-14）
+
+收口终扫后四项待拍板事项经交互选择卡由蔡工拍板（均按推荐项，留痕可推翻），回写 `docs/goal-sprint-BLOCKED.md` 并派生两份新件：
+
+- **D7 阈值**：维持待拍板（支撑度 `insufficient_for_unfreeze`，样本达标后再拍；零预支纪律不变）。
+- **G-C 签署与账号发放**：整理签署材料包——NEW `docs/deployment/对外受控试用-G-C签署材料包-2026-11-14.md`（三闸现状更正〔G-A 2026-11-09、G-B 2026-11-10 已签，未签仅 G-C〕＋G-C 剩余判据逐项指针＋T5-7 外部真机执行指引＋签署三步＋值守/回收预案成文＋证据索引）；T5-7 与签署、发放归 `OWNER`/`HOST` 亲手。
+- **N1 试点窗口**：2026-11-19 按期关闭（到期后如实登记；8/8 产物复核已清零，宿主通道转回待授权态）。
+- **两项共享活体风险**（跨栈 Redis 服务别名 DNS 轮询＋healthcheck 探针 FAIL exit=0）：单独立项一次修两项——NEW `docs/goal-liveinfra-活体基础设施修复-任务书-v1.md`（R1 别名唯一化＋R2 探针 exit code，单 PR 交付，验收含双栈心跳归位观测与探针变异验证）；实施排期待显式令。
+- 台账同步：`docs/goal-sprint-PROGRESS.md` 追加收口拍板回写节；`AGENTS.md` 收口行补拍板结论。
+
+## [未发布] — 桌面第三批业务与治理闭环：本体写面与候选＋方案 AI 生成＋智能体凭据＋到期与队列监控（桌面变更·零服务端改动·零迁移零路由，便携版 r50（r48 编号被并发线顺延——r49 已被 30b433f6 态打包消耗），2026-11-14）
+
+补齐桌面 4 处「后端完备、前端零入口」的业务与治理面（本体/solutions/agents/jobs 契约早已上线，本轮接最后一公里），严守闭集键、明文零驻留与禁自审纪律：
+
+- **本体写面与候选（`GlossaryPage.tsx`）**：canManage 三块写面——①「候选生成」面板懒加载（展开才拉 `GET /projects/<id>/discovery/extractions?limit=50`，前端预筛 `status==="review_required"`），`POST .../ontology/candidates/generate` body 恰 `{extraction_id}`，结果 `{change_set, created, skipped, cross_project_conflicts}` 就地呈现（跳过清单与跨项目同名告警如实显示、后者只读不阻断）并刷新变更集清单；②「手工提变更集」起草表单（create_term/update_term/merge_terms 三动作条目化），body 闭集 `{title, description?, proposed_json}`——description 留空不传、**绝不传 `captured_from`**（AI 通道专用，服务端显式 400），同名合并在前端拦下不发请求，`term_type` 五值闭集（entity/attribute/metric/alias_target/generic）；③关系类型「登记类型／停用」：登记 body 闭集 `{kind, code, label?, description?, scope}`，code 与服务端同尺（`^[a-z][a-z0-9_]*$` ≤60），`global` 范围仅 admin 可见可选；**link_type 另附 `allowed_source_types`/`allowed_target_types` 两键**（任务书闭集未列，服务端硬闸必填——缺一即 400 invalid_request，前端同尺补齐、仍在服务端字段允许名单内）；停用走两步确认 `POST .../relation-types/<id>/retire`（无 body），非 retired 行才可停、全局行仅 admin（否则呈现「全局类型仅系统运维员可停用」）；变更集评审列表补**禁自审闸**——`in_review` 且 `created_by_user_id===user.id` 的行禁点确认/否决并提示「须由另一管理员审阅」（服务端 403 语义的前端预拦）。
+- **方案 AI 生成（`SolutionDetailPage.tsx`）**：头部新增 `SolutionAgentGenerator`（仅 `canManage && status!=="archived"` 渲染，与服务端 409 `solution_archived` 同口径）：`GET /api/v1/agents` 清单默认选中可用且 `capability_tier==="agent.module.solution"` 的智能体，不可用项禁选并展示 `unavailable_reason`；`POST /projects/<id>/solutions/<sid>/generate-agent` body 闭集 `{agent_id, idempotency_key?}`（键留空不传、幂等键 ≤160 字客户端拦截）；`wired===true` 经 onWired 回写 solution（溯源徽标「智能体生成」就地联动刷新）；`wired===false` 呈现 `run.status` 并以 `allowNextHashNavigation()` 放行锚点跳转 `#projects/<projectId>?tab=agents`；清单拉取失败静默降级（辅助入口不阻断方案详情主内容）。
+- **智能体凭据（`ExtensionsPage.tsx`＋NEW `AgentCredentialsPanel.tsx`）**：「AI 与扩展」新增「智能体凭据」Tab（仅 canManage 显）：`GET /api/v1/agents/credentials` 直接返数组（403 呈现「仅平台操作者可管理智能体凭据」）；保存 `POST` body 闭集 `{name, credential}`——凭据名与服务端同尺 `^[A-Za-z0-9_]{1,120}$`（提示 default 槽），明文非空 ≤8000；**明文零驻留：提交入口 await 前即清空明文 state、清空按钮与取消同步清空**（明文只在本次请求的内存 body 出现一次）；删除走两步确认 `DELETE /api/v1/agents/credentials/<name>`（404 原样呈现）；清单只出名字与 `credential_configured` 布尔、绝不回显。
+- **运行治理卡（`SystemConfigurationPage.tsx`＋NEW `PlatformGovernancePanel.tsx`）**：`<form>` 外下方渲染（结构约定有 DOM 断言钉住），失败不阻保存——两路数据独立加载各自呈现错误：①到期事项 `GET /api/v1/expirations?due=true`，域按服务端 `EXPIRY_ACTIONS` 四键闭集（automation_approval/api_confirmation/dispatch_offer/upload_session）防御性过滤，中文域标签＋对象/截止时间/状态/到期动作表格；②队列计量 `GET /api/v1/admin/jobs/metering`，`queue_depth`（null 呈「—」）＋`groups`（`org_id??"平台级"`/active/terminal）；③取消任务两步确认 `POST /api/v1/admin/jobs/<job_id>/cancel`（无 body），幂等 `cancelled=false` 如实呈现、409 already_terminal/job_running 与 404 原样透传，成功后刷新计量。
+- **验证与打包**：vitest 新增 28 例（`ontology-write` 9＋`solution-agent-generate` 5＋`agent-credentials` 8＋`platform-governance` 6，覆盖闭环/闭集键/明文清空/禁自审/403/409/404 与 `<form>` 外结构断言），全量 **102 文件 1170 passed**＋`npm run typecheck` 零错＋变异三连全红→字节级 sha256 还原→复绿（M1 手工变更集塞 `captured_from`／M2 generate-agent 多塞 `solution_id`／M3 注释凭据 await 前明文清空）；★M1 变异当场暴露一处**真空断言缺陷**（mock 的 GET 清单分支排在 POST 分支前且不区分 method，body 断言成死代码）——修分支顺序后变异才真红，变异机制自身被反向验证；`git diff fork/main -- server/` 为空（零服务端改动）。合并后在主树 `release/` 产出 `蔡工FDE-0.3.0-便携版-r50`（r48 编号被并发线顺延）并完成新旧 `app.asar` 四特征串（`ontology/candidates/generate`、`generate-agent`、`agents/credentials`、`admin/jobs/metering`）旧=0 新≥1 正反向核验。
+
+## [未发布] — goal-sprint 收口轮：上线就绪终扫＋BLOCKED 登记＋冲刺线收官（纯文档零代码零迁移零路由＝490/52/153/75 rev 单头 `d4b8e1f6a9c3`/98 ENTRIES 全不变，2026-11-14）
+
+任务书 §8/§9 收口轮：对照 `docs/deployment/对外试用部署方案-v1.md` §8 十三项验收清单逐项终扫（技术判据引用 2026-11-09 T6 现测＋本轮只读复测，业务闸不代拍）并核销 §9 六条硬指标。
+
+- **只读复测全绿**：`app.fde18.com` ready/live `200`＋官网 `200`；证书 `app` 至 `2027-02-07`、`diag` 至 `2027-02-11`；公网 `8010/5432/6379` 外探均不可达；四 compose 服务 healthy；`VERIFY-R5-DIAG-PUBLIC-LIVE` 复跑 PASS（6/6）。
+- **§9 硬指标 6/6 核销**：①`adapter_missing` 解除回执在场（台账 §12，r3）；②N1 窗口终态＝2 条 `host_poll` run 全 `completed` 且 **8/8 产物全部人工复核**（活库现测，r4 时 5 件待复核已清零；sha256 指针纪律）；③D7 报告出齐＋拍板位「待蔡工拍板」（零预支）；④T-14b 终态（r5＋本轮复测）；⑤六轮 PR（#411/#422/#433/#438/#445/#459）各自四 CI job 绿＋活体三验绿；⑥全程零闸代拍零预支零造假。
+- **NEW `docs/goal-sprint-BLOCKED.md`**：待授权 3 项（D7 阈值拍板／G-B、G-C 闸签署与账号发放／N1 窗口 11-19 到期处置）＋共享活体现测风险 2 项（跨栈 Redis 服务别名 `redis` DNS 轮询致心跳键跨栈串写、healthcheck 探针 FAIL 不置非零退出码致「healthy」对心跳缺失无判别力——均非本线改动面，处置待拍板后单独立项）。
+- **台账三同步**：`docs/goal-sprint-PROGRESS.md` 至终态（r1–r6＋收口全 ✅ 冲刺线收官）；`AGENTS.md` 本线收口行；实施台账 §12 收口行。冲刺线八轮（r1–r6＋收口）至此全收官。
+
+## [未发布] — goal-crv 修复批 R7：桌面五项安全与体验收口（主进程守卫成对＋LCSC 闸全覆盖＋点击前复验＋双桥响应面恒同＋控制台错误条，零服务端改动·便携版 r49，2026-11-14）
+
+依据 `docs/goal-crv-fix2-剩余批次总循环-任务书.md` r6 批 R7 完成 `QR-109`~`QR-113` 五项 P2 修复（零迁移零新表零路由）：
+
+- **QR-109 主窗口 will-redirect 守卫**：`hardenWebContents` 主窗口分支补 30x 重定向同尺拦截（此前特权更高的主窗口只有 will-navigate 半边，lcsc 分支反而成对注册）。
+- **QR-110 desktop-execute 入闸**：`lcscIpcEnabled`「默认关」闸覆盖第 4 个 LCSC 面——API 桥 `desktop-execute` 拦截分支在拉起自动化执行前调 `requireLcscEnabled()`（flag=false 桥层即拒，不再依赖服务端 403 兜底）；声明上移 TDZ 安全，4 面共用单点。
+- **QR-111 点击前语义复验**：denied 名单提单一真身 `DENIED_ACTION_SOURCE`（观察面与点击面共用），runner 点击分支执行前对目标当前文案/aria-label/title 复验同尺正则＋form 归属拦截（TOCTOU 窗口敏感控件误点即停）。
+- **QR-112 双桥响应面恒同**：`shared/api-safety.ts` 新增 `parseApiEnvelope`（ok∧error 拒／!ok∧¬error 拒／!ok data 置空／错误体形态四不变量单一判定）与脱敏纯函数族（实现逐字迁移）；桌面桥与 web 桥各自消费同一 verdict——web 桥四处不等价缺口全封；等价性静态钉扩响应面 17 信封样本＋5 脱敏样本双侧钉死；旧钉换代 1 处（错误信封 stub 200→409，换代注记留痕）。
+- **QR-113 控制台错误条**：`AgentsConsole` 去顶层 error 整页早返回（单件复核 409/下载失败不再全页坍缩），改页内错误条＋重试按钮，与 detailError/queueError 就地呈现一致。
+- **验证与打包**：`npm run typecheck` 零错＋vitest 全量 104 文件 **1217 passed**（+26：信封/脱敏样本双侧＋源码锚钉 8 例）＋变异三连（`M1_QR110_gate_bypass`/`M2_QR111_recheck_bypass`/`M3_QR112_ok_with_error`）全红→字节还原核 sha256→54 passed 复绿；RELEASE-COUNTER 对齐实际轮次（45→48）后 bump 打包**便携版 r49**（`0.3.0-r49`），asar 正反向字节双证 ALL PASS（六特征新命中/旧 0 命中＋版本 marker），归档主树 `release/蔡工FDE-0.3.0-便携版-r49`（asar `275313739f5dc4eb…`）。
+
+## [未发布] — goal-crv 修复批 G：复核清单指纹化零真名＋update_analysis 编辑复扫（零迁移零新路由，2026-11-14）
+
+依据 `docs/goal-crv-fix2-剩余批次总循环-任务书.md` r5 批 G 完成 `QR-133`/`QR-134` 两项拍板修复（零迁移零新表零新路由）：
+
+- **QR-133（拍板 #6A）复核清单指纹化**：`guidance.redaction_review` 事件账零真名——`guidance/redaction.py` 落 `redaction_name_hash`（域分隔 sha256）与 `fingerprint_review_entries` 单一真身，确证命中只存指纹、未确证疑似名不入条目账只留聚合计数（`suspect_count`）；guidance worker／translator 创建与落库两阶段／采纳流搬运四锚写入侧接线；读面 `resolve_redaction_display` 经词典反解显示词目原文（未命中 `name=None` 软失败），历史 name 形状事件现算指纹归一兼容。
+- **QR-134（拍板 #7A）编辑复扫＋豁免登记**：`update_analysis` 保存时对编辑文本与列表 str 值输出端复扫——词典确证命中 422 `redaction_name_detected` fail-closed（不回显原文）、疑似名替换为代号放行＋`manual_edit` 计数事件、凭据串 422 同闸；presurvey 录入卡维持零脱敏豁免（用户自填自述≠AI 加工面），随指纹化语义一并登记 `AGENTS.md` 独立 bullet。
+- **验证**：NEW `tests/test_crv_batch_g.py` 10 例＋旧钉换代 4 文件＋邻域回归 12 套件 97 passed＋变异三连（`M1_QR133_fingerprint_bypass`/`M2_QR134_dict_hit_reject`/`M3_QR133_suspect_count`）全红→`try/finally` 字节还原核 sha256→10 passed 复绿；`ruff` 零告警；`check-python-types.py` 277 基线零新增。
+
+## [未发布] — 学习闭环 2.0 L4 服务端：workbench 真执行面＋analyze_run 三源化＋AI 蒸馏返件起草＋断点⑥ lessons 键名修正（迁移① `d4b7e2f9a6c1`：candidate_payload_json 加列＋adapter_mode 扩值，2026-11-14）
+
+goal-l2.0 任务书 L4 轮服务端半（桌面「失败→AI 起草→建案」另 PR）；按设计稿 v1.1 §2.1–§2.3 落六断点中的断点①②③⑥：
+
+- **NEW `simulation/adapters/workbench.py`（第三执行档）**：`adapter_mode="workbench"` 注册进 `ADAPTER_MODES` 与 `build_adapter`（mock/real 零回归）；probe/analyze/design 走 `execute_ai_prompt` 单一入口（purpose=`simulation_workbench`＋注册表版本 `simulation-workbench-prompt-v1`＋预算/审计全继承），JSON 契约失败带拒因重试一次后回落 `structured=False`（real.py 语义）；implement/validate 复用确定性腿；usage 逐调用累计回填 `cost_json`（修正 v1 硬编码 `tokens:0`）。模型槽位 NEW `deepseek_simulation_workbench_model`（空＝回落评估槽位；缺端点/密钥 fail-closed ⇒ 运行诚实失败不静默退回 mock）。候选载荷通道：run config `candidate_payload.prompt_overlay_fragment` 以 ≤200 字追加条款进 system 消息（J-1 登记例外 `system_content`）。
+- **runner 逐轮 ctx（评审 P0-Ⅴ）**：访谈循环内逐轮 `dataclasses.replace(base_ctx, disclosed=…, config={…, "history": …})`——修正 v1 全程传同一 ctx（disclosed 恒空）失真；mock 忽略新键零回归；probe 模型面不可用 ⇒ `_fail_unavailable(phase="interview")` 诚实失败。
+- **异步化**：workbench 单跑经 outbox 入 `simulation.run` 后台作业（`BackgroundJob` 状态承载零迁移；入 `RECOVERABLE_JOB_TYPES`，终态幂等不重复执行不重复计费）；mock/real 小跑保持同步。
+- **analyze_run 三源化（断点②）**：L-A 不动；L-B 查询钉 `layer=="model" AND evaluator_id=="model:server"`＋`verdict!="unavailable"` 二道 ⇒ 低分产 `likely` 发现（不解锁提案，单独提案 409；模型自写 evidence/reason 不采信——evidence_refs 恒空）；L-C 取 `created_at` 最新人工行产 `confirmed` 发现（FA-C1），note 全文先过答案句黑名单（场景 rubric 三桶＋期望结果＋验收标准原文句洗刷＋`note_redacted` 留痕）；幂等键 `(evaluation_id, code)` 三源各挂各行。
+- **NEW `POST /simulation/findings/draft-ai`（断点③，返件式零落库，不进 api_catalog）**：蒸馏输入＝字段允许名单投影 `{code, dimension, severity, score, 脱敏 description}`（description 过 T-A2 脱敏管线 fail-closed；evidence_refs/reason/note 物理不进提示词）；train split 服务端过滤；跨题按 FA 码聚类；产出三型候选载荷（lesson_entry≤300 字／skill_version_draft／prompt_overlay_fragment≤200 字）；契约失败整批丢弃重试一次 ⇒ 409 `ai_draft_contract_failed`；输出夹带答案侧键拒（键清单从 `schemas.ANSWER_SIDE_KEYS` 单一真身取）。静态钉：蒸馏器模块 AST import ⊆ 白名单（禁 scenarios.loader/reference 面）。
+- **指纹修正（评审 P0-Ⅶ）**：`_finding_fingerprint` canonical 增 `payload_sha256`（无 payload 固定空值）——同 findings 同 target 不同候选载荷两案并存（不再被旧指纹 409 挡死）、同 payload 重复提交幂等 409、老提案互不误伤；`create_proposal` 收 `candidate_payload`（键闭集＝三载体类型＋长度闸）入 NEW 列 `candidate_payload_json`（与 `override_json` 分工：override＝run 参数，candidate＝三载体载荷）。
+- **断点⑥修正**：`agents/lessons.py` 键名 `fde_agent_lessons_*`→`agent_lessons_*`（只修 lessons 侧——config 字段真名；此前生产注入恒关）；假 settings 测试同步修正＋NEW 真实 Settings 验收钉（`create_app` 实例断言注入默认生效/可关——同坑两次复发家族）。
+- **迁移① `d4b7e2f9a6c1`（75→76 单头，挂 `d4b8e1f6a9c3`）**：`improvement_proposals.candidate_payload_json`（JSON NOT NULL server_default '{}'）＋`simulation_runs.adapter_mode` 列宽 String(8)→16＋CHECK 闭集扩 `'workbench'`——**设计稿 v1.1 勘误**：§2.1 只记注册两处、漏记列宽与 CHECK 两处 DB 落点（"workbench" 9 字符＞8），不随迁则 workbench 运行行在 DB 层必被拒。
+- **验证**：NEW 测试三套 41 例（workbench 12＋三源化 8＋蒸馏 16＋真实 Settings 钉并入 lessons 套件 1＋静态钉等）全绿；模拟域回归 135 例＋lessons/registry/J 系/纯度/预算/台账钉 42 例＋迁移套件 32 例全绿；`ruff check` 绿；`check-python-types.py` 277 基线零新增；**变异四连红→sha256 逐字节还原→复绿**（M1 摘 L-B evaluator 钉／M2 摘蒸馏允许名单／M3 还原 lessons 键名错配／M4 摘指纹 payload_sha256）；审计清单三件套重生成（路由 491/76 rev 单头 `d4b7e2f9a6c1`）＋archify architecture 四件套刷新（finalize 四闸绿＋preview 整页实拍 1440×2098）＋防陈旧闸绿。真机 workbench 证据（run id＋活库）另附待蔡工放行额度（配额购买属 OWNER 决策）。
+
+## [未发布] — goal-sprint r6：E8/E11 意图↔实现验收与 A 轨只读降级三处真缺口闭合（零迁移零路由；server 变更，2026-11-14）
+
+任务书 §3 r6 条件轮（开工闸＝r4 D7 复审报告出齐＋蔡工显式开工令，两项齐备；`goal-crv` 147 条 QR 台账扫描与 E8/E11 零交集缺陷）：对 `#414` 合入的 E8 A 轨只读降级层与 E11 智能体凭据管理面执行 N3 五问逐条意图↔实现（intended-vs-implemented）核对，当场修复 E8 三处「测试绿而生产断/漏」真缺口并同步台账。
+
+- **E8 点分能力→只读工具权威映射（修复真实任务无法降级断层）**：`server/src/fde_api/control/automation_fallback.py` 新增 `_build_capability_read_only_map()`，从 `mcp_gateway.TOOLS` 单一真身派生 `CAPABILITY_READ_ONLY_TOOLS` 与 `UNSCOPED_READ_ONLY_TOOLS`（`project.summarize` 共享 `project.read` 4 项只读工具，命中点分只读能力时附带 5 项无能力门槛通用只读工具），修复桌面端/ClawBot 创建任务持久化的点分能力名（默认 `["project.read", "project.summarize", "file.search"]`）此前与下划线工具名 `READ_ONLY_TOOLS` 交集恒空导致生产 100% 不降级的断层；同时保留直传下划线只读工具名兼容与纯写/编排能力集返回 `None` 的诚实失败语义。
+- **E8 降级调用链能力与工具白名单双重收窄**：`server/src/fde_api/control/ai_tool_loop.py` 的 `tool_definitions` 与 `direct_tool_completion` 新增可选关键字参数 `capabilities` 与 `allowed_tools`；`server/src/fde_api/control/automation_jobs.py` 在 `_record_degraded_execution → _run_degraded_readonly` 中显式透传任务级 `capabilities=execution["allowed_tools"]` 与 `allowed_tools=plan.allowed_tools`，对齐 `output_json.degraded_allowed_tools` 审计留痕与实际暴露给模型的工具集；`server/src/fde_api/control/ai_server_client.py` 在 `execute_ai_prompt` 两处 `_degraded_direct_result` 降级分支同步透传 `capabilities`。
+- **直连/降级循环执行期只读硬闸（N3-Q4 纵深防御）**：`ai_tool_loop._run_tools` 在调用 `mcp_gateway.call_tool` 前强制校验 `name in _permitted_read_only_tools(allowed_tools)`（恒 `<= READ_ONLY_TOOLS`），即使高权限账号遇模型幻觉或提示词注入返回 `capability=None` 的 `api_execute` 或外发工具 `file_send_wechat`/`lcsc_search`，亦直接返回 `{"error": "forbidden", ...}` 绝不执行写操作。
+- **E11 凭据管理面核验与验证回执**：核实 `agents/credentials.py` 三路由（`is_platform_operator` 平台双轴闸、凭据名正则 `^[A-Za-z0-9_]{1,120}$`、Fernet 密文零回显、不进 `api_catalog`、7 个 zcode 种子赋 `default`）100% 吻合规格；pytest +6 例（`test_automation_fallback` +2、`test_automation_fallback_wiring` +1 真实 API 点分能力端到端、`test_ai_tool_loop` +2、`test_ai_server_direct_fallback` +1），M1–M3 串行变异三连全真红→`try/finally` sha256 逐字节还原→控制面与安全邻域 13 套件 **209 passed**＋ruff 绿＋mypy 277/102 基线不变＋架构图防陈旧闸与台账钉全绿。零迁移・零新表・零新路由・零桌面改动（现测结构口径 490 路由 / 52 蓝图 / 153 表 / 75 rev 单头 `d4b8e1f6a9c3` / 98 ENTRIES 不变）。
+
+## [未发布] — 项目详情页第二批桌面 AI 辅助闭环：交付方案面板＋测试计划面板＋工作流「从方案生成草稿」（桌面变更·零服务端改动·零迁移零路由，便携版 r47，2026-11-14）
+
+打通项目详情页三块 AI 辅助消费面（plans／quality／workflows 蓝图路由早已上线，本轮补齐桌面最后一公里），严守双来源并列、产物恒 draft、闸不代拍与错误码原样呈现纪律：
+
+- **交付方案面板**：新增 `desktop/src/renderer/src/plans/DeliveryPlansPanel.tsx` 挂入 `desktop/src/renderer/src/projects/ProjectDetailPage.tsx` delivery 分支（SolutionDesign 与 HandoverPackagesPanel 之间，未选 solutionId 时渲染）。`generate`（确定性拼装）与 `generate-ai`（AI 起草）并列双来源、产物恒 draft；draft 态「批准/驳回」（内联备注 ≤500 字）、approved 态「发布」、approved/published 态「分解任务」——目标模块下拉（`project.modules` 过滤 cancelled，空模块禁用入口）＋条目勾选＋`dry_run:true` 预览→`dry_run:false` 落任务两段式，写后重拉并回刷项目任务（`onTasksCreated` → 项目详情重取）。
+- **测试计划面板**：新增 `desktop/src/renderer/src/quality/TestPlansPanel.tsx` 挂入 tasks 分支（TaskTable 下方）。`generate`/`generate-ai` 双来源且「来源任务」下拉选中即透传 `source_task_id`；用例表（`case_key`/`title`/`risk_level`/`acceptance_mode`/`requirement_key`）；draft「批准/驳回」（覆盖闸 409 `requirement_coverage_incomplete` 连 `missing_requirement_keys` 原样呈现）；approved「登记执行」——环境仅 dev/staging（production 恒 409 不出 UI 选项）、逐用例勾 result（passed/failed/blocked）、`report_uri` 与 `report_sha256` 缺一前端拦截不提交（成对后放行）。
+- **工作流控制台升级**：`desktop/src/renderer/src/workflows/WorkflowConsole.tsx` 既有行为零回归，canManage 顶部新增「从方案生成草稿」区＝交付方案下拉（过滤 approved/published）＋实施技能下拉（GET `/api/v1/extensions` skills 过滤 published，ref=`key@current_version`）＋审批能力默认 `workbench.write`，并列「编译草稿」（POST `draft-from-plan`，落库为 draft 定义）与「AI 起草草稿」（POST `generate-ai-draft`，返件式零落库）；AI 返件就地预览（节点表＋validate 明细＋`dag_sha256`），「采纳为定义」POST `/workflows` body 恰含 `name`/`dag`（`description` 非空才携带，validate 明细不进 body）；draft 卡片加「干跑校验」（validate 干跑明细就地呈现），isAdmin 加「发布」；`ProjectDetailPage` 增传 `isAdmin`。
+- **错误码纪律**：全部写动作 403/409/422 原样呈现 `[code] message` 不吞；草稿来源列表（方案/技能）加载失败静默降级为空下拉（沿面板族 fail-静默纪律），生成动作仍受服务端闸约束。
+- **验证与打包**：vitest 新增 22 例（`delivery-plans-panel` 8＋`test-plans-panel` 7＋`workflow-console` 6＋`workflow-console-launch` 1），全量 98 文件 **1142 passed**＋`npm run typecheck` 零错＋M1–M3 反向验证（分解 dry_run 提交腿／报告成对闸／采纳 dag payload）全红→字节级还原→复绿＋`server/tests/test_diagnostic_sample_surface.py` 与 `server/tests/test_ledger_sync_nail.py` 全绿（7 passed）＋`git diff fork/main -- server/` 为空；合并后在主树 `release/` 产出 `蔡工FDE-0.3.0-便携版-r47` 并完成新旧 `app.asar` 四特征串（`draft-from-plan`、`generate-ai-draft`、`delivery-plans/generate-ai`、`test-plans/generate-ai`）正反向核验。
+## [未发布] — goal-crv 修复批 E：席位回填四路径预扣税递进闭合＋工作流 solutions.create 契约闸（零迁移零新路由，2026-11-14）
+
+依据 `docs/goal-crv-fix2-剩余批次总循环-任务书.md` r4 批 E 完成 `QR-071`/`QR-072` 两项 P1 修复与 `QR-073` 宿主通道核销（零迁移零新表零新路由）：
+
+- **QR-071（续 CR-028）席位回填四路径闭合**：published 态 `seat_delivery=None` 生成的 draft 结算行在接单（`transition_package` accept 分支扫 draft 行回填）、五席位分配（`allocate_five_seats` 落 `seat_payees["delivery"]`）、二次收款刷新（`record_receipt_settlements`）与 `accrue_settlements_for_project` 兜底（paid 明细→包指针→接单人逐级回退并持久化）四条路径同步回填 `seat_delivery_user_id`，保证当期预扣税非零且同自然年后续里程碑把已计提行计入累计预扣递进基数。
+- **QR-072 工作流 solutions.create 契约闸**：`compile_delivery_preview` 与种子模板 `plan_execution` 补 `params.project_id` 并把骨架字段包进 `params.body`（对齐 api_catalog 路由契约）；`validate_dag` 新增 `catalog_call_contracts()` 注入，定义期拦截缺路径必填参数（`call_missing_path_param`）、`body` 非对象（`call_invalid_body`）、写操作字段散落顶层（`call_unwrapped_body_params`）三类 422 `dag_invalid`；`_dispatch_skill` 把 skill JSON 输出字典字段透出节点上下文使下游 `{{research_brief.opportunity_ids}}` 引用可达；编译→定义→发布→执行器端到端真实创建 `ProjectSolution` 行。
+- **QR-073 及宿主通道核销**：`is_unsafe_artifact_path` 三形态路径钉（POSIX 绝对／`..` 穿越／Windows 盘符·反斜杠根·UNC）＋ `#422`（`QR-088/089`）与 `#433`（`QR-092/094/095`）吸收项在位核验；附带收口 `host_receipt.py` exit_code 布尔漏点（`isinstance(False, int)` 为真且 `False == 0`，宿主传 `"exit_code": false` 可误判成功——补 `not isinstance(..., bool)` fail-closed 排除）。
+- **验证**：NEW `tests/test_crv_batch_e.py` 5 例＋邻域回归 14 套件 213 passed＋变异三连（`M1_QR071_accept_backfill`/`M2_QR072_definition_gate`/`M3_QR072_compiler_contract`）全红→`try/finally` 字节还原核 sha256→5 passed 复绿；`ruff` 零告警；`check-python-types.py` 277 基线零新增。
+
+## [未发布] — 桌面端五处前后端断链与静默缺陷收口：图片预览 CSP `blob:`＋训练场交付原文展开＋提案五态与发布/回滚＋产物采纳方案与跳转＋派单 AI 撮合（桌面变更·零服务端改动·零迁移零路由，便携版 r45，2026-11-13）
+
+打通桌面端五处前后端契约断链与静默渲染缺陷，严守零后端改动与人工拍板红线：
+
+- **图片预览 CSP 白屏修复**：`desktop/src/renderer/index.html` 与 `desktop/src/renderer/web.html` 的 `Content-Security-Policy` 中 `img-src 'self' data:;` 扩为 `img-src 'self' data: blob:;`，消除 `desktop/src/renderer/src/files/FilePreview.tsx` 通过 `URL.createObjectURL(blob)` 渲染 `<img src="blob:...">` 时的 CSP 拦截白屏。
+- **训练场阶段交付原文展开（消解 L-C 盲评）**：`desktop/src/renderer/src/SimulationLab/SimulationRunDetail.tsx` 为 `trace.payload.artifact` 非空 Trace 行增加「展开交付原文 / 收起交付原文」折叠面板，逐件渲染自由文本 `artifacts[]`（`name`、`kind`、`sha256` 与只读 `text` 原文）及结构化阶段字段键值/JSON，不新增后端接口。
+- **训练场改进提案五态对齐与管理员发布记账 / 回滚**：`desktop/src/renderer/src/SimulationLab/types.ts`、`desktop/src/renderer/src/SimulationLab/api.ts` 与 `desktop/src/renderer/src/SimulationLab/ImprovementProposals.tsx` 补齐 `ProposalDto.status` 的 `"published"`（`STATUS_LABEL.published = "已发布"`，消除 `undefined` 徽标）与 `release` / `rollback` 留痕展示；`admin` 视角下对 `approved` 提案提供「发布记账」（`regression_plan` 为空时禁用并提示）、对 `published` 提案提供「回滚」，内联确认框必填管理员密码与备注调 `POST /api/v1/simulation/proposals/<id>/release` 与 `/rollback`，提交或取消即刻清空密码 state。
+- **智能体产物「采纳为方案」与关联方案跳转**：`desktop/src/renderer/src/agents/AgentsConsole.tsx` 对 `linked_solution_id` 非空产物展示「查看方案」，经 `allowNextHashNavigation()` 放行跳转 `#projects/<projectId>?tab=delivery&solution=<linked_solution_id>`；`linked_solution_id` 为空且 `canManage` 在 `completed` / `succeeded_but_receipt_invalid` 终态下提供「采纳为方案」，调用 `POST /api/v1/agents/runs/<run_id>/artifacts/<artifact_id>/adopt-solution`（body `{}`），刷新产物关联状态并呈现新建或幂等重复采纳提示（同时保留宿主通道溯源头与「方案」列展示）。
+- **派单控制台「AI 撮合建议」与采纳 / 驳回留痕**：`desktop/src/renderer/src/dispatch/ConsolePage.tsx` 在 `published` 工作包操作区接入「AI 撮合建议」（`POST /api/v1/dispatch/packages/<id>/match-ai`），展示场景、模型/`prompt_version` 与 `ai_suggestions`（`ai_called=false` 如实提示未调用模型）；「采纳建议 / 驳回建议」调用 `POST /api/v1/dispatch/packages/<id>/match-ai/decision` 并严格传 `{ decision, recommendation_sha256, adopted_candidate_ids }` 闭集三键——采纳自动勾选候选人复选框但不自动创建 `dispatch_offers`，正式指派仍走人工「指派 offer」按钮。
+- **验证与打包**：`vitest +9`（全量 96 文件 **1117 passed**）＋`npm run typecheck` 零错＋M1–M5 反向验证五连全红→`try/finally` sha256 逐字节还原→复绿＋`server/tests/test_diagnostic_sample_surface.py` 与 `server/tests/test_ledger_sync_nail.py` 全绿；合并后在主树 `release/` 产出 `蔡工FDE-0.3.0-便携版-r45` 并完成新旧 `app.asar` 特征串核验。
+
+## [未发布] — 桌面端「采纳为方案」人工入口＋宿主通道溯源展示（1A，零新依赖零新样式类，2026-11-13）
+
+OWNER 拍板 1A 的落地（服务端 PR #435 已供契约，补桌面最后一公里）：
+
+- **运行详情头**透出宿主通道溯源：`通道 <execution_provider>`＋`宿主领取 <时刻>`＋`宿主回执 <时刻>`——业务负责人在界面即可看到「本次 run 是宿主执行的、何时领走、何时回执」（此前只在 API/DB 可见）。
+- **产物表新增「方案」列**：已采纳显示方案指针（id 前 8 位），未采纳显示 —。
+- **「采纳为方案」按钮**（canManage + run 终态 + 该 run 尚无任何产物被采纳时显示）：点按展开内联名称输入（留空自动命名／回车即提交），成功后重拉详情回真（不本地猜写，与 T-B1 同款）。**一 run 一方案的闸仍在服务端**（409 由服务端裁决），前端置灰仅省一次徒劳请求。
+- 状态机标签补 `host_running＝宿主执行中`。
+- 零新 CSS 类（全部复用既有类）、零新依赖；desktop typecheck 零错误、vitest 1106 全过。
+
+## [未发布] — goal-crv 修复批 F：富文本段落键名契约双向对齐＋`complete_upload` 唯一键预检与重放恢复（2026-11-13）
+
+依据 `docs/goal-crv-fix-批BF-任务书.md` 完成批 F 两项 P1 修复与契约钉闭合（零迁移零新表零新路由）：
+
+- **QR-117（P1 → 趋 P0 随批注记）富文本键名兼容与桌面往返闭合**：`server/src/fde_api/documents/rich_text.py::sanitize_rich_text` 对 `paragraph`/`heading` 优先读取规范键 `content`，缺省回退旧版桌面 `text` 键并走同一 `bleach.clean` 清洗；`desktop/src/renderer/src/documents/DocumentEditor.tsx` 导出 `plainToRichText`（写出规范键 `content`）与 `richTextToPlain`（兼容服务端 `render_rich_text` 落库返回的 `list[dict]` 数组与 `{type:"doc",content:[...]}` 包装对象及 `content`/`text` 双键），闭合保存→重开→Worker 生成 `.docx` 段落往返链路。
+- **QR-118（P1）`complete_upload` 唯一键预检、409 映射与重放/中止恢复**：`server/src/fde_api/files/service.py` 新增 `_preflight_upload_target` 在 `complete_multipart` 消费 `.multipart/<upload_id>` 前预检目标文件存在性（404 `project_file_not_found`）与新文件 `(project_id, category, display_name)` 同名冲突（409 `file_name_conflict`）；并发竞态下捕获 `IntegrityError` 映射 409 `file_name_conflict`，重试若遇 `multipart_upload_not_found` 通过 `head(storage_prefix)` 回收已合成对象完成入库，`abort_upload` 在分片目录已消费时幂等清理孤儿对象并收敛 `aborted`。
+- **测试钉、变异验证与桌面交付**：NEW `server/tests/test_crv_batch_f.py` 6 例＋`desktop/tests/renderer/project-documents.test.tsx` +1 例（全量 vitest 96 文件 / 1107 passed；PR #442 首轮 CI `server-tests` 3625 passed + 8 skipped）＋变异七连（M1–M6）全红→`try/finally` 逐字节还原→全绿＋服务端文档/上传回归 68 passed＋静态/存储/台账钉 96 passed＋ruff 绿＋mypy 277 基线不变；桌面便携版 `r44` 于合并入 `main` 后重打包并执行 `asar` 指纹与 marker 字节验证。
+
+## [未发布] — goal-sprint r5：T-14b 全收口（`diag.fde18.com` 443 签证上线＋官网 CTA 切 `diag` 双锚点＋公网只读校验器，2026-11-13）
+
+任务书 §3 r5 行＋§9 硬指标 4 全项兑现：蔡工添加阿里云 `diag.fde18.com → 141.95.33.198` A 记录后完成 D-3 独立轻部署 HTTPS 开闸、官网 CTA 锚点切换与跨三域公网复测。
+
+- **远端 `diag.fde18.com` 443 签证与潜伏真缺陷修复**：预检抓出 `/www/server/panel/vhost/nginx/diag.fde18.com.conf` 漏写 `server` 级 `root`/`index` 致 `/` 返回 58KB 宝塔停用页真缺陷并修复；`certbot` webroot 签发 Let's Encrypt 证书（有效期至 `2027-02-11`），升级 80→`301`＋443 SSL HTTP/2（同主站 CSP/安全头），公网 HTTPS 7 项冒烟（含 `POST /api/v1/diagnostics/sessions` 匿名会话创建、`diag` 注册面 404、`app.fde18.com` 诊断面 404 隔离）全绿。
+- **官网仓 `fde-ops` CTA 切换与线上表单密钥恢复**：`caishide/fde-ops` PR `#55`（`04f4220`）将 `/diagnosis-samples/` 主 CTA 切至 `https://diag.fde18.com/#diagnostics`（政策补贴测算·免注册）、次 CTA 切至 `https://diag.fde18.com/#diagnostics/sample`，E38 正式收回 `app.fde18.com` 临时直链豁免（全站零出现）＋E39 持 `diag` 双直链（变异 M1/M2 红→还原→绿）；并从远端历史备份找回真 UUID 修复前序部署误截断的 `/contact/` `PUBLIC_FORM_KEY`，`deploy-ovh-fde18.sh` STAMP `20261113-201958`（`99/99 PASS`＋tag `deploy-20261113-2019`＋补记 PR `#56` `a2b40f1`）上线。
+- **公网只读校验器与任务书收口**：NEW `scripts/verify/verify_diag_public_live.py`（6 项公网直连校验：DNS／80→301／443 TLS+SPA+CSP／问卷 200+注册闸 404／主站诊断闸 404／官网 `diag` 双直链且零 `app.fde18.com`，实跑 `VERIFY-R5-DIAG-PUBLIC-LIVE PASS`）；`获客诊断工具实施任务书-v1.md` T-14 标全收口并锚定 R-A 3 个月止损线起算日 `2026-11-13`（复盘日 `2027-02-13`）。零后端/桌面生产代码改动・零迁移・零新路由（490/52/153/74 全不变）。
+
 ## [未发布] — AI 原生化 G-10 CI 评测凭据接线轮：ai-eval workflow 四槽 secret 全接线（端点/模型/超时缺省回落＝既有语义零改动；零迁移零路由零桌面，2026-11-13）
 
 - **挂账消解第一段（凭据面）**：N4 轮挂账「上游 CI 配 `secrets.FDE_DEEPSEEK_API_KEY`（按量付费 key）后 ai-eval 出首份非 insufficient 报告」。本轮现测发现**只灌 key 一槽不足以消解**——生产 `server/.env` 的 `FDE_DEEPSEEK_*` 槽现行实际为 **MiniMax 端点**（`FDE_DEEPSEEK_BASE_URL=https://api.minimaxi.com/v1`＋`FDE_DEEPSEEK_AI_OPPORTUNITY_MODEL=MiniMax-M3.1-Flash`，按量付费），而 workflow 只接 `API_KEY`、harness `BASE_URL` 缺省 `https://api.deepseek.com` ⇒ MiniMax key 调 DeepSeek 官方端点＝真模型腿 9 例全错 ⇒ 报告**仍 `insufficient_data`**（误导性绿）。key 来源/接线深度三选拍板问询未获答复 ⇒ 按「按推荐执行＋留痕可推翻」先例走推荐项：**复用生产 key＋四槽全接线**（secret 随时可覆盖/删除，workflow 走 PR 可回退）。
@@ -10,6 +226,8 @@
 - **判据**：合并后手动 `workflow_dispatch` 出**首份非 insufficient 报告**（读数与四特征④上行复评随回填 PR 落台账 v1.22）；周一 03:00 UTC 定时 cadence 照常（首跑不再等周一）。
 - 零迁移零路由零蓝图零桌面零生产代码改动；结构口径**不变**（引用前现测 **490 路由／52 蓝图／153 表／74 rev 单头 `c8e2a6f0b9d4`**，inventory 逐位吻合）；无 server 变更 ⇒ 无需 rebuild／alembic／重打包。
 - 文档同步：台账 **v1.21**（G-10 凭据接线注记）＋任务书 §13 **#25**。
+- **合并与首跑证据（回填）**：PR #441 rebase 解 CHANGELOG 插队一次（#440「试点度量口径」节两侧全留、后合并者在上，force-with-lease）→ squash **`d1126d3c`**；PR CI 四绿×2（首推＋rebase 后：server-tests 13m38s/10m42s → 13m9s/15m19s）。4 secret 于 12:41:40–45 UTC 经 stdin 管道灌入；dispatch run **43427382735**（34s）出**首份非 insufficient 报告**：verdict=**pass**／kpi=**1.0**（live 9/9：citation 6＋pseudonym 3 全过——kept≥1＋引文逐字独立复核＋零 PII 事件）／offline 14 例 oracle 重放全 ok／incidents=0／uplift 1.0≥PASS 0.8（未校准观察线，非必需门禁语义不变）／prompt_fingerprint `ae12fd11c092cb7c` 与首轮 insufficient 报告逐位一致（提示词零漂移）／fixture sha256 `7871b7dd4f766fcf…`（全文在 artifact）／model=**MiniMax-M3.1-Flash**（生产同款——四槽接线生效）。
+- **四特征④上行复评（DoD③，回填结论）**：**2-1-2-1 → 2-1-2-2**（④持续进化 1/3→2/3）——任务书 §1.2 翻分判据三件复测证据全在案（第一批真模型评估数据＝模拟场 3 例在库＋CI golden set 首份真报告 kpi=1.0／G-13 版本注册＝N6／受控发布通道＝G-11 N4 落地），台账 v1.19 预告触发点「首个非 insufficient 报告产出」兑现；**留痕**：发布/回滚**动作面**仍零行使（首提案/首工单出现后走通道——§1.2 判据只要求通道落地；3/3 属 L4 段不预支）。台账 v1.22＋任务书 §13 #26。周一 03:00 UTC cadence 照常（凭据已在位）。
 
 ## [未发布] — 试点度量口径两项收口（产物人工接受率分母定义＋`agent_pilot_max_runs` 默认对齐文档拍板值，2026-11-13）
 

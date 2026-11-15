@@ -25,12 +25,24 @@ from sqlalchemy import select
 from fde_api.auth.models import User
 from fde_api.auth.passwords import verify_password
 from fde_api.extensions import db
-from fde_api.simulation.failure_analyzer import FAILURE_CATEGORIES, analyze_failures
+from fde_api.simulation.failure_analyzer import (
+    FAILURE_CATEGORIES,
+    analyze_failures,
+    analyze_human_layer,
+    analyze_model_layer,
+)
+from fde_api.simulation.improvement_draft import (
+    MAX_LESSON_TEXT,
+    MAX_OVERLAY_FRAGMENT,
+    PAYLOAD_KINDS,
+    candidate_payload_sha256,
+)
 from fde_api.simulation.models import (
     ImprovementProposal,
     SimulationEvaluation,
     SimulationFinding,
     SimulationRun,
+    SimulationScenario,
     SimulationTrace,
 )
 from fde_api.simulation.service import ScenarioServiceError, _require_level
@@ -59,9 +71,19 @@ def _run_split(session, run_id: str) -> str | None:
     return row.split if row is not None else None
 
 
-def _finding_fingerprint(finding_ids: list[str], target: dict[str, Any]) -> str:
+def _finding_fingerprint(
+    finding_ids: list[str], target: dict[str, Any], *, payload_sha256: str = ""
+) -> str:
+    """幂等指纹（学习闭环 2.0 L4 指纹修正，评审 P0-Ⅶ）：canonical 增
+    ``payload_sha256``（无 payload 取固定空值）——「同 findings 同 target 不同
+    候选载荷」的 AI 重新起草不再被旧指纹 409 挡死；老提案指纹（无该键）与新
+    格式互不碰撞（老提案互不误伤、同 payload 重复提交幂等保留）。"""
     canonical = json.dumps(
-        {"findings": sorted(finding_ids), "target": target},
+        {
+            "findings": sorted(finding_ids),
+            "target": target,
+            "payload_sha256": payload_sha256,
+        },
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -103,6 +125,7 @@ def _serialize_proposal(row: ImprovementProposal) -> dict[str, Any]:
         "impact_scope": list(row.impact_scope_json or []),
         "regression_plan": dict(row.regression_plan_json or {}),
         "override_json": dict(row.override_json or {}),
+        "candidate_payload": dict(row.candidate_payload_json or {}),
         "status": row.status,
         "release": release or None,
         "decided_by_user_id": row.decided_by_user_id,
@@ -124,9 +147,18 @@ def list_findings(*, actor: User, run_id: str | None = None) -> dict[str, Any]:
 
 
 def analyze_run(*, actor: User, run_id: str) -> dict[str, Any]:
-    """对一次运行做失败分析，落 ``simulation_findings`` 行。
+    """对一次运行做失败分析（三源化，学习闭环 2.0 L4 断点②）。
 
-    幂等：同 (run_id, evaluation_id, code) 只留一行（重跑分析不增殖）。
+    - **L-A 规则层**：既有 FA-01..10 映射不动（唯一可判硬性失败的来源）；
+    - **L-B 模型层**：查询钉 ``layer=="model" AND evaluator_id=="model:server"``
+      （stub 替身行有真实 verdict，不钉 evaluator 会误当真模型层——评审 P0-Ⅵ），
+      ``verdict!="unavailable"`` 二道 ⇒ 低分产 ``likely`` 发现（不解锁提案）；
+    - **L-C 人工层**：``layer=="human"`` 按 ``created_at`` 最新一行（人工插行
+      无幂等，按 get_evaluation_report 同语义收敛为最新）⇒ 产 ``confirmed``
+      发现；note 全文先过答案句黑名单。
+
+    幂等：同 (run_id, evaluation_id, code) 只留一行（重跑分析不增殖；三源各挂
+    各的评估行，唯一约束天然分流）。
     """
     _require_level(actor)
     with db.session() as session:
@@ -162,9 +194,56 @@ def analyze_run(*, actor: User, run_id: str) -> dict[str, Any]:
             "scores": dict(evaluation.scores_json or {}),
             "hard_failures": list(evaluation.hard_failures_json or []),
         }
-        findings = analyze_failures(
-            evaluation=evaluation_payload, traces=traces
+        findings = list(
+            analyze_failures(evaluation=evaluation_payload, traces=traces)
         )
+
+        # ---- L-B：真模型层（model:server 钉死；unavailable 二道） ------------
+        model_evaluation = session.scalar(
+            select(SimulationEvaluation)
+            .where(
+                SimulationEvaluation.run_id == run_id,
+                SimulationEvaluation.layer == "model",
+                SimulationEvaluation.evaluator_id == "model:server",
+                SimulationEvaluation.verdict != "unavailable",
+            )
+            .order_by(
+                SimulationEvaluation.created_at.desc(), SimulationEvaluation.id.desc()
+            )
+        )
+        if model_evaluation is not None:
+            findings.extend(
+                analyze_model_layer(
+                    evaluation={
+                        "scores": dict(model_evaluation.scores_json or {}),
+                        "hard_failures": [],
+                    }
+                )
+            )
+
+        # ---- L-C：人工终裁最新行（created_at 收敛） --------------------------
+        human_evaluation = session.scalar(
+            select(SimulationEvaluation)
+            .where(
+                SimulationEvaluation.run_id == run_id,
+                SimulationEvaluation.layer == "human",
+            )
+            .order_by(
+                SimulationEvaluation.created_at.desc(), SimulationEvaluation.id.desc()
+            )
+        )
+        if human_evaluation is not None:
+            findings.extend(
+                analyze_human_layer(
+                    evaluation={
+                        "scores": dict(human_evaluation.scores_json or {}),
+                        "hard_failures": list(human_evaluation.hard_failures_json or []),
+                        "verdict": human_evaluation.verdict,
+                        "note": human_evaluation.note or "",
+                    },
+                    blacklist=_answer_blacklist(session, run),
+                )
+            )
 
         existing = {
             (row.evaluation_id, row.code)
@@ -173,12 +252,20 @@ def analyze_run(*, actor: User, run_id: str) -> dict[str, Any]:
             )
         }
         created: list[SimulationFinding] = []
+        evaluation_ids = {
+            "deterministic": evaluation.id,
+            "model": model_evaluation.id if model_evaluation is not None else None,
+            "human": human_evaluation.id if human_evaluation is not None else None,
+        }
         for finding in findings:
-            if (evaluation.id, finding.code) in existing:
+            source = str((finding.detail or {}).get("source") or "deterministic")
+            layer = {"model_server": "model", "human": "human"}.get(source, "deterministic")
+            owner_id = evaluation_ids.get(layer) or evaluation.id
+            if (owner_id, finding.code) in existing:
                 continue
             row = SimulationFinding(
                 run_id=run.id,
-                evaluation_id=evaluation.id,
+                evaluation_id=owner_id,
                 code=finding.code,
                 title=finding.title,
                 severity=finding.severity,
@@ -205,6 +292,26 @@ def analyze_run(*, actor: User, run_id: str) -> dict[str, Any]:
                 )
             ],
         }
+
+
+def _answer_blacklist(session: Any, run: SimulationRun) -> tuple[str, ...]:
+    """答案句黑名单：该 run 场景 reference 的 rubric 三桶＋期望结果＋验收标准
+    原文句（L-C note 洗刷用；评分侧数据，只进黑名单比对，不落 finding）。"""
+    scenario = session.get(SimulationScenario, run.scenario_id)
+    if scenario is None or not scenario.reference_json:
+        return ()
+    reference = dict(scenario.reference_json or {})
+    rubric = reference.get("rubric") if isinstance(reference.get("rubric"), dict) else {}
+    sentences: list[str] = []
+    for bucket in ("must_identify", "must_avoid", "must_produce"):
+        items = rubric.get(bucket) if isinstance(rubric, dict) else None
+        if isinstance(items, list):
+            sentences.extend(str(item) for item in items)
+    for key in ("expected_outcomes", "acceptance_criteria"):
+        items = reference.get(key)
+        if isinstance(items, list):
+            sentences.extend(str(item) for item in items)
+    return tuple(sentence for sentence in sentences if sentence.strip())
 
 
 def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
@@ -266,19 +373,6 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
                 {"finding_codes": [row.code for row in rows]},
             )
 
-        fingerprint = _finding_fingerprint(
-            [row.id for row in rows], {"kind": target_kind, "ref": target_ref.strip()}
-        )
-        clash = session.scalar(
-            select(ImprovementProposal).where(
-                ImprovementProposal.fingerprint == fingerprint
-            )
-        )
-        if clash is not None:
-            raise ScenarioServiceError(
-                "conflict", "同一组失败发现与改进对象已有提案。", 409, {"proposal_id": clash.id}
-            )
-
         codes = sorted({row.code for row in rows})
         meta = FAILURE_CATEGORIES.get(codes[0], {})
         title = payload.get("title") or f"改进：{meta.get('title', codes[0])}"
@@ -300,6 +394,72 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
                 raise ScenarioServiceError(
                     "invalid_request", "override_json 只接受 {'run_config': {...}} 形状。"
                 )
+        # 三载体候选载荷（L4）：AI 蒸馏返件经人工采纳后随提案入档——与
+        # override_json 分工：override＝run 参数；candidate_payload＝三载体载荷
+        # （L5 发布通道的执行输入）。只做形状与长度校验；发布闸在 release_channel。
+        candidate_payload = payload.get("candidate_payload")
+        if candidate_payload is not None and not isinstance(candidate_payload, dict):
+            raise ScenarioServiceError("invalid_request", "candidate_payload 必须是对象。")
+        if isinstance(candidate_payload, dict) and candidate_payload:
+            unknown_kinds = set(candidate_payload) - set(PAYLOAD_KINDS)
+            if unknown_kinds:
+                raise ScenarioServiceError(
+                    "invalid_request",
+                    "candidate_payload 键闭集为三载体载荷类型。",
+                    400,
+                    {"allowed": list(PAYLOAD_KINDS), "unknown": sorted(unknown_kinds)},
+                )
+            lesson = candidate_payload.get("lesson_entry")
+            if isinstance(lesson, dict) and len(str(lesson.get("text") or "")) > MAX_LESSON_TEXT:
+                raise ScenarioServiceError(
+                    "invalid_request", f"lesson_entry.text 超长（≤{MAX_LESSON_TEXT} 字）。"
+                )
+            overlay = candidate_payload.get("prompt_overlay_fragment")
+            if isinstance(overlay, dict) and len(
+                str(overlay.get("fragment") or "")
+            ) > MAX_OVERLAY_FRAGMENT:
+                raise ScenarioServiceError(
+                    "invalid_request",
+                    f"prompt_overlay_fragment.fragment 超长（≤{MAX_OVERLAY_FRAGMENT} 字）。",
+                )
+            skill_draft = candidate_payload.get("skill_version_draft")
+            if isinstance(skill_draft, dict):
+                # Skill 双闸链（L5 §2.5B，评审 P0-Ⅳ）：AI 蒸馏与提案候选载荷禁 personal
+                # scope——personal Skill 保存即 published 零闸会绕过全套回归与密码闸。
+                if str(skill_draft.get("scope") or "").strip().lower() == "personal":
+                    raise ScenarioServiceError(
+                        "invalid_request",
+                        "skill_version_draft 禁止 personal scope（个人 Skill 保存即生效，必须走公共受控治理链）。",
+                        400,
+                        {"forbidden_scope": "personal"},
+                    )
+                skill_ref = skill_draft.get("skill_ref")
+                if isinstance(skill_ref, str) and skill_ref.strip():
+                    from fde_api.control.models import SkillDefinition
+
+                    skill_row = session.get(SkillDefinition, skill_ref.strip())
+                    if skill_row is not None and skill_row.scope == "personal":
+                        raise ScenarioServiceError(
+                            "conflict",
+                            "skill_version_draft.skill_ref 不得指向个人（personal）Skill。",
+                            409,
+                            {"skill_ref": skill_ref.strip(), "scope": "personal"},
+                        )
+
+        fingerprint = _finding_fingerprint(
+            [row.id for row in rows],
+            {"kind": target_kind, "ref": target_ref.strip()},
+            payload_sha256=candidate_payload_sha256(candidate_payload),
+        )
+        clash = session.scalar(
+            select(ImprovementProposal).where(
+                ImprovementProposal.fingerprint == fingerprint
+            )
+        )
+        if clash is not None:
+            raise ScenarioServiceError(
+                "conflict", "同一组失败发现与改进对象已有提案。", 409, {"proposal_id": clash.id}
+            )
 
         row = ImprovementProposal(
             proposal_key=f"PROP-{fingerprint[:8].upper()}",
@@ -316,6 +476,7 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
             impact_scope_json=list(payload.get("impact_scope") or [meta.get("target_scope", "")]),
             regression_plan_json=dict(payload.get("regression_plan") or {}),
             override_json=dict(override or {}),
+            candidate_payload_json=dict(candidate_payload or {}),
             status="draft",
             created_by_user_id=actor.id,
         )

@@ -98,7 +98,8 @@ def submit_host_receipt(*, presented_token: str, run_id: str, payload: dict[str,
     # 缺失/非零的 completed 一律降 failed（fail-closed，人工按 failures
     # 处置）；timeout/budget_exceeded/failed 显式态不受影响（与 dev 直连
     # 同口径——timeout 路径 exit_code 本就为 None）。
-    exit_code = payload.get("exit_code") if isinstance(payload.get("exit_code"), int) else None
+    raw_exit = payload.get("exit_code")
+    exit_code = raw_exit if isinstance(raw_exit, int) and not isinstance(raw_exit, bool) else None
     host_status = payload.get("status")
     if host_status not in ("completed", "timeout", "budget_exceeded", "failed"):
         host_status = "completed" if exit_code == 0 else "failed"

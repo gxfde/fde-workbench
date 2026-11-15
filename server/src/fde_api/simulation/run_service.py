@@ -28,6 +28,22 @@ LIST_PAGE_SIZE = 50
 MAX_LIST_PAGE_SIZE = 200
 TRACE_PAGE_SIZE = 200
 MAX_TRACE_PAGE_SIZE = 500
+# 异步档位（学习闭环 2.0 L4 §2.1）：真模型单跑 30-60s 会卡请求 ⇒ 走后台队列；
+# mock/real 小跑保持同步（零回归）。
+ASYNC_ADAPTER_MODES = ("workbench",)
+
+
+def _enqueue_run_job(session, run: SimulationRun) -> None:
+    """经 outbox 入后台作业（topic＝job_type＝simulation.run；平台级计量）。"""
+    from fde_api.jobs.outbox import enqueue_outbox
+
+    enqueue_outbox(
+        session,
+        "simulation.run",
+        run.id,
+        {"run_id": run.id},
+        subject_org=None,
+    )
 
 
 def _require_operator(user: User) -> None:
@@ -147,8 +163,15 @@ def create_run(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
         )
         session.add(run)
         session.flush()
+        if payload.get("execute") and adapter_mode in ASYNC_ADAPTER_MODES:
+            _enqueue_run_job(session, run)
+            async_queued = True
+        else:
+            async_queued = False
         session.commit()
         result = {**_serialize_run(run), "created": True}
+        if async_queued:
+            return {**result, "queued_async": True}
 
     if payload.get("execute"):
         execute_run(actor=actor, run_id=result["id"])
@@ -160,8 +183,23 @@ def create_run(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_run(*, actor: User, run_id: str) -> dict[str, Any]:
-    """执行一次模拟运行（同步）。真实适配面不可用时明确报错，不静默退回 mock。"""
+    """执行一次模拟运行。workbench 档转后台作业（异步）；其余同步。
+
+    真实适配面不可用时明确报错，不静默退回 mock。"""
     _require_operator(actor)
+    with db.session() as session:
+        row = session.get(SimulationRun, run_id)
+        if row is None:
+            raise ScenarioServiceError("not_found", "模拟运行不存在。", 404)
+        if row.adapter_mode in ASYNC_ADAPTER_MODES:
+            if row.status in RUN_TERMINAL_STATUSES:
+                return {
+                    **_serialize_run(row),
+                    "outcome": {"run_id": row.id, "status": row.status, "idempotent": True},
+                }
+            _enqueue_run_job(session, row)
+            session.commit()
+            return {**_serialize_run(row), "queued_async": True}
     try:
         outcome = run_simulation(run_id)
     except SimulationRunnerError as error:

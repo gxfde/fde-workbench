@@ -251,9 +251,9 @@ def test_redis_down_fails_open_with_warning(app, db_session, caplog):
 
 
 def test_redis_down_fail_closed_when_configured(app, db_session, settings, caplog):
-    """FDE_REGISTRATION_RATE_FAIL_CLOSED=1：Redis 挂时一律 429（从严），同样记 WARNING。"""
+    """FDE_REGISTRATION_RATE_FAIL_CLOSED=1：注册面已开闸前提下 Redis 挂时一律 429（从严），同样记 WARNING。"""
     app.extensions["fde_api_redis"] = _BrokenRedis()
-    app.config["SETTINGS"] = settings.model_copy(
+    app.config["SETTINGS"] = app.config["SETTINGS"].model_copy(
         update={"registration_rate_fail_closed": True}
     )
     client = app.test_client()

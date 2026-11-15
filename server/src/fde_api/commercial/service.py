@@ -324,14 +324,17 @@ def activate_seat(
             "invalid_seat_source",
             "seat_source 必须是 first_delivery/bootcamp_practical/bootcamp_mentorship 之一。",
         )
+    parsed_expires_at = _parsemoment(expires_at, "expires_at")
     row = lock_entitlement(session, user_id)
     if row.seat_status == "active":
         raise _error("seat_already_active", "该用户年度席位已激活，不重复激活。", 409)
+    if parsed_expires_at is None:
+        raise _error("invalid_request", "expires_at 必填（激活年度席位须设定到期时刻）。")
     before = _snapshot(row)
     row.seat_status = "active"
     row.seat_source = seat_source  # type: ignore[assignment]
     row.seat_activated_at = datetime.now(timezone.utc)
-    row.seat_expires_at = _parsemoment(expires_at, "expires_at")
+    row.seat_expires_at = parsed_expires_at
     profile_sync: dict[str, Any] | None = None
     profile = session.get(FdeProfile, user_id)
     if profile is not None and profile.status == "pending":

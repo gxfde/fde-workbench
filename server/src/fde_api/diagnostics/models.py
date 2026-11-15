@@ -39,8 +39,8 @@ from fde_api.auth.models import UTCDateTime
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
 
 # 状态机：draft → submitted → report_ready → claimed | expired
-# T-10a 只落 draft/submitted（测算卡与问卷答案）；report_ready/claimed 由
-# T-10b（AI 报告）与 T-11（认领）推进。
+# T-10a 落 draft/submitted；report_ready/claimed 由 T-10b/T-11 推进；
+# expired 由 30 天留存期懒检查（QR-042）推进并匿名化清空内容字段。
 SESSION_STATUSES = (
     "draft",
     "submitted",

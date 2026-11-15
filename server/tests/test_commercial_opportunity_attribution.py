@@ -115,6 +115,7 @@ def _activate_seat(app, admin_user_id: str, user_id: str) -> None:
             actor=admin,
             user_id=user_id,
             seat_source="bootcamp_practical",
+            expires_at="2027-12-31T00:00:00Z",
             confirm_password=INITIAL_PASSWORD,
         )
         session.commit()

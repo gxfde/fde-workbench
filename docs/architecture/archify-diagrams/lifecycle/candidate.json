@@ -10,7 +10,7 @@
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
+      "revision": "8c297a125db8ae11dc40e150a462108104202d9b"
     }
   },
   "mainPath": [
@@ -28,7 +28,7 @@
         {
           "path": "server/src/fde_api/workflows/executor.py",
           "line": 186,
-          "end_line": 285,
+          "end_line": 288,
           "label": "start_run 建 run"
         },
         {
@@ -48,7 +48,7 @@
         {
           "path": "server/src/fde_api/workflows/recovery.py",
           "line": 65,
-          "end_line": 84,
+          "end_line": 83,
           "label": "_recover_interrupted"
         }
       ]
@@ -96,7 +96,7 @@
         {
           "path": "server/src/fde_api/workflows/recovery.py",
           "line": 46,
-          "end_line": 63,
+          "end_line": 62,
           "label": "worker 丢失兜底"
         }
       ]
@@ -109,8 +109,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 324,
-          "end_line": 346,
+          "line": 327,
+          "end_line": 348,
           "label": "cancel_run"
         }
       ]
@@ -123,8 +123,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 348,
-          "end_line": 394,
+          "line": 351,
+          "end_line": 399,
           "label": "resume 复位"
         },
         {
@@ -144,7 +144,7 @@
         {
           "path": "server/src/fde_api/workflows/dispatch.py",
           "line": 99,
-          "end_line": 152,
+          "end_line": 147,
           "label": "_begin_node tx A"
         }
       ]
@@ -158,7 +158,7 @@
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 221,
-          "end_line": 233,
+          "end_line": 232,
           "label": "_settle_node_waiting"
         }
       ]
@@ -172,13 +172,13 @@
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 110,
-          "end_line": 131,
+          "end_line": 130,
           "label": "_settle_node_success"
         },
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 34,
-          "end_line": 87,
+          "end_line": 86,
           "label": "_attach_gate_evidence_marker"
         }
       ]
@@ -192,7 +192,7 @@
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 133,
-          "end_line": 181,
+          "end_line": 180,
           "label": "_settle_node_failure 重试"
         }
       ]
@@ -206,7 +206,7 @@
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 133,
-          "end_line": 181,
+          "end_line": 180,
           "label": "_settle_node_failure"
         },
         {
@@ -226,7 +226,7 @@
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 183,
-          "end_line": 195,
+          "end_line": 194,
           "label": "_skip_node"
         }
       ]
@@ -239,14 +239,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/workflows/executor.py",
-          "line": 324,
-          "end_line": 346,
+          "line": 327,
+          "end_line": 348,
           "label": "cancel_run 节点清理"
         },
         {
           "path": "server/src/fde_api/workflows/settlement.py",
           "line": 89,
-          "end_line": 108,
+          "end_line": 107,
           "label": "cancelled_after_dispatch"
         }
       ]

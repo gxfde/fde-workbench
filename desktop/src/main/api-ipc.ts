@@ -9,11 +9,17 @@ import {
 } from "../shared/contracts"
 // CR-071（夜审 r8 设计稿推荐 A）：校验族提升 shared/api-safety.ts 纯函数单点，
 // 桌面 IPC 与 web 桥双消费同一原语；等价性静态钉防再漂移。
+// QR-112（批 R7）：响应面信封判定与脱敏同点提升（四条不变量双桥恒同）。
 import {
+  collectEnvelopeSensitiveValues as collectSensitiveValues,
   isAllowedMethod,
   isAuthExcludedPath,
   isBodySerializable,
+  isRecord,
   isSafeApiPath,
+  parseApiEnvelope,
+  redactSensitiveString as redactString,
+  sanitizeEnvelopeDetails as sanitizeDetails,
   serializeBodyString,
   validateCustomHeaders,
   validateMultipartFileShape,
@@ -56,7 +62,7 @@ interface RegisterApiIpcOptions {
 }
 
 const ALLOWED_KEYS = new Set(["path", "method", "accessToken", "body", "headers"])
-const REDACTED = "[REDACTED]"
+// QR-112：REDACTED 随脱敏族提升 shared/api-safety.ts（RESPONSE_REDACTED）。
 
 export class ApiIpcError extends Error implements ApiErrorDto {
   readonly code: string
@@ -249,48 +255,33 @@ async function parseApiResponse(
       "The API service returned an invalid response.",
     )
   }
-  if (!isRecord(value) || !("data" in value) || !("error" in value)) {
+  // QR-112：四条不变量改由 shared/api-safety::parseApiEnvelope 单点判定
+  // （web 桥同函数——双桥响应面判定恒同），本侧只负责把 invalid 翻译为
+  // ApiIpcError、把 error 体经共享脱敏纯函数出参。
+  const verdict = parseApiEnvelope(value, response.status)
+  if (verdict.kind === "invalid") {
     throw new ApiIpcError(
       "invalid_api_response",
       "The API service returned an invalid response.",
     )
   }
-  let error: ApiErrorDto | null = null
-  if (value.error !== null) {
-    if (
-      !isRecord(value.error) ||
-      typeof value.error.code !== "string" ||
-      typeof value.error.message !== "string"
-    ) {
-      throw new ApiIpcError(
-        "invalid_api_response",
-        "The API service returned an invalid response.",
-      )
+  if (verdict.kind === "error") {
+    return {
+      status: response.status,
+      data: null,
+      error: {
+        code: redactString(verdict.error.code as string, secrets),
+        message: redactString(verdict.error.message as string, secrets),
+        ...(verdict.error.details === undefined
+          ? {}
+          : { details: sanitizeDetails(verdict.error.details, secrets) }),
+      },
     }
-    error = {
-      code: redactString(value.error.code, secrets),
-      message: redactString(value.error.message, secrets),
-      ...(value.error.details === undefined
-        ? {}
-        : { details: sanitizeDetails(value.error.details, secrets) }),
-    }
-  }
-  if (response.ok && error !== null) {
-    throw new ApiIpcError(
-      "invalid_api_response",
-      "The API service returned an invalid response.",
-    )
-  }
-  if (!response.ok && error === null) {
-    throw new ApiIpcError(
-      "invalid_api_response",
-      "The API service returned an invalid response.",
-    )
   }
   return {
     status: response.status,
-    data: response.ok ? value.data : null,
-    error,
+    data: verdict.data,
+    error: null,
   }
 }
 
@@ -321,60 +312,10 @@ function invalidRequest(): ApiIpcError {
   return new ApiIpcError("invalid_request", "请求内容不符合要求。")
 }
 
-function collectSensitiveValues(value: unknown, depth = 0): string[] {
-  if (depth > 5 || ArrayBuffer.isView(value) || !isRecord(value)) {
-    return []
-  }
-  return Object.entries(value).flatMap(([key, item]) => {
-    if (isSensitiveKey(key) && typeof item === "string" && item) {
-      return [item]
-    }
-    if (Array.isArray(item)) {
-      return item.flatMap((entry) => collectSensitiveValues(entry, depth + 1))
-    }
-    return collectSensitiveValues(item, depth + 1)
-  })
-}
-
-function sanitizeDetails(value: unknown, secrets: string[], depth = 0): unknown {
-  if (depth > 5) return "[TRUNCATED]"
-  if (typeof value === "string") return redactString(value, secrets)
-  if (Array.isArray(value)) {
-    return value.slice(0, 50).map((item) => sanitizeDetails(item, secrets, depth + 1))
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .slice(0, 50)
-        .map(([key, item]) => [
-          key,
-          isSensitiveKey(key)
-            ? REDACTED
-            : sanitizeDetails(item, secrets, depth + 1),
-        ]),
-    )
-  }
-  if (value === null || typeof value === "number" || typeof value === "boolean") {
-    return value
-  }
-  return undefined
-}
-
-function redactString(value: string, secrets: string[]): string {
-  return secrets.reduce(
-    (result, secret) => (secret ? result.split(secret).join(REDACTED) : result),
-    value,
-  )
-}
-
-function isSensitiveKey(key: string): boolean {
-  return /password|token|secret|authorization|credential/i.test(key)
-}
+// QR-112：collectSensitiveValues / sanitizeDetails / redactString / isSensitiveKey
+// / isRecord 已提升 shared/api-safety.ts 单点（import 别名保持调用点零改动）；
+// 本地重复定义删除，行为逐位等价（实现逐字迁移）。
 
 function isAbortError(error: unknown): boolean {
   return isRecord(error) && error.name === "AbortError"
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

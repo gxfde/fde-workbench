@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -32,6 +33,7 @@ from fde_api.guidance.jobs import (
     handle_presurvey_analysis,
 )
 from fde_api.guidance.models import ProjectGuidanceAnalysis
+from fde_api.guidance.redaction import redaction_name_hash
 from fde_api.jobs.models import BackgroundJob
 from fde_api.jobs.worker import run_job
 from fde_api.storage.base import StorageNotFoundError
@@ -529,5 +531,9 @@ def test_contract_retry_does_not_double_redaction_entries(app, db_session, monke
         event_type=REDACTION_EVENT_TYPE,
     ).all()
     assert len(events) == 1
-    names = [entry["name"] for entry in events[0].changes["entries"]]
-    assert names.count("合成测试集团") == 1, f"重试不得使复核条目翻倍：{names}"
+    # QR-133 指纹化：条目只含 name_hash（零真名）——「合成测试集团」指纹恰 1 条。
+    hashes = [entry["name_hash"] for entry in events[0].changes["entries"]]
+    assert hashes.count(redaction_name_hash("合成测试集团")) == 1, (
+        f"重试不得使复核条目翻倍：{hashes}"
+    )
+    assert "合成测试集团" not in json.dumps(events[0].changes, ensure_ascii=False, default=str)

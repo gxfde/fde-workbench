@@ -202,6 +202,42 @@ describe("project files workspace", () => {
     expect(screen.queryByText("预览生成失败，原文件可下载。")).not.toBeInTheDocument()
   })
 
+  it("renders an image preview <img src=\"blob:...\"> from the signed download URL", async () => {
+    const pngFile: ProjectFileDto = {
+      ...availableFile,
+      id: "file-image",
+      display_name: "现场架构图.png",
+      current_version_id: "version-image",
+      current_version: {
+        id: "version-image",
+        version_number: 1,
+        status: "available",
+        scan_status: "clean",
+        original_filename: "现场架构图.png",
+      },
+    }
+    const apiRequest = baseRequest({
+      files: { list: () => [pngFile] },
+      downloadUrl: apiOk({ url: "https://storage.test/source.png", expires_seconds: 300 }),
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(new Blob(["PNG-BYTES"], { type: "image/png" }), { status: 200 })),
+    )
+    const user = userEvent.setup()
+    renderFilesTab(apiRequest, { role: "admin" })
+
+    await user.click(await screen.findByRole("button", { name: "预览：现场架构图.png" }))
+
+    const img = await screen.findByRole("img", { name: "现场架构图.png 预览" })
+    expect(img).toBeVisible()
+    expect(img).toHaveAttribute("src", expect.stringMatching(/^blob:/))
+    expect(apiRequest.mock.calls).toContainEqual([
+      `${filesPath}/version-image/download-url`,
+      expect.objectContaining({ method: "GET" }),
+    ])
+  })
+
   it("degrades gracefully when the preview is not available and offers a download link instead of a blank iframe", async () => {
     const docxFile: ProjectFileDto = {
       id: "file-docx",

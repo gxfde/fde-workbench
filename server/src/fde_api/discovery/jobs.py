@@ -35,7 +35,7 @@ from fde_api.discovery.models import (
 from fde_api.discovery.prompt import DISCOVERY_CHUNK_SYSTEM_PROMPT
 from fde_api.extensions import db
 from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
-from fde_api.guidance.redaction import redact_text_detailed
+from fde_api.guidance.redaction import fingerprint_review_payload, redact_text_detailed
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
 from fde_api.transcripts.models import InterviewMinutes, TranscriptDraft
 from fde_api.workbench.models import OperationEvent, Project
@@ -380,7 +380,9 @@ def handle_discovery_extraction(job) -> None:
         extraction.completed_at = datetime.now(UTC)
         extraction.failure_code = None
         extraction.failure_message = None
-        extraction.redaction_entries = redaction_entries or None
+        # 盲审追批（拍板 #6A 同族扩线）：复核账零真名——指纹条目＋疑似哨兵聚合。
+        redaction_payload = fingerprint_review_payload(redaction_entries)
+        extraction.redaction_entries = redaction_payload or None
         if redaction_entries:
             session.add(
                 OperationEvent(
@@ -389,7 +391,7 @@ def handle_discovery_extraction(job) -> None:
                     target_type="discovery_extraction",
                     target_id=extraction.id,
                     event_type=REDACTION_EVENT_TYPE,
-                    changes={"entries": redaction_entries},
+                    changes={"entries": redaction_payload},
                 )
             )
         if quota_report.facts_dropped or quota_report.requirements_dropped:

@@ -115,18 +115,37 @@ def _result(events):
     return None
 
 
-def _authorized(user, spec, parameters, scope=None):
+def _target_project_id(operation, parameters, body):
+    if parameters.get("project_id"):
+        return parameters["project_id"]
+    if operation == "agents.run_start":
+        return (body or {}).get("project_id")
+    return None
+
+
+def _require_run_start_scope_binding(operation, parameters, body, scope):
+    """票据绑定闸（安全评审 C 项 / QR-003 统一入口）：校验 run_start 的目标项目与
+    票据 scope 一致（workflows 腿取 parameters.project_id，agents 腿取
+    body.project_id），并在 _authorized 内统一调起，消除路径参数缺失致死代码。"""
+    if not scope:
+        return
+    if _target_project_id(operation, parameters, body) != scope:
+        raise ControlServiceError(
+            "forbidden", "操作超出本次项目授权范围。", 403)
+
+
+def _authorized(user, spec, parameters, scope=None, *, operation=None, body=None):
     if not user.is_active or user.must_change_password:
         raise ControlServiceError("forbidden", "账号授权已失效。", 403)
     allowed = capabilities_for_level(effective_ai_access(user)[0])
     if not allowed or (spec["write"] and "workbench.write" not in allowed):
         raise ControlServiceError("forbidden", "当前账号没有 AI 操作权限。", 403)
-    if scope and parameters.get("project_id") != scope:
-        raise ControlServiceError("forbidden", "操作超出本次项目授权范围。", 403)
-    if parameters.get("project_id"):
+    _require_run_start_scope_binding(operation, parameters, body, scope)
+    target_project_id = _target_project_id(operation, parameters, body)
+    if target_project_id is not None:
         from fde_api.control.mcp_gateway import _project
         with db.session() as session:
-            _project(session, user, {"project_id": scope}, parameters["project_id"])
+            _project(session, user, {"project_id": scope}, target_project_id)
 
 
 # N5（G-02）：发起 run 走受控提议通道（确认类）。AI 不代发起 run——propose
@@ -143,18 +162,6 @@ def _require_run_start_idempotency_key(operation, body):
             "run_start_idempotency_required",
             "发起 run 必须携带幂等键（idempotency_key）：确认与取消语义都按它判定。",
             400)
-
-
-def _require_run_start_scope_binding(operation, parameters, body, scope):
-    """票据绑定闸（安全评审 C 项）：agents.run_start 的 project_id 在 body，
-    _authorized 的 scope 检查只覆盖 parameters.project_id（workflows 腿）——
-    这里补 agents 腿：票据 scope 与 body.project_id 不一致即 403，AI 不得借
-    确认通道发起票据授权范围之外项目的 run。"""
-    if operation != "agents.run_start" or not scope:
-        return
-    if body.get("project_id") != scope:
-        raise ControlServiceError(
-            "forbidden", "操作超出本次项目授权范围。", 403)
 
 
 def _run_start_confirm_guard(session, data):
@@ -191,9 +198,8 @@ def execute_api(*, user, claims, allowed, operation=None, parameters=None, body=
     spec = _spec(operation, parameters, body, query)
     if spec["write"] and "workbench.write" not in allowed:
         raise ControlServiceError("forbidden", "本次 AI 执行未获写入授权。", 403)
-    _authorized(user, spec, parameters, claims.get("project_id"))
+    _authorized(user, spec, parameters, claims.get("project_id"), operation=operation, body=body)
     _require_run_start_idempotency_key(operation, body)
-    _require_run_start_scope_binding(operation, parameters, body, claims.get("project_id"))
     if not spec["write"]:
         return _invoke(user, spec, parameters, body, query)
     execution_id = claims.get("execution_id")
@@ -239,7 +245,7 @@ def execute_api(*, user, claims, allowed, operation=None, parameters=None, body=
                 _event(session, user, identifier, "requested", {**data, "auth_version": user.auth_version,
                     "scope": claims.get("project_id"), "confirmation_required": sensitive,
                     "execution_id": execution_id, "target_fingerprint": fingerprint,
-                    "description": spec["description"] + ("：" + fingerprint[-1] if fingerprint else "")}, parameters.get("project_id"))
+                    "description": spec["description"] + ("：" + fingerprint[-1] if fingerprint else "")}, _target_project_id(operation, parameters, body))
             if sensitive:
                 return {"action_id": identifier, "status": "awaiting_confirmation", "message": "尚未执行。请在工作台确认弹窗输入当前账号密码；微信使用专用确认指令，密码不交给模型。"}
             return _run(session, user, identifier, spec, data)
@@ -251,7 +257,8 @@ def execute_api(*, user, claims, allowed, operation=None, parameters=None, body=
 
 
 def _run(session, user, identifier, spec, data, password=None):
-    _event(session, user, identifier, "started", {}, data["parameters"].get("project_id"))
+    target_project_id = _target_project_id(data["operation"], data["parameters"], data["body"])
+    _event(session, user, identifier, "started", {}, target_project_id)
     body = dict(data["body"])
     if data["operation"] == "models.save":
         body["api_key"] = ""  # Retain existing secret or create unconfigured draft.
@@ -265,7 +272,7 @@ def _run(session, user, identifier, spec, data, password=None):
         body["expected_version"] = data["target_fingerprint"][1]
     result = _invoke(user, spec, data["parameters"], body, data["query"])
     outcome = {"status": "completed" if result["http_status"] < 400 else "failed", **result}
-    _event(session, user, identifier, "finished", outcome, data["parameters"].get("project_id"))
+    _event(session, user, identifier, "finished", outcome, target_project_id)
     return {"action_id": identifier, **outcome}
 
 
@@ -327,10 +334,8 @@ def decide_action(user, identifier, password, approve=True):
                 record_confirm_failure(user.id)
                 raise ControlServiceError("invalid_password", "当前账号密码不正确。", 403)
             spec = _spec(data["operation"], data["parameters"], data["body"], data["query"])
-            _authorized(current, spec, data["parameters"], data.get("scope"))
+            _authorized(current, spec, data["parameters"], data.get("scope"), operation=data["operation"], body=data["body"])
             if data["operation"] in RUN_START_OPERATIONS:
-                _require_run_start_scope_binding(
-                    data["operation"], data["parameters"], data["body"], data.get("scope"))
                 _run_start_confirm_guard(session, data)
             if data.get("target_fingerprint") and data["operation"] == "files.deprecate":
                 from fde_api.files.models import ProjectFile

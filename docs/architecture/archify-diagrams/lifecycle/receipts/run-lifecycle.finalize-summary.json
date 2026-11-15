@@ -6,13 +6,13 @@
   "type": "lifecycle",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-    "sha256": "3a035615b5154bbd3c4e93cea7e74cc34a6b8e39cc0492d3779dd892c668f804",
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+    "sha256": "8d4d4d8bf3c0450ef5166492ee83bb3d99ab701a77470dc140b55092a410a5c9",
     "bytes": 11991
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
-    "sha256": "75fdc7ea2ef0e67783b6847d4a296fa73332a22a915edbd645655448e75964dc",
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "84ae7cfd1c81daa6257e863e799503434bd6a72d238b085bd99d28b29c97cd4f",
     "bytes": 847851
   },
   "gates": {
@@ -28,22 +28,22 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
+    "receipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\receipts\\run-lifecycle.browser-check.json"
   },
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
     "releaseNotes": null,
-    "checkedAt": "2026-11-08T11:17:58.598Z",
+    "checkedAt": "2026-11-13T06:10:42.431Z",
     "source": "cache",
     "noticeRequired": false,
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 14071,
+  "durationMs": 4164,
   "browserCheck": {
     "requested": true,
     "ran": true

@@ -117,8 +117,8 @@ def list_claims_route():
 @_gate_first
 @require_auth
 def get_claim_route(claim_id: str):
-    """读认领单（含台账行——**代号化九字段**）。"""
-    claim = claim_service.get_claim(claim_id)
+    """读认领单（含台账行——**代号化九字段**；admin 全量，非 admin 仅本人申请）。"""
+    claim = claim_service.get_claim(actor=_actor(), claim_id=claim_id)
     return _data(claim_service.serialize_claim(claim))
 
 

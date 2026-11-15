@@ -56,8 +56,10 @@ RUN_STATUSES = (
 )
 # 终态集合（不可再推进）
 RUN_TERMINAL_STATUSES = ("completed", "failed", "failed_hard", "timeout", "cancelled")
-# 适配模式：real＝委托 V3.1 既有执行面；mock＝明确标记的脚本化替身（G1 §8.3）
-ADAPTER_MODES = ("real", "mock")
+# 适配模式：real＝委托 V3.1 既有执行面；mock＝明确标记的脚本化替身（G1 §8.3）；
+# workbench＝API 内真模型执行面（学习闭环 2.0 L4——probe/analyze/design 走
+# execute_ai_prompt，implement/validate 复用确定性腿）
+ADAPTER_MODES = ("real", "mock", "workbench")
 # 角色（G1 §5.1 六类）
 ACTOR_ROLES = (
     "customer",
@@ -171,7 +173,7 @@ class SimulationRun(Base, TimestampMixin):
             name="ck_simulation_runs_status",
         ),
         CheckConstraint(
-            "adapter_mode IN ('real', 'mock')",
+            "adapter_mode IN ('real', 'mock', 'workbench')",
             name="ck_simulation_runs_adapter_mode",
         ),
         CheckConstraint(
@@ -191,7 +193,8 @@ class SimulationRun(Base, TimestampMixin):
     scenario_version: Mapped[int] = mapped_column(Integer, nullable=False)
     split: Mapped[str] = mapped_column(String(16), nullable=False, default="train")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
-    adapter_mode: Mapped[str] = mapped_column(String(8), nullable=False, default="mock")
+    # String(16)：容 "workbench"（9 字符）——L4 勘误（v1 设计稿漏记列宽与 CHECK 扩值）
+    adapter_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="mock")
     seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 本次运行的角色编排快照（角色 → 配置），保证复现
@@ -395,6 +398,13 @@ class ImprovementProposal(Base, TimestampMixin):
     # 候选改进在**模拟域内**的覆盖载荷（G1 §11.3）：{"run_config": {...}}。
     # 只影响模拟运行参数，**不触及任何生产配置**。
     override_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # 三载体候选载荷（学习闭环 2.0 L4，迁移①）：AI 蒸馏返件经人工采纳后随提案
+    # 入档——lesson_entry / skill_version_draft / prompt_overlay_fragment。与
+    # override_json 分工：override＝run 参数；candidate_payload＝三载体载荷
+    # （L5 发布通道的执行输入）。仍只是**提案入档**，热生效须经 release_channel。
+    candidate_payload_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     created_by_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")

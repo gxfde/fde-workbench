@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import io
+import json
 from datetime import date
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from fde_api.extensions import db, object_storage
 from fde_api.files.models import ProjectFile, ProjectFileVersion
 from fde_api.guidance import jobs as guidance_jobs
 from fde_api.guidance.enterprise_dict import EXTRA_DICT_ENV, reset_dict_cache
+from fde_api.guidance.redaction import redaction_name_hash
 from fde_api.guidance.jobs import (
     DICT_FAILURE_CODE,
     REDACTION_EVENT_TYPE,
@@ -167,13 +169,20 @@ def test_content_redacted_before_model_and_review_event_written(app, db_session,
     assert _SEED_NAME not in (analysis.customer_vision or "")
     assert _SEED_NAME not in (analysis.executive_summary or "")
 
-    # 复核事件落 operation_events（B#9 事实链可查）
+    # 复核事件落 operation_events（B#9 事实链可查）——QR-133 指纹化：确证命中
+    # 只存 sha256 指纹，事件账（含 JSON 序列化）零真名。
     event = db_session.query(OperationEvent).filter_by(
         event_type=REDACTION_EVENT_TYPE, target_id=analysis.id
     ).one_or_none()
     assert event is not None
-    names = {entry["name"] for entry in event.changes["entries"]}
-    assert _SEED_NAME in names
+    entries = event.changes["entries"]
+    assert entries
+    assert all("name" not in entry for entry in entries)
+    assert any(
+        entry["name_hash"] == redaction_name_hash(_SEED_NAME) and entry["matched_dict"]
+        for entry in entries
+    )
+    assert _SEED_NAME not in json.dumps(event.changes, ensure_ascii=False, default=str)
 
 
 def test_dict_failure_fails_closed_without_retry(app, db_session, monkeypatch):

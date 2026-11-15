@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from fde_api.guidance.docx_extract import ExtractedBlock, ExtractedPresurvey
 from fde_api.guidance.enterprise_dict import (
@@ -85,7 +86,12 @@ def _alias(project_code: str) -> str:
     return head or "客户代号"
 
 
-def redact_text_detailed(value: str, *, project_code: str = "") -> RedactionResult:
+def redact_text_detailed(
+    value: str,
+    *,
+    project_code: str = "",
+    mask_pii: bool = True,
+) -> RedactionResult:
     """分层失败语义（闸①拍板）的完整实现。
 
     第①层 fail-closed：凭据正则命中（既有行为）、词典机制性异常
@@ -119,10 +125,13 @@ def redact_text_detailed(value: str, *, project_code: str = "") -> RedactionResu
             text = text.replace(candidate, alias)
             suspects[candidate] = suspects.get(candidate, 0) + 1
 
-    value = _EMAIL.sub("[邮箱已脱敏]", text)
-    value = _MOBILE.sub("[手机号已脱敏]", value)
-    value = _ID_CARD.sub("[证件号已脱敏]", value)
-    value = _LANDLINE.sub("[电话已脱敏]", value)
+    if mask_pii:
+        value = _EMAIL.sub("[邮箱已脱敏]", text)
+        value = _MOBILE.sub("[手机号已脱敏]", value)
+        value = _ID_CARD.sub("[证件号已脱敏]", value)
+        value = _LANDLINE.sub("[电话已脱敏]", value)
+    else:
+        value = text
     return RedactionResult(
         text=value,
         suspects=tuple(SuspectName(name=k, occurrences=v) for k, v in suspects.items()),
@@ -138,6 +147,84 @@ def redact_text(value: str) -> str:
     需要复核清单的调用方走 redact_text_detailed。
     """
     return redact_text_detailed(value).text
+
+
+# ---------------------------------------------------------------------------
+# QR-133（goal-crv-fix2 批 G，拍板 #6A 指纹化复核清单）：redaction_review 事件
+# 账零真名——确证命中名只存 sha256 指纹（复核 UI 经词典反解显示），未确证疑似
+# 名不入事件账只留聚合计数（复核人看草稿原文判定）。红线「数据库只存代号」
+# 字面全守；复核功能保留。写入侧单一真身（guidance/translator 四锚共用）。
+# ---------------------------------------------------------------------------
+
+_REDACTION_HASH_DOMAIN = "fde-redaction-v1"
+
+
+def redaction_name_hash(name: str) -> str:
+    """复核条目指纹（域分隔 sha256）：事件账与读面反解共用同一真身。"""
+    import hashlib
+
+    return hashlib.sha256(f"{_REDACTION_HASH_DOMAIN}:{name}".encode("utf-8")).hexdigest()
+
+
+def fingerprint_review_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """旧形状（name/occurrences/matched_dict）→ 事件账新形状（零真名）。
+
+    返回（指纹化条目列表, 疑似名聚合计数）：
+    - matched_dict=True（词典确证命中）→ ``{"name_hash", "occurrences", "matched_dict": True}``；
+    - matched_dict=False（疑似）→ 不逐条入账，名字出现次数并入 suspect_count。
+    """
+    fingerprinted: list[dict[str, Any]] = []
+    suspect_count = 0
+    for item in entries:
+        occurrences = int(item.get("occurrences", 1) or 0)
+        if item.get("matched_dict"):
+            fingerprinted.append(
+                {
+                    "name_hash": redaction_name_hash(str(item.get("name", ""))),
+                    "occurrences": occurrences,
+                    "matched_dict": True,
+                }
+            )
+        else:
+            suspect_count += occurrences
+    return fingerprinted, suspect_count
+
+
+def fingerprint_review_payload(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """复核账存储形状（盲审追批，拍板 #6A 同族扩线）：单数组含两类项——
+
+    - 指纹条目 ``{"name_hash", "occurrences", "matched_dict": True}``（确证命中）；
+    - 哨兵聚合项 ``{"suspect_count": N}``（疑似名不逐条入账，殿后一条）。
+
+    与 guidance 读面投影（``_review_projection``）完全同形状：桌面一处守卫
+    复用三面（guidance / transcripts / discovery）。零真名红线不变。
+    """
+    fingerprinted, suspect_count = fingerprint_review_entries(entries)
+    payload = list(fingerprinted)
+    if suspect_count:
+        payload.append({"suspect_count": suspect_count})
+    return payload
+
+
+def resolve_redaction_display(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """读面反解：指纹 → 词典词目原文（仅显示，不落库）。
+
+    词典命中 → ``name`` 为词目原文；词典故障或指纹未命中（词典已更新删词）
+    → ``name=None``（UI 显示指纹前 8 位占位，诚实缺失）。软失败不抛——
+    读面（get_analysis/confirm/adopt 投影）不得因词典机制故障 500。
+    """
+    if not entries:
+        return []
+    try:
+        digest_to_name = {redaction_name_hash(n): n for n in enterprise_names()}
+    except Exception:  # noqa: BLE001 - 读面软失败（词典故障不阻断复核投影）
+        digest_to_name = {}
+    out: list[dict[str, Any]] = []
+    for item in entries:
+        row = dict(item)
+        row["name"] = digest_to_name.get(str(item.get("name_hash", "")))
+        out.append(row)
+    return out
 
 
 def redact_presurvey(extracted: ExtractedPresurvey, *, project_code: str = "") -> tuple[ExtractedPresurvey, tuple[SuspectName, ...], tuple[str, ...]]:

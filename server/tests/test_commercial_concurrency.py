@@ -474,7 +474,8 @@ def test_concurrent_activation_leaves_single_event(
         conn.execute(
             text(
                 "UPDATE commercial_entitlements SET seat_status = 'active', "
-                "seat_source = 'first_delivery', seat_activated_at = now() "
+                "seat_source = 'first_delivery', seat_activated_at = now(), "
+                "seat_expires_at = now() + interval '365 days' "
                 "WHERE user_id = :uid"
             ),
             {"uid": deliverer.id},

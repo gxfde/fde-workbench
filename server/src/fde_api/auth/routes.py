@@ -17,6 +17,7 @@ from fde_api.auth.service import (
     TokenPair,
     change_password as change_user_password,
     login as login_user,
+    normalize_username,
     record_state_blocked_login,
     revoke_refresh_token,
     rotate_refresh_token,
@@ -36,7 +37,7 @@ LOGIN_RATE_WINDOW_SECONDS = 900
 
 def _login_fail_key(username: str, remote_addr: str | None) -> str:
     ip = remote_addr or "unknown"
-    return f"auth:login_fail:{username}:{ip}"
+    return f"auth:login_fail:{normalize_username(username)}:{ip}"
 
 
 def _login_throttle(username: str, remote_addr: str | None) -> int | None:

@@ -91,6 +91,13 @@ function hardenWebContents(contents: WebContents): void {
       event.preventDefault()
     }
   })
+  // QR-109（goal-crv r7）：30x 重定向不走 will-navigate——主窗口补 will-redirect
+  // 同尺守卫（lcsc 分支成对注册，特权更高的主窗口不得只有半边）。
+  contents.on("will-redirect", (event, url) => {
+    if (!allowsRendererUrl(url)) {
+      event.preventDefault()
+    }
+  })
   contents.on("will-attach-webview", (event) => event.preventDefault())
 }
 
@@ -179,6 +186,13 @@ async function start(): Promise<void> {
   })
   registerAuthIpc({ ipcMain, handlers, isTrustedSender })
   const requestApi = createApiRequestHandler({ apiBaseUrl, fetch: globalThis.fetch, timeoutMs: 120_000 })
+  // QR-110（goal-crv r7）：desktop-execute 桥拦截同受 lcscIpcEnabled「默认关」闸
+  // ——F3 纪律此前只护 3/4 个 LCSC 面（flag=false 经 API 桥仍拉起自动化执行）。
+  // 声明提升到 registerApiIpc 之前（回调运行时求值，TDZ 安全且 TS 静态可查）。
+  let lcscIpcEnabled = false
+  function requireLcscEnabled(): void {
+    if (!lcscIpcEnabled) throw new Error("立创商城集成未启用。")
+  }
   registerApiIpc({
     ipcMain,
     request: async (input) => {
@@ -188,13 +202,14 @@ async function start(): Promise<void> {
       try {
         const candidate = input as { path?: string; method?: string; accessToken?: string; body?: unknown }
         result = candidate.path === '/api/v1/ai/lcsc-runs/desktop-execute' && candidate.method === 'POST' && typeof candidate.accessToken === 'string'
-          ? await executeDesktopLcsc({ accessToken: candidate.accessToken, body: candidate.body }, requestApi, lcscSession!).catch((error: unknown) => {
+          ? (requireLcscEnabled(),
+            await executeDesktopLcsc({ accessToken: candidate.accessToken, body: candidate.body }, requestApi, lcscSession!).catch((error: unknown) => {
               // CR-073：确定性业务态（如「已有立创查询正在执行」）不再被桥层
               // 吞成通用 internal_error——包装为 ApiIpcError 透传原 message。
               throw error instanceof ApiIpcError
                 ? error
                 : new ApiIpcError('lcsc_execute_failed', error instanceof Error ? error.message : '立创桌面执行失败。')
-            })
+            }))
           : await requestApi(input)
       } finally { if (mutating) activeMutations-- }
       return result
@@ -217,16 +232,14 @@ async function start(): Promise<void> {
   // F3：LCSC 桌面 IPC 默认关闭——渲染端只有在其服务端工具清单确实包含
   // lcsc_search（即账号具备 lcsc.browse 能力，F1 门槛）时才打开开关；
   // 与 weixin_enabled 一致的「默认关、显式开」语义，不删功能只降暴露面。
-  let lcscIpcEnabled = false
+  // QR-110：lcscIpcEnabled/requireLcscEnabled 声明已上移至 registerApiIpc 之前
+  // （desktop-execute 桥拦截同受此闸），此处只留 set 开关 IPC。
   ipcMain.handle(IPC_CHANNELS.appSetLcscEnabled, (event, enabled: unknown) => {
     if (!isTrustedSender(event) || typeof enabled !== "boolean") {
       throw new Error("Unauthorized IPC sender or payload.")
     }
     lcscIpcEnabled = enabled
   })
-  function requireLcscEnabled(): void {
-    if (!lcscIpcEnabled) throw new Error("立创商城集成未启用。")
-  }
   ipcMain.handle(IPC_CHANNELS.appVersion, (event) => {
     if (!isTrustedSender(event)) {
       throw new Error("Unauthorized IPC sender.")

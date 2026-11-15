@@ -133,7 +133,11 @@ def _prime_all(admin_client, user_id: str) -> None:
     assert (
         admin_client.post(
             _seat_url(user_id),
-            json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+            json={
+                "seat_source": "first_delivery",
+                "expires_at": "2027-12-31T00:00:00Z",
+                "confirm_password": _pwd(),
+            },
         ).status_code
         == 200
     )
@@ -175,7 +179,11 @@ def test_seat_activation_does_not_touch_certification_or_role(
     )
     activated = admin_client.post(
         _seat_url(target.id),
-        json={"seat_source": "bootcamp_practical", "confirm_password": _pwd()},
+        json={
+            "seat_source": "bootcamp_practical",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert activated.status_code == 200
     data = activated.json["data"]["entitlement"]
@@ -224,7 +232,11 @@ def test_certification_change_does_not_touch_seat_or_role(
     # 反向再断言一次：已认证后再激活席位，认证不被席位动作触碰
     activated = admin_client.post(
         _seat_url(target.id),
-        json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert activated.status_code == 200
     assert activated.json["data"]["entitlement"]["certification"]["status"] == "certified"
@@ -238,7 +250,11 @@ def test_training_revocation_leaves_seat_active(
     target = authorized_client_factory("viewer").user
     admin_client.post(
         _seat_url(target.id),
-        json={"seat_source": "bootcamp_mentorship", "confirm_password": _pwd()},
+        json={
+            "seat_source": "bootcamp_mentorship",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     granted = admin_client.post(
         _training_url(target.id),
@@ -285,7 +301,11 @@ def test_seat_activation_syncs_pending_profile_only(
 
     ok = admin_client.post(
         _seat_url(pending_user.id),
-        json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert ok.status_code == 200
     db_session.expire_all()  # expire_on_commit=False：跨会话更新须显式失效缓存
@@ -303,7 +323,11 @@ def test_seat_activation_syncs_pending_profile_only(
 
     kept = admin_client.post(
         _seat_url(suspended_user.id),
-        json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert kept.status_code == 200
     db_session.expire_all()
@@ -311,7 +335,11 @@ def test_seat_activation_syncs_pending_profile_only(
 
     missing = admin_client.post(
         _seat_url(plain_user.id),
-        json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert missing.status_code == 200
     assert db_session.get(FdeProfile, plain_user.id) is None
@@ -376,7 +404,11 @@ def test_audit_events_carry_request_id_and_never_the_password(
     admin_client.post(_role_url(target.id), json={"role": "R4", "confirm_password": _pwd()})
     admin_client.post(
         _seat_url(target.id),
-        json={"seat_source": "first_delivery", "confirm_password": _pwd()},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     events = db_session.scalars(
         select(OperationEvent)
@@ -536,6 +568,7 @@ def test_migration_roundtrip_and_head_shape(engine, alembic_config) -> None:
         "ck_commercial_entitlements_seat_source",
         "ck_commercial_entitlements_certification",
         "ck_commercial_entitlements_delivery_eligibility",
+        "ck_commercial_entitlements_active_requires_expiry",
     } <= ent_checks
 
     train_cols = {c["name"] for c in inspector.get_columns("training_entitlements")}

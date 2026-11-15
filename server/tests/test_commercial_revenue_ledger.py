@@ -435,7 +435,11 @@ def _package_seat_purchase(admin_client, db_session, buyer, package_code: str) -
     assert seat_fee.status_code == 200, seat_fee.get_data(as_text=True)
     activated = admin_client.post(
         _seat_url(buyer.id),
-        json={"seat_source": REVENUE_PACKAGES[package_code]["seat_source"], "confirm_password": _pwd()},
+        json={
+            "seat_source": REVENUE_PACKAGES[package_code]["seat_source"],
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": _pwd(),
+        },
     )
     assert activated.status_code == 200, activated.get_data(as_text=True)
     return seat_fee.json["data"]["entry"]

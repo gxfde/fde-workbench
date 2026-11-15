@@ -97,6 +97,10 @@ class CommercialEntitlement(Base, TimestampMixin):
             "delivery_eligibility IN ('none', 'eligible')",
             name="ck_commercial_entitlements_delivery_eligibility",
         ),
+        CheckConstraint(
+            "seat_status <> 'active' OR seat_expires_at IS NOT NULL",
+            name="ck_commercial_entitlements_active_requires_expiry",
+        ),
     )
 
     user_id: Mapped[str] = mapped_column(
@@ -152,8 +156,8 @@ class CommercialRoleAssignment(Base, TimestampMixin):
     commercial_role: Mapped[str] = mapped_column(String(2), nullable=False)
     valid_from: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     valid_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
-    # 来源＝书面依据指针＋sha256 指纹（不内嵌正文——证据红线）
-    source_uri: Mapped[str] = mapped_column(String(255), nullable=False)
+    # 来源＝书面依据指针＋sha256 指纹（不内嵌正文——证据红线；QR-057 对齐 _URI_MAX=500）
+    source_uri: Mapped[str] = mapped_column(String(500), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     assigned_by_user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -885,6 +889,12 @@ class CommercialOpportunity(Base, TimestampMixin):
         Index("ix_commercial_opportunities_enterprise", "enterprise_code"),
         Index("ix_commercial_opportunities_reporter", "reported_by_user_id"),
         Index("ix_commercial_opportunities_status", "status"),
+        Index(
+            "uq_commercial_opportunities_settled_ledger",
+            "settled_ledger_entry_id",
+            unique=True,
+            postgresql_where=text("settled_ledger_entry_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)

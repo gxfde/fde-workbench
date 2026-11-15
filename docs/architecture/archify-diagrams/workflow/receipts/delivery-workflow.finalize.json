@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "workflow",
   "quality": "showcase",
-  "startedAt": "2026-11-08T14:42:27.124Z",
+  "startedAt": "2026-11-13T23:03:26.571Z",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
-    "sha256": "ab93829f334dce53ae5015d9ad1f6f70a5075f0e5baa6429eaa817037b5644bc",
-    "bytes": 19626
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+    "sha256": "ef68619795106783278ff2e1b076c45dc74957aeb6d7810ad7750f6353c981a0",
+    "bytes": 19655
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
-    "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
-    "bytes": 855470
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+    "sha256": "7eabe9fa6f29e682da61bcc6303842e22a7b2e9ce3f6294026df3780978b7e62",
+    "bytes": 855577
   },
   "stages": {
     "validate": {
@@ -27,12 +27,12 @@
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "workflow",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch-fix",
+        "D:\\test\\fde-workbench",
         "--json"
       ],
       "receipt": {
@@ -40,8 +40,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "ab93829f334dce53ae5015d9ad1f6f70a5075f0e5baa6429eaa817037b5644bc",
-          "bytes": 19626
+          "sha256": "ef68619795106783278ff2e1b076c45dc74957aeb6d7810ad7750f6353c981a0",
+          "bytes": 19655
         },
         "validation": {
           "checksPassed": 9,
@@ -56,35 +56,35 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 5895,
+      "durationMs": 1172,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "deliver",
         "workflow",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "--quality",
         "showcase",
         "--repo-root",
-        "D:\\test\\fde-wt-arch-fix",
+        "D:\\test\\fde-workbench",
         "--json"
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "26987f5a-0e5e-4855-870d-70cfdd816fe6",
+        "receiptId": "bec2e620-c7a3-415e-919f-aed002db4b62",
         "ok": true,
         "command": "deliver",
         "type": "workflow",
-        "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
-        "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "input": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\candidate.json",
+        "output": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "specification": {
-          "sha256": "ab93829f334dce53ae5015d9ad1f6f70a5075f0e5baa6429eaa817037b5644bc",
-          "bytes": 19626
+          "sha256": "ef68619795106783278ff2e1b076c45dc74957aeb6d7810ad7750f6353c981a0",
+          "bytes": 19655
         },
         "artifact": {
-          "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
-          "bytes": 855470
+          "sha256": "7eabe9fa6f29e682da61bcc6303842e22a7b2e9ce3f6294026df3780978b7e62",
+          "bytes": 855577
         },
         "validation": {
           "checksPassed": 9,
@@ -97,7 +97,7 @@
         "evidence": {
           "verified": true,
           "repository": "https://github.com/gxfde/fde-workbench",
-          "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
+          "revision": "8c297a125db8ae11dc40e150a462108104202d9b",
           "references": 33,
           "linkMode": "local-only"
         },
@@ -117,20 +117,20 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 1184,
+      "durationMs": 205,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "check",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "--require-provenance"
       ],
       "receipt": {
         "ok": true,
-        "file": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "file": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "artifact": {
-          "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
-          "bytes": 855470
+          "sha256": "7eabe9fa6f29e682da61bcc6303842e22a7b2e9ce3f6294026df3780978b7e62",
+          "bytes": 855577
         },
         "checks": [
           {
@@ -247,22 +247,22 @@
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "26987f5a-0e5e-4855-870d-70cfdd816fe6"
+        "deliveryReceiptId": "bec2e620-c7a3-415e-919f-aed002db4b62"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 7438,
+      "durationMs": 2295,
       "command": [
         "D:\\software\\nodejs\\node.exe",
         "C:\\Users\\P1\\.agents\\skills\\archify\\archify\\bin\\archify.mjs",
         "browser-check",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
         "--json",
         "--require-provenance",
         "--out-dir",
-        "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts"
+        "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\receipts"
       ],
       "execution": "in-process",
       "receipt": {
@@ -273,11 +273,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "26987f5a-0e5e-4855-870d-70cfdd816fe6",
+        "deliveryReceiptId": "bec2e620-c7a3-415e-919f-aed002db4b62",
         "artifact": {
-          "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
-          "sha256": "fa4d60c74c242c739170be2c5f38a6e7a8754c19fc36b3f45964046c9c413c81",
-          "bytes": 855470
+          "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\delivery-workflow.html",
+          "sha256": "7eabe9fa6f29e682da61bcc6303842e22a7b2e9ce3f6294026df3780978b7e62",
+          "bytes": 855577
         },
         "state": {
           "detail": "read",
@@ -1894,7 +1894,7 @@
           "contactSheet": null
         },
         "sidecars": {
-          "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts",
+          "directory": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\receipts",
           "receipt": "delivery-workflow.browser-check.json",
           "files": []
         }
@@ -1907,19 +1907,19 @@
   },
   "diagnostics": [],
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.browser-check.json"
+    "receipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\workflow\\receipts\\delivery-workflow.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-11-08T14:42:43.803Z",
-  "durationMs": 16679,
+  "finishedAt": "2026-11-13T23:03:30.810Z",
+  "durationMs": 4238,
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
     "releaseNotes": null,
-    "checkedAt": "2026-11-08T11:17:58.598Z",
+    "checkedAt": "2026-11-13T06:10:42.431Z",
     "source": "cache",
     "noticeRequired": false,
     "noticeText": null

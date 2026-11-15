@@ -390,9 +390,15 @@ def update_project(
                 "planned_end_date": "planned_end_date",
                 "t6_review_disabled": "t6_review_disabled",
             }
+            old_enterprise_code = project.enterprise_code
             for input_name, model_name in field_map.items():
                 if input_name in normalized_changes:
                     setattr(project, model_name, normalized_changes[input_name])
+            if project.enterprise_code != old_enterprise_code:
+                try:
+                    ensure_enterprise_channel(session, actor=actor, business_line=project.business_line or "FDE", enterprise_code=project.enterprise_code)
+                except ChannelGuardError as err:
+                    raise ProjectServiceError(err.code, err.message, err.status) from None
             root_subject_changes: dict[str, Any] = {}
             if "name" in normalized_changes or "background" in normalized_changes:
                 root_subject = session.scalar(

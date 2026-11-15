@@ -177,24 +177,42 @@ function recordToStrings(record: Record<string, unknown>): Record<string, string
   return result
 }
 
-/** Extract a plain-text preview from a `{type:"doc",content:[{type:"paragraph",text}]}` doc. */
-function richTextToPlain(value: unknown): string {
+/**
+ * Extract plain-text lines from server-rendered rich_text blocks
+ * (`[{type:"paragraph", content:"...", marks:[]}]`) or `{type:"doc", content:[...]}`
+ * (accepting both canonical `content` and legacy `text` block keys).
+ */
+export function richTextToPlain(value: unknown): string {
   if (typeof value === "string") return value
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    const content = (value as Record<string, unknown>).content
-    if (Array.isArray(content)) {
-      return content
-        .filter((item) => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).text === "string")
-        .map((item) => (item as Record<string, unknown>).text as string)
-        .join("\n")
+  const blocks = Array.isArray(value)
+    ? value
+    : typeof value === "object" && value !== null && Array.isArray((value as Record<string, unknown>).content)
+      ? ((value as Record<string, unknown>).content as unknown[])
+      : null
+  if (!blocks) return ""
+  const lines: string[] = []
+  for (const item of blocks) {
+    if (typeof item !== "object" || item === null) continue
+    const record = item as Record<string, unknown>
+    if (typeof record.content === "string") {
+      lines.push(record.content)
+    } else if (typeof record.text === "string") {
+      lines.push(record.text)
+    } else if (Array.isArray(record.content)) {
+      for (const entry of record.content) {
+        if (typeof entry === "string") lines.push(entry)
+        else if (Array.isArray(entry)) {
+          lines.push(entry.filter((cell): cell is string => typeof cell === "string").join("\t"))
+        }
+      }
     }
   }
-  return ""
+  return lines.join("\n")
 }
 
-/** Rebuild the canonical rich-text doc JSON from plain lines. */
-function plainToRichText(text: string): unknown {
-  const content = text.split("\n").map((line) => ({ type: "paragraph", text: line }))
+/** Rebuild the canonical `{type:"doc", content:[{type:"paragraph", content}]}` payload from plain lines. */
+export function plainToRichText(text: string): unknown {
+  const content = text.split("\n").map((line) => ({ type: "paragraph", content: line }))
   return { type: "doc", content }
 }
 

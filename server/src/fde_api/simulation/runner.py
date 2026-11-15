@@ -115,7 +115,11 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             session, run.scenario_id, run.scenario_version
         )
         config = dict(run.context_json or {})
-        adapter = build_adapter(run.adapter_mode, **config)
+        # actor_user_id 由服务端注入（run 创建者）——workbench 档真模型调用的
+        # 预算/审计主体；run config 里的同名键一律被服务端值覆盖（不可伪造主体）。
+        adapter = build_adapter(
+            run.adapter_mode, **{**config, "actor_user_id": run.created_by_user_id}
+        )
 
         actors = {
             actor.role: actor
@@ -173,9 +177,24 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         )
 
         # ---- 访谈 --------------------------------------------------------
+        # 学习闭环 2.0 L4：逐轮构造 ctx——disclosed 随轮更新（v1 全程传同一
+        # base_ctx ⇒ disclosed 恒空的失真修正）＋history 累积对话；mock 忽略
+        # 新键 ⇒ 零回归。
         max_rounds = int(config.get("max_rounds") or 6)
+        history: list[dict[str, Any]] = []
         for round_index in range(1, max_rounds + 1):
-            question = adapter.probe(base_ctx, round_index=round_index)
+            round_ctx = dataclasses.replace(
+                base_ctx,
+                disclosed=customer.disclosed_facts,
+                config={**base_ctx.config, "history": tuple(history)},
+            )
+            try:
+                question = adapter.probe(round_ctx, round_index=round_index)
+            except AdapterUnavailable as unavailable:
+                # workbench 档模型面不可用 ⇒ 诚实失败（不静默退回 mock）
+                return _fail_unavailable(
+                    session, run, trace, reason=str(unavailable.reason), phase="interview"
+                )
             trace.record(
                 phase="interview",
                 event_type="actor_turn",
@@ -210,9 +229,21 @@ def run_simulation(run_id: str) -> dict[str, Any]:
                         "trigger": "probe_keywords_hit" if reply.matched else "escalated",
                     },
                 )
+            history.append(
+                {
+                    "round": round_index,
+                    "question": question,
+                    "answer": reply.text,
+                    "disclosed": [str(fact) for fact in reply.disclosed],
+                }
+            )
 
         disclosed = customer.disclosed_facts
-        ctx = dataclasses.replace(base_ctx, disclosed=disclosed)
+        ctx = dataclasses.replace(
+            base_ctx,
+            disclosed=disclosed,
+            config={**base_ctx.config, "history": tuple(history)},
+        )
 
         # ---- 分析 / 方案 / 实施 -----------------------------------------
         try:
@@ -312,13 +343,25 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         else:
             run.status = "completed"
 
-        run.cost_json = {
+        # L4 cost 修正：workbench 档接入真实 usage（v1 硬编码 tokens:0 会让
+        # 回归 cost_delta 失真）；mock/real 无 usage 面 ⇒ 键集逐字节不变。
+        cost: dict[str, Any] = {
             "tokens": 0,
             "tool_calls": len(environment.calls),
             "rejected_calls": len(violations),
             "tool_failures": len(environment.failed_calls),
             "rounds": customer.state.probe_count,
         }
+        usage = _adapter_usage_summary(adapter)
+        if usage:
+            cost["tokens"] = int(usage.get("tokens") or 0)
+            cost.update(
+                {
+                    key: int(usage.get(key) or 0)
+                    for key in ("model_calls", "prompt_tokens", "completion_tokens")
+                }
+            )
+        run.cost_json = cost
         run.actor_set_json = {
             role: {
                 "actor_id": actor.id,
@@ -351,6 +394,20 @@ def _now_iso() -> str:
     from datetime import UTC, datetime
 
     return datetime.now(UTC).isoformat()
+
+
+def _adapter_usage_summary(adapter: Any) -> dict[str, Any] | None:
+    """取适配器的真实模型用量（仅 workbench 档实现 usage_summary；其余 None）。"""
+    getter = getattr(adapter, "usage_summary", None)
+    if not callable(getter):
+        return None
+    try:
+        summary = getter()
+    except Exception:  # noqa: BLE001 - 用量读取失败不阻断收尾（成本面缺失可容忍）
+        return None
+    if isinstance(summary, dict) and summary:
+        return summary
+    return None
 
 
 def _fail_unavailable(

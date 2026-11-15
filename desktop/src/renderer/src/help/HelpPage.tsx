@@ -945,6 +945,62 @@ const SECTIONS: HelpSection[] = [
     ),
   },
   {
+    id: "agent-artifacts",
+    title: "智能体产物与售前参考",
+    body: (
+      <>
+        <p className="help-lead">
+          智能体每执行一次 run 都会产出文件并落库——库里只存指针 + sha256 指纹，原件留在宿主工作区。
+          产出构成由该 run 的执行智能体与上下文决定：售前智能体以文档为主，同一智能体两次 run
+          的组合也可能不同（试点项目的两次售前 run 分别产出 3 份与 5 份）。
+        </p>
+
+        <h3>在桌面端哪里看</h3>
+        <Steps
+          items={[
+            <>进项目 →「智能体」标签 → run 列表点开目标 run。</>,
+            <>
+              run 详情里每个产物都有 <strong>[预览]</strong>（Markdown 就地渲染）与{" "}
+              <strong>[下载]</strong>。
+            </>,
+            <>
+              未复核产物会同时出现在「<strong>终审队列</strong>」，可逐件或批量标记复核
+              （需项目负责人/管理员权限）。复核不是装饰：未复核产物不应作为对外依据。
+            </>,
+            <>
+              原件规律：宿主裸跑模式下在{" "}
+              <code>D:\test\agent-workspaces\platform\&lt;RUN_ID&gt;\output\</code>，
+              可直接双击阅读。
+            </>,
+          ]}
+        />
+
+        <h3>售前五件套（2026-11-13 试点项目 run-002 实例）</h3>
+        <table className="help-table">
+          <thead>
+            <tr><th>产物</th><th>作用</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>presales-brief.md</td><td>售前任务简报：项目代号、执行智能体、文档状态与引用情况一览</td></tr>
+            <tr><td>discovery-questionnaire.md</td><td>调研问卷：首访要问的问题清单</td></tr>
+            <tr><td>assumptions-and-gaps.md</td><td>假设与缺口：哪些前提未验证、信息差在哪</td></tr>
+            <tr><td>solution-directions.md</td><td>方案方向：可选技术路线与取舍</td></tr>
+            <tr><td>delivery-plan.md</td><td>交付计划：阶段划分与验收口径草案</td></tr>
+          </tbody>
+        </table>
+        <p>
+          参考样板已存仓库 <code>docs/售前产物参考/run-002-20261113/</code>。
+          新项目做售前时拿这套结构对照：先简报 → 再问卷 → 盘假设缺口 → 出方案方向 → 落交付计划。
+        </p>
+
+        <p className="help-warn">
+          <strong>常见问题</strong>：产物列表为空 → 该 run 尚无产物落库，先看 run 状态；
+          [预览] 报 503 → 产物指纹与库不一致或原件被移动，先别把这份产物当依据。
+        </p>
+      </>
+    ),
+  },
+  {
     id: "bridge",
     title: "集成桥",
     body: (

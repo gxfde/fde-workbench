@@ -139,6 +139,7 @@ def validate_dag(
     context_keys: Collection[str] = DEFAULT_CONTEXT_KEYS,
     capabilities: Collection[str] | None = None,
     call_effects: Mapping[str, str] | None = None,
+    call_contracts: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> DagValidation:
     """dag_json 校验纯函数：返回 (errors, warnings, 拓扑序)；白名单由调用方注入。
 
@@ -293,6 +294,46 @@ def validate_dag(
                         {"ref": ref},
                     )
                 )
+            elif (
+                call_contracts is not None
+                and ref in call_contracts
+                and (params is None or isinstance(params, dict))
+            ):
+                contract = call_contracts[ref]
+                eff_params = params or {}
+                path_params = tuple(contract.get("path_params") or ())
+                for req_key in path_params:
+                    val = eff_params.get(req_key)
+                    if val is None or (isinstance(val, str) and not val.strip()):
+                        errors.append(
+                            DagIssue(
+                                "call_missing_path_param",
+                                f"节点 {key} 调用 {ref} 缺少路径必填参数：{req_key}。",
+                                key,
+                                {"ref": ref, "param": req_key},
+                            )
+                        )
+                method = str(contract.get("method") or "")
+                if method in ("POST", "PUT", "PATCH"):
+                    if "body" in eff_params and not isinstance(eff_params["body"], dict):
+                        errors.append(
+                            DagIssue(
+                                "call_invalid_body",
+                                f"节点 {key} 调用写操作 {ref} 的 params.body 须为对象。",
+                                key,
+                                {"ref": ref},
+                            )
+                        )
+                    stray = sorted(set(eff_params) - set(path_params) - {"body"})
+                    if stray:
+                        errors.append(
+                            DagIssue(
+                                "call_unwrapped_body_params",
+                                f"节点 {key} 调用写操作 {ref} 的请求体字段须放入 params.body：{'、'.join(stray)}。",
+                                key,
+                                {"ref": ref, "keys": stray},
+                            )
+                        )
         elif node_type == "skill":
             if not isinstance(ref, str) or SKILL_REF_PATTERN.fullmatch(ref) is None:
                 errors.append(
@@ -482,6 +523,17 @@ def catalog_call_effects() -> dict[str, str]:
     return {ref: str(row["effect"]) for ref, row in CATALOG.items()}
 
 
+def catalog_call_contracts() -> dict[str, dict[str, Any]]:
+    """call 节点参数契约元数据（QR-072）：ref → {method, path_params}。"""
+    return {
+        ref: {
+            "method": str(row["method"]).upper(),
+            "path_params": tuple(re.findall(r"\{(\w+)\}", str(row["path"]))),
+        }
+        for ref, row in CATALOG.items()
+    }
+
+
 def published_skill_refs(session: Session) -> frozenset[str]:
     """skill.ref 白名单 = published skill 的既有版本号 `skill_key@version_number`（T-W1 挂账已随 T-S1 收敛）。"""
     rows = session.execute(
@@ -507,6 +559,7 @@ def validate_dag_against_registry(session: Session, dag: Any) -> DagValidation:
         agent_refs=available_agent_refs(session),
         capabilities=APPROVAL_CAPABILITIES,
         call_effects=catalog_call_effects(),
+        call_contracts=catalog_call_contracts(),
     )
 
 

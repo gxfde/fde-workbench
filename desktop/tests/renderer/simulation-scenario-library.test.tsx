@@ -149,6 +149,72 @@ it("总览按客户行为与数据集给出盘点", async () => {
   })
 })
 
+it("案例库分类下拉按导入数量标注（未导入显示 0）", async () => {
+  mocks.apiRequest.mockImplementation((path: string) => {
+    if (String(path).includes("limit=200")) {
+      return Promise.resolve(
+        listDto([
+          scenario({ industry: "manufacturing" }),
+          scenario({ id: "scn-2", scenario_key: "CASE-B", industry: "retail" }),
+        ]),
+      )
+    }
+    return Promise.resolve(listDto([]))
+  })
+
+  render(<ScenarioLibrary />)
+
+  const select = await screen.findByLabelText("分类")
+  // 计数来自异步全量请求，等选项标注出现再断言
+  await waitFor(() => {
+    const labels = within(select)
+      .getAllByRole("option")
+      .map((option) => option.textContent)
+    expect(labels).toContain("制造业（1）")
+    expect(labels).toContain("零售（1）")
+    expect(labels).toContain("能源（0）")
+  })
+})
+
+it("案例库切换分类过滤会带 industry 参数重新请求", async () => {
+  mocks.apiRequest.mockResolvedValue(listDto([]))
+  const user = userEvent.setup()
+
+  render(<ScenarioLibrary />)
+  await screen.findByRole("button", { name: "刷新" })
+
+  await user.selectOptions(screen.getByLabelText("分类"), "manufacturing")
+
+  await waitFor(() => {
+    const calls = mocks.apiRequest.mock.calls
+    expect(calls.some(([path]) => String(path).includes("industry=manufacturing"))).toBe(true)
+  })
+})
+
+it("总览分类筛选收敛 KPI 且按分类分布显示全量", async () => {
+  mocks.apiRequest.mockResolvedValue(
+    listDto([
+      scenario({ industry: "manufacturing" }),
+      scenario({ id: "scn-2", scenario_key: "CASE-B", industry: "retail" }),
+    ]),
+  )
+  const user = userEvent.setup()
+
+  render(<SimulationDashboard />)
+
+  await waitFor(() => {
+    expect(screen.getByText("案例分支")).toBeInTheDocument()
+  })
+  await user.selectOptions(screen.getByLabelText("分类"), "manufacturing")
+
+  // KPI「案例分支」收敛为 1；「按分类」分布节仍显示全量（制造 1 + 零售 1）
+  const kpi = screen.getByText("案例分支").closest("article")
+  expect(kpi).toHaveTextContent("1")
+  const industrySection = screen.getByLabelText("按分类分布")
+  expect(industrySection).toHaveTextContent("制造业")
+  expect(industrySection).toHaveTextContent("零售")
+})
+
 it("场景编辑弹层：分区标题 + × 关闭钮可关 + 可滚弹层类", async () => {
   mocks.apiRequest.mockResolvedValue(listDto([scenario()]))
   const user = userEvent.setup()

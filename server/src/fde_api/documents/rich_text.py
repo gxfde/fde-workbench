@@ -161,7 +161,10 @@ def sanitize_rich_text(value: Any) -> RichTextDocument:
         marks = _sanitize_marks(raw_block)
 
         if block_type in _TEXT_BLOCK_TYPES:
-            cleaned = _clean_text(raw_block.get("content"))
+            raw_text = raw_block.get("content")
+            if raw_text is None:
+                raw_text = raw_block.get("text")
+            cleaned = _clean_text(raw_text)
             if not cleaned:
                 continue
             blocks.append(RichTextBlock(type=block_type, content=cleaned, marks=marks))

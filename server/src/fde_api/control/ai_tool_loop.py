@@ -56,12 +56,25 @@ READ_ONLY_TOOLS = frozenset({
 })
 
 
-def tool_definitions(allowed: list[str] | set[str]) -> list[dict[str, Any]]:
+def _permitted_read_only_tools(
+    allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
+) -> frozenset[str]:
+    if allowed_tools is None:
+        return READ_ONLY_TOOLS
+    return frozenset(name for name in READ_ONLY_TOOLS if name in set(allowed_tools))
+
+
+def tool_definitions(
+    allowed: list[str] | set[str],
+    *,
+    allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
     """Build the OpenAI-compatible `tools` array for the readable tools."""
+    permitted_tools = _permitted_read_only_tools(allowed_tools)
     definitions: list[dict[str, Any]] = []
     for name, entry in TOOLS.items():
         description, capability, properties, _, _ = entry
-        if name not in READ_ONLY_TOOLS:
+        if name not in permitted_tools:
             continue
         if capability and capability not in allowed:
             continue
@@ -94,12 +107,21 @@ def _truncate(payload: Any) -> str:
 
 
 def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
-               tool_calls: list[dict[str, Any]], session: Session) -> list[dict[str, Any]]:
+               tool_calls: list[dict[str, Any]], session: Session,
+               allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None) -> list[dict[str, Any]]:
     """Execute the requested tools and build the `tool` role messages."""
+    permitted_tools = _permitted_read_only_tools(allowed_tools)
     results: list[dict[str, Any]] = []
     for call in tool_calls:
         function = call.get("function") or {}
         name = function.get("name")
+        if not isinstance(name, str) or name not in permitted_tools:
+            content = json.dumps(
+                {"error": "forbidden", "message": "直连只读循环不允许调用写类或未授权工具。"},
+                ensure_ascii=False,
+            )
+            results.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": content})
+            continue
         raw_arguments = function.get("arguments")
         try:
             arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else (raw_arguments or {})
@@ -184,6 +206,8 @@ def direct_tool_completion(
     max_tokens: int = 16384,
     timeout_seconds: int = 300,
     session: Any | None = None,
+    capabilities: list[str] | tuple[str, ...] | None = None,
+    allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
     """Call the provider with tools and run the tool loop locally.
 
@@ -208,7 +232,10 @@ def direct_tool_completion(
 
     level, _ = effective_ai_access(user)
     allowed = capabilities_for_level(level)
-    definitions = tool_definitions(allowed)
+    if capabilities is not None:
+        requested = {str(item) for item in capabilities}
+        allowed = [item for item in allowed if item in requested]
+    definitions = tool_definitions(allowed, allowed_tools=allowed_tools)
     claims = _claims_for(user, project_id=project_id, execution_id=execution_id, allowed=allowed)
 
     messages: list[dict[str, Any]] = []
@@ -292,7 +319,8 @@ def direct_tool_completion(
             messages.append({"role": "assistant", "content": content or "",
                              "tool_calls": tool_calls})
             results = _run_tools(user=user, claims=claims, allowed=allowed,
-                                  tool_calls=tool_calls, session=db_session)
+                                  tool_calls=tool_calls, session=db_session,
+                                  allowed_tools=allowed_tools)
             # Close the transaction this tool round may have opened: the next
             # provider call (up to `timeout_seconds`, zero DB traffic) must not
             # overlap a connection that sits idle-in-transaction while still

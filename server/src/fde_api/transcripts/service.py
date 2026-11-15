@@ -28,7 +28,11 @@ from sqlalchemy import select
 
 from fde_api.guidance import enterprise_dict
 from fde_api.guidance.enterprise_dict import RedactionConfigError
-from fde_api.guidance.redaction import redact_text_detailed
+from fde_api.guidance.redaction import (
+    fingerprint_review_payload,
+    redact_text_detailed,
+    resolve_redaction_display,
+)
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access, visible_project_ids
 from fde_api.transcripts.models import (
@@ -232,7 +236,7 @@ def _serialize_draft(row: TranscriptDraft, *, detail: bool) -> dict[str, Any]:
         # 正文与复核条目只在活动草稿详情出现（墓碑无正文可回放——T+7 语义）
         data["content"] = row.content
         data["content_sha256"] = row.content_sha256
-        data["redaction_entries"] = row.redaction_entries or []
+        data["redaction_entries"] = resolve_redaction_display(row.redaction_entries or [])
     return data
 
 
@@ -294,7 +298,8 @@ def create_draft(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
             title=redacted_title or None,
             content=redacted_content,
             content_sha256=hashlib.sha256(redacted_content.encode("utf-8")).hexdigest(),
-            redaction_entries=entries,
+            # 盲审追批（拍板 #6A 同族扩线）：复核账零真名（指纹＋疑似哨兵聚合）。
+            redaction_entries=fingerprint_review_payload(entries),
             source_kind=source_kind,
             engine=engine,
             status="draft",

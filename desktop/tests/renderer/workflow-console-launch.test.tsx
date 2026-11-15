@@ -122,3 +122,36 @@ it("surfaces server 409 messages instead of swallowing them", async () => {
   await user.click(await screen.findByRole("button", { name: "启动" }))
   expect(await screen.findByRole("alert")).toHaveTextContent("只有已发布的定义可以发起运行。")
 })
+
+// ── 第二批桌面 AI 辅助闭环·任务 3：新「从方案生成草稿」区在场时，启动行为零回归 ──
+
+it("keeps launch behavior unchanged while the draft-generation section is present", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path === `/api/v1/projects/${projectId}/workflows` && options?.method === "GET") {
+      return Promise.resolve({ items: [definition()] })
+    }
+    if (path === `/api/v1/projects/${projectId}/workflow-runs` && options?.method === "GET") {
+      return Promise.resolve({ items: [], truncated: false })
+    }
+    if (path === `/api/v1/projects/${projectId}/delivery-plans` && options?.method === "GET") {
+      return Promise.resolve({ items: [{ id: "plan-ap-1", title: "交付方案 v1", status: "approved", version: 1 }] })
+    }
+    if (path === "/api/v1/extensions" && options?.method === "GET") {
+      return Promise.resolve({ skills: [{ key: "sop-deploy", name: "部署 SOP", status: "published", current_version: 3 }] })
+    }
+    if (path === launchPath && options?.method === "POST") {
+      return Promise.resolve({ run: run(), created: true })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<WorkflowConsole projectId={projectId} canManage isAdmin />)
+
+  // 新功能区在场（默认审批能力 workbench.write）
+  expect(await screen.findByLabelText("从方案生成草稿")).toBeInTheDocument()
+  expect(screen.getByLabelText("审批能力")).toHaveValue("workbench.write")
+  // 既有启动行为零回归：POST runs → 重拉运行列表
+  await user.click(screen.getByRole("button", { name: "启动" }))
+  await waitFor(() => expect(callCount(launchPath, "POST")).toBe(1))
+  await waitFor(() => expect(callCount(`/api/v1/projects/${projectId}/workflow-runs`, "GET")).toBe(2))
+})

@@ -255,6 +255,7 @@ def change_password(
                 raise AuthServiceError("account_inactive", "This account is inactive.", 403)
             if not verify_password(current_user.password_hash, current_password):
                 raise AuthServiceError(*INVALID_CREDENTIALS)
+            _registration_state_gate(current_user)
 
             session.execute(
                 update(RefreshSession)

@@ -1,0 +1,27 @@
+[
+  {
+    "path": "presales-brief.md",
+    "kind": "doc",
+    "source_refs": []
+  },
+  {
+    "path": "discovery-questionnaire.md",
+    "kind": "doc",
+    "source_refs": []
+  },
+  {
+    "path": "assumptions-and-gaps.md",
+    "kind": "doc",
+    "source_refs": []
+  },
+  {
+    "path": "solution-directions.md",
+    "kind": "doc",
+    "source_refs": []
+  },
+  {
+    "path": "delivery-plan.md",
+    "kind": "doc",
+    "source_refs": []
+  }
+]

@@ -1236,7 +1236,11 @@ def record_settlement(
         )
     if not isinstance(ledger_entry_id, str) or not ledger_entry_id:
         raise _error("invalid_request", "ledger_entry_id 必填。")
-    entry = session.get(CommercialRevenueLedger, ledger_entry_id)
+    entry = session.scalars(
+        select(CommercialRevenueLedger)
+        .where(CommercialRevenueLedger.id == ledger_entry_id)
+        .with_for_update()
+    ).first()
     if entry is None:
         raise _error("ledger_entry_not_found", "科目行不存在。", 404)
     if entry.subject_type != "project_share":
@@ -1245,13 +1249,25 @@ def record_settlement(
         )
     if entry.status == "voided":
         raise _error("ledger_entry_voided", "结算科目行已作废，不可结算。", 409)
+    # QR-056：对齐 regional_service.py:470-479，无包或包不一致一律 409，封堵无包行跨企业结算洞
     if (
-        entry.delivery_package_id is not None
-        and row.matched_delivery_package_id is not None
-        and entry.delivery_package_id != row.matched_delivery_package_id
+        entry.delivery_package_id is None
+        or row.matched_delivery_package_id is None
+        or entry.delivery_package_id != row.matched_delivery_package_id
     ):
         raise _error(
-            "ledger_package_mismatch", "结算科目行的交付包与撮合结果不一致。", 409
+            "ledger_package_mismatch", "结算科目行的交付包缺失或与撮合结果不一致。", 409
+        )
+    # QR-059：同一笔 project_share 科目行不可被多条商机重复引用结算
+    existing_settled = session.scalars(
+        select(CommercialOpportunity).where(
+            CommercialOpportunity.settled_ledger_entry_id == entry.id,
+            CommercialOpportunity.id != row.id,
+        )
+    ).first()
+    if existing_settled is not None:
+        raise _error(
+            "ledger_already_settled", "该结算科目行已被其他商机结算引用，不可重复结算。", 409
         )
     row.settled_ledger_entry_id = entry.id
     row.status = "settled"

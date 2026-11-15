@@ -126,6 +126,7 @@ def register_route(entry: str):
     回滚注册，账号停在 pending_email 走重发路径）。
     """
     settings = _settings()
+    _ensure_surface_open(settings)
     retry_after = _register_throttle(request.remote_addr)
     if retry_after is not None:
         return error_response(
@@ -168,6 +169,8 @@ def verify_route():
 @registration_blueprint.post("/registrations/resend")
 def resend_route():
     """重发验证邮件（**防枚举**：响应形状恒同 202 accepted；真实发送以事件留痕）。"""
+    settings = _settings()
+    _ensure_surface_open(settings)
     retry_after = _register_throttle(request.remote_addr)
     if retry_after is not None:
         return error_response(
@@ -178,11 +181,11 @@ def resend_route():
     payload = _json_payload()
     with db.session() as session, session.begin():
         raw_token, recipient = resend_verification(
-            session, settings=_settings(), username=payload.get("username")
+            session, settings=settings, username=payload.get("username")
         )
     if raw_token is not None and recipient is not None:
         dispatch_verification_email(
-            _settings(), recipient=recipient, raw_token=raw_token
+            settings, recipient=recipient, raw_token=raw_token
         )
     return jsonify({"data": {"status": "accepted"}, "error": None}), 202
 

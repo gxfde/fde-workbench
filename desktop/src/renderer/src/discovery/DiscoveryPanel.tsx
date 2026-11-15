@@ -11,10 +11,25 @@ import { auditFacts, summarizeAnchorAudit, type AnchorGrade } from "./anchorAudi
 // 试点轮追加：line 定位条目按 source_ref 拉取纪要正文做本地锚点核验
 // （A/B/C 分级只提示不裁决），列表分页加载缓解大纪要抽取的百级条目。
 
+// 复核账条目（盲审追批零真名换代）：指纹条目（name 词典反解可空）＋疑似聚合
+// 哨兵 {suspect_count}；旧形状（name 原文）宽容兼容。
 interface RedactionEntryDto {
-  name: string
-  occurrences: number
-  matched_dict: boolean
+  name?: string | null
+  name_hash?: string
+  occurrences?: number
+  matched_dict?: boolean
+  suspect_count?: number
+}
+
+function redactionEntryLabel(entry: RedactionEntryDto): string {
+  if (entry.suspect_count !== undefined) return "疑似企业名（未收录词典）"
+  if (typeof entry.name === "string" && entry.name) return entry.name
+  if (entry.name_hash) return `${entry.name_hash.slice(0, 8)}…`
+  return "未知条目"
+}
+
+function redactionEntryCount(entry: RedactionEntryDto): number {
+  return entry.suspect_count ?? entry.occurrences ?? 0
 }
 
 interface ExtractionDto {
@@ -431,7 +446,7 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
                   {extraction.failure_code
                     ? <span title={extraction.failure_message ?? ""}>{extraction.failure_code}</span>
                     : extraction.redaction_entries && extraction.redaction_entries.length
-                      ? <span title={extraction.redaction_entries.map((entry) => `${entry.name}×${entry.occurrences}`).join("；")}>脱敏复核 {extraction.redaction_entries.length} 项</span>
+                      ? <span title={extraction.redaction_entries.map((entry) => `${redactionEntryLabel(entry)}×${redactionEntryCount(entry)}`).join("；")}>脱敏复核 {extraction.redaction_entries.length} 项</span>
                       : "—"}
                 </td>
                 <td>

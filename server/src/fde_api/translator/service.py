@@ -25,6 +25,7 @@ from fde_api.guidance.models import INTERVIEW_MODES, ProjectGuidanceAnalysis, RE
 from fde_api.guidance.redaction import (
     RedactionResult,
     SensitiveCredentialDetected,
+    fingerprint_review_entries,
     redact_text_detailed,
 )
 from fde_api.jobs.outbox import enqueue_outbox, subject_org_of_user
@@ -112,6 +113,11 @@ def create_translation(*, actor: User, payload: Mapping[str, Any]) -> dict[str, 
             if entries:
                 # 疑似/替换清单随事件留痕（append-only）；采纳流把条目交接给
                 # 项目指引分析，confirm 复核闸按分析聚合后强制人工复核。
+                # QR-133 指纹化：确证命中只存指纹、疑似只留计数（零真名）。
+                fingerprinted, suspect_count = fingerprint_review_entries(entries)
+                event_changes: dict[str, Any] = {"stage": "input", "entries": fingerprinted}
+                if suspect_count:
+                    event_changes["suspect_count"] = suspect_count
                 session.add(
                     OperationEvent(
                         actor_user_id=actor.id,
@@ -119,7 +125,7 @@ def create_translation(*, actor: User, payload: Mapping[str, Any]) -> dict[str, 
                         target_type="translator_translation",
                         target_id=row.id,
                         event_type=REDACTION_EVENT_TYPE,
-                        changes={"stage": "input", "entries": entries},
+                        changes=event_changes,
                     )
                 )
             enqueue_outbox(

@@ -19,6 +19,7 @@ import pytest
 
 from fde_api.auth.models import User
 from fde_api.guidance.models import ProjectGuidanceAnalysis
+from fde_api.guidance.redaction import redaction_name_hash
 from fde_api.guidance.service import (
     GuidanceServiceError,
     confirm_analysis,
@@ -111,7 +112,8 @@ def test_confirm_with_ack_confirmed_and_event_payload(app, db_session):
             expected_version=analysis.version, redaction_reviewed=True,
         )
     assert data["status"] == "confirmed"
-    assert data["redaction_review"] == [{"name": "某示例公司", "occurrences": 2, "matched_dict": False}]
+    # QR-133 指纹化投影：疑似名不入条目账，只留聚合计数（零真名）。
+    assert data["redaction_review"] == [{"suspect_count": 2}]
     event = _confirm_event(db_session, project.id)
     assert event is not None
     assert event.changes["redaction_reviewed"] is True
@@ -139,9 +141,11 @@ def test_get_analysis_surfaces_review_entries(app, db_session):
     with app.app_context():
         data = get_analysis(actor=leader, project_id=analysis.project_id, analysis_id=analysis.id)
     assert data["redaction_review"] == [
-        {"name": "某示例公司", "occurrences": 3, "matched_dict": False},
-        {"name": "示例集团", "occurrences": 1, "matched_dict": True},
-    ]  # 按名称排序，形状与写入条目一致
+        # QR-133：确证命中=指纹条目（「示例集团」不在种子词典 → 反解 name=None）；
+        # 疑似名=聚合计数项；条目按 name_hash 排序在前。
+        {"name_hash": redaction_name_hash("示例集团"), "name": None, "occurrences": 1, "matched_dict": True},
+        {"suspect_count": 3},
+    ]
 
 
 def test_review_entries_merge_across_events(app, db_session):
@@ -151,8 +155,10 @@ def test_review_entries_merge_across_events(app, db_session):
     with app.app_context():
         data = get_analysis(actor=leader, project_id=analysis.project_id, analysis_id=analysis.id)
     assert data["redaction_review"] == [
-        {"name": "示例集团", "occurrences": 3, "matched_dict": True}
-    ]  # 跨事件同名合并：occurrences 累加、matched_dict 求并
+        # QR-133 投影语义统一：确证命中条目（旧形状现算指纹归一）＋疑似折算聚合计数。
+        {"name_hash": redaction_name_hash("示例集团"), "name": None, "occurrences": 1, "matched_dict": True},
+        {"suspect_count": 2},
+    ]
 
 
 def test_review_persists_across_field_edits(app, db_session):
@@ -166,4 +172,4 @@ def test_review_persists_across_field_edits(app, db_session):
         )
         data = get_analysis(actor=leader, project_id=analysis.project_id, analysis_id=analysis.id)
     assert data["executive_summary"] == "人工改写后的摘要"
-    assert data["redaction_review"] == [{"name": "某示例公司", "occurrences": 1, "matched_dict": False}]
+    assert data["redaction_review"] == [{"suspect_count": 1}]

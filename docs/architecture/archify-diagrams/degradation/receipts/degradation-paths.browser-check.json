@@ -6,11 +6,11 @@
   "status": "pass",
   "visualReview": "not-requested",
   "provenance": "current",
-  "deliveryReceiptId": "d33c875e-b88c-4ac9-8df3-e8fe2fcacea0",
+  "deliveryReceiptId": "ea171131-15e9-4b61-9977-3f8d71496226",
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
-    "sha256": "75a40beb1bf412daa9b2a1c41d1062a2ea119d8be43bdd2822b36ab93189d15d",
-    "bytes": 834853
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
+    "sha256": "3da06d872f6e37ad45f1e3362b8fb62799acc63895ed30fa44fb4a802266c5cb",
+    "bytes": 834929
   },
   "state": {
     "detail": "read",
@@ -1219,7 +1219,7 @@
     "contactSheet": null
   },
   "sidecars": {
-    "directory": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\receipts",
+    "directory": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\receipts",
     "receipt": "degradation-paths.browser-check.json",
     "files": []
   }

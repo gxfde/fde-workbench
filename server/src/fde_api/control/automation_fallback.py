@@ -48,6 +48,7 @@ from typing import Any
 
 from fde_api.control.ai_tool_loop import READ_ONLY_TOOLS
 from fde_api.control.ai_server_client import DEGRADABLE_DSH_CODES
+from fde_api.control.mcp_gateway import TOOLS
 
 # A 轨任务类型封闭集（N3-Q1 拍板）：只有「ai」类定时任务可降级。
 # 其余类型（若有）不在降级范围内 —— 诚实失败，不扩大降级面。
@@ -86,23 +87,51 @@ class DegradedFallbackPlan:
         return True
 
 
+def _build_capability_read_only_map() -> tuple[dict[str, frozenset[str]], frozenset[str]]:
+    """由 `mcp_gateway.TOOLS` 单一真身派生点分能力名→只读工具白名单映射。"""
+    by_cap: dict[str, set[str]] = {}
+    unscoped: set[str] = set()
+    for name, entry in TOOLS.items():
+        if name not in READ_ONLY_TOOLS:
+            continue
+        capability = entry[1]
+        if capability is None:
+            unscoped.add(name)
+        else:
+            by_cap.setdefault(capability, set()).add(name)
+    # `project.summarize`（`assistant_read` 档、`DEFAULT_AUTOMATION_CAPABILITIES` 成员）
+    # 是纯只读项目摘要能力，无独立同名 MCP 工具但依赖读取项目事实。
+    if "project.read" in by_cap:
+        by_cap["project.summarize"] = set(by_cap["project.read"])
+    frozen_map = {cap: frozenset(names) for cap, names in by_cap.items()}
+    return frozen_map, frozenset(unscoped)
+
+
+CAPABILITY_READ_ONLY_TOOLS, UNSCOPED_READ_ONLY_TOOLS = _build_capability_read_only_map()
+
+
 def _read_only_tools_for(capabilities: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
     """从任务请求的能力集里挑出**属于只读白名单**的工具。
 
-    任务能力集是 `requested_capabilities`（能力名，如 `agent.plan.generate`），
-    与工具名不是同一命名空间 ⇒ 这里只做「能力集为空 ⇒ 全量白名单；
-    否则按能力名与工具名无交集 ⇒ 空集」的诚实映射：
-
     - 能力集为空（未限定）⇒ 给出 `READ_ONLY_TOOLS` 全量（降级面最宽但仍是只读）；
-    - 能力集非空 ⇒ 只保留**同名**的只读工具（能力名恰好是工具名时命中）；
-      一个都没命中 ⇒ 空集 ⇒ 不可降级（不猜、不放宽）。
-
-    宁可降级面窄到零（诚实失败），也不把写类工具混进降级。
+    - 能力集含点分只读能力名（如 `project.read`、`file.search`）⇒ 按 `mcp_gateway.TOOLS`
+      派生映射展开为对应只读工具集，并附带无能力门槛的通用只读辅助工具；
+    - 能力集直传只读工具名（如 `project_read`）⇒ 仅保留同名只读白名单工具；
+    - 仅含写类／编排类能力（零只读映射）⇒ 空集 ⇒ 不可降级（诚实失败，不放宽）。
     """
     if not capabilities:
         return tuple(sorted(READ_ONLY_TOOLS))
     wanted = {str(capability) for capability in capabilities}
-    return tuple(sorted(name for name in READ_ONLY_TOOLS if name in wanted))
+    selected: set[str] = {name for name in READ_ONLY_TOOLS if name in wanted}
+    matched_dotted_cap = False
+    for cap in wanted:
+        mapped = CAPABILITY_READ_ONLY_TOOLS.get(cap)
+        if mapped:
+            selected.update(mapped)
+            matched_dotted_cap = True
+    if matched_dotted_cap:
+        selected.update(UNSCOPED_READ_ONLY_TOOLS)
+    return tuple(sorted(selected))
 
 
 def plan_degraded_fallback(
@@ -151,6 +180,7 @@ def plan_degraded_fallback(
 
 
 __all__ = [
+    "CAPABILITY_READ_ONLY_TOOLS",
     "DEGRADABLE_TASK_TYPES",
     "DEGRADED_CONFIRMATION_REQUIRED",
     "DEGRADED_PRODUCED_DESCRIPTION",
@@ -160,5 +190,6 @@ __all__ = [
     "OUTPUT_KEY_DEGRADED",
     "OUTPUT_KEY_PRODUCED",
     "OUTPUT_KEY_REASON",
+    "UNSCOPED_READ_ONLY_TOOLS",
     "plan_degraded_fallback",
 ]

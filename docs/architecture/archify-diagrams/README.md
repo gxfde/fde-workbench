@@ -1,6 +1,6 @@
 # 蔡工FDE智能交付系统 · 整套架构图（archify 取证生成）
 
-用 **archify**（v3.2.0，`~/.agents/skills/archify`）从本仓库**真实代码取证**生成的六个视角架构图（2026-11-08 全量同步 + 新增第六图「降级与失败路径」）。
+用 **archify**（v3.2.0，`~/.agents/skills/archify`）从本仓库**真实代码取证**生成的六个视角架构图（2026-11-14 全量校对同步）。
 每张都是**独立 standalone HTML**（内联 SVG、暗/亮主题、可导出 PNG/JPEG/WebP/SVG/WebM、带路径/透镜视图），
 `candidate.json` 为生成输入，`receipts/` 为该图**通过那一轮**的 finalize/browser-check 回执，
 `<name>.delivery.json`（交付回执）**必须与 HTML 同目录**——`check --require-provenance` 按同目录找 sidecar，
@@ -11,27 +11,26 @@
 
 ## 入口
 
-- [index.html](index.html) —— 汇总页，五张图卡片入口 + 规模/取证版本速览。
+- [index.html](index.html) —— 汇总页，六张图卡片入口 + 规模/取证版本速览。
 
-## 五张图
+## 六张图
 
 | 视角 | 目录 | 图 | 规模 | 取证 revision |
 |---|---|---|---|---|
-| architecture | `architecture/` | 系统总体架构 | 14 节点 / 16 连接 / 4 边界 | `e66647b` |
-| workflow | `workflow/` | 交付主流程：从项目到回款 | 16 节点 / 19 边 / 6 车道 | `e66647b` |
-| sequence | `sequence/` | Workflow run 一次执行的完整调用链 | 8 参与者 / 42 消息 / 10 段 | `e66647b` |
-| dataflow | `dataflow/` | 集成桥采集 → 服务端投影 → 一等证据登记簿 | 12 节点 | `e66647b` |
-| lifecycle | `lifecycle/` | Workflow 运行生命周期状态机 | 14 态 / 22 迁移 | `e66647b` |
-| degradation | `degradation/` | 降级与失败路径：故障 → 判定 → 兜底与人工 | 12 节点 / 8 边 / 3 车道 | `e66647b` |
+| architecture | `architecture/` | 系统总体架构 | 14 节点 / 16 连接 / 4 边界 | `8c297a12` |
+| workflow | `workflow/` | 交付主流程：从项目到回款 | 16 节点 / 19 边 / 6 车道 | `8c297a12` |
+| sequence | `sequence/` | Workflow run 一次执行的完整调用链 | 8 参与者 / 42 消息 / 10 段 | `8c297a12` |
+| dataflow | `dataflow/` | 集成桥采集 → 服务端投影 → 一等证据登记簿 | 12 节点 | `8c297a12` |
+| lifecycle | `lifecycle/` | Workflow 运行生命周期状态机 | 14 态 / 22 迁移 | `8c297a12` |
+| degradation | `degradation/` | 降级与失败路径：故障 → 判定 → 兜底与人工 | 12 节点 / 8 边 / 3 车道 | `8c297a12` |
 
 打开任意 `<type>/<type>-*.html`（或 `index.html`）即在浏览器中查看；每张 HTML 自带主题切换与导出控件。
 
 ## 取证版本说明
 
-2026-11-08 全量刷新（架构评估 P2-7 + 第六图）：六张统一钉 `e66647b`（含 P1-2 工作流执行器拆分、
-P2-5 蓝图注册表单一真身、P3-9 桌面发起运行）。
-当时实测口径与 AGENTS「当前状态」逐位一致：**49 蓝图 / 391 路由 / 130 表 / 51 rev（head e9c4a1f7b3d2）/
-49 蓝图注册 app.py::_BLUEPRINT_SPECS（28-101）**。口径漂移由 `scripts/audit/check_archify_diagram_freshness.py`
+2026-11-14 全量刷新：六张统一钉 `8c297a12`（融合树 `fork/main` `7e99b658` + 本分支文档同步；含多租户 `orgs` 隔离底座、公网免注册诊断/四入口注册、五席位分账+AI 派单推荐、单 run 宿主代理 `host_agent`+⑦出站白名单闸、AI 原生化 N1–N6 全链、学习闭环 2.0 L4 服务端与 E8 A 轨只读降级闭合）。
+实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**52 蓝图 / 493 路由 / 155 表 / 77 rev（单头 `a9f3e5c7b1d2`）/
+52 蓝图注册 `app.py::_BLUEPRINT_SPECS`（29-100）**。口径漂移由 `scripts/audit/check_archify_diagram_freshness.py`
 机械拦截（见下「防陈旧闸」）。
 链接模式为 `local-only`：fork/main 领先 upstream（gxfde），web 链接会指向不存在的上游 revision；
 SRC 标记保留 文件路径+行号+revision，可在本仓 checkout 下复验。
@@ -77,7 +76,7 @@ archify `visual-check` / `browser-check` 的截图是**固定视口首屏实拍*
 
   ```bash
   ARCHIFY_CHROME="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
-    node tools/capture-full-preview.mjs sequence/*.html architecture/*.html workflow/*.html dataflow/*.html lifecycle/*.html
+    node tools/capture-full-preview.mjs sequence/*.html architecture/*.html workflow/*.html dataflow/*.html lifecycle/*.html degradation/*.html
   ```
 
 - 拍完**逐张目检底部**（图例 / 卡片 / 节点索引必须入画）。四闸全绿 ≠ 整图完整，

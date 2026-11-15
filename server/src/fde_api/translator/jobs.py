@@ -22,7 +22,7 @@ from fde_api.extensions import db
 from fde_api.guidance.ai_schema import GuidanceContractError, validate_guidance_output
 from fde_api.guidance.enterprise_dict import DICT_FAILURE_CODE, RedactionConfigError
 from fde_api.guidance.models import REDACTION_EVENT_TYPE
-from fde_api.guidance.redaction import redact_draft_payload
+from fde_api.guidance.redaction import fingerprint_review_entries, redact_draft_payload
 from fde_api.jobs.handlers import register_handler, register_job_failure_handler
 from fde_api.translator.ai_prompt import build_translator_messages
 from fde_api.translator.models import TranslatorTranslation
@@ -122,6 +122,11 @@ def handle_translator_translate(job) -> None:
             _safe_fail(session, job.target_id, DICT_FAILURE_CODE, TRANSLATOR_DICT_FAILURE_MESSAGE)
             return
         if output_entries:
+            # QR-133 指纹化：确证命中只存指纹、疑似只留计数（零真名）。
+            fingerprinted, suspect_count = fingerprint_review_entries(output_entries)
+            output_changes: dict[str, Any] = {"stage": "output", "entries": fingerprinted}
+            if suspect_count:
+                output_changes["suspect_count"] = suspect_count
             session.add(
                 OperationEvent(
                     actor_user_id=row.created_by_user_id,
@@ -129,7 +134,7 @@ def handle_translator_translate(job) -> None:
                     target_type="translator_translation",
                     target_id=row.id,
                     event_type=REDACTION_EVENT_TYPE,
-                    changes={"stage": "output", "entries": output_entries},
+                    changes=output_changes,
                 )
             )
         row.result_json = draft

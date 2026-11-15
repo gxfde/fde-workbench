@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { aiCapabilityLabels } from "../ai/accessLabels"
 import { useAuth } from "../auth/AuthProvider"
 import { ModelPreferencesPanel } from "./ModelPreferencesPanel"
+import { AgentCredentialsPanel } from "./AgentCredentialsPanel"
 import { LcscToolCard } from "./LcscToolCard"
 import { SkillVersionsPage } from "./SkillVersionsPage"
 import "./extensions.css"
@@ -27,7 +28,7 @@ const displayPlugin = <T extends Plugin,>(plugin: T): T => ({ ...plugin, descrip
 export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
   const { apiRequest } = useAuth()
   const [data, setData] = useState<ExtensionCenter | null>(null)
-  const [tab, setTab] = useState<"skills" | "tools" | "models">(initialTab || "skills")
+  const [tab, setTab] = useState<"skills" | "tools" | "models" | "credentials">(initialTab || "skills")
   const [draft, setDraft] = useState(emptySkill)
   const [editingSkill, setEditingSkill] = useState(false)
   const [skillScope, setSkillScope] = useState<"personal" | "public">("personal")
@@ -87,7 +88,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
     {error ? <p className="form-error banner" role="alert">{error}</p> : null}
     {notice ? <p className="notice" role="status">{notice}</p> : null}
     {!data ? <Loading label="正在加载扩展配置…" /> : <div className="extension-stack">
-      <div className="extension-tabs" role="tablist" aria-label="AI 与扩展分类"><button id="skills-tab" role="tab" aria-selected={tab === "skills"} aria-controls="skills-panel" onClick={() => setTab("skills")}>Skills</button><button id="tools-tab" role="tab" aria-selected={tab === "tools"} aria-controls="tools-panel" onClick={() => setTab("tools")}>工具 / 插件</button><button id="models-tab" role="tab" aria-selected={tab === "models"} aria-controls="models-panel" onClick={() => setTab("models")}>模型管理</button></div>
+      <div className="extension-tabs" role="tablist" aria-label="AI 与扩展分类"><button id="skills-tab" role="tab" aria-selected={tab === "skills"} aria-controls="skills-panel" onClick={() => setTab("skills")}>Skills</button><button id="tools-tab" role="tab" aria-selected={tab === "tools"} aria-controls="tools-panel" onClick={() => setTab("tools")}>工具 / 插件</button><button id="models-tab" role="tab" aria-selected={tab === "models"} aria-controls="models-panel" onClick={() => setTab("models")}>模型管理</button>{canManage ? <button id="credentials-tab" role="tab" aria-selected={tab === "credentials"} aria-controls="credentials-panel" onClick={() => setTab("credentials")}>智能体凭据</button> : null}</div>
       {tab === "skills" ? <section id="skills-panel" role="tabpanel" aria-labelledby="skills-tab" className="panel extension-panel"><div className="panel-heading"><div><h2>Skills</h2><p>公共 Skill 供所有已开通 AI 的账号使用；个人 Skill 仅自己可见。</p></div><div className="extension-heading-actions">
         {canManage ? <button className="secondary-button" onClick={() => { setDraft(emptySkill); setSkillScope("public"); setEditingSkill(true) }}>新建公共 Skill</button> : null}
         {data.permissions.can_manage_personal_skills ? <button className="primary-button" onClick={() => { setDraft(emptySkill); setSkillScope("personal"); setEditingSkill(true) }}>新建个人 Skill</button> : null}
@@ -103,6 +104,7 @@ export function ExtensionsPage({ initialTab }: { initialTab?: 'tools' }) {
       {tab === "models" ? <section id="models-panel" role="tabpanel" aria-labelledby="models-tab" className="panel extension-panel"><ModelPreferencesPanel items={data.model_preferences || []} canManage={canManage} credentialsReady={data.model_credentials_ready !== false} onSaved={load} />
         {data.models.length ? <><h3 className="legacy-model-title">系统登记模型</h3><div className="extension-card-grid">{data.models.map((model) => <article key={model.id} className="extension-item"><strong>{model.name}</strong><p>{model.provider.name} · {model.key}</p><small>{model.supports_tools ? "支持工具调用" : "普通对话"}{model.supports_json ? " · 支持 JSON" : ""}</small></article>)}</div></> : null}
       </section> : null}
+      {tab === "credentials" && canManage ? <section id="credentials-panel" role="tabpanel" aria-labelledby="credentials-tab" className="panel extension-panel"><AgentCredentialsPanel /></section> : null}
     </div>}
     {editingSkill ? <div className="dialog-backdrop"><section className="dialog extension-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-editor-title"><h2 id="skill-editor-title">{skillScope === "public" ? "公共" : "个人"} Skill</h2><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await apiRequest(`/api/v1/extensions/skills/${skillScope}`, { method: "POST", body: draft }); setDraft(emptySkill); setEditingSkill(false); setNotice("Skill 已保存，历史版本保留。"); await load() }) }}><div className="skill-editor"><label className="field"><span>标识</span><input autoFocus aria-label="Skill 标识" required value={draft.key} onChange={(event) => setDraft({ ...draft, key: event.target.value })} /></label><label className="field"><span>名称</span><input aria-label="Skill 名称" required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label className="field full"><span>说明</span><input aria-label="Skill 说明" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label><label className="field full"><span>SKILL.md 指令</span><textarea aria-label="SKILL.md 指令" required rows={9} value={draft.instructions} onChange={(event) => setDraft({ ...draft, instructions: event.target.value })} /></label></div><div className="dialog-actions"><button className="secondary-button" disabled={busy} type="button" onClick={() => setEditingSkill(false)}>取消</button><button className="primary-button" disabled={busy} type="submit">保存 Skill</button></div></form></section></div> : null}
     {versionsSkill ? <SkillVersionsPage skill={{ id: versionsSkill.id, name: versionsSkill.name }} onClose={() => setVersionsSkill(null)} onChanged={load} /> : null}

@@ -104,6 +104,7 @@ def _active_seat(db_session, user) -> None:
             seat_status="active",
             seat_source="first_delivery",
             seat_activated_at=datetime.now(UTC),
+            seat_expires_at=datetime(2027, 12, 31, tzinfo=UTC),
         )
     )
     db_session.commit()

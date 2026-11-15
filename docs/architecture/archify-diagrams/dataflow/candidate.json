@@ -13,7 +13,7 @@
     "repository": {
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
-      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf",
+      "revision": "8c297a125db8ae11dc40e150a462108104202d9b",
       "link_mode": "local-only"
     },
     "views": [
@@ -221,12 +221,12 @@
         {
           "path": "server/src/fde_api/bridge/sync.py",
           "line": 230,
-          "end_line": 289
+          "end_line": 287
         },
         {
           "path": "server/src/fde_api/bridge/routes.py",
-          "line": 56,
-          "end_line": 73
+          "line": 55,
+          "end_line": 74
         }
       ]
     },
@@ -247,7 +247,7 @@
         {
           "path": "server/src/fde_api/evidence/service.py",
           "line": 185,
-          "end_line": 230
+          "end_line": 219
         },
         {
           "path": "server/migrations/versions/e1f3a5c7b9d2_v3_project_evidence.py",
@@ -298,8 +298,8 @@
         },
         {
           "path": "server/src/fde_api/projects/gate_service.py",
-          "line": 749,
-          "end_line": 850
+          "line": 760,
+          "end_line": 905
         }
       ]
     },
@@ -319,8 +319,8 @@
         },
         {
           "path": "server/src/fde_api/evidence/service.py",
-          "line": 307,
-          "end_line": 315
+          "line": 302,
+          "end_line": 340
         }
       ]
     }

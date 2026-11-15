@@ -112,4 +112,15 @@
 
 - **范围**：QR-024（P1→CLOSED）＋QR-025（随批裁定 P1→P0→CLOSED）＋拍板 §5-5 SNS 关闭态 403 例外登记随带（CLOSED）。
 - **实施**：`ai/deepseek.py` 流式 `stream_options.include_usage`＋SSE `usage` 帧解析（缺失/畸形诚实置 `None` 不写 `0`）；`ai/kimi.py` 移除 `/files` 未脱敏原件上传/拉取/删除分支、统一本地提取后经 `build_messages` 脱敏送模型，`config.py`/`.env.example` `kimi_local_docx_extract` 默认改 `True`（兼容存量 `false`）；`test_kimi_client.py` 上传正例钉换代留痕；`AGENTS.md` 红线区与 `goal-crv-r6-后台作业与队列.md` §5-1 落 SNS 403 例外销号。
-- **验证**：NEW `server/tests/test_crv_batch_b.py` 12 例＋邻域 149 passed＋变异 M1–M4 全真红→`try/finally` sha256 逐字节还原→复绿＋ruff 绿＋mypy 277/102 不变；下一棒＝修复批 F（QR-117＋QR-118）。
+- **验证**：NEW `server/tests/test_crv_batch_b.py` 12 例＋邻域 149 passed＋变异 M1–M4 全真红→`try/finally` sha256 逐字节还原→复绿＋ruff 绿＋mypy 277/102 不变；PR #436 squash `8adc8e7b` 已合并入 `fork/main`。
+
+## 修复批 F（QR-117＋QR-118 · 2026-11-13 CLOSED）
+- **范围**：QR-117（随批升格 P1→P0：富文本键名契约断裂双向修复）＋QR-118（P1：`complete_upload` 唯一键预检/409 映射/重放与中止恢复）。
+- **实施**：`documents/rich_text.py` 优先读 `content`、缺失或 `None` 时回退 `text`；`DocumentEditor.tsx` 导出 `plainToRichText`（产规范 `content` 键）与 `richTextToPlain`（同时支持服务端数组回读与包装对象、`content`/`text` 双键）；`files/service.py` 在 `complete_multipart` 前加 `_preflight_upload_target` 预检 404/409，并发 `IntegrityError` 映射 409 `file_name_conflict`，并补 `head(storage_prefix)` 重放兜底与 `abort_upload` 孤儿对象幂等清理。
+- **验证**：NEW `server/tests/test_crv_batch_f.py` 6 例＋`desktop/tests/renderer/project-documents.test.tsx` +1 例＋服务端邻域 68 passed＋桌面全量绿＋变异六连 M1–M6 全真红→`try/finally` sha256 逐字节还原→双端复绿＋ruff 绿＋mypy 277/102 基线不变；`docs/goal-crv-fix-批BF-任务书.md` 批 B＋批 F 全量收官。
+
+---
+
+## 修复批 A/C/D/E/G/R7＋收口（goal-crv-fix2 总循环 · 2026-11-14 全收官）
+
+剩余批次七轮一 PR 全合并（`docs/goal-crv-fix2-PROGRESS.md` 逐轮明细）：批 A `#444`/`a8a2c25c`、批 C `#451`/`f4cb5e9f`、批 D `#456`/`b11b8b3f`（唯一迁移 `d4b8e1f6a9c3` 74→75，后被 #455 续接至 76）、批 E `#462`/`30b433f6`、批 G `#463`/`3fc7ddb6`、批 R7 `#466`/`b65f9167`（桌面五项＋便携版 r49）；收口轮＝总报告销号节＋本行＋AGENTS bullet＋统一活体部署三验。每批变异三连/五连全红→`try/finally` 字节还原核 sha256→复绿在案；QR 台账 147 条中 P1 与拍板项全清零，P2/P3 存量按任务书范围不越界。

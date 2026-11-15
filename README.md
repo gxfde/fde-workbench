@@ -304,6 +304,8 @@ npm run build
 npx electron-builder --win dir --x64   # 产物在 release/win-unpacked/，整个文件夹拷走即用
 ```
 
+版本与打包轮次（2026-11-13 起）：打包前跑 `node scripts/release-version.mjs bump`，会把轮次注入 `desktop/package.json`（如 `0.3.0-r46`），应用侧栏、exe 元数据与 `app.getVersion()` 随之显示；轮次计数在仓库根 `RELEASE-COUNTER`（跨发布列车续接）。`package:win` / `package:mac` 已内置 bump，无需手动调。发布列车升版（如 0.3.0→0.4.0）用 `node scripts/release-version.mjs train minor`，自动同步 `desktop/package.json` 与 `server/pyproject.toml` 双文件；README 徽章与 AGENTS 口径行随升版 PR 人工顺带改，tag `v0.4.0` 打在 fork。`node scripts/release-version.mjs show` 可随时查看当前轮次与下次将注入的版本。
+
 macOS Apple Silicon（arm64）DMG：
 
 ```bash

@@ -591,6 +591,8 @@ def review_registration(
     registration.review_note = cleaned_note
     approved = decision == REVIEW_DECISION_APPROVE
     user.registration_state = "active" if approved else "rejected"
+    if not approved:
+        user.auth_version += 1
     record_event(
         session,
         actor,
@@ -616,6 +618,7 @@ def suspend_registration(session: Session, *, actor: User, user_id: str) -> dict
     if user.registration_state not in ("active", "pending_review"):
         raise _error("invalid_registration_state", "当前注册状态不允许停用。", 409)
     user.registration_state = "suspended"
+    user.auth_version += 1
     record_event(
         session,
         actor,

@@ -61,13 +61,16 @@
           "timeout_seconds": 600,
           "failure_class": "fatal",
           "params": {
-            "name": "交付方案草稿（模板生成，人工修订后生效）",
-            "design_markdown": "# 交付方案草稿（待人工修订）\n\n## 方案设想\n- 待补：按交付方案条目概述解决思路与预期收益\n\n## 实施路径\n- 待补：阶段与里程碑",
-            "deliverables": "- 待补：核心交付物清单",
-            "acceptance_criteria": "- 待补：验收标准",
-            "data_systems": "- 待补：系统与部署约束",
-            "schedule": "- 待补：阶段与里程碑",
-            "risks_dependencies": "- 待补：风险与依赖"
+            "project_id": "{{project_id}}",
+            "body": {
+              "name": "交付方案草稿（模板生成，人工修订后生效）",
+              "design_markdown": "# 交付方案草稿（待人工修订）\n\n## 方案设想\n- 待补：按交付方案条目概述解决思路与预期收益\n\n## 实施路径\n- 待补：阶段与里程碑",
+              "deliverables": "- 待补：核心交付物清单",
+              "acceptance_criteria": "- 待补：验收标准",
+              "data_systems": "- 待补：系统与部署约束",
+              "schedule": "- 待补：阶段与里程碑",
+              "risks_dependencies": "- 待补：风险与依赖"
+            }
           }
         },
         {

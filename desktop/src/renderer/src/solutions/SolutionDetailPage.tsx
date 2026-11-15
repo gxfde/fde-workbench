@@ -91,6 +91,7 @@ export function SolutionDetailPage({ projectId, canManage, solutionId, mode, opp
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     {mode === 'edit' && solution.status === 'archived' ? <p className="notice warning" role="alert">此方案已弃用，仅可查看内容。</p> : null}
     {solution.source?.kind === 'legacy_opportunity_delivery' ? <p className="solution-legacy-notice">{solution.source.reviewed ? '历史交付说明：已保留来源，内容经过编辑整理，不代表客户审核或验收。' : '历史交付说明 · 待整理：保留了原机会中的交付内容，请核对完善方案后再导出 SOW。'}</p> : null}
+    {canManage && solution.status !== 'archived' ? <SolutionAgentGenerator projectId={projectId} solution={solution} onWired={setSolution} /> : null}
     <section className="solution-view-associated">
       <h3>关联 AI 机会 <span>{solution.opportunities.length} 个机会 · {groups.size} 个对象</span></h3>
       <div className="solution-opportunity-groups">{Array.from(groups, ([key, group]) => <section className="solution-opportunity-group" key={key}>
@@ -116,6 +117,112 @@ export function SolutionProvenanceBadge({ solution }: { solution: SolutionDto })
     return <span className="badge warning solution-provenance" title={`降级生成（${solution.agent_fallback_level ?? 'L1'}）：产物须经人工终审后使用`}>智能体生成 · 已降级</span>
   }
   return <span className="badge muted solution-provenance" title="本方案由智能体生成，溯源见 agent 溯源链">智能体生成</span>
+}
+
+// 桌面第三批 ops3：方案 AI 生成入口（POST /solutions/{id}/generate-agent）。
+// 服务端复用 agents.start_run 全链（权限双层/T2 门/幂等/预算），响应二态：
+// wired=true → solution 已接线（溯源徽标经 onWired 刷新）；wired=false →
+// run 在途/失败，呈现 run.status 并放行跳转智能体控制台（导航守卫放行）。
+const SOLUTION_AGENT_TIER = 'agent.module.solution'
+
+interface AgentListItem {
+  id: string
+  name: string
+  enabled: boolean
+  capability_tier: string
+  available: boolean
+  unavailable_reason: string | null
+}
+
+interface GenerateAgentResponse {
+  solution_id: string
+  wired: boolean
+  wired_now?: boolean
+  agent_run_id?: string
+  solution?: SolutionDto
+  run?: { status: string }
+}
+
+export function SolutionAgentGenerator({ projectId, solution, onWired }: {
+  projectId: string
+  solution: SolutionDto
+  onWired(next: SolutionDto): void
+}) {
+  const { apiRequest } = useAuth()
+  const [agents, setAgents] = useState<AgentListItem[] | null>(null)
+  const [selected, setSelected] = useState('')
+  const [idempotencyKey, setIdempotencyKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [pendingRun, setPendingRun] = useState<{ status: string } | null>(null)
+  const agentsHref = routeHash({ kind: 'project', projectId, tab: 'agents' })
+
+  useEffect(() => {
+    let active = true
+    // 清单拉取失败静默降级（辅助入口不阻断方案详情主内容——同 SolutionHealthChip 纪律）
+    void apiRequest<{ items: AgentListItem[] }>('/api/v1/agents', { method: 'GET' })
+      .then((data) => {
+        if (!active || !Array.isArray(data.items)) return
+        setAgents(data.items)
+        const preferred = data.items.find((item) => item.available && item.capability_tier === SOLUTION_AGENT_TIER)
+        if (preferred) setSelected(preferred.id)
+      })
+      .catch(() => { if (active) setAgents([]) })
+    return () => { active = false }
+  }, [apiRequest])
+
+  async function generate() {
+    if (!selected || busy) return
+    const key = idempotencyKey.trim()
+    if (key.length > 160) {
+      setError('幂等键最长 160 字符。')
+      return
+    }
+    setBusy(true); setError(''); setNotice(''); setPendingRun(null)
+    // body 闭集 {agent_id, idempotency_key?}：键留空不传，无多余键
+    const body: { agent_id: string; idempotency_key?: string } = { agent_id: selected }
+    if (key) body.idempotency_key = key
+    try {
+      const result = await apiRequest<GenerateAgentResponse>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/solutions/${encodeURIComponent(solution.id)}/generate-agent`,
+        { method: 'POST', body },
+      )
+      if (result.wired && result.solution) {
+        onWired(result.solution)
+        setNotice(result.wired_now === false ? '方案已关联既有智能体产物（同 run 幂等复用）。' : '智能体生成产物已接线到本方案——溯源徽标已更新。')
+      } else {
+        setPendingRun(result.run ?? { status: 'unknown' })
+      }
+    } catch (caught) {
+      setError(solutionError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="panel solution-panel solution-agent-generator" role="region" aria-label="AI 生成方案">
+    <h3>AI 生成 <span>智能体起草方案，产物经人工终审后生效</span></h3>
+    {notice ? <p className="notice" role="status">{notice}</p> : null}
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+    {agents === null ? <p className="field-hint" role="status">正在读取智能体清单…</p> : null}
+    {agents !== null && agents.length === 0 ? <p className="field-hint">智能体清单暂不可用——请稍后重试。</p> : null}
+    {agents !== null && agents.length > 0 ? <>
+      <div className="field"><label htmlFor="solution-agent-select"><span>智能体</span></label>
+        <select id="solution-agent-select" value={selected} onChange={event => setSelected(event.target.value)}>
+          <option value="">— 选择智能体 —</option>
+          {agents.map(item => <option key={item.id} value={item.id} disabled={!item.available}>
+            {item.name} · {item.capability_tier}{item.available ? '' : `（不可用：${item.unavailable_reason ?? '未知原因'}）`}
+          </option>)}
+        </select>
+      </div>
+      <div className="field"><label htmlFor="solution-agent-idempotency"><span>幂等键（可选）</span></label>
+        <input id="solution-agent-idempotency" value={idempotencyKey} placeholder="留空则不启用幂等复用" onChange={event => setIdempotencyKey(event.target.value)} />
+      </div>
+      <button type="button" className="primary-button compact" disabled={!selected || busy} onClick={() => void generate()}>{busy ? '生成中…' : '发起 AI 生成'}</button>
+    </> : null}
+    {pendingRun ? <p className="field-hint" role="status">智能体 run 未完成接线（状态：{pendingRun.status}）——<a href={agentsHref} onClick={() => allowNextHashNavigation(agentsHref)}>前往智能体运行查看</a></p> : null}
+  </section>
 }
 
 interface SolutionHealth {

@@ -419,13 +419,22 @@ def test_improvement_proposal_reference_surface_is_closed():
         Path("simulation") / "models.py",
         Path("simulation") / "improvement_service.py",
         Path("simulation") / "release_channel.py",
-        # 回归验证面只读消费（G6：跑回归时读提案 override_json，非状态写）。
+        # 回归验证面只读消费（G6：跑回归时读提案 override_json / candidate_payload_json，非状态写）。
         Path("simulation") / "regression_service.py",
+    }
+    # 学习闭环 2.0 L5：三载体表 AgentLesson / PromptOverlay 的 source_proposal_id
+    # 外键声明指向 "improvement_proposals.id"（仅限 ORM ForeignKey 字面量，禁导入/构造 ImprovementProposal）。
+    fk_only_allowed = {
+        Path("agents") / "models.py",
+        Path("workbench") / "models.py",
     }
     offenders: list[str] = []
     for path in sorted(package_root.rglob("*.py")):
         relative = path.relative_to(package_root)
         text = path.read_text(encoding="utf-8", errors="replace")
+        if relative in fk_only_allowed:
+            assert "ImprovementProposal" not in text, f"{relative} 仅允许表名 FK 声明，不得引用 ImprovementProposal 类"
+            continue
         if "improvement_proposals" in text or "ImprovementProposal" in text:
             if relative not in allowed:
                 offenders.append(relative.as_posix())

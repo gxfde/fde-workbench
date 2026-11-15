@@ -134,3 +134,36 @@ def test_degraded_plan_is_marked_degradable():
     plan = plan_degraded_fallback(error_code="dsh_unavailable")
     assert isinstance(plan, DegradedFallbackPlan)
     assert plan.degradable is True
+
+
+def test_dotted_capabilities_map_to_read_only_tools():
+    """真实 A 轨任务存点分能力名（如 DEFAULT_AUTOMATION_CAPABILITIES）时必须产出对应只读工具集。"""
+    from fde_api.control.service import DEFAULT_AUTOMATION_CAPABILITIES
+
+    plan = plan_degraded_fallback(
+        error_code="dsh_not_enabled",
+        capabilities=DEFAULT_AUTOMATION_CAPABILITIES,
+    )
+    assert plan is not None
+    allowed = set(plan.allowed_tools)
+    assert allowed <= READ_ONLY_TOOLS
+    # project.read + file.search + 无能力门槛通用只读工具在列；system.health / lcsc.browse 未授权工具不在列
+    assert {"project_list", "project_read", "gates_read", "quote_list"} <= allowed
+    assert {"file_search", "file_read"} <= allowed
+    assert {"ontology_read", "api_catalog", "skill_list", "skill_read", "help_fetch"} <= allowed
+    assert "system_status" not in allowed
+    assert "lcsc_runs_read" not in allowed
+
+
+def test_summarize_only_dotted_capability_maps_to_project_read_only_tools():
+    """project.summarize（assistant_read 只读摘要能力）单独或与写能力并存时仅映射只读项目工具。"""
+    plan = plan_degraded_fallback(
+        error_code="dsh_unavailable",
+        capabilities=["project.summarize", "workbench.write"],
+    )
+    assert plan is not None
+    allowed = set(plan.allowed_tools)
+    assert allowed <= READ_ONLY_TOOLS
+    assert {"project_list", "project_read", "gates_read", "quote_list"} <= allowed
+    assert "file_search" not in allowed
+    assert "system_status" not in allowed

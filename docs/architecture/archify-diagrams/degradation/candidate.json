@@ -11,7 +11,7 @@
       "url": "https://github.com/gxfde/fde-workbench.git",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "e66647b7b11ae471b62c4dffaf9e5c1b2d8f93cf"
+      "revision": "8c297a125db8ae11dc40e150a462108104202d9b"
     }
   },
   "lanes": [
@@ -92,8 +92,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 225,
-          "end_line": 231,
+          "line": 175,
+          "end_line": 195,
           "label": "adapter/credential 缺失判定"
         },
         {
@@ -104,9 +104,9 @@
         },
         {
           "path": "server/src/fde_api/config.py",
-          "line": 144,
-          "end_line": 148,
-          "label": "宿主通道默认 False"
+          "line": 230,
+          "end_line": 244,
+          "label": "宿主通道与⑦出站闸默认关"
         }
       ]
     },
@@ -123,7 +123,7 @@
         {
           "path": "server/src/fde_api/workflows/dispatch.py",
           "line": 175,
-          "end_line": 243,
+          "end_line": 241,
           "label": "_dispatch_call 同闸"
         }
       ]
@@ -158,15 +158,15 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 516,
-          "end_line": 520,
-          "label": "L1/L2 落点"
+          "line": 451,
+          "end_line": 485,
+          "label": "L1/L2 终态判定"
         },
         {
-          "path": "server/src/fde_api/agents/service.py",
-          "line": 1130,
-          "end_line": 1135,
-          "label": "L1 判定"
+          "path": "server/src/fde_api/control/ai_server_client.py",
+          "line": 451,
+          "end_line": 510,
+          "label": "A轨只读工具双重收窄"
         }
       ]
     },
@@ -182,15 +182,15 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 425,
-          "end_line": 426,
-          "label": "L2 落点"
+          "line": 372,
+          "end_line": 381,
+          "label": "_mark_l2 落点"
         },
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 1292,
-          "end_line": 1300,
-          "label": "L1/L2 终态构造"
+          "line": 660,
+          "end_line": 711,
+          "label": "宿主配置/票据失败转 L2"
         }
       ]
     },
@@ -206,9 +206,9 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 1142,
-          "end_line": 1151,
-          "label": "L3 落点与事件"
+          "line": 1179,
+          "end_line": 1213,
+          "label": "handoff_run L3 落点与事件"
         }
       ]
     },
@@ -242,14 +242,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/cli.py",
-          "line": 191,
-          "end_line": 193,
+          "line": 193,
+          "end_line": 199,
           "label": "worker 周期对账"
         },
         {
           "path": "server/src/fde_api/jobs/outbox.py",
-          "line": 50,
-          "end_line": 98,
+          "line": 92,
+          "end_line": 135,
           "label": "dispatch_pending 补投"
         }
       ]
@@ -266,14 +266,14 @@
       "sources": [
         {
           "path": "server/src/fde_api/jobs/models.py",
-          "line": 79,
-          "end_line": 86,
+          "line": 84,
+          "end_line": 123,
           "label": "background_jobs 租约语义"
         },
         {
           "path": "server/src/fde_api/jobs/outbox.py",
           "line": 29,
-          "end_line": 49,
+          "end_line": 59,
           "label": "事务性 outbox"
         }
       ]
@@ -290,8 +290,8 @@
       "sources": [
         {
           "path": "server/src/fde_api/agents/service.py",
-          "line": 1151,
-          "end_line": 1151,
+          "line": 1208,
+          "end_line": 1213,
           "label": "agent_run_handoff 事件"
         }
       ]
@@ -308,14 +308,14 @@
       "sources": [
         {
           "path": "docs/architecture/降级与失败路径契约-v1.md",
-          "line": 108,
+          "line": 100,
           "end_line": 116,
           "label": "§1.3 永不降级项"
         },
         {
           "path": "server/src/fde_api/control/api_actions.py",
-          "line": 261,
-          "end_line": 266,
+          "line": 245,
+          "end_line": 276,
           "label": "写类确认闸"
         }
       ]

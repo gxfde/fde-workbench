@@ -6,14 +6,14 @@
   "type": "workflow",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\candidate.json",
-    "sha256": "9055261dc8bdd0a16110107e4bfcfce2c5d17d9e38f4d84a683e0c33c78861d2",
-    "bytes": 11899
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\candidate.json",
+    "sha256": "a7a83975ad7c1f22e4f4bf91c30294c77bd8564c58beb09c2d9e2dbdb47ab2f5",
+    "bytes": 11975
   },
   "artifact": {
-    "path": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
-    "sha256": "75a40beb1bf412daa9b2a1c41d1062a2ea119d8be43bdd2822b36ab93189d15d",
-    "bytes": 834853
+    "path": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
+    "sha256": "3da06d872f6e37ad45f1e3362b8fb62799acc63895ed30fa44fb4a802266c5cb",
+    "bytes": 834929
   },
   "gates": {
     "validate": "pass",
@@ -28,22 +28,22 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.finalize.json",
-    "summaryReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.finalize-summary.json",
-    "browserCheckReceipt": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.browser-check.json"
+    "receipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\degradation\\receipts\\degradation-paths.browser-check.json"
   },
   "update": {
     "status": "current",
     "installedVersion": "3.2.0",
     "availableVersion": "3.2.0",
     "releaseNotes": null,
-    "checkedAt": "2026-11-08T11:17:58.598Z",
+    "checkedAt": "2026-11-13T06:10:42.431Z",
     "source": "cache",
     "noticeRequired": false,
     "noticeText": null
   },
   "visualReview": "not-requested",
-  "durationMs": 10150,
+  "durationMs": 4043,
   "browserCheck": {
     "requested": true,
     "ran": true

@@ -22,13 +22,18 @@ export async function pointAt(win: BrowserWindow, target: string) {
 export type BrowserAction = { kind: 'click' | 'navigate' | 'scroll' | 'dismiss' | 'hover' | 'wait'; title: string; visible_text: string; target?: string; url?: string }
 export type BrowserObservation = { url: string; page: string; actions: BrowserAction[] }
 
+// QR-111（goal-crv r7）：denied 名单单一真身——观察时刻（OBSERVE_BROWSER 内联）
+// 与 AI 实时操作点击前复验（runner 注入 ${DENIED_ACTION_SOURCE}）共用同一字面，
+// 防「观察后 DOM 变化（TOCTOU）点击到敏感控件」。改动此正则两处同步。
+export const DENIED_ACTION_SOURCE = "登录|注册|购物车|购买|下单|收藏|关注|提交|支付|删除|询价|客服|上传|评价|举报|领取|兑换|报名|预约|订阅|下载|同意|授权|logout|login|checkout|payment|delete|subscribe|cart"
+
 export const OBSERVE_BROWSER = `(() => {
   const root=document.querySelector('[role="dialog"][data-state="open"]') || document.querySelector('main') || document.body;
   const overlays=[...document.querySelectorAll('[role="tooltip"],.el-tooltip__popper,.ant-tooltip,.ant-popover,[data-popper-placement]')].filter(e=>e.getBoundingClientRect().width>0 && !root.contains(e)).map(e=>e.innerText).join(String.fromCharCode(10));
   const page=(overlays+String.fromCharCode(10)+root.innerText).slice(0,18000);
   const actions=[];
   if(root.matches('[role="dialog"]'))actions.push({kind:'dismiss',title:'关闭资料弹窗，返回商品页面',visible_text:'Dismiss the current information dialog to inspect the underlying product page'});
-  const denied=/登录|注册|购物车|购买|下单|收藏|关注|提交|支付|删除|询价|客服|上传|评价|举报|领取|兑换|报名|预约|订阅|下载|同意|授权|logout|login|checkout|payment|delete|subscribe|cart/i;
+  const denied=new RegExp(${JSON.stringify(DENIED_ACTION_SOURCE)},'i');
   const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&getComputedStyle(e).visibility!=='hidden'};
   const label=e=>(e.innerText||e.getAttribute('aria-label')||e.getAttribute('title')||'').trim();
   [...root.querySelectorAll('a[href],button,[role="tab"],[role="button"],summary,[aria-expanded]')].filter(visible).forEach((e,i)=>{

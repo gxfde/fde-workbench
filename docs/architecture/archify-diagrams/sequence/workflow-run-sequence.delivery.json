@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "dc93e42e-db40-4aba-b699-01668164a3d5",
+  "receiptId": "737d5b3c-9fdc-4536-9fd8-8488e6385a70",
   "status": "current",
   "command": "deliver",
   "type": "sequence",
-  "input": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\candidate.json",
-  "output": "D:\\test\\fde-wt-arch-fix\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
+  "input": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\sequence\\candidate.json",
+  "output": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\sequence\\workflow-run-sequence.html",
   "specification": {
-    "sha256": "a9e8f7434f2b3d2d4ec8a55d9ea5e8579bca8aab5c00fa9a54b263f2b84039be",
-    "bytes": 18845
+    "sha256": "8b2b8923c2d60f2d1baba5b85535a65a343014409bbac97b0e2b995f69c951be",
+    "bytes": 18855
   },
   "artifact": {
-    "sha256": "d1d007d1506e23dc3bb79860d4ac623f6465a7c06297dac06791f2b9a2c48d01",
-    "bytes": 854493
+    "sha256": "e76ab8a5e87e18fe018b4147d1497f80d5c25e670b65c3465094ce5939654da5",
+    "bytes": 854503
   }
 }

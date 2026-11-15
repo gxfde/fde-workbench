@@ -280,10 +280,10 @@ def validate_answers(payload: dict[str, Any], *, scope: str) -> dict[str, Any]:
     return cleaned
 
 
-def _redact_text(value: str) -> str:
+def _redact_text(value: str, *, mask_pii: bool = True) -> str:
     """单段文本过脱敏管线（T-A2）：企业名 → 代号；词典异常 fail-closed。"""
     try:
-        result = redact_text_detailed(value)
+        result = redact_text_detailed(value, mask_pii=mask_pii)
     except RedactionConfigError:
         raise _error(
             "pseudonym_dict_unavailable",
@@ -314,6 +314,50 @@ def _redact_answers(answers: dict[str, Any]) -> dict[str, Any]:
 # ── 会话生命周期 ─────────────────────────────────────────────────────
 
 
+def _enforce_retention(
+    session: Any,
+    row: LeadDiagnosticSession,
+    *,
+    now: datetime | None = None,
+    commit: bool = True,
+) -> bool:
+    """30 天留存期懒检查（QR-042，个保法留存期兑现）：
+
+    未认领（``status != 'claimed'``）且 ``expires_at <= now`` 的匿名会话在读写边界
+    立即转为 ``expired`` 并匿名化清空内容字段（答案、测算卡、报告、留资、主体指纹、
+    区域与分享令牌指纹），不要求新增后台定时清扫器。已认领线索受业务台账保护不在此处置。
+    """
+    if row.status == "claimed":
+        return False
+    ref_now = now or datetime.now(UTC)
+    if row.expires_at is None or ref_now < row.expires_at:
+        return row.status == "expired"
+    mutated = (
+        row.status != "expired"
+        or bool(row.answers)
+        or row.assessment is not None
+        or row.report is not None
+        or row.lead_contact is not None
+        or row.subject_fingerprint is not None
+        or row.region_name is not None
+        or row.share_token_sha256 is not None
+    )
+    if mutated:
+        row.status = "expired"
+        row.answers = {}
+        row.assessment = None
+        row.report = None
+        row.lead_contact = None
+        row.subject_fingerprint = None
+        row.region_name = None
+        row.share_token_sha256 = None
+        row.failure_code = None
+        row.failure_message = None
+        if commit:
+            session.commit()
+    return True
+
+
 def _load_by_token(session: Any, token: str) -> LeadDiagnosticSession:
     row = session.scalars(
         select(LeadDiagnosticSession).where(
@@ -322,6 +366,7 @@ def _load_by_token(session: Any, token: str) -> LeadDiagnosticSession:
     ).first()
     if row is None:
         raise _error("session_not_found", "会话不存在或已失效。", 404)
+    _enforce_retention(session, row)
     return row
 
 
@@ -486,9 +531,11 @@ def capture_lead(token: str, contact: dict[str, Any]) -> LeadDiagnosticSession:
 
     token_sha = hash_token(token)
     enforce_session_quota(token_sha)
+    safe_name = _redact_text(name) if name else None
+    safe_region = _redact_text(region) if region else None
     payload = {
-        "contact": _redact_text(reach),
-        "name": name or None,
+        "contact": _redact_text(reach, mask_pii=False),
+        "name": safe_name,
         "consent": True,
         "captured_at": datetime.now(UTC).isoformat(),
     }
@@ -503,7 +550,7 @@ def capture_lead(token: str, contact: dict[str, Any]) -> LeadDiagnosticSession:
         row.lead_contact = payload
         # 主体指纹（T-11 自认领判定）：**只存指纹**，明文仍在留资行里
         row.subject_fingerprint = subject_fingerprint(reach)
-        row.region_name = region
+        row.region_name = safe_region
         session.commit()
         return row
 
@@ -613,7 +660,7 @@ def read_share(share_token: str) -> dict[str, Any]:
                 LeadDiagnosticSession.share_token_sha256 == hash_share_token(share_token)
             )
         ).first()
-        if row is None:
+        if row is None or _enforce_retention(session, row):
             raise _error("share_not_found", "链接不存在或已失效。", 404)
         view = report_share_view(row.report)
         if view is None:

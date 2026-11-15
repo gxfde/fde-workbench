@@ -97,6 +97,7 @@ def _active_seat(db_session, user) -> CommercialEntitlement:
         seat_status="active",
         seat_source="first_delivery",
         seat_activated_at=datetime.now(UTC),
+        seat_expires_at=datetime(2027, 12, 31, tzinfo=UTC),
     )
     db_session.add(row)
     db_session.commit()
@@ -156,7 +157,11 @@ def test_admin_cross_org_entitlement_writes_leave_cross_org_events(
 
     seat = client.post(
         f"/api/v1/admin/commercial/users/{user_b.id}/seat-activation",
-        json={"seat_source": "first_delivery", "confirm_password": INITIAL_PASSWORD},
+        json={
+            "seat_source": "first_delivery",
+            "expires_at": "2027-12-31T00:00:00Z",
+            "confirm_password": INITIAL_PASSWORD,
+        },
         headers=headers,
     )
     assert seat.status_code == 200, seat.get_data(as_text=True)

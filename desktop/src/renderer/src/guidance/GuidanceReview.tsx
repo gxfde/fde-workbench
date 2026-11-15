@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
-import type { GuidanceAnalysisDto, GuidanceClassification, GuidanceItemDto, GuidanceRedactionReviewEntry } from "./types"
+import type { GuidanceAnalysisDto, GuidanceClassification, GuidanceItemDto, GuidanceRedactionReviewItem } from "./types"
 import { isRedactionReviewEntries } from "./types"
 import {
   CLASSIFICATION_LABELS,
@@ -41,7 +41,7 @@ export function GuidanceReview({ projectId, initial, canManage, initialEditing =
     setReviewAcked(false); setReviewBlocked(false)
   }, [initial, initialEditing])
   const canEdit = canManage && draft.analysis_state === "ready"
-  const reviewList: GuidanceRedactionReviewEntry[] = isRedactionReviewEntries(draft.redaction_review) ? draft.redaction_review : []
+  const reviewList: GuidanceRedactionReviewItem[] = isRedactionReviewEntries(draft.redaction_review) ? draft.redaction_review : []
   // 空文本条目在保存前滤掉——服务端 `invalid_text` 拒收空条目，而「新增条目」
   // 允许先建空行再填。
   const payload = useMemo(() => Object.fromEntries(sections.map(([key]) => [
@@ -126,15 +126,34 @@ export function GuidanceReview({ projectId, initial, canManage, initialEditing =
           <legend>企业名替换复核清单（{reviewList.length} 项）</legend>
           {reviewBlocked ? <p className="form-error" role="alert">存在待复核的企业名替换：请逐项核对下方清单后勾选「已复核」，再确认。</p> : null}
           <ul className="guidance-item-editor-list">
-            {reviewList.map((entry) => <li key={entry.name} className="guidance-item-editor">
-              <div className="guidance-item-editor-head">
-                <span className="guidance-item-text">{entry.name}</span>
-                <span className="guidance-item-meta">
-                  <span className="guidance-item-source">{entry.occurrences} 处</span>
-                  <span className={entry.matched_dict ? "guidance-item-confirmed" : "guidance-item-unconfirmed"}>{entry.matched_dict ? "词典命中" : "疑似（未收录）"}</span>
-                </span>
-              </div>
-            </li>)}
+            {reviewList.map((entry, index) => {
+              if ("suspect_count" in entry) {
+                return <li key="suspect-aggregate" className="guidance-item-editor">
+                  <div className="guidance-item-editor-head">
+                    <span className="guidance-item-text">疑似企业名（未收录词典）</span>
+                    <span className="guidance-item-meta">
+                      <span className="guidance-item-source">{entry.suspect_count} 处</span>
+                      <span className="guidance-item-unconfirmed">疑似（聚合计数，原文见草稿）</span>
+                    </span>
+                  </div>
+                </li>
+              }
+              const label = typeof entry.name === "string" && entry.name
+                ? entry.name
+                : "name_hash" in entry && entry.name_hash
+                  ? `${entry.name_hash.slice(0, 8)}…`
+                  : "未知条目"
+              const confirmed = entry.matched_dict !== false
+              return <li key={"name_hash" in entry && entry.name_hash ? entry.name_hash : `legacy-${index}`} className="guidance-item-editor">
+                <div className="guidance-item-editor-head">
+                  <span className="guidance-item-text">{label}</span>
+                  <span className="guidance-item-meta">
+                    <span className="guidance-item-source">{entry.occurrences} 处</span>
+                    <span className={confirmed ? "guidance-item-confirmed" : "guidance-item-unconfirmed"}>{confirmed ? "词典命中" : "疑似（未收录）"}</span>
+                  </span>
+                </div>
+              </li>
+            })}
           </ul>
           {canEdit ? <label className="guidance-item-confirmed-toggle">
             <input type="checkbox" checked={reviewAcked} onChange={(event) => setReviewAcked(event.target.checked)} />

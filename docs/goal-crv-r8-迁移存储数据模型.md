@@ -18,8 +18,8 @@
 ### P1（2 条，E0 双证据确认）
 | QR | 锚点 | 标题 |
 |---|---|---|
-| QR-117 | rich_text.py:163-167 ↔ DocumentEditor.tsx:196-198 | **桌面/服务端富文本键名契约断裂：编辑器正文逐块静默丢弃**——桌面 plainToRichText 产 `{type:"paragraph",text}`（读回也读 text），服务端 `_clean_text(raw_block.get("content"))` 只认 content 键，非字符串→空→`continue`；draft_service.py:378 先 sanitize 后存⇒`draft.rich_text_json` 被覆写为空形态，重载显示为空、generate 同读⇒正文 100% 不进 DOCX。自 v0.1.0（5ded7b3）即损坏；服务端测试钉 content 键形状、桌面零钉——集成契约无钉。判级 P1（趋近 P0 的草稿数据破坏面） |
-| QR-118 | files/service.py:857 | **complete_upload 新建 ProjectFile 撞 display_name 唯一约束 → IntegrityError 未映射且 multipart 已终结⇒会话永久卡死**——同名同 category 上传（display_name 缺省取文件名主干）必触发：首次 500、重试恒 422 invalid_parts（manifest 已删）、abort 恒 400；rename 面有 `except IntegrityError→409`（:461-462）而 complete 面漏——同文件不对称实证；_next_version_number（:862-869 无锁）并发同 file_id 撞版本唯一同路径 |
+| QR-117 | rich_text.py:163-167 ↔ DocumentEditor.tsx:196-198 | **桌面/服务端富文本键名契约断裂：编辑器正文逐块静默丢弃**——桌面 plainToRichText 产 `{type:"paragraph",text}`（读回也读 text），服务端 `_clean_text(raw_block.get("content"))` 只认 content 键，非字符串→空→`continue`；draft_service.py:378 先 sanitize 后存⇒`draft.rich_text_json` 被覆写为空形态，重载显示为空、generate 同读⇒正文 100% 不进 DOCX。自 v0.1.0（5ded7b3）即损坏；服务端测试钉 content 键形状、桌面零钉——集成契约无钉。判级 P1（趋近 P0 的草稿数据破坏面）。**〔2026-11-13 随批 F 升格 P1→P0 并 CLOSED：`rich_text.py` 优先读 `content` 兼容 `text`，`DocumentEditor.tsx` 改发规范 `content` 并兼容服务端数组回读形态，端到端契约钉入 `test_crv_batch_f.py`＋`project-documents.test.tsx`〕** |
+| QR-118 | files/service.py:857 | **complete_upload 新建 ProjectFile 撞 display_name 唯一约束 → IntegrityError 未映射且 multipart 已终结⇒会话永久卡死**——同名同 category 上传（display_name 缺省取文件名主干）必触发：首次 500、重试恒 422 invalid_parts（manifest 已删）、abort 恒 400；rename 面有 `except IntegrityError→409`（:461-462）而 complete 面漏——同文件不对称实证；_next_version_number（:862-869 无锁）并发同 file_id 撞版本唯一同路径。**〔2026-11-13 批 F CLOSED：`complete_multipart` 前 `_preflight_upload_target` 预检 404/409＋并发 `IntegrityError→409`＋`head(storage_prefix)` 重放与 `abort_upload` 幂等清理〕** |
 
 ### P2（11 条，E0 锚点逐一重读确认）
 | QR | 锚点 | 标题 |

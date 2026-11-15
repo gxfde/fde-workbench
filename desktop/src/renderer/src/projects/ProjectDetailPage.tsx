@@ -19,6 +19,8 @@ import { MeetingsConsole } from "../meetings/MeetingsConsole"
 import { TranscriptDraftsPanel } from "../transcripts/TranscriptDraftsPanel"
 import { DiscoveryPanel } from "../discovery/DiscoveryPanel"
 import { HandoverPackagesPanel } from "../handover/HandoverPackagesPanel"
+import { DeliveryPlansPanel } from "../plans/DeliveryPlansPanel"
+import { TestPlansPanel } from "../quality/TestPlansPanel"
 import { GlossaryPage } from "../ontology/GlossaryPage"
 import { ExecutionFactChain } from "../evidence/ExecutionFactChain"
 import { ResearchWorkspace } from "../research/ResearchWorkspace"
@@ -190,18 +192,18 @@ export function ProjectDetailPage({ projectId, tab, solutionId, solutionMode, op
       {loading ? <p role="status">正在加载项目详情…</p> : error ? <p className="form-error banner" role="alert">{error}</p> : project ? (
         <div id="project-detail-tabpanel" role="tabpanel" aria-labelledby={`project-tab-${tab}`}>
           {tab === "overview" ? <div className="page-stack"><ProjectOverview project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} guidanceSlot={<><ProjectGuidanceCard projectId={project.id} canManage={canManage} /><TranscriptDraftsPanel projectId={project.id} canManage={canManage} /><DiscoveryPanel projectId={project.id} canManage={canManage} /></>} /><ProjectGantt projectId={project.id} /></div> : null}
-          {tab === "tasks" ? <TaskTable projectId={project.id} initialTasks={project.tasks ?? []} modules={project.modules} members={project.members ?? []} canManage={canManage} onTasksChange={handleTasksChange} /> : null}
+          {tab === "tasks" ? <div className="page-stack"><TaskTable projectId={project.id} initialTasks={project.tasks ?? []} modules={project.modules} members={project.members ?? []} canManage={canManage} onTasksChange={handleTasksChange} /><TestPlansPanel projectId={project.id} canManage={canManage} tasks={project.tasks ?? []} /></div> : null}
           {tab === "gates" ? <GateBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "commercial" ? <CommercialBoard projectId={project.id} canManage={canManage} /> : null}
           {tab === "management" ? <ProjectManagement project={project} canManage={canManage} onProjectChange={handleProjectChange} onRefresh={loadProject} /> : null}
-          {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} /> : null}
+          {tab === "workflow" ? <WorkflowConsole projectId={project.id} canManage={canManage} isAdmin={user?.role === "admin"} /> : null}
           {tab === "agents" ? <AgentsConsole projectId={project.id} canManage={canManage} /> : null}
           {tab === "meetings" ? <MeetingsConsole projectId={project.id} /> : null}
           {tab === "ontology" ? <GlossaryPage projectId={project.id} canManage={canManage} /> : null}
           {tab === "facts" ? <ExecutionFactChain projectId={project.id} /> : null}
           {tab === "library" ? <ProjectLibrary projectId={project.id} canManage={canManage} /> : null}
           {tab === "research" ? <ResearchWorkspace project={project} canFill={canFillResearch} canManage={canManage} onDirtyChange={setResearchDirty} initialOpportunityId={opportunityId} /> : null}
-          {tab === "delivery" ? <><SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} /><HandoverPackagesPanel projectId={project.id} canManage={canManage} isAdmin={user?.role === "admin"} /></> : null}
+          {tab === "delivery" ? <div className="page-stack"><SolutionDesign projectId={project.id} canManage={canManage} solutionId={solutionId} mode={solutionMode} opportunityId={opportunityId} />{!solutionId ? <DeliveryPlansPanel projectId={project.id} canManage={canManage} modules={project.modules} onTasksCreated={() => { void loadProject() }} /> : null}<HandoverPackagesPanel projectId={project.id} canManage={canManage} isAdmin={user?.role === "admin"} /></div> : null}
         </div>
       ) : null}
     </div>

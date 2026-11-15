@@ -358,8 +358,10 @@ def _render_context(
             template_skeleton=skeleton,
             # L 线 L3：静态经验条目层接线（能力腿＋项目行业过滤＋top-K 截断；
             # 装载异常运行时软失败回落空片段——见 agents/lessons.py）。
+            # 学习闭环 2.0 L5：session 在场 ⇒ 「seeds 底座 ∪ published 动态行」
+            # （动态腿 DB 现查零模块级缓存，热生效/回滚依赖——见 lessons.py）。
             knowledge_snippets=knowledge_snippets_for(
-                project=project, agent=agent, settings=settings
+                project=project, agent=agent, settings=settings, session=session
             ),
             forbidden_terms=forbidden_terms,
         )
@@ -605,12 +607,27 @@ def _execute_run(
                 ref_id=run_id,
                 quota_monthly=int(settings.seat_action_quota_monthly or 0),
             )
+            injected_lesson_ids = [
+                str(item.get("id") or "")
+                for item in knowledge_snippets_for(
+                    project=project, agent=agent, settings=settings, session=session
+                )
+                if str(item.get("id") or "").startswith("LESS-DYN-")
+            ]
+            event_changes: dict[str, Any] = {
+                "run_id": run_id,
+                "agent_id": agent.id,
+                "capability": agent.capability_tier,
+                "retry_of": retry_of,
+            }
+            if injected_lesson_ids:
+                event_changes["dynamic_lesson_ids"] = injected_lesson_ids
             record_event(
                 session,
                 actor,
                 "agent_run_created",
                 project,
-                {"run_id": run_id, "agent_id": agent.id, "capability": agent.capability_tier, "retry_of": retry_of},
+                event_changes,
             )
     except IntegrityError as exc:
         # CR-045（r5 迁移窗口 a9c5e2d7b3f1）：入口先查只防时序内并发，真实

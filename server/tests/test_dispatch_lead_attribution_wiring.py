@@ -246,6 +246,7 @@ def test_reporter_seat_gate_entitlement_path(db_session):
         actor=admin,
         user_id=reporter.id,
         seat_source="bootcamp_practical",
+        expires_at="2027-12-31T00:00:00Z",
         confirm_password=INITIAL_PASSWORD,
     )
     data = submit_opportunity(

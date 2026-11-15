@@ -60,6 +60,7 @@ def _audit(
     error_code: str | None,
     prompt_version: str | None = None,
     prompt_fingerprint: str | None = None,
+    context_payload_json: dict[str, Any] | None = None,
 ) -> None:
     """E7 审计入口；只传元数据，绝不携带密钥或消息内容。"""
     try:
@@ -78,6 +79,7 @@ def _audit(
             error_code=error_code,
             prompt_version=prompt_version,
             prompt_fingerprint=prompt_fingerprint,
+            context_payload_json=context_payload_json,
         )
     except Exception:  # noqa: BLE001 - 审计失败不阻塞业务
         logger.warning("AI audit dispatch failed request_id=%s", request_id, exc_info=True)
@@ -124,6 +126,23 @@ class DeepSeekClient:
 
         fingerprint = compute_prompt_fingerprint(messages=messages)
 
+        # L5 任务 5：两点共用装载（deepseek complete_json 直连腿），注入点在指纹之后。
+        # DSH 开时本方法走 structured_completion → execute_ai_prompt，由那一侧
+        # 按同一 purpose 装载并注入 harness system_prompt，归因记在 execute 侧
+        # audit 行；本处不重复装载（同一片段不得双重下发）。直连腿（DSH 关）
+        # 才在此处装载；DSH 分支在下方提前 return，届时 overlay_payload 恒 None。
+        from fde_api.ai.overlays import apply_overlays_to_messages, load_overlays
+
+        _dsh_branch = has_app_context() and current_app.config["SETTINGS"].dsh_enabled
+        overlay_fragments: list[str]
+        overlay_payload: dict[str, Any] | None
+        if _dsh_branch:
+            overlay_fragments, overlay_payload = [], None
+        else:
+            overlay_fragments, overlay_payload = load_overlays(purpose, prompt_version)
+            if overlay_fragments:
+                messages = apply_overlays_to_messages(messages, overlay_fragments)
+
         # E7 预算门：月度 token 预算用尽时拒绝调用，且不发起任何供应商请求。
         # 预算设施自身故障时放行（fail-open），不阻塞业务。
         actor_id: str | None = None
@@ -148,6 +167,7 @@ class DeepSeekClient:
                     error_code="ai_budget_exceeded",
                     prompt_version=prompt_version,
                     prompt_fingerprint=fingerprint,
+                    context_payload_json=overlay_payload,
                 )
                 raise DeepSeekError(
                     "ai_budget_exceeded",
@@ -188,6 +208,7 @@ class DeepSeekClient:
                     status="failed", error_code=error.code,
                     prompt_version=prompt_version,
                     prompt_fingerprint=fingerprint,
+                    context_payload_json=overlay_payload,
                 )
                 raise
             # 主模型失败 → 备用模型（只对瞬时故障降级；配置/认证错误不降级）
@@ -217,6 +238,7 @@ class DeepSeekClient:
                     status="failed", error_code=fallback_error.code,
                     prompt_version=prompt_version,
                     prompt_fingerprint=fingerprint,
+                    context_payload_json=overlay_payload,
                 )
                 raise DeepSeekError(
                     "ai_manual_handoff",
@@ -231,6 +253,7 @@ class DeepSeekClient:
                 status="succeeded", error_code=None,
                 prompt_version=prompt_version,
                 prompt_fingerprint=fingerprint,
+                context_payload_json=overlay_payload,
             )
             return result
         _audit(
@@ -241,6 +264,7 @@ class DeepSeekClient:
             status="succeeded", error_code=None,
             prompt_version=prompt_version,
             prompt_fingerprint=fingerprint,
+            context_payload_json=overlay_payload,
         )
         return result
 

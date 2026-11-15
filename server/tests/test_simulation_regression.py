@@ -21,6 +21,7 @@ from conftest import INITIAL_PASSWORD
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
+from fde_api.jobs.models import BackgroundJob, OutboxEvent
 from fde_api.simulation.models import (
     ImprovementProposal,
     RegressionResult,
@@ -33,10 +34,13 @@ from fde_api.simulation.models import (
     SimulationTrace,
 )
 from fde_api.simulation.regression_runner import (
+    DEFAULT_NOISE_BAND,
+    DEFAULT_NOISE_BAND_AXIS,
     OVERFIT_GAP_THRESHOLD,
     RunSummary,
     compare,
 )
+from fde_api.simulation.regression_service import SIMULATION_REGRESSION_JOB_TYPE
 from fde_api.simulation.seeds import CASE_SPLIT
 
 
@@ -84,6 +88,12 @@ def lead(client, db_session, settings):
 def _clean_simulation(db_session):
     yield
     db_session.rollback()
+    db_session.execute(
+        delete(BackgroundJob).where(BackgroundJob.job_type == SIMULATION_REGRESSION_JOB_TYPE)
+    )
+    db_session.execute(
+        delete(OutboxEvent).where(OutboxEvent.topic == SIMULATION_REGRESSION_JOB_TYPE)
+    )
     db_session.execute(delete(RegressionResult))
     db_session.execute(delete(RegressionSuite))
     db_session.execute(delete(ImprovementProposal))
@@ -409,3 +419,205 @@ def test_regression_result_is_idempotent(operator):
     assert first.status_code == 201
     assert first.get_json()["data"]["created"] is True
     assert second.get_json()["data"]["created"] is False
+
+
+# ---------------------------------------------------------------------------
+# 5. 学习闭环 2.0 L5：噪声带四钉 ＋ 候选载荷沙箱注入 ＋ 异步 BackgroundJob
+# ---------------------------------------------------------------------------
+
+
+def _model_summary(run_id: str, model_total: float, *, total: float = 0.70) -> RunSummary:
+    return RunSummary(
+        run_id=run_id,
+        scenario_id=f"scn-{run_id}",
+        split="train",
+        total_score=total,
+        verdict="conditional",
+        dimension_scores={"D1": total},
+        hard_failures=(),
+        cost={"tool_calls": 4},
+        failure_codes=(),
+        model_total=model_total,
+        evaluator_axis=DEFAULT_NOISE_BAND_AXIS,
+    )
+
+
+def test_noise_band_nail_1_within_noise_does_not_claim_improved():
+    """钉①：样本数 n>=3 且 |Δ| <= noise_band ⇒ model_verdict == within_noise（不宣称 improved，且顶层 L-A verdict 不受影响）。"""
+    before = [
+        _model_summary("b1", 0.6000, total=0.60),
+        _model_summary("b2", 0.6200, total=0.60),
+        _model_summary("b3", 0.6100, total=0.60),
+    ]
+    # 均值从 0.6100 → 0.7149（Δ = +0.1049 == DEFAULT_NOISE_BAND，恰等于噪声带须判 within_noise）
+    after = [
+        _model_summary("a1", 0.7049, total=0.80),
+        _model_summary("a2", 0.7249, total=0.80),
+        _model_summary("a3", 0.7149, total=0.80),
+    ]
+
+    report = compare(
+        before=before,
+        after=after,
+        noise_band=DEFAULT_NOISE_BAND,
+        noise_band_axis=DEFAULT_NOISE_BAND_AXIS,
+    )
+
+    assert report["model_total_delta"] == 0.1049
+    assert report["model_verdict"] == "within_noise"
+    assert report["model_verdict"] != "improved"
+    # 顶层 L-A 规则分 Δ=0.20 仍独立维持 improved
+    assert report["verdict"] == "improved"
+
+    # 严格超过噪声带（+0.1200 > 0.1049）才允许判 improved
+    after_above = [
+        _model_summary("a4", 0.7300, total=0.80),
+        _model_summary("a5", 0.7300, total=0.80),
+        _model_summary("a6", 0.7300, total=0.80),
+    ]
+    report_above = compare(
+        before=before,
+        after=after_above,
+        noise_band=DEFAULT_NOISE_BAND,
+        noise_band_axis=DEFAULT_NOISE_BAND_AXIS,
+    )
+    assert report_above["model_verdict"] == "improved"
+
+
+def test_noise_band_nail_2_fewer_than_three_samples_returns_insufficient_data():
+    """钉②：n < 3 ⇒ model_verdict == insufficient_data（即使分差远超噪声带也不判 improved）。"""
+    before = [_model_summary("b1", 0.50), _model_summary("b2", 0.52)]
+    after = [_model_summary("a1", 0.90), _model_summary("a2", 0.92)]
+
+    report = compare(
+        before=before,
+        after=after,
+        noise_band=DEFAULT_NOISE_BAND,
+        noise_band_axis=DEFAULT_NOISE_BAND_AXIS,
+    )
+
+    assert report["model_verdict"] == "insufficient_data"
+
+
+def test_noise_band_nail_3_axis_mismatch_fails_closed_409(operator):
+    """钉③：套件存档 noise_band.axis 与当前评估轴不符 ⇒ 409 noise_band_axis_mismatch fail-closed。"""
+    scenario = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L5-AXIS")
+    ).get_json()["data"]
+    suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "轴错配回归套件",
+            "split": "train",
+            "scenario_ids": [scenario["id"]],
+            "baseline_config": {
+                "adapter_mode": "mock",
+                "model_mode": "stub",
+                "noise_band": {
+                    "axis": "rubric-v1|model:server",
+                    "band": 0.1049,
+                    "anchor_n": 3,
+                },
+            },
+        },
+    ).get_json()["data"]
+
+    response = operator.post(
+        f"/api/v1/simulation/regression/suites/{suite['id']}/run", json={}
+    )
+
+    assert response.status_code == 409, response.get_json()
+    body = response.get_json()["error"]
+    assert body["code"] == "noise_band_axis_mismatch"
+    assert body["details"]["archived_axis"] == "rubric-v1|model:server"
+    assert body["details"]["current_axis"] == "rubric-v1|model:stub"
+
+
+def test_noise_band_nail_4_default_constant_matches_l2_ledger_anchor():
+    """钉④：DEFAULT_NOISE_BAND == 0.1049 且与 L2 底册锚点观测极差逐位双锚一致。"""
+    from pathlib import Path
+
+    assert DEFAULT_NOISE_BAND == 0.1049
+    ledger = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "audit"
+        / "训练场分布读数-L2底册-1.md"
+    )
+    assert ledger.is_file(), f"L2 底册缺失：{ledger}"
+    content = ledger.read_text(encoding="utf-8")
+    assert "0.1049" in content
+    assert DEFAULT_NOISE_BAND_AXIS == "rubric-v1|model:server"
+
+
+def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(operator, db_session):
+    """workbench 或 model:server 套件触发 202 异步 BackgroundJob，且支持状态查询与 worker 消费。"""
+    from fde_api.jobs.handlers import ensure_default_handlers, get_handler
+
+    scenario = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L5-ASYNC")
+    ).get_json()["data"]
+    # 先用同步 stub+mock 验证仅带 candidate_payload（无 override_json）的提案可跑沙箱回归
+    sync_suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "候选载荷同步套件",
+            "split": "train",
+            "scenario_ids": [scenario["id"]],
+            "baseline_config": {
+                "adapter_mode": "mock",
+                "model_mode": "stub",
+                "noise_band": {"axis": "rubric-v1|model:stub", "band": 0.1049, "anchor_n": 3},
+            },
+        },
+    ).get_json()["data"]
+    proposal = _proposal(operator)
+    from fde_api.extensions import db
+
+    with db.session() as session:
+        row = session.get(ImprovementProposal, proposal["id"])
+        row.override_json = {}
+        row.candidate_payload_json = {
+            "prompt_overlay_fragment": {
+                "purpose_key": "simulation_workbench",
+                "fragment": "未核实客户系统清单前不给出集成工期承诺。",
+            }
+        }
+        session.commit()
+
+    sync_resp = operator.post(
+        f"/api/v1/simulation/regression/suites/{sync_suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert sync_resp.status_code == 201, sync_resp.get_json()
+    sync_data = sync_resp.get_json()["data"]
+    assert sync_data["deltas"]["noise_band"] == 0.1049
+    assert sync_data["deltas"]["noise_band_axis"] == "rubric-v1|model:stub"
+    assert sync_data["deltas"]["model_verdict"] == "insufficient_data"
+
+    # workbench 套件返回 202 queued_async + job_id
+    async_suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "异步回归套件",
+            "split": "train",
+            "scenario_ids": [scenario["id"]],
+            "baseline_config": {"adapter_mode": "workbench", "model_mode": "stub"},
+        },
+    ).get_json()["data"]
+    async_resp = operator.post(
+        f"/api/v1/simulation/regression/suites/{async_suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert async_resp.status_code == 202, async_resp.get_json()
+    queued = async_resp.get_json()["data"]
+    assert queued["queued_async"] is True
+    assert queued["job_id"]
+
+    status_resp = operator.get(f"/api/v1/simulation/regression/jobs/{queued['job_id']}")
+    assert status_resp.status_code == 200
+    assert status_resp.get_json()["data"]["suite_id"] == async_suite["id"]
+
+    ensure_default_handlers()
+    assert get_handler(SIMULATION_REGRESSION_JOB_TYPE) is not None
+

@@ -214,11 +214,20 @@ def complete_upload(
                     )
 
                 normalized_parts = _normalize_part_input(parts)
-                stored = object_storage.current.complete_multipart(
-                    upload_session.storage_prefix,
-                    upload_session.multipart_upload_id,
-                    normalized_parts,
+                _preflight_upload_target(
+                    session, upload_session, project.id, category
                 )
+                try:
+                    stored = object_storage.current.complete_multipart(
+                        upload_session.storage_prefix,
+                        upload_session.multipart_upload_id,
+                        normalized_parts,
+                    )
+                except StorageError as storage_err:
+                    if storage_err.code != "multipart_upload_not_found":
+                        raise
+                    # 前次并发事务已完成分片合成但因 DB 唯一键冲突回滚时，按已落盘对象重放恢复
+                    stored = object_storage.current.head(upload_session.storage_prefix)
                 # 新布局 placement：对象按状态机补落其余物理目标
                 # （dual_write/read_new+ ⇒ copy 到主体段键；legacy ⇒ 零 copy）。
                 for placement in physical_write_targets(
@@ -300,6 +309,10 @@ def complete_upload(
                 }
     except FileServiceError:
         raise
+    except IntegrityError:
+        raise FileServiceError(
+            "file_name_conflict", "项目中已存在同名文件。", 409
+        ) from None
     except StorageError:
         raise FileServiceError(
             "invalid_parts", "The uploaded parts are invalid.", 422
@@ -331,10 +344,18 @@ def abort_upload(
                     session, upload_session, now=datetime.now(UTC)
                 ):
                     return
-                object_storage.current.abort_multipart(
-                    upload_session.storage_prefix,
-                    upload_session.multipart_upload_id,
-                )
+                try:
+                    object_storage.current.abort_multipart(
+                        upload_session.storage_prefix,
+                        upload_session.multipart_upload_id,
+                    )
+                except StorageError as storage_err:
+                    if storage_err.code != "multipart_upload_not_found":
+                        raise
+                    try:
+                        object_storage.current.delete(upload_session.storage_prefix)
+                    except StorageError:
+                        pass
                 upload_session.status = "aborted"
     except FileServiceError:
         raise
@@ -825,6 +846,39 @@ def _normalize_part_input(
             )
         normalized.append(UploadedPart(part["part_number"], part["etag"]))
     return normalize_parts(normalized)
+
+
+def _preflight_upload_target(
+    session: Session,
+    upload_session: UploadSession,
+    project_id: str,
+    category: str,
+) -> None:
+    """消费分片目录前预检目标文件存在性与同名唯一键冲突，防止 DB 回滚后会话卡死。"""
+    if upload_session.file_id is not None:
+        target = session.get(ProjectFile, upload_session.file_id)
+        if target is None or target.project_id != project_id:
+            raise FileServiceError(
+                "project_file_not_found",
+                "The target file was not found.",
+                404,
+            )
+        return
+    display_name = (
+        upload_session.completion_json.get("display_name")
+        or upload_session.name.rsplit(".", 1)[0]
+    )
+    conflict_id = session.scalar(
+        select(ProjectFile.id)
+        .where(
+            ProjectFile.project_id == project_id,
+            ProjectFile.category == category,
+            ProjectFile.display_name == display_name,
+        )
+        .limit(1)
+    )
+    if conflict_id is not None:
+        raise FileServiceError("file_name_conflict", "项目中已存在同名文件。", 409)
 
 
 def _resolve_or_create_file(

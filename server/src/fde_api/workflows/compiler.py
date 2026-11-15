@@ -256,8 +256,11 @@ def compile_delivery_preview(
                 "output": "solution_draft",
                 "max_retries": 0,
                 "params": {
-                    **skeleton,
-                    "opportunity_ids": "{{research_brief.opportunity_ids}}",
+                    "project_id": "{{project_id}}",
+                    "body": {
+                        **skeleton,
+                        "opportunity_ids": "{{research_brief.opportunity_ids}}",
+                    },
                 },
             },
             {

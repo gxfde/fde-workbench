@@ -299,11 +299,36 @@ def list_findings():
 @simulation_blueprint.post("/runs/<run_id>/analyze")
 @require_auth
 def analyze_run(run_id):
-    """失败分析：由评估结论归因，落失败发现行（幂等）。"""
+    """失败分析（三源化，学习闭环 2.0 L4）：L-A 规则层＋L-B 真模型层（likely）
+    ＋L-C 人工终裁最新行（confirmed）；幂等不增殖。"""
     try:
         data = improvement_service.analyze_run(actor=g.current_user, run_id=run_id)
     except service.ScenarioServiceError as error:
         return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.post("/findings/draft-ai")
+@require_auth
+def draft_findings_ai():
+    """AI 蒸馏起草（学习闭环 2.0 L4 断点③；**不进 api_catalog**——治理审阅面）。
+
+    返件式零落库：蒸馏输入＝字段允许名单投影（evidence_refs/reason/note 不进
+    起草面）；产出三型候选载荷（lesson_entry / skill_version_draft /
+    prompt_overlay_fragment）；契约失败整批丢弃重试一次 ⇒ 409
+    ``ai_draft_contract_failed``。采纳＝人工确认后经 ``create_proposal``
+    （candidate_payload 随提案入档）；AI 通道故障按 DSH 同尺映射。
+    """
+    from fde_api.control.ai_server_client import DSHRuntimeError
+    from fde_api.simulation import improvement_draft
+
+    payload = _payload()
+    try:
+        data = improvement_draft.draft_improvements(
+            actor=g.current_user, finding_ids=payload.get("finding_ids")
+        )
+    except DSHRuntimeError as error:
+        return error_response(error.code, error.public_message, 503 if error.retryable else 409)
     return _data(data)
 
 
@@ -368,6 +393,19 @@ def decide_proposal(proposal_id):
     try:
         data = improvement_service.decide_proposal(
             actor=g.current_user, proposal_id=proposal_id, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
+@simulation_blueprint.get("/proposals/<proposal_id>/release-preview")
+@require_auth
+def preview_proposal_release(proposal_id):
+    """发布前并排预览（L5 注入闸五件套③：注入终文＋purpose＋近 30 天调用量＋过拟合闸状态）。"""
+    try:
+        data = release_channel.preview_proposal_release(
+            actor=g.current_user, proposal_id=proposal_id
         )
     except service.ScenarioServiceError as error:
         return error_response(error.code, error.message, error.status, error.detail or None)
@@ -447,17 +485,32 @@ def get_regression_suite(suite_id):
 @simulation_blueprint.post("/regression/suites/<suite_id>/run")
 @require_auth
 def run_regression_suite(suite_id):
-    """跑一次回归对比（基线组 vs 候选组）。"""
+    """跑一次回归对比（stub+mock 同步 201；model:server 或 workbench 转后台作业返回 202）。"""
     payload = _payload()
     try:
         data = regression_service.run_regression(
             actor=g.current_user,
             suite_id=suite_id,
             proposal_id=payload.get("proposal_id"),
+            force_sync=bool(payload.get("force_sync")),
         )
     except service.ScenarioServiceError as error:
         return error_response(error.code, error.message, error.status, error.detail or None)
-    return _data(data), 201
+    status_code = 202 if data.get("queued_async") else 201
+    return _data(data), status_code
+
+
+@simulation_blueprint.get("/regression/jobs/<job_id>")
+@require_auth
+def get_regression_job(job_id):
+    """查询异步回归后台作业状态（供桌面端轮询）。"""
+    try:
+        data = regression_service.get_regression_job_status(
+            actor=g.current_user, job_id=job_id
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
 
 
 @simulation_blueprint.get("/regression/results")

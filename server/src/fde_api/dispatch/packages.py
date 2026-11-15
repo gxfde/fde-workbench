@@ -31,6 +31,7 @@ from fde_api.dispatch.channel_guard import ChannelGuardError, ensure_package_cha
 from fde_api.dispatch.errors import DispatchServiceError
 from fde_api.dispatch.models import (
     DeliveryPackage,
+    DeliverySettlement,
     DispatchOffer,
     resolve_onsite_required,
 )
@@ -404,6 +405,14 @@ def transition_package(
         package.accepted_user_id = seat_delivery_user_id
         if package.seat_delivery is None:
             package.seat_delivery = seat_delivery_user_id
+        for draft_settlement in session.scalars(
+            select(DeliverySettlement).where(
+                DeliverySettlement.package_id == package.id,
+                DeliverySettlement.status == "draft",
+                DeliverySettlement.seat_delivery_user_id.is_(None),
+            )
+        ):
+            draft_settlement.seat_delivery_user_id = package.seat_delivery
         changes["accepted_user_id"] = seat_delivery_user_id
     session.flush()
     record_event(session, actor, f"delivery_package_{action}", package, changes)

@@ -13,14 +13,26 @@ const desktopPackage = JSON.parse(
 const packageLock = JSON.parse(
   readFileSync(new URL("package-lock.json", appRoot), "utf8"),
 )
+const brandSource = readFileSync(
+  new URL("desktop/src/shared/brand.ts", appRoot),
+  "utf8",
+)
+const productNameMatch = brandSource.match(
+  /export const PRODUCT_NAME = "([^"]+)"/,
+)
+const productName = productNameMatch?.[1] ?? ""
 
 test("defines a reproducible ARM64 DMG package contract", () => {
+  assert.ok(productName.length > 0, "shared/brand.ts must define PRODUCT_NAME")
   assert.equal(rootPackage.scripts["package:mac"], "npm --workspace desktop run package:mac")
   assert.equal(rootPackage.scripts["verify:mac"], "bash scripts/verify-dmg.sh")
-  assert.match(desktopPackage.version, /^\d+\.\d+\.\d+$/)
-  assert.equal(packageLock.packages.desktop.version, desktopPackage.version)
-  assert.equal(desktopPackage.description, "FDE 项目工作台桌面客户端")
-  assert.equal(desktopPackage.author, "FDE Workbench Contributors")
+  assert.match(desktopPackage.version, /^\d+\.\d+\.\d+(-r\d+)?$/)
+  assert.equal(
+    packageLock.packages.desktop.version,
+    desktopPackage.version.replace(/-r\d+$/, ""),
+  )
+  assert.equal(desktopPackage.description, `${productName}桌面客户端`)
+  assert.equal(desktopPackage.author, productName)
   assert.match(desktopPackage.scripts["package:mac"], /electron-builder/)
   assert.match(desktopPackage.scripts["package:mac"], /--arm64/)
   assert.equal(desktopPackage.devDependencies["electron-builder"], "26.15.3")
@@ -34,7 +46,7 @@ test("defines a reproducible ARM64 DMG package contract", () => {
   assert.equal(desktopPackage.devDependencies["react-dom"], "19.2.8")
 
   assert.equal(desktopPackage.build.appId, "org.fdeworkbench.desktop")
-  assert.equal(desktopPackage.build.productName, "蔡工FDE")
+  assert.equal(desktopPackage.build.productName, productName)
   assert.equal(desktopPackage.build.asar, true)
   assert.equal(desktopPackage.build.directories.output, "../release")
   assert.equal(desktopPackage.build.mac.identity, "-")

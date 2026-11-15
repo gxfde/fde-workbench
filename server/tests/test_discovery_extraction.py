@@ -507,7 +507,12 @@ def test_extraction_output_redaction_and_review_event(app, db_session, d4_client
     assert row.status == "review_required"
     fact = db_session.query(BusinessFact).filter_by(extraction_id=row.id).first()
     assert _DICT_NAME not in fact.subject, "输出端兜底脱敏必须替换词典命中名"
-    assert row.redaction_entries and any(e["name"] == _DICT_NAME for e in row.redaction_entries)
+    # 盲审追批零真名换代：行内复核账只存指纹（＋疑似哨兵），确证命中按 name_hash 判。
+    assert row.redaction_entries
+    from fde_api.guidance.redaction import redaction_name_hash as _rnh
+
+    assert any(e.get("name_hash") == _rnh(_DICT_NAME) for e in row.redaction_entries)
+    assert all("name" not in e or not e.get("name") for e in row.redaction_entries), "行内复核账零真名"
     events = db_session.query(OperationEvent).filter_by(
         target_type="discovery_extraction", target_id=row.id, event_type="discovery.redaction_review"
     ).count()
