@@ -22,7 +22,10 @@ jobs:
   server-tests:
     # 钉具体镜像（ubuntu-latest 会随 GitHub 静默迁移大版本，2026-10 已发生过一次）
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 20min 闸与套件规模（3934+ 用例）已成边缘态：同 PR 三轮实测 runner 波动
+    # 11.6min（完成）↔ >20min（98% 处被取消）——+50% 护栏覆盖波动区间
+    # （S-12 PR #485 第三轮实证撞线后上调）
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
