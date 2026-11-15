@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\degradation\\candidate.json",
+    "sha256": "3895b781fe10bdff804e4e473524362e3a440c31b703e8f44faea298dedd32d4",
+    "bytes": 10612
+  },
+  "artifact": {
+    "path": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\degradation\\degradation-paths.html",
+    "sha256": "6794315e4a175e12bdcc995593feaca8f77f6d931ecf2304703983b5d4c1e7bd",
+    "bytes": 834929
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\degradation\\review-1\\degradation-paths.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\degradation\\review-1\\degradation-paths.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\degradation\\review-1\\degradation-paths.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-14T13:45:17.845Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6985,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

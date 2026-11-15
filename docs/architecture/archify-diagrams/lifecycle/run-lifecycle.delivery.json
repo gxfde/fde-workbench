@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "0a847784-e582-402b-bcc0-cbb934475022",
+  "receiptId": "c0fc047e-d769-45da-ab23-05cb37ce60f6",
   "status": "current",
   "command": "deliver",
   "type": "lifecycle",
-  "input": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
-  "output": "D:\\test\\fde-workbench\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+  "input": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+  "output": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
   "specification": {
-    "sha256": "8d4d4d8bf3c0450ef5166492ee83bb3d99ab701a77470dc140b55092a410a5c9",
-    "bytes": 11991
+    "sha256": "a11ffba01b3780b3a0c5179ee823cda3cb73564e149cfe752691ee154525ace8",
+    "bytes": 10590
   },
   "artifact": {
-    "sha256": "84ae7cfd1c81daa6257e863e799503434bd6a72d238b085bd99d28b29c97cd4f",
+    "sha256": "0e95636901028722516ffd772c0531a83348c5003ace86a938cb7b3c82d4f2cb",
     "bytes": 847851
   }
 }

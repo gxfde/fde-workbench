@@ -17,19 +17,19 @@
 
 | 视角 | 目录 | 图 | 规模 | 取证 revision |
 |---|---|---|---|---|
-| architecture | `architecture/` | 系统总体架构 | 14 节点 / 16 连接 / 4 边界 | `8c297a12` |
-| workflow | `workflow/` | 交付主流程：从项目到回款 | 16 节点 / 19 边 / 6 车道 | `8c297a12` |
-| sequence | `sequence/` | Workflow run 一次执行的完整调用链 | 8 参与者 / 42 消息 / 10 段 | `8c297a12` |
-| dataflow | `dataflow/` | 集成桥采集 → 服务端投影 → 一等证据登记簿 | 12 节点 | `8c297a12` |
-| lifecycle | `lifecycle/` | Workflow 运行生命周期状态机 | 14 态 / 22 迁移 | `8c297a12` |
-| degradation | `degradation/` | 降级与失败路径：故障 → 判定 → 兜底与人工 | 12 节点 / 8 边 / 3 车道 | `8c297a12` |
+| architecture | `architecture/` | 系统总体架构 | 14 节点 / 16 连接 / 4 边界 | `0e08b2c2` |
+| workflow | `workflow/` | 交付主流程：从项目到回款 | 16 节点 / 19 边 / 6 车道 | `0e08b2c2` |
+| sequence | `sequence/` | Workflow run 一次执行的完整调用链 | 8 参与者 / 42 消息 / 10 段 | `0e08b2c2` |
+| dataflow | `dataflow/` | 集成桥采集 → 服务端投影 → 一等证据登记簿 | 12 节点 | `0e08b2c2` |
+| lifecycle | `lifecycle/` | Workflow 运行生命周期状态机 | 14 态 / 22 迁移 | `0e08b2c2` |
+| degradation | `degradation/` | 降级与失败路径：故障 → 判定 → 兜底与人工 | 12 节点 / 8 边 / 3 车道 | `0e08b2c2` |
 
 打开任意 `<type>/<type>-*.html`（或 `index.html`）即在浏览器中查看；每张 HTML 自带主题切换与导出控件。
 
 ## 取证版本说明
 
-2026-11-14 全量刷新：六张统一钉 `8c297a12`（融合树 `fork/main` `7e99b658` + 本分支文档同步；含多租户 `orgs` 隔离底座、公网免注册诊断/四入口注册、五席位分账+AI 派单推荐、单 run 宿主代理 `host_agent`+⑦出站白名单闸、AI 原生化 N1–N6 全链、学习闭环 2.0 L4 服务端与 E8 A 轨只读降级闭合）。
-实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**52 蓝图 / 493 路由 / 155 表 / 77 rev（单头 `a9f3e5c7b1d2`）/
+2026-11-15 WP0 缝合刷新：六张统一钉 `0e08b2c2`（D11 缝合树；上一轮 2026-11-14 钉 `0e08b2c2`，融合树 `fork/main` `7e99b658` + 本分支文档同步；含多租户 `orgs` 隔离底座、公网免注册诊断/四入口注册、五席位分账+AI 派单推荐、单 run 宿主代理 `host_agent`+⑦出站白名单闸、AI 原生化 N1–N6 全链、学习闭环 2.0 L4 服务端与 E8 A 轨只读降级闭合）。
+实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**54 蓝图 / 512 路由 / 159 表 / 84 rev（单头 `c2a9e7d5b3f1`，M6-WP0 D11 缝合）/
 52 蓝图注册 `app.py::_BLUEPRINT_SPECS`（29-100）**。口径漂移由 `scripts/audit/check_archify_diagram_freshness.py`
 机械拦截（见下「防陈旧闸」）。
 链接模式为 `local-only`：fork/main 领先 upstream（gxfde），web 链接会指向不存在的上游 revision；

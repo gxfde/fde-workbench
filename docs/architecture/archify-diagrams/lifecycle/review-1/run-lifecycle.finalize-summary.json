@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "lifecycle",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\candidate.json",
+    "sha256": "a11ffba01b3780b3a0c5179ee823cda3cb73564e149cfe752691ee154525ace8",
+    "bytes": 10590
+  },
+  "artifact": {
+    "path": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\run-lifecycle.html",
+    "sha256": "0e95636901028722516ffd772c0531a83348c5003ace86a938cb7b3c82d4f2cb",
+    "bytes": 847851
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\review-1\\run-lifecycle.finalize.json",
+    "summaryReceipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\review-1\\run-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "D:\\test\\fde-wt-v33m5a\\docs\\architecture\\archify-diagrams\\lifecycle\\review-1\\run-lifecycle.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-14T13:45:17.845Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6106,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}
