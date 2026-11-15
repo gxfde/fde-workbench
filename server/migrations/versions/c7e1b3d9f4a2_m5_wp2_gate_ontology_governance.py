@@ -80,8 +80,8 @@ def upgrade() -> None:
         sa.Column(
             "gate_id",
             sa.String(36),
-            sa.ForeignKey("gates.id", ondelete="CASCADE"),
-            nullable=False,
+            sa.ForeignKey("gates.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column("gate_key", sa.String(10), nullable=False),
         sa.Column("revision", sa.Integer(), nullable=False),
