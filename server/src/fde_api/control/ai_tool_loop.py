@@ -45,6 +45,8 @@ def _configured_max_tool_rounds() -> int:
     except RuntimeError:
         return MAX_TOOL_ROUNDS
     return int(getattr(settings, "agent_max_tool_rounds", MAX_TOOL_ROUNDS))
+
+
 # A single tool result may not exceed this many characters when fed back to
 # the model; larger results are truncated with an explicit marker so the
 # model never silently works off a partial payload.

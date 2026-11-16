@@ -14,20 +14,26 @@ from uuid import uuid4
 import pytest
 
 from test_agents_d4_harness import (
+    ApiClient,
     FakeClock,
     FakeScanner,
     ScriptedEvents,
     api_client,
+    d4_app,
+    d4_client,
+    d4_settings,  # noqa: F401  (pytest fixture 再导出，F401 由 tests/* 忽略兜底)
+    make_user,
     prime_run,
     seed_agent,
 )
 from test_document_drafts_api import _persist_project
 
 from fde_api.agents.adapter import ArtifactFile
-from fde_api.agents.cancellation import _raise_if_cancelled
+from fde_api.agents.cancellation import _make_cancel_check, _raise_if_cancelled
 from fde_api.agents.models import AgentRun
 from fde_api.agents import service as agents_service
-from test_agents_d4_harness import d4_app, d4_client, d4_settings  # noqa: F401  (pytest fixture)
+from fde_api.auth.tokens import issue_access_token
+from fde_api.workbench.models import ProjectMember
 
 
 def _setup_lead(db_session, d4_client, d4_settings):
@@ -68,12 +74,71 @@ def test_cancel_queued_run_then_idempotent(db_session, d4_client, d4_settings):
     assert body2.json["data"]["cancelled"] is False
 
 
-def test_cancel_terminal_run_conflict(db_session, d4_client, d4_settings):
+@pytest.mark.parametrize(
+    "status",
+    ["completed", "failed", "timeout", "budget_exceeded", "succeeded_but_receipt_invalid"],
+)
+def test_cancel_terminal_run_conflict(db_session, d4_client, d4_settings, status):
     leader, project, agent = _setup_lead(db_session, d4_client, d4_settings)
-    run = _make_run(db_session, leader, project, agent, status="completed", exit_code=0)
+    run = _make_run(db_session, leader, project, agent, status=status, exit_code=1)
     body = leader.post(f"/api/v1/agents/runs/{run.id}/cancel")
     assert body.status_code == 409
     assert body.json["error"]["code"] == "already_terminal"
+
+
+def test_cancel_missing_run_404(db_session, d4_client, d4_settings):
+    leader, _project, _agent = _setup_lead(db_session, d4_client, d4_settings)
+    body = leader.post("/api/v1/agents/runs/nonexistent-run/cancel")
+    assert body.status_code == 404
+    assert body.json["error"]["code"] == "agent_run_not_found"
+
+
+def test_cancel_member_without_manage_forbidden(db_session, d4_client, d4_settings):
+    """同项目可见但不可管理、非发起人 → 403 run_cancel_forbidden（授权面钉死）。"""
+    leader, project, agent = _setup_lead(db_session, d4_client, d4_settings)
+    run = _make_run(db_session, leader, project, agent)
+    member = make_user(db_session, "viewer")
+    db_session.add(ProjectMember(project_id=project.id, user_id=member.id, role="viewer"))
+    db_session.commit()
+    viewer = ApiClient(d4_client, member, {"Authorization": f"Bearer {issue_access_token(member, d4_settings)}"})
+    body = viewer.post(f"/api/v1/agents/runs/{run.id}/cancel")
+    assert body.status_code == 403
+    assert body.json["error"]["code"] == "run_cancel_forbidden"
+
+
+def test_default_cancel_check_reads_row_status(db_session, d4_app, d4_client, d4_settings):
+    """默认取消检查（生产装配真身）：cancelled 行 True / in-flight 行 False。"""
+    leader, project, agent = _setup_lead(db_session, d4_client, d4_settings)
+    cancelled = _make_run(db_session, leader, project, agent, status="cancelled")
+    queued = _make_run(db_session, leader, project, agent, status="queued")
+    with d4_app.app_context():
+        assert _make_cancel_check(cancelled.id)() is True
+        assert _make_cancel_check(queued.id)() is False
+
+
+def test_execute_run_guard_wiring_blocks_cancelled(db_session, d4_app, d4_client, d4_settings, monkeypatch):
+    """接线钉：_execute_run 真调用启动守卫——删线即本测试转红。
+
+    monkeypatch 守卫符号：回调内把 queued 行翻 cancelled（模拟守卫读取后
+    的取消竞窗），再走真守卫语义断言 409；calls 计数钉住「守卫确实被调用」。
+    """
+    leader, project, agent = _setup_lead(db_session, d4_client, d4_settings)
+    prime_run(d4_app)  # RecordingBackend——断言的是守卫拦截，不是沙箱执行
+    calls = {"n": 0}
+
+    def flipping_guard(run_id):
+        calls["n"] += 1
+        row = db_session.get(AgentRun, run_id)
+        if row is not None:
+            row.status = "cancelled"
+            db_session.commit()
+        _raise_if_cancelled(run_id)  # 真守卫语义：cancelled → 409
+
+    monkeypatch.setattr(agents_service, "_raise_if_cancelled", flipping_guard)
+    body = leader.post(f"/api/v1/agents/{agent.id}/run", json={"project_id": project.id})
+    assert body.status_code == 409, body.json
+    assert body.json["error"]["code"] == "agent_run_cancelled"
+    assert calls["n"] == 1
 
 
 def test_cancel_host_running_explicitly_unsupported(db_session, d4_client, d4_settings):

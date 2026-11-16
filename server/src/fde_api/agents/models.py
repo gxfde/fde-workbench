@@ -150,6 +150,8 @@ class AgentRun(Base, TimestampMixin):
     host_agent_id: Mapped[str | None] = mapped_column(String(120))
     authorization_id: Mapped[str | None] = mapped_column(String(64))
     workspace_ref: Mapped[str | None] = mapped_column(String(255))
+    # 戊单②（docs/ai-fde/09 §1，P1 已批 2026-11-16）：AgentRun 级断点续跑
+    # 「明写不做」——本列不接线（全库无读写），列名保留标注 reserved，AF2+ 重估。
     resume_session_ref: Mapped[str | None] = mapped_column(String(120))
     policy_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
     # 发起时刻 run 白名单快照（goal-sprint r2 吸收 goal-crv QR-089，迁移

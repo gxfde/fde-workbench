@@ -565,3 +565,15 @@ def test_tool_loop_explicit_round_budget_overrides_settings(app, db_session, ai_
 
     assert text == "一轮就够。"
     assert len(session.calls) == 2
+
+
+def test_tool_loop_rejects_non_positive_round_budget(app, db_session, ai_user):
+    """显式参数 <1 → ValueError（配置面由 Field ge=1 拦截，参数面在此钉死）。"""
+    session = FakeSession([])
+    with pytest.raises(ValueError):
+        direct_tool_completion(
+            model=provider_model(), prompt="你好", user=ai_user,
+            project_id=None, execution_id="exec-bad", session=session,
+            max_tool_rounds=0,
+        )
+    assert session.calls == []

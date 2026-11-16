@@ -3,8 +3,8 @@
 AgentRun 取消入口（POST /api/v1/agents/runs/{id}/cancel）需要「已取消」
 与「跑完/失败」可判别——沿 WorkflowRun cancelled 与 background_jobs
 T-J2（d9f4a7c2e6b1）同一裁决：幂等取消对已取消行回 cancelled=false，
-对终态回 409 already_terminal。零列重建——只需置换 CHECK 约束（T-J2
-先例：纯 CHECK 置换零数据迁移）；downgrade 先把 cancelled 归位 failed
+对终态回 409 already_terminal。upgrade 零数据迁移零列重建（纯 CHECK
+置换，T-J2 先例）；downgrade 含数据回填——先把 cancelled 归位 failed
 （取消本就是「不再执行」的终态，failed 是旧值域最接近的诚实映射）。
 """
 import sqlalchemy as sa

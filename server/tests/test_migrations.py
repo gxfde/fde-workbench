@@ -1222,7 +1222,7 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     #   a9f3e5c7b1d2，挂 c8e2a6f0b9d4 分叉）之后 = 83；
     # + M6-WP0 D11 merge 收单头 c2a9e7d5b3f1（零 DDL 双头元组）之后 = 84；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    assert len(known) == 84
+    assert len(known) == 85
     # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
     # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):

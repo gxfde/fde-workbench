@@ -16,6 +16,7 @@ RunEventProvider/OutputScanner），超时/退避时钟可注入——断言全�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -25,6 +26,8 @@ from typing import Any, Protocol
 from fde_api.agents import zcode_contract as zc
 from fde_api.agents.sandbox import SandboxHandle
 from fde_api.agents.workspace_files import _MANIFEST_FILE
+
+logger = logging.getLogger(__name__)
 
 ADAPTER_KINDS: frozenset[str] = frozenset({"zcode", "codex", "claude_code", "opencode"})
 
@@ -253,14 +256,21 @@ class ZcodeAdapter:
         status = "failed"  # 无 done 事件且未熔断 → 上游异常退出的保守终态
 
         while True:
+            if should_cancel is not None:
+                # AF1-WP1 定参①：取消探测先于超时判定（同轮同时命中时诚实终
+                # 态=cancelled，不落可重试的 timeout 族）；探测失效不改变超
+                # 时语义（降级为 False + 留痕，run 照常可走 timeout 收口）。
+                try:
+                    hit = should_cancel()
+                except Exception:
+                    logger.warning("cancel check failed; continue as not-cancelled", exc_info=True)
+                    hit = False
+                if hit:
+                    status = "cancelled"
+                    break
             now = clock()
             if now >= deadline:
                 status = "timeout"
-                break
-            if should_cancel is not None and should_cancel():
-                # AF1-WP1 定参①：外部取消 → 诚实终态 cancelled；产物沿 B-1
-                # 非 completed 一律不入库；kill 由 finally 恒定发生（CR-015）。
-                status = "cancelled"
                 break
             events = event_provider.poll()
             terminal = False

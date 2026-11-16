@@ -44,8 +44,9 @@ def _raise_if_cancelled(run_id: str) -> None:
 def _make_cancel_check(run_id: str) -> Callable[[], bool]:
     """默认取消检查：短会话重读 run 状态（生产库并发读安全）。
 
-    测试经 ``fde_agent_cancel_check_factory`` 扩展注入假检查，避免测试
-    单连接（StaticPool）下的会话竞争——与 clock/sleeper 注入缝同构。
+    测试经 ``fde_agent_cancel_check_factory`` 扩展注入假检查（与
+    clock/sleeper 注入缝同构），使监听段收口路径可用按轮计数等确定性
+    假件驱动，不依赖真实并发时序。
     """
 
     def _check() -> bool:
