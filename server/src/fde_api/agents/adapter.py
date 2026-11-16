@@ -202,8 +202,14 @@ class ZcodeAdapter:
         output_scanner: OutputScanner,
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> AgentRunResult:
-        """三段执行；超时/预算熔断在本段强制（B-1/B-2），kill 恒定发生。"""
+        """三段执行；超时/预算熔断在本段强制（B-1/B-2），kill 恒定发生。
+
+        AF1-WP1 定参①：``should_cancel``（每轮监听轮询调用）轮询到 True 即
+        诚实终态 cancelled——外部 cancel API 写行后经此收口，副作用停止仍走
+        finally kill（CR-015），不新造第二套回收语义。
+        """
         started = clock()
 
         # ① spawn：AGENTS.md 纪律已由 service 写入 workspace；此处拉起 CLI
@@ -217,6 +223,7 @@ class ZcodeAdapter:
                 output_scanner=output_scanner,
                 clock=clock,
                 sleeper=sleeper,
+                should_cancel=should_cancel,
             )
         finally:
             # goal-c CR-015：回收走 finally——监听段任何非 SandboxError 异常
@@ -234,6 +241,7 @@ class ZcodeAdapter:
         output_scanner: OutputScanner,
         clock: Callable[[], float],
         sleeper: Callable[[float], None],
+        should_cancel: Callable[[], bool] | None = None,
     ) -> AgentRunResult:
         """② 监听（超时/预算熔断）→ ③ 产物扫描；回收 kill 由调用方 finally 保证。"""
         deadline = started + ctx.timeout_ms / 1000
@@ -248,6 +256,11 @@ class ZcodeAdapter:
             now = clock()
             if now >= deadline:
                 status = "timeout"
+                break
+            if should_cancel is not None and should_cancel():
+                # AF1-WP1 定参①：外部取消 → 诚实终态 cancelled；产物沿 B-1
+                # 非 completed 一律不入库；kill 由 finally 恒定发生（CR-015）。
+                status = "cancelled"
                 break
             events = event_provider.poll()
             terminal = False

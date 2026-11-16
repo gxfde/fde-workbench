@@ -67,7 +67,7 @@ class AgentRun(Base, TimestampMixin):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'host_running', 'completed',"
+            "status IN ('queued', 'running', 'host_running', 'cancelled', 'completed',"
             " 'succeeded_but_receipt_invalid', 'failed', 'timeout', 'budget_exceeded')",
             name="ck_agent_runs_status",
         ),

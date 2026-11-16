@@ -30,6 +30,21 @@ logger = logging.getLogger(__name__)
 
 # How many times the model may ask for tools before we force an answer.
 MAX_TOOL_ROUNDS = 6
+
+
+def _configured_max_tool_rounds() -> int:
+    """AF1-WP1 定参③（docs/ai-fde/09 §1）：轮数走 FDE_AGENT_* 配置族。
+
+    ``agent_max_tool_rounds``（config.py，初值 6 = 历史硬编码值）；无应用
+    上下文时回退模块常量，调用方也可用 ``max_tool_rounds`` 参数直传覆盖。
+    """
+    try:
+        from flask import current_app
+
+        settings = current_app.config["SETTINGS"]
+    except RuntimeError:
+        return MAX_TOOL_ROUNDS
+    return int(getattr(settings, "agent_max_tool_rounds", MAX_TOOL_ROUNDS))
 # A single tool result may not exceed this many characters when fed back to
 # the model; larger results are truncated with an explicit marker so the
 # model never silently works off a partial payload.
@@ -205,6 +220,7 @@ def direct_tool_completion(
     system_prompt: str | None = None,
     max_tokens: int = 16384,
     timeout_seconds: int = 300,
+    max_tool_rounds: int | None = None,
     session: Any | None = None,
     capabilities: list[str] | tuple[str, ...] | None = None,
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
@@ -249,8 +265,15 @@ def direct_tool_completion(
     trace: list[dict[str, Any]] = []
     text = ""
 
+    if max_tool_rounds is not None:
+        rounds_limit = int(max_tool_rounds)
+    else:
+        rounds_limit = _configured_max_tool_rounds()
+    if rounds_limit < 1:
+        raise ValueError("max_tool_rounds must be >= 1")
+
     with db.session() as db_session:
-        for round_index in range(MAX_TOOL_ROUNDS + 1):
+        for round_index in range(rounds_limit + 1):
             body: dict[str, Any] = {
                 "model": model_name,
                 "messages": messages,
@@ -299,7 +322,7 @@ def direct_tool_completion(
                     text = "AI 服务未返回有效结果。"
                 break
 
-            if round_index >= MAX_TOOL_ROUNDS:
+            if round_index >= rounds_limit:
                 # The round budget is spent, but the model answered with a
                 # mid-thought sentence ("Let me look that up") instead of a
                 # result. Ask once more with the tools withdrawn so it must
