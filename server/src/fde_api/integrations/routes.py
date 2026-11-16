@@ -16,7 +16,7 @@ from typing import Any
 
 from flask import Blueprint, g, jsonify, request
 
-from fde_api.auth.decorators import require_auth
+from fde_api.auth.decorators import require_auth, require_role
 from fde_api.errors import error_response
 from fde_api.integrations.service import (
     BindingError,
@@ -28,6 +28,7 @@ from fde_api.integrations.service import (
     execute_binding_action,
     get_binding_action,
     get_binding_lineage,
+    issue_trustboard_delivery_link,
     list_bindings,
     propose_binding_action,
     propose_upgrade,
@@ -41,6 +42,18 @@ ontology_bindings_blueprint = Blueprint(
 
 def _binding_error(exc: BindingError):
     return error_response(exc.code, exc.message, exc.status)
+
+
+def _no_store_json(payload: dict[str, Any]):
+    """含凭据的响应一律 no-store（禁缓存）+ Pragma no-cache。
+
+    交付链接是**一次性消费的凭据**（M6-WP6-R4）：落进浏览器/代理缓存即等于
+    把凭据再发一次。
+    """
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @ontology_bindings_blueprint.before_request
@@ -84,6 +97,22 @@ def create_binding_route(project_id: str):
     except BindingError as exc:
         return _binding_error(exc)
     return jsonify({"data": binding, "error": None}), 201
+
+
+@ontology_bindings_blueprint.post("/<project_id>/ontology-bindings/trustboard/delivery-link")
+@require_role("admin", "project_lead")
+def issue_trustboard_delivery_link_route(project_id: str):
+    """签发 TrustBoard 客户只读看板交付链接（M6-WP6；M6-WP6-R4 一次性消费）。
+
+    响应体含凭据（交付链接）⇒ **no-store**（禁缓存）；链接不落库、不进日志。
+    每次调用换一枚新链接——交付链接一次性消费，换设备/浏览器须重新签发。
+    角色闸限 admin / project_lead（客户关系责任角色；工程师如需签发再单开决策单）。
+    """
+    try:
+        link = issue_trustboard_delivery_link(actor=g.current_user, project_id=project_id)
+    except BindingError as exc:
+        return _binding_error(exc)
+    return _no_store_json({"data": link, "error": None})
 
 
 @ontology_bindings_blueprint.post(

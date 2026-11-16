@@ -253,6 +253,21 @@ class OntologyClient:
             idem=idem, json_body={"domain_key": domain_key, "title": title, "description": description},
         )
 
+    def issue_trustboard_delivery_link(
+        self, *, actor_id: str, org_id: str, project_id: str, ontology_id: str
+    ) -> dict[str, Any]:
+        """向本体运行时签发 TrustBoard 客户只读看板交付链接（M6-WP6）。
+
+        每次调用使用**新幂等键**：交付链接内嵌的是**一次性消费的交接令牌**
+        （M6-WP6-R4 硬条件 12）——同一枚链接被客户打开一次即失效，换设备/浏览器
+        须重新签发；复用幂等键会拿回同一枚已消费的链接，故此处不得复用。
+        """
+        idem = uuid.uuid4().hex
+        return self._request(
+            "POST", "/api/v1/ui/session", actor_id=actor_id, org_id=org_id, project_id=project_id,
+            idem=idem, json_body={"ontology_id": ontology_id},
+        )
+
     def submit_candidates(
         self,
         *,

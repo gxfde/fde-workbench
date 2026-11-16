@@ -343,6 +343,7 @@ class FakeClient:
 
 
         self.calls: list[dict[str, Any]] = []
+        self.delivery_behavior = "ok"
 
 
 
@@ -399,6 +400,24 @@ class FakeClient:
 
 
         raise AssertionError(f"unknown behavior {self.behavior}")
+
+    def issue_trustboard_delivery_link(self, **kwargs: Any) -> dict[str, Any]:
+        """M6 交付链接：默认返回含会话令牌的完整体（验证最小暴露收敛）。"""
+        self.calls.append(kwargs)
+        if self.delivery_behavior == "ok":
+            return {
+                "token": "vt-session-leak-check",
+                "delivery_path": "/ui/#/overview?d=vh-handover",
+                "handover_expires_at": "2026-11-16T09:00:00+00:00",
+                "expires_at": "2026-11-16T20:00:00+00:00",
+                "jti": "jti-1",
+                "_status": 200,
+            }
+        if self.delivery_behavior == "down":
+            raise OntologyUnavailable("refused")
+        if self.delivery_behavior == "no-path":
+            return {"token": "vt-x", "_status": 200}
+        raise AssertionError(f"unknown delivery_behavior {self.delivery_behavior}")
 
 
 
@@ -2961,3 +2980,130 @@ def test_upgrade_approve_malformed_annotation_400_no_side_effect(
 
 
 
+
+
+# ======================================================================
+# M6-WP6：TrustBoard 交付链接签发（Workbench 侧出链，单次消费口径）
+# M6-WP6-R4：交付链接内嵌一次性交接令牌；会话令牌不回吐（凭据最小暴露）
+# ======================================================================
+
+
+def _tb_auth_headers(app: Flask, user_id: str = "u-leader") -> dict[str, str]:
+    from fde_api.auth.tokens import issue_access_token
+
+    with app.app_context():
+        session = db.session()
+        user = session.scalar(select(User).where(User.id == user_id))
+        assert user is not None
+        # 种子用户 must_change_password=True（模型默认）⇒ 路由鉴权面会被
+        # password_change_required 闸拦下；测试须先过此闸。
+        user.must_change_password = False
+        session.commit()
+        settings = app.config["SETTINGS"]
+        return {"Authorization": f"Bearer {issue_access_token(user, settings)}"}
+
+
+def _tb_issue_delivery(
+    wb_app: Flask, monkeypatch: pytest.MonkeyPatch, fake: FakeClient
+) -> dict[str, Any]:
+    _create(wb_app, monkeypatch, fake)
+    _patch_client(monkeypatch, fake)
+    with wb_app.app_context():
+        return service.issue_trustboard_delivery_link(actor=_leader(), project_id="p-1")
+
+
+def test_delivery_link_happy_path_minimal_exposure(wb_app: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    """交付链接载荷最小暴露：只给一次性消费链接 + 到期时刻，会话令牌不回吐。"""
+    fake = FakeClient(behavior="ok")
+    link = _tb_issue_delivery(wb_app, monkeypatch, fake)
+    assert link["delivery_path"] == "/ui/#/overview?d=vh-handover"
+    assert link["single_use"] is True
+    assert link["expires_at"] == "2026-11-16T09:00:00+00:00"  # 取交接令牌到期（短者）
+    assert "token" not in link  # 会话令牌（常驻凭据）不回吐给调用方
+    delivery_call = fake.calls[-1]
+    assert delivery_call["org_id"] == "org-1"
+    assert delivery_call["project_id"] == "p-1"
+    assert delivery_call["ontology_id"] == "ont-1"
+    assert delivery_call["actor_id"] == "u-leader"
+
+
+def test_delivery_link_no_active_binding_404(wb_app: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    """无 active 绑定 → 404（不泄露存在性）；零出站（fail-closed）。"""
+    fake = FakeClient(behavior="ok")
+    _patch_client(monkeypatch, fake)
+    with wb_app.app_context():
+        with pytest.raises(service.BindingError) as excinfo:
+            service.issue_trustboard_delivery_link(actor=_leader(), project_id="p-1")
+    assert excinfo.value.status == 404
+    assert fake.calls == []  # 未到达 runtime
+
+
+def test_delivery_link_flag_off_404(wb_app_off: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D12 契约钉：ontology_enabled=False ⇒ 交付链接面 404 not_found。"""
+    fake = FakeClient(behavior="ok")
+    _patch_client(monkeypatch, fake)
+    with wb_app_off.app_context():
+        with pytest.raises(service.BindingError) as excinfo:
+            service.issue_trustboard_delivery_link(actor=_leader(), project_id="p-1")
+    assert excinfo.value.status == 404
+    assert excinfo.value.code == "not_found"
+    assert fake.calls == []
+
+
+def test_delivery_link_runtime_down_503(wb_app: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeClient(behavior="ok")
+    _create(wb_app, monkeypatch, fake)
+    fake.delivery_behavior = "down"
+    _patch_client(monkeypatch, fake)
+    with wb_app.app_context():
+        with pytest.raises(service.BindingError) as excinfo:
+            service.issue_trustboard_delivery_link(actor=_leader(), project_id="p-1")
+    assert excinfo.value.status == 503
+    assert excinfo.value.code == "ontology_unavailable"
+
+
+def test_delivery_link_runtime_omits_path_502(wb_app: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    """runtime 200 但无 delivery_path（契约回归）→ 502 delivery_link_failed。"""
+    fake = FakeClient(behavior="ok")
+    _create(wb_app, monkeypatch, fake)
+    fake.delivery_behavior = "no-path"
+    _patch_client(monkeypatch, fake)
+    with wb_app.app_context():
+        with pytest.raises(service.BindingError) as excinfo:
+            service.issue_trustboard_delivery_link(actor=_leader(), project_id="p-1")
+    assert excinfo.value.status == 502
+    assert excinfo.value.code == "delivery_link_failed"
+
+
+def test_delivery_link_route_no_store_and_minimal_payload(
+    wb_app: Flask, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """路由层：project_lead 可签发；响应 no-store（凭据禁缓存）；载荷最小化。"""
+    fake = FakeClient(behavior="ok")
+    _create(wb_app, monkeypatch, fake)
+    _patch_client(monkeypatch, fake)
+    client = wb_app.test_client()
+    resp = client.post(
+        "/api/v1/projects/p-1/ontology-bindings/trustboard/delivery-link",
+        headers=_tb_auth_headers(wb_app, "u-leader"),
+    )
+    assert resp.status_code == 200, resp.data
+    assert resp.headers["Cache-Control"] == "no-store"
+    assert resp.headers["Pragma"] == "no-cache"
+    body = resp.get_json()
+    assert body["data"]["delivery_path"] == "/ui/#/overview?d=vh-handover"
+    assert "token" not in body["data"]
+
+
+def test_delivery_link_route_role_gate(wb_app: Flask, monkeypatch: pytest.MonkeyPatch) -> None:
+    """角色闸：fde_engineer / viewer 一律 403（签发=客户关系责任角色）。"""
+    fake = FakeClient(behavior="ok")
+    _create(wb_app, monkeypatch, fake)
+    _patch_client(monkeypatch, fake)
+    client = wb_app.test_client()
+    for user_id in ("u-bo", "u-out"):
+        resp = client.post(
+            "/api/v1/projects/p-1/ontology-bindings/trustboard/delivery-link",
+            headers=_tb_auth_headers(wb_app, user_id),
+        )
+        assert resp.status_code == 403, (user_id, resp.data)
