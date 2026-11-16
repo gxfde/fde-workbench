@@ -625,7 +625,7 @@ function QuoteCard({
       </div>
       {quote.calibration.actual_hours !== null ? (
         <p className="quote-calibration">
-          回校：实际 {quote.calibration.actual_hours} h（偏差 {((quote.calibration.deviation_pct ?? 0) * 100).toFixed(1)}%，
+          回校：实际 {quote.calibration.actual_hours} h（工时偏差〔对预估工时〕 {((quote.calibration.deviation_pct ?? 0) * 100).toFixed(1)}%，
           建议缓冲 ×{quote.calibration.calibrated_buffer_factor}）——{quote.calibration.deviation_reason}
         </p>
       ) : needsCalibration ? (
@@ -633,7 +633,7 @@ function QuoteCard({
       ) : null}
       {quote.ledger.final_amount !== null ? (
         <p className="quote-ledger">
-          成交 {fmt(quote.ledger.final_amount)}（较锚点下沿 {((quote.ledger.final_deviation_pct ?? 0) * 100).toFixed(1)}%）·
+          成交 {fmt(quote.ledger.final_amount)}（成交偏离〔对锚点下沿〕 {((quote.ledger.final_deviation_pct ?? 0) * 100).toFixed(1)}%）·
           可让利 {fmt(quote.ledger.allowance_cap)} · 已让 {fmt(quote.ledger.allowance_paid)}
           {quote.ledger.ticket_deal ? " · 门票单" : ""}
         </p>

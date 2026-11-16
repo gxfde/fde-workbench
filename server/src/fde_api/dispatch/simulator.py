@@ -429,6 +429,25 @@ def _random_assignment_baseline(
     return round(total / (len(required_levels) * len(mix)), 4)
 
 
+def _require_sandbox_session(session: Session) -> None:
+    """W1-3：仿真只能写沙箱库——守卫下沉到 run_simulation 入口本身。
+
+    此前库名校验只在 CLI main() 读 FDE_DATABASE_URL，任何直接 import 调用
+    run_simulation(session) 的路径都能绕过，把仿真 finalized 单写进业务库。
+    这里从 session 实际绑定的连接读库名（不是环境变量），因此被测用例传
+    fde_workbench_test（_test 后缀）同样放行，不破坏测试；生产库 fde_workbench
+    无后缀则 fail-fast。与 conftest._ALLOWED_TEST_DATABASE_NAMES 同口径。
+    """
+    # connection().engine.url 类型明确（get_bind() 返回 Engine|Connection union，
+    # 直接取 .url 会触发 mypy union-attr；Connection 经 .engine 统一到 Engine）。
+    database = session.connection().engine.url.database or ""
+    if not database.rsplit("/", 1)[-1].split("?")[0].endswith(("_sim", "_test")):
+        raise RuntimeError(
+            f"拒绝执行：run_simulation 只能绑定沙箱库（库名以 _sim/_test 结尾），"
+            f"当前库={database!r}。"
+        )
+
+
 def run_simulation(
     session: Session,
     *,
@@ -437,6 +456,7 @@ def run_simulation(
     params: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """种子化全链路仿真 → H2/H3 报告（沙箱库执行；结束一次性 commit）。"""
+    _require_sandbox_session(session)
     assumptions = dict(DEFAULT_ASSUMPTIONS)
     if params:
         unknown = set(params) - set(assumptions)

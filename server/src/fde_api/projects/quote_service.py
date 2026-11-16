@@ -42,7 +42,10 @@ from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access
 from fde_api.workbench.models import OperationEvent, Project, Quote
 
-QUOTE_CARD_SOURCE = "deliverables/fde-sop-v1.1/报价计算卡-v1.1.md"
+# 方法论出处（v1.1 报价卡）为线下底稿，历史上以 QUOTE_CARD_SOURCE 指向仓内路径，
+# 但该路径从未随仓交付，构成"依据可追溯"的误导（party 评审 W1-6）。规则已逐条
+# 程序化于本模块 docstring、下方常量注释与各函数 docstring——代码即唯一事实源。
+# 出处在 _build_draft_html 的水印与方括号引用中保留文字溯源，不再登记悬空路径。
 
 TIER_LABELS = {"light": "轻量", "standard": "标准", "flagship": "旗舰"}
 
@@ -604,10 +607,16 @@ def finalize_quote(
             session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext('fde_quote_first_order'))")
             )
+            # W1-2：仿真器造的 finalized 报价（quote_key 前缀 Q-SIM-，仅存在于
+            # 沙箱库）不参与首单判定——否则在测试库混跑时，仿真单会挤掉真实首单，
+            # 令真实首单逃过回校义务与三条硬约束。按 key 前缀排除，零迁移、零新列。
             finalized_count = session.scalar(
                 select(func.count())
                 .select_from(Quote)
-                .where(Quote.status == "finalized")
+                .where(
+                    Quote.status == "finalized",
+                    ~Quote.quote_key.like("Q-SIM-%"),
+                )
             )
             first_order = (finalized_count or 0) == 0
             if first_order and quote.actual_hours is None:
@@ -750,10 +759,16 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
             range_text = "当前参数下超锚点，需缩范围/拆分期后另出"
         else:
             range_text = f"¥{low:,.0f} – ¥{high:,.0f}"
+        # W1-1 底牌脱敏：公式价 = 成本×1.4，三档全量外露等于把成本结构交给客户。
+        # 默认折叠（details 不设 open），仅内部需要时点开；对外只见建议区间与分支。
+        basis_cell = (
+            "<details class='internal-only'><summary>内部测算 · 展开可见</summary>"
+            f"¥{computed['formula_price']:,.0f}</details>"
+        )
         tiers_html.append(
             "<tr>"
             f"<td>{esc(TIER_LABELS[tier])}{recommended}</td>"
-            f"<td>¥{computed['formula_price']:,.0f}</td>"
+            f"{basis_cell}"
             f"<td>{range_text}</td>"
             f"<td>{branch}</td>"
             "</tr>"
@@ -777,6 +792,8 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
  th{{background:#eef3f8}}
  .banner{{background:#fff7e0;border-left:4px solid #d99a00;padding:8px 12px;font-size:13px}}
  .terms{{font-size:13px;color:#37424f;line-height:1.7}}
+ .internal-only{{font-size:12px;color:#8a94a3}}
+ .internal-only summary{{cursor:pointer;color:#b3261e}}
  .watermark{{color:#b3261e;font-weight:600}}
 </style></head><body>
 <h1>FDE 交付服务 · 参考报价（草稿）</h1>
@@ -784,21 +801,29 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
 <p class="meta">报价编号：{esc(quote.quote_key)} ｜ 出具日期：____-__-__ ｜ 有效期：__ 天</p>
 <p class="watermark">内部草稿 · 不自动发送客户 · 对外以工具包 §6-C 三档格式出具 · 最终价格以双方确认为准</p>
 <h3>三档参考价</h3>
-<table><tr><th>档位</th><th>参考基准价</th><th>建议报价区间</th><th>锚点分支</th></tr>
+<table><tr><th>档位</th><th>参考基准价（内部测算 · 不构成对外报价）</th><th>建议报价区间</th><th>锚点分支</th></tr>
 {''.join(tiers_html)}
 </table>
 {d_banner}
 <h3>覆盖范围与口径</h3>
 <div class="terms">
 <ul>
-<li>工时口径：自现场调研（Discover）至试点验收的技术工时；<b>不含</b>深度诊断（A 套餐独立计价）、启动建档与售后陪跑。</li>
+<li>工时口径：自现场调研（Discover）至试点验收的技术工时。</li>
 <li>映射表工时单列：数据映射/口径对照工作单独计价；客户口径变更需重做时按重做规则另行结算，返工不额外计费的范围以报价单写明为准。</li>
-<li>差旅单列、实报实销，不计入报价基数；客户账号直付的软件/云资源建议客户自付。</li>
 <li>效果数字写方案不写合同；验收标准以双方书面确认为准。</li>
 <li>分期与付款节奏按合同约定执行（A 预付 / B 50%+50% / C 40%+40%+20% / D 月付预付）。</li>
 </ul>
 </div>
-<p class="meta">出处：《FDE个人接单工具包与表单模板-v2.4.6》§6-C/§6-D · 《报价计算卡-v1.1》（对内底稿）</p>
+<h3>本报价不含（排除项）</h3>
+<div class="terms">
+<ul>
+<li>深度诊断（A 套餐独立计价）、启动建档、售后陪跑（持续运维类，另行报价）。</li>
+<li>差旅与驻场开销：单列、实报实销，不计入报价基数。</li>
+<li>客户账号直付的软件订阅与云资源：建议客户自付，不计入报价基数。</li>
+</ul>
+<p>上述排除项如需纳入，须另出报价或变更单，经双方书面确认后生效。</p>
+</div>
+<p class="meta">出处：《FDE个人接单工具包与表单模板-v2.4.6》§6-C/§6-D · 报价口径 v1.1（对内底稿）</p>
 </body></html>"""
 
 
@@ -841,6 +866,9 @@ def _serialize_quote(quote: Quote) -> dict[str, Any]:
         },
         "ledger": {
             "final_amount": float(quote.final_amount) if quote.final_amount is not None else None,
+            # W1-4 分母口径（两名近似但不同义，勿混用）：此值分母=anchor_low（成交价
+            # 相对锚点下沿的谈判偏离）；calibration.deviation_pct 分母=realistic（工时
+            # 偏差，服务回校）。前端各自显式标注分母；key 不改，零 API 契约变更。
             "final_deviation_pct": float(quote.final_deviation_pct) if quote.final_deviation_pct is not None else None,
             "allowance_cap": float(quote.allowance_cap) if quote.allowance_cap is not None else None,
             "allowance_paid": float(quote.allowance_paid),
