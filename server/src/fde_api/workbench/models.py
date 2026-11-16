@@ -759,6 +759,19 @@ class Quote(Base, TimestampMixin, VersionedMixin):
     field_claims: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    # ---- W3（party 评审）：报价来源。manual=人工创建（默认）；simulation=
+    # 派单仿真构造（simulator.py），finalize 首单计数与账本口径须排除——
+    # 替代 W1-2 的 Q-SIM- 前缀启发式（前缀保留作双保险）。存量行为=manual，
+    # 存量行零回填。
+    source: Mapped[str] = mapped_column(
+        String(12),
+        nullable=False,
+        default="manual",
+        server_default=text("'manual'"),
+    )
+    # W3-2 角色工时明细（P7）：可选。键=角色名（architect/engineer/review 等
+    # 自由命名），值=该角色 ideal 工时（Numeric 由服务层校验非负且合计=ideal_hours）。
+    role_hours: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     project: Mapped[Project] = relationship(back_populates="quotes")
 

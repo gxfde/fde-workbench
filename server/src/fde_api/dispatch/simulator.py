@@ -374,6 +374,9 @@ def _synthetic_demand(
         project_id=project.id,
         quote_key=f"Q-SIM-{index:04d}",
         status="finalized",
+        # W3-1：报价来源正式标注（迁移 d8b4f6a2c9e7）。finalize 首单计数按
+        # source != 'simulation' 排除（Q-SIM- 前缀保留双保险）。
+        source="simulation",
         tier=tier,
         ideal_hours=Decimal(str(_TIER_DELIVERY_HOURS[tier] * 0.8)),
         realistic_hours=realistic,

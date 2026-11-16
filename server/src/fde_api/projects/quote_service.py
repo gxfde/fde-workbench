@@ -324,6 +324,38 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
             if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 10:
                 raise QuoteServiceError("invalid_b_score", "B 层打分必须是 0–10 整数。", 400)
 
+            # W3-2 角色工时明细（P7，可选）：键=角色名（1–40 字符自由命名），
+            # 值=该角色工时（非负、合计必须等于 ideal_hours——明细与总量互证，
+            # 防两张皮）。不填＝角色不细分，行为与存量完全一致。
+            role_hours_raw = payload.get("role_hours")
+            role_hours: dict[str, str] | None = None
+            if role_hours_raw is not None:
+                if not isinstance(role_hours_raw, dict) or not role_hours_raw:
+                    raise QuoteServiceError(
+                        "invalid_role_hours", "role_hours 必须是非空对象（角色名 → 工时）。", 400
+                    )
+                role_hours = {}
+                for name, hours in role_hours_raw.items():
+                    if not isinstance(name, str) or not 1 <= len(name) <= 40:
+                        raise QuoteServiceError(
+                            "invalid_role_hours", "角色名必须是 1–40 字符。", 400
+                        )
+                    hours_dec = _decimal_input({"v": hours}, "v")
+                    if hours_dec is None or hours_dec < 0:
+                        raise QuoteServiceError(
+                            "invalid_role_hours", f"角色「{name}」工时必须是非负数字。", 400
+                        )
+                    # JSON 列不可序列化 Decimal：以 str 存（field_claims 同法），
+                    # 读取侧 float() 回显。
+                    role_hours[name] = str(hours_dec)
+                if sum(Decimal(v) for v in role_hours.values()) != ideal:
+                    raise QuoteServiceError(
+                        "invalid_role_hours",
+                        f"角色工时合计 {sum(Decimal(v) for v in role_hours.values())} h "
+                        f"必须等于 ideal_hours {ideal} h。",
+                        400,
+                    )
+
             if integration not in INTEGRATION_FACTORS:
                 raise QuoteServiceError("invalid_factor", "档内集成偏离取值必须是 0.75/1.00/1.40。", 400)
             if data not in DATA_FACTORS:
@@ -394,6 +426,9 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
                 quote_key=quote_key,
                 tier=tier,
                 status="draft",
+                # W3-1：人工创建恒为 manual（仿真单由 simulator 直构造并写
+                # source='simulation'，不走本服务函数）。
+                source="manual",
                 ideal_hours=ideal,
                 integration_factor=integration,
                 data_factor=data,
@@ -405,6 +440,8 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
                 b_layer_score=score,
                 anchor_mode=anchor_mode,
                 preset=preset,
+                # W3-2：角色工时明细（可选；服务层已校验非负且合计=ideal_hours）
+                role_hours=role_hours,
                 realistic_hours=computed["realistic_hours"],
                 labor_cost=computed["labor_cost"],
                 total_cost=computed["total_cost"],
@@ -435,6 +472,10 @@ def create_quote(*, actor: User, project_id: str, payload: Mapping[str, Any]) ->
                     "branch": branch,
                     "formula_price": float(formula),
                     "preset": preset,
+                    # W3-1/W3-2：来源恒 manual（本函数不产仿真单）；明细只记
+                    # 有无（角色名列表），金额工时不进事件（Quote 行已全量）。
+                    "source": "manual",
+                    "role_names": sorted(role_hours) if role_hours else [],
                 },
             )
             result = _serialize_quote(quote)
@@ -607,14 +648,17 @@ def finalize_quote(
             session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext('fde_quote_first_order'))")
             )
-            # W1-2：仿真器造的 finalized 报价（quote_key 前缀 Q-SIM-，仅存在于
-            # 沙箱库）不参与首单判定——否则在测试库混跑时，仿真单会挤掉真实首单，
-            # 令真实首单逃过回校义务与三条硬约束。按 key 前缀排除，零迁移、零新列。
+            # W1-2 + W3-1：仿真器造的 finalized 报价不参与首单判定——否则在
+            # 测试库混跑时，仿真单会挤掉真实首单，令真实首单逃过回校义务与
+            # 三条硬约束。正式口径＝source 列（迁移 d8b4f6a2c9e7，simulator
+            # 构造即写 source='simulation'）；Q-SIM- 前缀排除保留作双保险
+            # （防存量库中未经 source 标注的旧仿真行）。
             finalized_count = session.scalar(
                 select(func.count())
                 .select_from(Quote)
                 .where(
                     Quote.status == "finalized",
+                    Quote.source != "simulation",
                     ~Quote.quote_key.like("Q-SIM-%"),
                 )
             )
@@ -926,8 +970,16 @@ def _serialize_quote(quote: Quote) -> dict[str, Any]:
         "tier_label": TIER_LABELS[quote.tier],
         "status": quote.status,
         "preset": quote.preset,
+        # W3-1：报价来源（manual=人工创建；simulation=派单仿真，台账口径须排除）
+        "source": quote.source,
         "inputs": {
             "ideal_hours": float(quote.ideal_hours),
+            # W3-2：角色工时明细（可选；未填为 None）
+            "role_hours": (
+                {name: float(hours) for name, hours in (quote.role_hours or {}).items()}
+                if quote.role_hours
+                else None
+            ),
             "integration_factor": float(quote.integration_factor),
             "data_factor": float(quote.data_factor),
             "compliance_factor": float(quote.compliance_factor),

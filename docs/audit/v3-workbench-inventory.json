@@ -1,10 +1,10 @@
 {
- "route_count": 514,
+ "route_count": 515,
  "blueprint_count": 54,
  "table_count": 159,
- "revision_count": 85,
+ "revision_count": 86,
  "heads": [
-  "b3e7a1c9f4d2"
+  "d8b4f6a2c9e7"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -517,6 +517,14 @@
    ],
    "add_column_tables": [
     "lead_diagnostic_sessions"
+   ]
+  },
+  "d8b4f6a2c9e7": {
+   "file": "d8b4f6a2c9e7_quote_source_role_hours.py",
+   "down_revision": "b3e7a1c9f4d2",
+   "create_tables": [],
+   "add_column_tables": [
+    "quotes"
    ]
   },
   "d9c3e7f1a5b8": {
