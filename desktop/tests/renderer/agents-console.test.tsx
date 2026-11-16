@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../src/renderer/src/auth/AuthProvider", () => ({ useAuth: () => mocks }))
 
 import { AgentsConsole } from "../../src/renderer/src/agents/AgentsConsole"
+import { ApiClientError } from "../../src/renderer/src/api/client"
 
 const projectId = "proj-ta8"
 
@@ -566,3 +567,111 @@ it("产物采纳幂等回执与只读跳转：linked_solution_id 非空在非 ca
   expect(window.location.hash).toBe(`#projects/${projectId}?tab=delivery&solution=sol-existing-1`)
 })
 
+
+// —— AF1-WP4 工程台一键出链（docs/ai-fde/13 §7-B，选版 B）——
+
+it("AF1-WP4：工程台按钮签发两段式并在新窗打开交付链接（fragment 承载）", async () => {
+  const user = userEvent.setup()
+  const openSpy = vi.spyOn(window, "open").mockReturnValue(null)
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/eng/session" && options?.method === "POST") {
+      return Promise.resolve({
+        delivery_path: "/eng/console#/?d=handover-token-payload.sig",
+        expires_in: 8 * 3600,
+      })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<AgentsConsole projectId={projectId} />)
+  const button = await screen.findByRole("button", { name: "工程台 ↗" })
+  await user.click(button)
+  await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1))
+  const [url, target, features] = openSpy.mock.calls[0]
+  expect(url).toBe("/eng/console#/?d=handover-token-payload.sig")
+  expect(target).toBe("_blank")
+  expect(features).toContain("noopener")
+  openSpy.mockRestore()
+})
+
+it("AF1-WP4：出链被服务端拒（eng_disabled 403）→ 错误原样呈现不吞", async () => {
+  const user = userEvent.setup()
+  const openSpy = vi.spyOn(window, "open").mockReturnValue(null)
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/eng/session" && options?.method === "POST") {
+      return Promise.reject(
+        new ApiClientError(
+          { code: "eng_disabled", message: "工程台未启用：未配置独立签名密钥域。" },
+          403,
+        ),
+      )
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<AgentsConsole projectId={projectId} />)
+  const button = await screen.findByRole("button", { name: "工程台 ↗" })
+  await user.click(button)
+  expect(await screen.findByText(/工程台未启用/)).toBeInTheDocument()
+  expect(openSpy).not.toHaveBeenCalled()
+  openSpy.mockRestore()
+})
+
+it("AF1-WP4：桌面形态（file:// 协议）按钮不渲染——不假装能力可用（claims 第 4 条负向钉）", async () => {
+  // jsdom 恒 http:；协议条件是本用例唯一被测对象——stub 后断言按钮不存在
+  const originalDescriptor = Object.getOwnPropertyDescriptor(window, "location")
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { protocol: "file:", href: "file:///app/index.html" },
+  })
+  try {
+    mocks.apiRequest.mockImplementation((path: string) => {
+      if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+        return Promise.resolve({ items: [], truncated: false })
+      }
+      if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+        return Promise.resolve(costSummary())
+      }
+      throw new Error(`unexpected api call: ${path}`)
+    })
+    render(<AgentsConsole projectId={projectId} />)
+    await screen.findByText("项目现状", { exact: false }).catch(() => undefined)
+    expect(screen.queryByRole("button", { name: "工程台 ↗" })).not.toBeInTheDocument()
+  } finally {
+    if (originalDescriptor) Object.defineProperty(window, "location", originalDescriptor)
+    else Object.defineProperty(window, "location", { configurable: true, value: window.location })
+  }
+})
+
+it("AF1-WP4：交付链接形状异常/弹窗被拦→错误呈现且不开窗", async () => {
+  const user = userEvent.setup()
+  const openSpy = vi.spyOn(window, "open").mockReturnValue(null)
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path === `/api/v1/agents/runs?project_id=${projectId}`) {
+      return Promise.resolve({ items: [], truncated: false })
+    }
+    if (path === `/api/v1/agents/cost?scope=project&project_id=${projectId}`) {
+      return Promise.resolve(costSummary())
+    }
+    if (path === "/api/v1/eng/session" && options?.method === "POST") {
+      return Promise.resolve({ delivery_path: "/unexpected/path", expires_in: 8 * 3600 })
+    }
+    throw new Error(`unexpected api call: ${options?.method ?? "GET"} ${path}`)
+  })
+  render(<AgentsConsole projectId={projectId} />)
+  const button = await screen.findByRole("button", { name: "工程台 ↗" })
+  await user.click(button)
+  expect(await screen.findByText(/交付链接形状异常/)).toBeInTheDocument()
+  expect(openSpy).not.toHaveBeenCalled()
+  openSpy.mockRestore()
+})

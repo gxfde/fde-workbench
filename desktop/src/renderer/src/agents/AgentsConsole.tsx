@@ -82,6 +82,12 @@ interface ArtifactAdoptionResultDto {
   solution?: { id: string; name?: string } | null
 }
 
+// AF1-WP4 工程台出链（服务端白名单投影最小暴露：不含会话令牌本身）
+interface EngSessionDto {
+  delivery_path: string
+  expires_in: number
+}
+
 interface RunListDto {
   items: AgentRunRowDto[]
   truncated: boolean
@@ -207,6 +213,32 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
   const [downloadBusyId, setDownloadBusyId] = useState<string | null>(null)
   // —— 采纳为方案（PR #435 人工采纳入口；canManage + completed/succeeded_but_receipt_invalid + 未采纳才可点）——
   const [adoptBusyId, setAdoptBusyId] = useState<string | null>(null)
+  // —— AF1-WP4 工程台一键出链（docs/ai-fde/13 §7-B，选版 B）：签发两段式交接令牌
+  // 并在系统浏览器打开工程台（fragment 承载，一次性消费）。Web 形态（同源反代）
+  // 直接可用；桌面形态 renderer 无 server origin（零新桥面纪律）→ 按钮不渲染，
+  // 不假装可用（挂账：桌面出链归产品化排期）。
+  const [engBusy, setEngBusy] = useState(false)
+
+  const openEngConsole = useCallback(async (): Promise<void> => {
+    setEngBusy(true)
+    setError("")
+    try {
+      const data = await apiRequest<EngSessionDto>("/api/v1/eng/session", { method: "POST" })
+      // 交付链接形状闸（评审 edge：window.open(undefined/任意串) 打开空白页）
+      if (!data.delivery_path?.startsWith("/eng/console#/?d=")) {
+        throw new ApiClientError({ code: "invalid_delivery_path", message: "交付链接形状异常，请重试。" })
+      }
+      const win = window.open(data.delivery_path, "_blank", "noopener,noreferrer")
+      // 弹窗拦截（评审 edge）：令牌已签发但窗口未开——如实提示
+      if (!win) {
+        setError("浏览器拦截了新窗口，请允许弹窗后重试。")
+      }
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : "工程台出链失败，请稍后重试。")
+    } finally {
+      setEngBusy(false)
+    }
+  }, [apiRequest])
 
   const load = useCallback(async (): Promise<void> => {
     setError("")
@@ -519,6 +551,21 @@ export function AgentsConsole({ projectId, canManage = false }: AgentsConsolePro
             <h2>智能体运行</h2>
             <p>本项目的智能体 run 列表（运行态）；勾选多个 run 可在其下汇总未复核产物做批量终审；产物/工具调用/成本在详情按需展开。</p>
           </div>
+          {/*
+            AF1-WP4 工程台一键出链（docs/ai-fde/13 §7-B，选版 B）：签发两段式
+            交接令牌并在系统浏览器打开工程台（fragment 承载，一次性消费）。
+            Web 形态（同源反代）直接可用；桌面形态 renderer 无 server origin
+            （零新桥面纪律）→ 按钮不渲染，不假装可用。
+          */}
+          {location.protocol.startsWith("http") ? (
+            <button
+              className="secondary-button"
+              disabled={engBusy}
+              onClick={() => { void openEngConsole() }}
+            >
+              {engBusy ? "正在出链…" : "工程台 ↗"}
+            </button>
+          ) : null}
           {cost ? (
             <div>
               <strong>{cost.total_token_cost}</strong>

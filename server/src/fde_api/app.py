@@ -84,6 +84,7 @@ _BLUEPRINT_SPECS: tuple[tuple[str, str], ...] = (
     # 404 not_found——对齐 diagnostics_enabled「不确认面存在」先例。
     ("fde_api.integrations.routes", "ontology_bindings_blueprint"),
     ("fde_api.integrations.ingest_routes", "ontology_ingest_blueprint"),
+    ("fde_api.control.eng_routes", "eng_blueprint"),  # AF1-WP4 工程台（独立工程入口，B 版）
 )
 
 

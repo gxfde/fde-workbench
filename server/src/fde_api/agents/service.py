@@ -99,6 +99,7 @@ from fde_api.agents import pilot, quota as seat_quota
 from fde_api.agents.tools import declares_run_tools, effective_run_tools
 from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
+from fde_api.control.payload_audit import audit_payload
 from fde_api.extensions import db
 from fde_api.guidance.models import ProjectGuidanceAnalysis
 from fde_api.meetings.service import (
@@ -502,6 +503,11 @@ def _finalize(
         elif result.degraded_reason:
             run.degraded_reason = result.degraded_reason
         for record in result.tool_calls:
+            # AF1-WP4 N1（docs/ai-fde/13 §6.2 T1）：载荷审计留痕——落库侧统一
+            # 过 audit_payload（写入侧兜底截断 ≤64KB，任何来源超限都截）；
+            # 缺省 None/False＝存量路径零变化。
+            request_text, request_cut = audit_payload(record.request_json)
+            response_text, response_cut = audit_payload(record.response_json)
             session.add(
                 AgentToolCall(
                     run_id=run.id,
@@ -510,6 +516,9 @@ def _finalize(
                     capability=record.capability[:64],
                     reason=record.reason[:120] if record.reason else None,
                     duration_ms=record.duration_ms,
+                    request_json=request_text,
+                    response_json=response_text,
+                    payload_truncated=record.payload_truncated or request_cut or response_cut,
                 )
             )
         # 超时/熔断产物不入库（B-1）；completed 的产物含校验失败者一律留痕

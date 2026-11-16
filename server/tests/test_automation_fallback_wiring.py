@@ -133,7 +133,7 @@ def test_degradable_dsh_error_lands_degraded_success(app, db_session, make_accou
         side_effect=DSHRuntimeError("dsh_unavailable", "DSH 服务暂时不可用。", retryable=True),
     ), patch.object(
         automation_jobs, "_run_degraded_readonly",
-        return_value=("项目现状清单：3 个任务待办。", ["project_read"]),
+        return_value=("项目现状清单：3 个任务待办。", ["project_read"], {}),
     ):
         automation_jobs.execute_automation_run(_job(run.id))
 
@@ -161,7 +161,7 @@ def test_degraded_output_never_contains_prompt_body(app, db_session, make_accoun
         automation_jobs.dsh_runtime.current, "execute",
         side_effect=DSHRuntimeError("dsh_timeout", "DSH 执行超时。", retryable=True),
     ), patch.object(
-        automation_jobs, "_run_degraded_readonly", return_value=("清单内容", []),
+        automation_jobs, "_run_degraded_readonly", return_value=("清单内容", [], {}),
     ):
         automation_jobs.execute_automation_run(_job(run.id))
 

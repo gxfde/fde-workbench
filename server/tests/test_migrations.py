@@ -115,7 +115,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          lessons/prompt_overlays 两表 a9f3e5c7b1d2；均挂 c8e2a6f0b9d4 分叉）+
 #          merge 收单头 c2a9e7d5b3f1（零 DDL，down_revision=双头元组；
 #          P1 §7④ merge 非 rebase；细则②）
-HEAD_REVISION = "d8b4f6a2c9e7"
+HEAD_REVISION = "a1e5f9c3d7b2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1222,8 +1222,9 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     #   a9f3e5c7b1d2，挂 c8e2a6f0b9d4 分叉）之后 = 83；
     # + M6-WP0 D11 merge 收单头 c2a9e7d5b3f1（零 DDL 双头元组）之后 = 84；
     # v3-workbench-inventory.json 的 revision_count 为审计快照（随清单重生成同步）
-    # W3（quote source/role_hours d8b4f6a2c9e7）之后 = 86
-    assert len(known) == 86
+    # W3（quote source/role_hours d8b4f6a2c9e7）之后 = 86；
+    # + AF1-WP4 N1（a1e5f9c3d7b2，agent_tool_calls 载荷三列 + eng_token_marks）之后 = 87
+    assert len(known) == 87
     # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
     # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):

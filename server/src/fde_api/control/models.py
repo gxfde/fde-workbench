@@ -405,3 +405,18 @@ class AIModelConfig(Base, TimestampMixin, VersionedMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
 
     provider: Mapped[AIProviderConfig] = relationship(foreign_keys=[provider_id])
+
+
+class EngTokenMark(Base, TimestampMixin):
+    """工程台 token 标记（AF1-WP4：一次性消费/客户端绑定/吊销）。
+
+    主键 = jti 派生 key（``eng_console._mark_key``，HMAC 导出）——**token
+    明文零落库**（凭据红线：只存派生标记，不存载荷）。viewer 侧 ``seen_nonces``
+    的 workbench 对应物（多 worker 可见）。
+    """
+
+    __tablename__ = "eng_token_marks"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

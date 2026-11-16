@@ -359,6 +359,11 @@ class Settings(BaseSettings):
     # 客户敏感数据不默认发公共模型）
     ai_selfhosted_allow_public: bool = False
 
+    # AF1-WP4（docs/ai-fde/13 §7-B）：工程台独立密钥域。空 = 工程台面整体关闭
+    # （签发/消费路由 fail-closed）；与 jwt_secret 相同 → 启动即拒（同 validate_
+    # ontology_environment 内的跨域同钥闸）。
+    workbench_eng_signing_key: str = ""
+
     @model_validator(mode="after")
     def validate_selfhosted_provider(self) -> "Settings":
         import ipaddress
@@ -428,6 +433,15 @@ class Settings(BaseSettings):
                 "FDE_ONTOLOGY_GATE_DEPENDENCY must be one of strong|weak|per_gate "
                 "(S-16 two-tier degradation; got "
                 f"{self.ontology_gate_dependency!r})"
+            )
+        # AF1-WP4（docs/ai-fde/13 §7-B）：工程台独立密钥域 fail-closed——空 =
+        # 工程台面整体关闭（路由层 403）；与 jwt_secret 相同 = 启动即拒（viewer
+        # 「独立密钥域防误配」同款纪律：跨域冒名在签名层面即不可能）。
+        eng_key = (self.workbench_eng_signing_key or "").strip()
+        if eng_key and eng_key == self.jwt_secret:
+            raise ValueError(
+                "FDE_WORKBENCH_ENG_SIGNING_KEY must differ from jwt_secret "
+                "(独立密钥域防误配：工程台/JWT 任两域同钥 = 启动即拒)"
             )
         return self
 

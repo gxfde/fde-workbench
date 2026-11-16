@@ -170,9 +170,10 @@ def _record_degraded_execution(
     """
     produced_text = ""
     produced_tools: list[str] = []
+    produced_trace: dict[str, list[dict[str, Any]]] = {}
     failure_code = ""
     try:
-        produced_text, produced_tools = _run_degraded_readonly(
+        produced_text, produced_tools, produced_trace = _run_degraded_readonly(
             prompt=prompt,
             actor_user_id=actor_user_id,
             project_id=project_id,
@@ -196,6 +197,11 @@ def _record_degraded_execution(
             )
             if produced_tools:
                 output["degraded_tools_used"] = list(produced_tools)
+            # AF1-WP4 N1（评审 auditor）：直连循环腿载荷持久落点——trace 含
+            # arguments/result 摘要（64KB 截断由 ai_tool_loop 侧保证），追加
+            # key 不破坏既有 output 消费方。
+            if produced_trace.get("tool_trace"):
+                output["tool_trace"] = produced_trace["tool_trace"]
             current.output_json = output
             current.error_code = plan.reason
             current.error_message = "DSH 不可用，本次执行已降级为只读产出，需人工确认。"
@@ -225,7 +231,7 @@ def _run_degraded_readonly(
     run_id: str,
     capabilities: list[str] | tuple[str, ...] | None = None,
     allowed_tools: list[str] | tuple[str, ...] | None = None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], dict[str, list[dict[str, Any]]]]:
     """执行降级态的只读产出，返回（产出正文，只读工具清单）。
 
     复用 `ai_tool_loop.direct_tool_completion`（既有 13 例只读降级模式）：
@@ -265,7 +271,11 @@ def _run_degraded_readonly(
             for item in trace
             if isinstance(item, dict) and item.get("tool")
         ]
-        return text, used
+        # AF1-WP4 N1：trace（含 arguments/result 载荷摘要）整体进 output 留痕——
+        # 直连循环腿的持久审计落点（评审 auditor：仅取工具名时载荷被丢弃）；
+        # output 为追加 key，既有消费方零破坏。
+        return text, used, {"tool_trace": trace}
+
     finally:
         session.close()
 
