@@ -226,6 +226,14 @@ class AgentToolCall(Base, TimestampMixin):
     # denied 原因（capability_missing / not_in_allowlist 等）
     reason: Mapped[str | None] = mapped_column(String(120))
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # AF1-WP4 N1（docs/ai-fde/13 §6.2 T1）：请求/响应载荷审计留痕（工程台
+    # 工具历史/Diff/校验错误回查面）——payload_audit.audit_payload 保证
+    # ≤64KB，超限截断并置 payload_truncated；缺省 NULL/false＝存量路径零变化。
+    request_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_truncated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
 
 class AgentCredential(Base, TimestampMixin):

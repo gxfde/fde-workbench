@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from fde_api.auth.models import User
 from fde_api.control.access import capabilities_for_level, effective_ai_access
 from fde_api.control.mcp_gateway import TOOLS, call_tool
+from fde_api.control.payload_audit import MAX_AUDIT_PAYLOAD_BYTES, audit_payload
 from fde_api.control.service import ControlServiceError
 from fde_api.extensions import db
 
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 
 # How many times the model may ask for tools before we force an answer.
 MAX_TOOL_ROUNDS = 6
+
+__all__ = ["MAX_AUDIT_PAYLOAD_BYTES", "MAX_TOOL_ROUNDS", "direct_tool_completion",
+           "tool_definitions"]
 
 
 def _configured_max_tool_rounds() -> int:
@@ -139,20 +143,20 @@ def _truncate(payload: Any) -> str:
 
 def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
                tool_calls: list[dict[str, Any]], session: Session,
-               allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None) -> list[dict[str, Any]]:
-    """Execute the requested tools and build the `tool` role messages."""
+               allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None
+               ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Execute the requested tools and build the `tool` role messages.
+
+    返回 ``(results, metas)``：metas 与 results 逐位对齐，承载审计载荷
+    （AF1-WP4 N1——trace/持久留痕需要 arguments/result/decision；回灌给模型
+    的 ``results`` 形状零变化）。
+    """
     permitted_tools = _permitted_loop_tools(allowed_tools)
     results: list[dict[str, Any]] = []
+    metas: list[dict[str, Any]] = []
     for call in tool_calls:
         function = call.get("function") or {}
         name = function.get("name")
-        if not isinstance(name, str) or name not in permitted_tools:
-            content = json.dumps(
-                {"error": "forbidden", "message": "直连只读循环不允许调用写类或未授权工具。"},
-                ensure_ascii=False,
-            )
-            results.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": content})
-            continue
         raw_arguments = function.get("arguments")
         try:
             arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else (raw_arguments or {})
@@ -160,6 +164,15 @@ def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
             arguments = {}
         if not isinstance(arguments, dict):
             arguments = {}
+        if not isinstance(name, str) or name not in permitted_tools:
+            content = json.dumps(
+                {"error": "forbidden", "message": "直连只读循环不允许调用写类或未授权工具。"},
+                ensure_ascii=False,
+            )
+            results.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": content})
+            # 闭集外工具的载荷照旧留痕（N1：越权反查要连载荷可回查）
+            metas.append({"name": name, "decision": "denied", "arguments": arguments, "result": content})
+            continue
         try:
             value = call_tool(session, user=user, claims=claims, allowed=allowed,
                               name=name, arguments=arguments)
@@ -168,6 +181,11 @@ def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
             # A refused tool must be reported back to the model as data, not
             # as a crash: the model can then explain the refusal to the user.
             content = json.dumps({"error": error.code, "message": error.message}, ensure_ascii=False)
+            # N1（评审 edge-case）：拒执腿的 metas 不得落公共 allowed 路径——
+            # 能力拒绝照 denied 留痕（决策错标即审计失真），载荷照旧留痕。
+            results.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": content})
+            metas.append({"name": name, "decision": "denied", "arguments": arguments, "result": content})
+            continue
         except Exception as error:  # noqa: BLE001 - a tool failure must not kill the turn
             logger.warning("Direct tool call failed tool=%s error_type=%s", name, type(error).__name__)
             # A crashed tool may leave this shared session holding an aborted
@@ -179,7 +197,8 @@ def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
             session.rollback()
             content = json.dumps({"error": "tool_failed", "message": "工具执行失败。"}, ensure_ascii=False)
         results.append({"role": "tool", "tool_call_id": call.get("id", ""), "name": name, "content": content})
-    return results
+        metas.append({"name": name, "decision": "allowed", "arguments": arguments, "result": content})
+    return results, metas
 
 
 def _force_final_answer(*, http, headers: dict[str, str], base_url: str, model_name: str,
@@ -357,9 +376,9 @@ def direct_tool_completion(
 
             messages.append({"role": "assistant", "content": content or "",
                              "tool_calls": tool_calls})
-            results = _run_tools(user=user, claims=claims, allowed=allowed,
-                                  tool_calls=tool_calls, session=db_session,
-                                  allowed_tools=allowed_tools)
+            results, tool_metas = _run_tools(user=user, claims=claims, allowed=allowed,
+                                             tool_calls=tool_calls, session=db_session,
+                                             allowed_tools=allowed_tools)
             # Close the transaction this tool round may have opened: the next
             # provider call (up to `timeout_seconds`, zero DB traffic) must not
             # overlap a connection that sits idle-in-transaction while still
@@ -368,10 +387,18 @@ def direct_tool_completion(
             # propose tier's drafts live in ontology-service, not here (AF1
             # 提议档，docs/ai-fde/04 §3.1) — so rolling back loses nothing.
             db_session.rollback()
-            for call, result in zip(tool_calls, results):
+            for call, result, meta in zip(tool_calls, results, tool_metas):
+                # AF1-WP4 N1（挂账「直连循环持久审计留痕」的数据面前提）：
+                # trace 项带载荷摘要——automation output 留痕随之携带载荷；
+                # 判定语义零变化（载荷为附加留痕，截断失败＝None）。
+                arguments_text, _cut = audit_payload(meta["arguments"])
+                result_text, _cut = audit_payload(meta["result"])
                 trace.append({
                     "tool": result.get("name"),
                     "ok": not str(result.get("content", "")).startswith('{"error"'),
+                    "decision": meta["decision"],
+                    "arguments": arguments_text,
+                    "result": result_text,
                 })
             messages.extend(results)
 

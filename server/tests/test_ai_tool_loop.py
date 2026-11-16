@@ -173,7 +173,7 @@ def test_tool_loop_executes_tool_and_feeds_result_back(app, db_session, ai_user,
 
     assert text == "你有 1 个项目：示例项目。"
     assert calls == [("project_list", {"query": "示例"}, ai_user.id)]
-    assert trace == [{"tool": "project_list", "ok": True}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "project_list", "ok": True}]
     assert usage["complete"] is True
     assert len(usage["calls"]) == 2
     # The second provider call must carry the tool result back.
@@ -215,7 +215,7 @@ def test_tool_loop_reports_refused_tool_as_data_not_crash(app, db_session, ai_us
         execution_id="exec-1", session=session)
 
     assert "没有权限" in text
-    assert trace == [{"tool": "project_read", "ok": False}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "project_read", "ok": False}]
     second_body = session.calls[1][1]["json"]
     tool_message = [m for m in second_body["messages"] if m.get("role") == "tool"][0]
     assert "forbidden" in tool_message["content"]
@@ -235,7 +235,7 @@ def test_tool_loop_survives_a_crashing_tool(app, db_session, ai_user, monkeypatc
         execution_id="exec-1", session=session)
 
     assert "工具出错了" in text
-    assert trace == [{"tool": "project_list", "ok": False}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "project_list", "ok": False}]
 
 
 def test_crashing_tool_rolls_back_the_shared_db_session(app, db_session, ai_user, monkeypatch):
@@ -287,7 +287,7 @@ def test_crashing_tool_rolls_back_the_shared_db_session(app, db_session, ai_user
     # provider call — a successful tool round must not idle-in-transaction
     # either.
     assert rollbacks == [True, True]
-    assert trace == [{"tool": "file_read", "ok": False}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "file_read", "ok": False}]
     tool_message = [m for m in provider.calls[1][1]["json"]["messages"] if m.get("role") == "tool"][0]
     assert "工具执行失败" in tool_message["content"]
     assert text == "工具暂时不可用。"
@@ -425,7 +425,7 @@ def test_quote_tool_reads_the_quote_ledger(app, db_session, ai_user, monkeypatch
         project_id=None, execution_id="exec-1", session=session)
 
     assert calls == [("quote_list", {"project_id": "p1"}, ai_user.id)]
-    assert trace == [{"tool": "quote_list", "ok": True}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "quote_list", "ok": True}]
     second_body = session.calls[1][1]["json"]
     tool_message = [m for m in second_body["messages"] if m.get("role") == "tool"][0]
     assert "Q-001" in tool_message["content"]
@@ -485,7 +485,7 @@ def test_direct_loop_blocks_write_tool_call_even_for_admin(app, db_session, ai_u
 
     assert text == "已拒绝写操作。"
     assert called == []
-    assert trace == [{"tool": "api_execute", "ok": False}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "api_execute", "ok": False}]
     second_messages = session.calls[1][1]["json"]["messages"]
     tool_msg = [m for m in second_messages if m.get("role") == "tool"][0]
     assert json.loads(tool_msg["content"])["error"] == "forbidden"
@@ -514,7 +514,7 @@ def test_direct_loop_narrows_capabilities_and_allowed_tools(app, db_session, ai_
         item["function"]["name"] for item in session.calls[0][1]["json"]["tools"]
     }
     assert offered_names == {"project_read", "api_catalog"}
-    assert trace == [{"tool": "system_status", "ok": False}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [{"tool": "system_status", "ok": False}]
 
 
 # --- tool-round budget（AF1-WP1 定参③：MAX_TOOL_ROUNDS 参数化，docs/ai-fde/09 §1）---
@@ -689,8 +689,10 @@ def test_tool_loop_feeds_validation_violations_back_for_correction(app, db_sessi
     assert toll["n"] == 2
     # 评审 F8：两腿都钉——轮1 violations 回灌、轮2 修正值真复检 pass（非恒回假件）
     assert verdicts == ["violations", "pass"]
-    assert trace == [{"tool": "ontology_dry_validate", "ok": True},
-                     {"tool": "ontology_dry_validate", "ok": True}]
+    assert [{k: v for k, v in item.items() if k in ('tool', 'ok')} for item in trace] == [
+        {"tool": "ontology_dry_validate", "ok": True},
+        {"tool": "ontology_dry_validate", "ok": True},
+    ]
     # 违规确实回灌进第二轮 provider 消息（真实校验错误驱动修正——非假循环）
     second_body = session.calls[1][1]["json"]
     tool_messages = [m for m in second_body["messages"] if m.get("role") == "tool"]

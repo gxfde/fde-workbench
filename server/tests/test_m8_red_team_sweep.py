@@ -22,7 +22,7 @@ leader 任务书 :106-107 与 ADR-M3 §6 :44 定的最终兜底：用企业 A �
   ``sweep_required``／``b_owner_status``／``measured``（三套 token 实测码）。
 - **降级即红（反逃逸闸，本轮新增）**：并集恒等对「把爬扫面降级成排除登记」
   是不变量，故另配四道闸：
-  ① 条数基线 ``len(ROUTES) == 39``／``len(_EXCLUSION_RECORDS) == 73``；
+  ① 条数基线 ``len(ROUTES) == 39``／``len(_EXCLUSION_RECORDS) == 74``；
   ② **实测派生 must_sweep 必须为空**——凡「B 属主实测 200 且 A/同角色 A
      均被拒」的路由若停留在排除登记里即转红；
   ③ 排除登记的 ``measured`` 与**现测重测**逐条一致（登记不可伪造、不可陈旧）；
@@ -137,6 +137,18 @@ ROUTES = {
 # 数值口径来自基线 d092c2e 的 A/B/同角色 A 三状态码现测，并由
 # test_m8_exclusion_registry_matches_live_measurement 逐条现测复核。
 _EXCLUSION_RECORDS = {
+    # AF1-WP4（docs/ai-fde/13 §7-B）：工程台两段式 token 读面——Bearer
+    # eng-session/handover 鉴权（非用户 JWT 读面），JWT/匿名一律 403
+    # （eng_missing_token/malformed），投影语义（一次性消费/白名单逐字段/
+    # 租户钉定/跨租户 404 同形）由 tests/test_af1_wp4_eng_api.py 专项覆盖。
+    ("GET", "/api/v1/eng/runs/<run_id>"): {
+        "reason": "工程台两段式 token 面（AF1-WP4，Bearer eng token；非用户 JWT 读面）：A 实测 403、同角色 A 实测 403、B 属主实测 403——JWT 打进即 403 malformed，无跨企业语义可爬；专项闸在 test_af1_wp4_eng_api",
+        "exclusion_kind": "internal_service",
+        "verified_positive_control": False,
+        "sweep_required": False,
+        "b_owner_status": 403,
+        "measured": {"a": 403, "same_role_a": 403, "b_owner": 403},
+    },
     ("GET", "/api/v1/admin/commercial/orgs/<org_id>/ai-budget"): {
         "reason": "admin-only 平台面，非企业 token 读面：A 实测 403、同角色 A 实测 403、B 属主实测 403；M6 已证 admin 全量可见是平台能力非漏洞",
         "exclusion_kind": "admin_only",
@@ -1041,7 +1053,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
     assert len(ROUTES) == 39, ("爬扫面条数基线被改动：", len(ROUTES))
-    assert len(_EXCLUSION_RECORDS) == 73, (
+    assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
     )

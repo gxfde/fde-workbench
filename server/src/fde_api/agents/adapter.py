@@ -26,6 +26,7 @@ from typing import Any, Protocol
 from fde_api.agents import zcode_contract as zc
 from fde_api.agents.sandbox import SandboxHandle
 from fde_api.agents.workspace_files import _MANIFEST_FILE
+from fde_api.control.payload_audit import audit_payload
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +36,36 @@ ADAPTER_KINDS: frozenset[str] = frozenset({"zcode", "codex", "claude_code", "ope
 POLL_INTERVAL_SECONDS = 0.25
 
 
+def _payload_from_event(event: Mapping[str, Any], *keys: str) -> tuple[str | None, bool]:
+    """按优先级取第一个可序列化载荷键（AF1-WP4 N1）：``(text, truncated)``。
+
+    全部键缺失/不可序列化 → ``(None, False)``（列落 NULL，判定零影响）。
+    """
+    for key in keys:
+        if key in event:
+            text, truncated = audit_payload(event.get(key))
+            if text is not None:
+                return text, truncated
+    return None, False
+
+
 @dataclass(frozen=True)
 class ToolCallRecord:
-    """一次工具调用的判定结果（service 层落 agent_tool_calls）。"""
+    """一次工具调用的判定结果（service 层落 agent_tool_calls）。
+
+    AF1-WP4 N1：载荷三字段为附加留痕（工程台工具历史/Diff/校验错误回查面，
+    docs/ai-fde/13 §6.2）——缺省 None/False，既有构造点零行为变化；截断由
+    ``payload_audit.audit_payload`` 保证 ≤64KB。
+    """
 
     tool_name: str
     decision: str  # allowed / denied
     capability: str
     reason: str | None = None
     duration_ms: int = 0
+    request_json: str | None = None
+    response_json: str | None = None
+    payload_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -333,12 +355,19 @@ class ZcodeAdapter:
         tool_name = tool if isinstance(tool, str) and tool else "unknown_tool"
         raw_duration = event.get("duration_ms")
         duration = raw_duration if isinstance(raw_duration, int) and raw_duration >= 0 else 0
+        # AF1-WP4 N1：载荷尽力提取（request←arguments/input；response←output/
+        # result），截断/序列化失败＝None——判定与执行语义零变化。
+        request_json, request_cut = _payload_from_event(event, "arguments", "input")
+        response_json, response_cut = _payload_from_event(event, "output", "result")
         if tool_name in ctx.allowed_tools:
             return ToolCallRecord(
                 tool_name=tool_name,
                 decision="allowed",
                 capability=ctx.capability,
                 duration_ms=duration,
+                request_json=request_json,
+                response_json=response_json,
+                payload_truncated=request_cut or response_cut,
             )
         return ToolCallRecord(
             tool_name=tool_name,
@@ -346,6 +375,9 @@ class ZcodeAdapter:
             capability=ctx.capability,
             reason="not_in_allowlist",
             duration_ms=duration,
+            request_json=request_json,
+            response_json=response_json,
+            payload_truncated=request_cut or response_cut,
         )
 
 
