@@ -72,6 +72,7 @@ def test_explicit_default_preference_beats_selfhosted(app, db_session, pref_user
     db_session.add(ModelPreference(
         owner_user_id=pref_user.id,
         scope="personal",
+        name="自托管对照-云端偏好行",
         provider="deepseek",
         base_url="https://api.deepseek.com",
         model="deepseek-chat",
