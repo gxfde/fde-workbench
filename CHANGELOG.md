@@ -2,7 +2,17 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
-## [未发布] — SME 交付尾巴轮·handover 三态＋交付清单模板：item_type 扩 document/file（SME 审计尾巴②清偿，迁移 86→87 单头，2026-11-17）
+## [未发布] — SME 交付尾巴轮·文档刷新：改进单 1–4 状态行实态化＋AGENTS 口径刷新（纯文档零代码零迁移零路由，2026-11-17）
+
+承「SME 交付物优先级对照审计」（2026-11-15/17）尾巴清单第①项——四份改进单头部状态行自 2026-11-14 落盘后从未随实施推进刷新（文档漂移，违反「口径引用前现测」纪律的精神），本轮只做文档实态化：
+
+- **改进单 2（logic_engine 加固）**：PROPOSED → **IMPLEMENTED**——M4.1 轮已在 `Fde-Ontology` 落地（Decimal-First `prec=28, ROUND_HALF_UP`＋受界集合归约宏 `MAX_COLLECTION_ITEMS=1000`＋`days_between`/`coalesce`；`test_m4_1_logic_decimal_cel.py`/`test_m4_1_logic_edge_coverage.py` 钉住）。
+- **改进单 3（双仓契约门禁）**：PROPOSED → **IMPLEMENTED**——双向 parity 机械闸双侧在位（`Fde-Ontology` `test_m4_1_contract_parity.py`＋workbench `test_m5_wp2_client_mock_parity.py`）；spec 单一真身随尾巴轮升版 1.3.6-af0 → 1.3.7-sme5（`Fde-Ontology` PR #26 已 MERGED，版本钉换代不删钉）。
+- **改进单 4（Ontology-as-Code＋单向晋升）**：PROPOSED → **IMPLEMENTED**——M6-WP2 落地（`bundle.py`＋`bundle_cli.py` lint/test/diff 三命令；workbench `glossary_promotion.py` 单向晋升＋`integrations/ingest_service.py` discovery 直提链）。
+- **改进单 1（独立运行边界）**：PROPOSED → **PARTIAL**——已落地：M6-WP6 TrustBoard（A1 静态快照＋活数据档＋WP6-R4 单次消费交接令牌）＋S-12 运行时拦截（workbench #485）＋**Step2 `.ontpkg` 离线验签导入＋打包纯度闸（`Fde-Ontology` PR #26 已 MERGED）**；挂账：Step1 本地鉴权模／Step3 `local-ops-ui`／完整 `standalone_pod` 打包件（M6 出口留档 PLANNED，首家纯内网私有化客户进场前必做）。
+- **总览 §四**加「实施实态」注记；**AGENTS 当前状态行**刷新为终态速览（结构口径现测 **523 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`**；历史轮次史收敛为 CHANGELOG 与 `Fde-Ontology CURRENT.md` 权威指针——治理口径行无限膨胀的家族病）。
+
+## [未发布] — SME 交付尾巴轮·handover 三态＋交付清单模板：item_type 扩 document/file（SME 审计尾巴②清偿，PR #495 已合并，2026-11-17）
 
 承「SME 交付物优先级对照审计」（2026-11-15/17 两轮）尾巴清单第②项——handover 包 v1 只开 artifact、document/file 类型挂账未接线；本轮接线并补齐面向客户的交付件清单模板：
 
@@ -13,7 +23,7 @@
 - **SME 交付件清单模板**：NEW `docs/templates/SME交付件清单与验收标准模板-v1.md`——15 项按「能连上/能对上/能用起来/能留下」四段编排，每项带系统来源与验收判据，并显式登记五项「明确不交付」裁剪边界（对齐 SME 审计结论）。
 - **验证**：`tests/test_handover_packages.py` 6→9 例（三态混合端到端含 manifest 三指针与挑选面三态／document·file 全闸族负例／file 指纹漂移），套件 9 passed；邻域回归（m6 商业隔离＋可见性 parity）30 passed；ruff clean；mypy 277 基线零新增。
 - **挂账**：桌面端挑选面与建包表单的三态接线（type 选择器＋document/file 列表拉取）归下一桌面轮，随轮重打包便携版。
-- 口径：**523 路由 / 55 蓝图 / 160 表 / 89 迁移单头 `b7f2d9e4c6a8`**（含 AF1-WP4 并行合流的 55 蓝图/523 路由/160 表基线；分支顶现测值）。
+- 口径：**523 路由 / 55 蓝图 / 160 表 / 89 迁移单头 `b7f2d9e4c6a8`**（含 AF1-WP4 并行合流基线；分支顶现测值）。
 
 ## [未发布] — billing_actor_policy 机制化轮：模拟域真模型评估记账主体服务账号（opt-in 配置＋双 ContextVar 注入＋fail-closed；零迁移零路由零表，2026-11-15）
 
