@@ -6,10 +6,16 @@ binding_service（monkeypatch 假件，零出站）。
 """
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
+from sqlalchemy.orm import Session
 
 from fde_api.control import ontology_gateway
 from fde_api.control.service import ControlServiceError
+
+# 分派层直测：被测分支不触 session（分派前即校验/假件接管）——cast 钉形状。
+_NO_SESSION = cast(Session, None)
 
 
 class _User:
@@ -19,13 +25,13 @@ class _User:
 def test_dry_validate_requires_object_payload() -> None:
     with pytest.raises(ControlServiceError) as missing:
         ontology_gateway.call_ontology_tool(
-            None, user=_User(), name="ontology_dry_validate",
+            _NO_SESSION, user=_User(), name="ontology_dry_validate",
             arguments={"project_id": "p", "binding_id": "b"}, execution_id="e1",
         )
     assert missing.value.code == "invalid_request"
     with pytest.raises(ControlServiceError) as wrong_type:
         ontology_gateway.call_ontology_tool(
-            None, user=_User(), name="ontology_dry_validate",
+            _NO_SESSION, user=_User(), name="ontology_dry_validate",
             arguments={"project_id": "p", "binding_id": "b", "proposed_json": "nope"},
             execution_id="e1",
         )
@@ -42,7 +48,7 @@ def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPa
     from fde_api.integrations import service as binding_service
     monkeypatch.setattr(binding_service, "dry_validate_binding_candidate", fake_dry_validate)
     out = ontology_gateway.call_ontology_tool(
-        None, user=_User(), name="ontology_dry_validate",
+        _NO_SESSION, user=_User(), name="ontology_dry_validate",
         arguments={"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
         execution_id="e1",
     )
@@ -58,7 +64,7 @@ def test_dry_validate_requires_execution_id_for_audit() -> None:
     """§9.3 运行追溯：无 execution_id 的调用分派前即拒（与既有三件同规）。"""
     with pytest.raises(ControlServiceError) as excinfo:
         ontology_gateway.call_ontology_tool(
-            None, user=_User(), name="ontology_dry_validate",
+            _NO_SESSION, user=_User(), name="ontology_dry_validate",
             arguments={"project_id": "p", "binding_id": "b", "proposed_json": {}},
             execution_id="",
         )
