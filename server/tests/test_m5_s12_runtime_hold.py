@@ -150,7 +150,11 @@ def _hold_env(m5_env: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[s
 
 
 def _establish_then_downgrade(env: dict[str, Any], db_session: Any, gate: Any) -> None:
-    """admin 建档 required → leader（Owner 异人）下调 optional（非熔断窗，合法落值）。"""
+    """admin 建档 required → leader（Owner 异人）下调 optional（非熔断窗，合法落值）。
+
+    尾部必须 ``commit``：后续 ``_submit_gate_evidence``/``_decide`` 走 HTTP，
+    app 侧独立 session 会 UPDATE 同一 gate 行——测试事务不释放行锁即
+    PG 无限等待（第四轮 CI 30min 挂死根因，98% 后 17min 零输出实证）。"""
     set_gate_dependency(
         db_session,
         actor=env["admin"].user,
@@ -165,6 +169,7 @@ def _establish_then_downgrade(env: dict[str, Any], db_session: Any, gate: Any) -
         gate=gate,
         new_level="optional",
     )
+    db_session.commit()
 
 
 def test_e2e_hold_suspends_relaxed_dependency_on_decision(
@@ -261,6 +266,7 @@ def test_e2e_global_direct_tier_not_held(m5_env, db_session, monkeypatch) -> Non
         gate=gate,
         new_level="none",
     )
+    db_session.commit()  # 同 _establish_then_downgrade：HTTP 前释放行锁
 
     env["mock"].breaker_state = "open"
     env["mock"].inject_fault("unavailable")
