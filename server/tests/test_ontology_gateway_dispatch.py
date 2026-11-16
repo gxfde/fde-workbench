@@ -60,15 +60,41 @@ def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPa
     }
 
 
-def test_dry_validate_registered_in_gateway_branch() -> None:
-    """分派注册钉：dry_validate 与既有三件同走 ontology 桥（execution_id
-    强制在 mcp_gateway.call_tool 层——删除注册即本测试转红）。"""
-    assert "ontology_dry_validate" in (
-        "ontology_logic_run", "ontology_action_propose",
-        "ontology_action_execute", "ontology_dry_validate",
+def test_call_tool_dispatches_dry_validate_through_ontology_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """真闸钉：走 mcp_gateway.call_tool 全链（闭集校验/能力交集/execution_id
+    强制/分派元组）——分派元组删名或 execution_id 缺失均转红。"""
+    from fde_api.control import mcp_gateway, ontology_gateway
+
+    captured: dict[str, object] = {}
+
+    def fake_bridge(session, *, user, name, arguments, execution_id):
+        captured.update(name=name, arguments=dict(arguments), execution_id=execution_id)
+        return {"verdict": "pass", "violations": []}
+
+    monkeypatch.setattr(ontology_gateway, "call_ontology_tool", fake_bridge)
+    out = mcp_gateway.call_tool(
+        _NO_SESSION,
+        user=_User(),
+        claims={"execution_id": "e1"},
+        allowed=["ontology.read"],
+        name="ontology_dry_validate",
+        arguments={"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
     )
-    from fde_api.control import mcp_gateway
-    assert "ontology_dry_validate" in mcp_gateway.TOOLS
-    descriptor = mcp_gateway.TOOLS["ontology_dry_validate"]
-    assert descriptor[1] == "ontology.read"  # capability
-    assert descriptor[3] == "read"  # effect（零状态变更）
+    assert out == {"verdict": "pass", "violations": []}
+    assert captured == {
+        "name": "ontology_dry_validate",
+        "arguments": {"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
+        "execution_id": "e1",
+    }
+    with pytest.raises(ControlServiceError) as excinfo:
+        mcp_gateway.call_tool(
+            _NO_SESSION,
+            user=_User(),
+            claims={"execution_id": ""},
+            allowed=["ontology.read"],
+            name="ontology_dry_validate",
+            arguments={"project_id": "p", "binding_id": "b", "proposed_json": {}},
+        )
+    assert excinfo.value.code == "invalid_request"

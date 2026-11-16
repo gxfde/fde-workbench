@@ -100,7 +100,7 @@ def tool_definitions(
     *,
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build the OpenAI-compatible `tools` array for the readable tools."""
+    """Build the OpenAI-compatible `tools` array for the loop whitelist (read face + propose tier)."""
     permitted_tools = _permitted_loop_tools(allowed_tools)
     definitions: list[dict[str, Any]] = []
     for name, entry in TOOLS.items():
@@ -363,8 +363,10 @@ def direct_tool_completion(
             # Close the transaction this tool round may have opened: the next
             # provider call (up to `timeout_seconds`, zero DB traffic) must not
             # overlap a connection that sits idle-in-transaction while still
-            # holding the tool round's row locks. Direct-loop tools are
-            # read-only, so rolling back loses nothing.
+            # holding the tool round's row locks. Loop-whitelist tools write
+            # nothing to this database — the read face is read-only and the
+            # propose tier's drafts live in ontology-service, not here (AF1
+            # 提议档，docs/ai-fde/04 §3.1) — so rolling back loses nothing.
             db_session.rollback()
             for call, result in zip(tool_calls, results):
                 trace.append({

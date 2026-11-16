@@ -487,7 +487,7 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
     request_identifier = execution_id or str(uuid4())
     tool_trace: list[dict[str, Any]] = []
     if use_tools and user_id:
-        from fde_api.control.ai_tool_loop import direct_tool_completion
+        from fde_api.control.ai_tool_loop import READ_ONLY_TOOLS, direct_tool_completion
         with db.session() as session:
             user = session.get(User, user_id)
             if user is not None:
@@ -498,7 +498,10 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                         execution_id=request_identifier,
                         system_prompt=system_prompt, max_tokens=max_tokens,
                         timeout_seconds=timeout_seconds,
-                        capabilities=capabilities)
+                        capabilities=capabilities,
+                        # 聊天降级腿保持只读面（AF1 提议档仅工程循环显式启用，
+                        # 见 11 号 WP1 第二批——默认白名单扩张不静默作用于本路径）
+                        allowed_tools=sorted(READ_ONLY_TOOLS))
                 except DSHRuntimeError as error:
                     _audit_execution(request_id=request_identifier, actor_id=user_id,
                                      purpose=purpose, model=model_name, used_fallback=True,

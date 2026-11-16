@@ -783,8 +783,9 @@ def dry_validate_binding_candidate(
     """AF0-C1（api-spec 1.3.6-af0）：项目绑定 pinned 版本上的纯候选预检。
 
     S-13：ontology_id 与 pinned_version 由服务端从绑定注入，调用方只带
-    proposed_json；零状态变更（不改 ChangeSet、不写幂等/审计——调用留痕由
-    Workbench 侧 agent_tool_calls 承载）。violations/conflict 为 200 结果。
+    proposed_json；零状态变更（服务端按 1.3.6-af0 契约刻意零写——Workbench
+    侧直连循环路径现无持久审计留痕，工具 trace 仅存活于本轮上下文；持久
+    审计归属 AF1 工程台审计面设计挂账）。violations/conflict 为 200 结果。
     """
     ensure_enabled()
     session = db.session()

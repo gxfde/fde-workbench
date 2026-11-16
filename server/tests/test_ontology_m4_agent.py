@@ -611,3 +611,75 @@ def test_auth_error_with_forbidden_code_translates_to_403_not_502(m4_binding_app
             )
     assert raised.value.status == 403, f"授权拒绝必须 403，实际 {raised.value.status}"
     assert raised.value.code == "forbidden"
+
+
+def test_binding_dry_validate_proxy_enforces_pinned_version_and_org(
+    m4_binding_app: Flask, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AF0-C1（api-spec 1.3.6-af0）：dry_validate 代理强制绑定 pinned_version_id
+    与 project.org_id（S-13/D10 同款注入——伪造值不得抵达客户端）。"""
+    mock_adapter = MockOntologyAdapter()
+    captured_calls: list[dict[str, Any]] = []
+
+    orig_dry = mock_adapter.dry_validate_change_set
+
+    def spy_dry(**kwargs: Any) -> dict[str, Any]:
+        captured_calls.append({"fn": "dry_validate_change_set", **kwargs})
+        return orig_dry(**kwargs)
+
+    monkeypatch.setattr(mock_adapter, "dry_validate_change_set", spy_dry)
+    monkeypatch.setattr(binding_service, "client_from_settings", lambda: mock_adapter)
+
+    with m4_binding_app.app_context():
+        session = db.session()
+        user_a = User(
+            id="user-dry",
+            username="dry@alpha.test",
+            role="project_lead",
+            password_hash="x",
+            is_active=True,
+            must_change_password=False,
+            auth_version=1,
+            org_id="org-alpha",
+        )
+        proj = Project(
+            id="proj-dry",
+            project_code="PA-DRY",
+            name="Dry Project",
+            enterprise_code="ENT-DRY",
+            leader_user_id="user-dry",
+            status="active",
+            planned_start_date=date(2026, 1, 1),
+            planned_end_date=date(2026, 12, 31),
+            template_snapshot={},
+            org_id="org-alpha",
+        )
+        member = ProjectMember(project_id="proj-dry", user_id="user-dry", role="member")
+        binding = ProjectOntologyBinding(
+            id="bind-dry-1",
+            org_id="org-alpha",
+            project_id="proj-dry",
+            ontology_id="ont-seed-mfg",
+            pinned_version_id="ver-seed-1-0-0",
+            pinned_version="1.0.0",
+            binding_role="primary",
+            status="active",
+            active_marker=ACTIVE_MARKER,
+            bound_by_user_id="user-dry",
+        )
+        session.add_all([user_a, proj, member, binding])
+        session.commit()
+
+        out = binding_service.dry_validate_binding_candidate(
+            actor=user_a,
+            project_id="proj-dry",
+            binding_id="bind-dry-1",
+            payload={"proposed_json": {"objects": []}},
+        )
+
+    assert out["verdict"] == "pass"
+    assert captured_calls, "spy 未捕获调用——S-13 注入面失守"
+    call = captured_calls[-1]
+    assert call["ontology_id"] == "ont-seed-mfg"
+    assert call["version_id"] == "ver-seed-1-0-0"
+    assert call["org_id"] == "org-alpha"

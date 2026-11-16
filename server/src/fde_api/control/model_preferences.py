@@ -181,12 +181,21 @@ def resolve_model_preference(session: Session, user_id: str, preference_id: str 
     # 发公共模型）；显式 preference（用户/公共 default 行）恒最优先。
     selfhost_base = (getattr(settings, "ai_selfhosted_base_url", "") or "").strip()
     if selfhost_base:
+        raw_key = getattr(settings, "ai_selfhosted_api_key", None)
+        if raw_key is None:
+            api_key = ""
+        elif hasattr(raw_key, "get_secret_value"):
+            api_key = str(raw_key.get_secret_value())
+        else:
+            api_key = str(raw_key)
         return {"id": "system-selfhosted", "provider": _provider_for_base_url(selfhost_base),
-                "base_url": selfhost_base, "model": getattr(settings, "ai_selfhosted_model", ""),
-                # 本地端点（Ollama 类）不校验凭据：留空时补显式占位（直连契约要求
-                # api_key 非空；该占位不是凭据，也不出本机）
-                "api_key": (getattr(settings, "ai_selfhosted_api_key", "") or "") or "selfhosted-local",
-                "supports_tools": True}
+                "base_url": selfhost_base,
+                "model": (getattr(settings, "ai_selfhosted_model", "") or "").strip(),
+                # 本地/私网端点多数不校验 Authorization：留空补显式占位（直连
+                # 契约要求 api_key 非空；该占位随请求头发出、非凭据——私网
+                # 边界由 FDE_AI_SELFHOSTED_ALLOW_PUBLIC 闸守）
+                "api_key": api_key or "selfhosted-local",
+                "supports_tools": bool(getattr(settings, "ai_selfhosted_supports_tools", True))}
     key = getattr(settings, "deepseek_api_key", "")
     if not key:
         raise ControlServiceError("model_not_configured", "请先在 AI 与扩展的模型管理中配置模型。", 409)

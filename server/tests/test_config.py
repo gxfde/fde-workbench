@@ -180,3 +180,42 @@ def test_clawbot_gateway_is_disabled_by_default_and_requires_a_secret():
     )
     assert enabled.clawbot_gateway_token.get_secret_value() == "private-clawbot-token"
     assert "private-clawbot-token" not in repr(enabled)
+
+
+def test_selfhosted_slot_validation_and_public_host_gate():
+    """AF1-WP1 定参④：自托管槽位启动闸——半配拦截 + 公网冒名 fail-closed。"""
+    with pytest.raises(ValidationError, match="requires non-empty FDE_AI_SELFHOSTED_MODEL"):
+        Settings(env="test", ai_selfhosted_base_url="http://127.0.0.1:11434/v1", **BASE_SETTINGS)
+    with pytest.raises(ValidationError, match="requires non-empty FDE_AI_SELFHOSTED_BASE_URL"):
+        Settings(env="test", ai_selfhosted_model="qwen3:14b", **BASE_SETTINGS)
+    with pytest.raises(ValidationError, match="not loopback/private"):
+        Settings(
+            env="test",
+            ai_selfhosted_base_url="https://api.deepseek.com/v1",
+            ai_selfhosted_model="deepseek-chat",
+            **BASE_SETTINGS,
+        )
+    loopback = Settings(
+        env="test",
+        ai_selfhosted_base_url="http://127.0.0.1:11434/v1",
+        ai_selfhosted_model="qwen3:14b",
+        **BASE_SETTINGS,
+    )
+    assert loopback.ai_selfhosted_supports_tools is True
+    assert "lan-token" not in repr(
+        Settings(
+            env="test",
+            ai_selfhosted_base_url="http://10.0.0.8:8000/v1",
+            ai_selfhosted_model="qwen3-32b",
+            ai_selfhosted_api_key="lan-token-1",
+            **BASE_SETTINGS,
+        )
+    )
+    public_confirmed = Settings(
+        env="test",
+        ai_selfhosted_base_url="https://10.0.0.8:8000/v1",
+        ai_selfhosted_model="qwen3-32b",
+        ai_selfhosted_allow_public=True,
+        **BASE_SETTINGS,
+    )
+    assert public_confirmed.ai_selfhosted_allow_public is True

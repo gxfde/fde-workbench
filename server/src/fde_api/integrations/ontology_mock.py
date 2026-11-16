@@ -389,6 +389,19 @@ class MockOntologyAdapter:
         self._action_approvals[req_id] = []
         return {"_status": 201, **self._action_view(req)}
 
+    def dry_validate_change_set(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        proposed_json: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """AF0-C1：纯候选预检（零状态变更）——mock 恒回 pass（形状/注入契约测试用）。"""
+        return {"verdict": "pass", "violations": [], "conflicting_entities": [], "_status": 200}
+
     def approve_action(
         self,
         *,

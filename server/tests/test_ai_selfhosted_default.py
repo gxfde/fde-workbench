@@ -61,3 +61,25 @@ def test_without_selfhosted_config_falls_through_to_deepseek_slot(app, db_sessio
     with pytest.raises(ControlServiceError) as excinfo:
         resolve_model_preference(db_session, pref_user.id)
     assert excinfo.value.code == "model_not_configured"
+
+
+def test_explicit_default_preference_beats_selfhosted(app, db_session, pref_user, monkeypatch: pytest.MonkeyPatch) -> None:
+    """三分序钉：显式偏好行（用户/公共 default）恒最优先于自托管系统档。"""
+    from fde_api.control.model_preferences import ModelPreference, _cipher
+
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_base_url", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_model", "qwen3:14b")
+    db_session.add(ModelPreference(
+        owner_user_id=pref_user.id,
+        scope="personal",
+        provider="deepseek",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        supports_tools=True,
+        is_default=True,
+        credential_ciphertext=_cipher().encrypt(b"pref-key").decode(),
+    ))
+    db_session.commit()
+    out = resolve_model_preference(db_session, pref_user.id)
+    assert out["id"] != "system-selfhosted"
+    assert out["model"] == "deepseek-chat"

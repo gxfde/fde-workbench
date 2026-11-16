@@ -494,7 +494,7 @@ class OntologyClient:
         project_id: str,
         ontology_id: str,
         version_id: str,
-        proposed_json: dict[str, Any] | None,
+        proposed_json: dict[str, Any],
     ) -> dict[str, Any]:
         """AF0-C1 / api-spec 1.3.6-af0：纯候选预检（零状态变更只读校验）。
 
@@ -513,7 +513,7 @@ class OntologyClient:
             json_body={
                 "ontology_id": ontology_id,
                 "pinned_version": version_id,
-                "proposed_json": proposed_json or {},
+                "proposed_json": proposed_json,
             },
         )
 

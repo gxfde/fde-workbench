@@ -597,12 +597,29 @@ def test_tool_definitions_include_propose_tier_but_never_execute_tier():
     assert "ontology_action_execute" not in names
 
 
+def test_default_loop_whitelist_expands_with_ontology_capabilities():
+    """默认分支（allowed_tools=None）在 ontology 能力下含提议档三件；
+    降级腿以 READ_ONLY_TOOLS 显式收窄——保持既有「只读降级」语义
+    （ai_server_client/automation_jobs 消费面，见 11 号 WP1 第二批）。"""
+    names = {item["function"]["name"] for item in tool_definitions(["ontology.read", "ontology.write"])}
+    assert {"ontology_dry_validate", "ontology_action_propose", "ontology_logic_run"} <= names
+    assert "ontology_action_execute" not in names
+    readonly_names = {
+        item["function"]["name"]
+        for item in tool_definitions(["ontology.read", "ontology.write"], allowed_tools=sorted(READ_ONLY_TOOLS))
+    }
+    assert "ontology_action_propose" not in readonly_names
+    assert "ontology_dry_validate" not in readonly_names
+
+
 def test_tool_loop_feeds_validation_violations_back_for_correction(app, db_session, ai_user, monkeypatch):
     """失败→修正形状：dry-validate 违规回灌 → 模型修正后走提议档。
 
-    AF1-WP1 验收锚的循环形状。脚本在 provider 边界，工具分派走真网关白名单
-    分派（call_tool 假件仅替换出站调用）；真服务校验反馈的端到端在 WP2
-    dry_validate 实装后由 N-DV 系列补齐（10 号修订件 §四）。
+    AF1-WP1 验收锚的循环形状。脚本在 provider 边界；monkeypatch **整体替换**
+    网关入口 call_tool——白名单过滤在本侧 _run_tools 行使、闭集/能力交集/
+    execution_id 真闸由分派钉测试（test_ontology_gateway_dispatch）另行钉住。
+    真服务校验反馈的端到端在 WP2 dry_validate 实装后由 N-DV 系列补齐
+    （10 号修订件 §四）。
     """
     from fde_api.control import ai_tool_loop
 
