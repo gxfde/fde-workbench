@@ -199,6 +199,10 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
     if name in ("ontology_logic_run", "ontology_action_propose", "ontology_action_execute", "ontology_dry_validate"):
         from fde_api.control.ontology_gateway import call_ontology_tool
 
+        # AF1-WP5 G2（追认落地）：ontology 工具族与其他工具面同闸——先过
+        # _project（execution claims 的 project_id 窄化 + can_view；S-01），
+        # 再进 integrations 桥（桥内 S-01/S-13 校验保留为纵深防御二层）。
+        _project(session, user, claims, str(arguments.get("project_id", "")))
         execution_id = claims.get("execution_id")
         if not isinstance(execution_id, str) or not execution_id:
             raise ControlServiceError("invalid_request", "本次 AI 执行缺少可审计编号。", 400)
