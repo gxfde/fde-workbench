@@ -10,6 +10,11 @@ called directly and the model's tool calls are executed in-process. The
 capability model is unchanged — the same `capabilities_for_level` gate and
 the same `call_tool` authorisation path apply, so a direct call can never
 reach more data than the MCP route would allow.
+
+AF1 提议档（docs/ai-fde/04 §3.1 C1 已批；11 号 WP1）：只产草稿/校验结果、
+零直接副作用的工具（Logic 只读执行、dry-validate 预检、动作提议——runtime
+默认 dry-run）也进本循环白名单；执行档（ontology_action_execute / api_execute
+/ file_send_wechat）仍排除——真执行必须人工批准，不因循环白名单放宽。
 """
 from __future__ import annotations
 
@@ -72,13 +77,22 @@ READ_ONLY_TOOLS = frozenset({
     "lcsc_runs_read",
 })
 
+# 提议档：草稿/校验类（见模块 docstring AF1 提议档注）；与只读面并集为循环白名单。
+PROPOSE_TIER_TOOLS = frozenset({
+    "ontology_logic_run",
+    "ontology_dry_validate",
+    "ontology_action_propose",
+})
+LOOP_TOOL_WHITELIST = READ_ONLY_TOOLS | PROPOSE_TIER_TOOLS
 
-def _permitted_read_only_tools(
+
+def _permitted_loop_tools(
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
 ) -> frozenset[str]:
+    """直连循环可暴露的工具面 = 只读面 ∪ 提议档（见模块 docstring AF1 注）。"""
     if allowed_tools is None:
-        return READ_ONLY_TOOLS
-    return frozenset(name for name in READ_ONLY_TOOLS if name in set(allowed_tools))
+        return LOOP_TOOL_WHITELIST
+    return frozenset(name for name in LOOP_TOOL_WHITELIST if name in set(allowed_tools))
 
 
 def tool_definitions(
@@ -86,8 +100,8 @@ def tool_definitions(
     *,
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build the OpenAI-compatible `tools` array for the readable tools."""
-    permitted_tools = _permitted_read_only_tools(allowed_tools)
+    """Build the OpenAI-compatible `tools` array for the loop whitelist (read face + propose tier)."""
+    permitted_tools = _permitted_loop_tools(allowed_tools)
     definitions: list[dict[str, Any]] = []
     for name, entry in TOOLS.items():
         description, capability, properties, _, _ = entry
@@ -127,7 +141,7 @@ def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
                tool_calls: list[dict[str, Any]], session: Session,
                allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None) -> list[dict[str, Any]]:
     """Execute the requested tools and build the `tool` role messages."""
-    permitted_tools = _permitted_read_only_tools(allowed_tools)
+    permitted_tools = _permitted_loop_tools(allowed_tools)
     results: list[dict[str, Any]] = []
     for call in tool_calls:
         function = call.get("function") or {}
@@ -349,8 +363,10 @@ def direct_tool_completion(
             # Close the transaction this tool round may have opened: the next
             # provider call (up to `timeout_seconds`, zero DB traffic) must not
             # overlap a connection that sits idle-in-transaction while still
-            # holding the tool round's row locks. Direct-loop tools are
-            # read-only, so rolling back loses nothing.
+            # holding the tool round's row locks. Loop-whitelist tools write
+            # nothing to this database — the read face is read-only and the
+            # propose tier's drafts live in ontology-service, not here (AF1
+            # 提议档，docs/ai-fde/04 §3.1) — so rolling back loses nothing.
             db_session.rollback()
             for call, result in zip(tool_calls, results):
                 trace.append({

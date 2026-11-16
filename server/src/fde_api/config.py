@@ -347,6 +347,54 @@ class Settings(BaseSettings):
     # 分离——证据包防伪面独立换钥）。缺省 None：导出/签收 fail-closed 503
     # evidence_pack_not_configured（宁可拒绝不可裸包出闸）。
     ontology_evidence_pack_hmac_key: SecretStr | None = Field(default=None, repr=False)
+    # AF1-WP1 定参④（docs/ai-fde/09 §2.2 方案 B①，P1 已批 2026-11-16）：自托管
+    # 默认端点（OpenAI 兼容面，如本机 Ollama）。配置后 system-default 档优先
+    # 解析自托管（红线：客户敏感数据不默认发公共模型）；未配置回落既有
+    # deepseek_* 槽位（向后兼容；显式 preference 恒最优先）。
+    ai_selfhosted_base_url: str = ""
+    ai_selfhosted_model: str = ""
+    ai_selfhosted_api_key: SecretStr | None = Field(default=None, repr=False)
+    ai_selfhosted_supports_tools: bool = True
+    # 非 loopback/私网端点须显式开启（防公网 URL 冒名「自托管」档——红线：
+    # 客户敏感数据不默认发公共模型）
+    ai_selfhosted_allow_public: bool = False
+
+    @model_validator(mode="after")
+    def validate_selfhosted_provider(self) -> "Settings":
+        import ipaddress
+        from urllib.parse import urlparse
+
+        base = self.ai_selfhosted_base_url.strip()
+        model = self.ai_selfhosted_model.strip()
+        if base and not model:
+            raise ValueError(
+                "FDE_AI_SELFHOSTED_BASE_URL requires non-empty FDE_AI_SELFHOSTED_MODEL "
+                "(AF1-WP1 定参④：自托管默认须带模型名，防止空模型名静默失效)"
+            )
+        if model and not base:
+            raise ValueError(
+                "FDE_AI_SELFHOSTED_MODEL requires non-empty FDE_AI_SELFHOSTED_BASE_URL "
+                "(AF1-WP1 定参④：反向半配同样静默失效，一并拦截)"
+            )
+        if base:
+            parsed = urlparse(base)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme not in ("http", "https") or not host:
+                raise ValueError(
+                    "FDE_AI_SELFHOSTED_BASE_URL must be an http(s) URL with a hostname"
+                )
+            try:
+                ip = ipaddress.ip_address(host)
+                host_private = ip.is_private or ip.is_loopback
+            except ValueError:
+                host_private = host == "localhost" or host.endswith((".local", ".internal"))
+            if not host_private and not self.ai_selfhosted_allow_public:
+                raise ValueError(
+                    f"FDE_AI_SELFHOSTED_BASE_URL host {host!r} is not loopback/private; "
+                    "set FDE_AI_SELFHOSTED_ALLOW_PUBLIC=true to confirm "
+                    "(红线：客户敏感数据不默认发公共模型——公网端点不得冒名自托管档)"
+                )
+        return self
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

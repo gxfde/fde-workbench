@@ -64,6 +64,18 @@ def call_ontology_tool(
                 action_key=action_key,
                 payload={"request_id": request_id},
             )
+        if name == "ontology_dry_validate":
+            # AF0-C1（api-spec 1.3.6-af0）：纯候选预检——零状态变更，本体与钉版
+            # 由绑定服务端注入（S-13），调用方只带 proposed_json。
+            proposed_json = arguments.get("proposed_json")
+            if not isinstance(proposed_json, dict):
+                raise ControlServiceError("invalid_request", "proposed_json 必须是 JSON 对象。", 400)
+            return binding_service.dry_validate_binding_candidate(
+                actor=user,
+                project_id=project_id,
+                binding_id=binding_id,
+                payload={"proposed_json": proposed_json},
+            )
         raise ControlServiceError("invalid_tool", "工具或参数无效。", 400)
     except BindingError as exc:
         raise ControlServiceError(

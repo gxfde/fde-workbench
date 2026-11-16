@@ -249,8 +249,13 @@ def _resolve_preference(session, user_id: str | None) -> dict | None:
         "base_url": base_url,
         "api_key": api_key,
         "model": model,
-        # "system-default" = 解析器自己落的系统默认槽位；其余是偏好表里的模型。
-        "source": "system_default" if resolved.get("id") == "system-default" else "model_preference",
+        # "system-default"/"system-selfhosted" = 解析器自己落的系统默认槽位
+        # （AF1-WP1 定参④新增自托管档）；其余是偏好表里的模型。
+        "source": (
+            "system_default"
+            if resolved.get("id") in ("system-default", "system-selfhosted")
+            else "model_preference"
+        ),
     }
 
 
