@@ -6,8 +6,9 @@
 sha256 = 清单规范化 JSON 哈希，delivered 终态不可逆。
 
 状态机：draft → sealed → delivered；unseal 仅 sealed→draft（清封存三痕，
-unsealed_count 累计留痕）；v1 item_type 只开 'artifact'（document/file 留
-扩展——版本表已在位，接线归后续轮）。
+unsealed_count 累计留痕）；item_type 三态全开（artifact／document／file——
+document/file 指针接 project_document_versions / project_file_versions，
+SME 交付尾巴轮接线）。
 """
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ from fde_api.auth.models import UTCDateTime
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
 
 HANDOVER_STATUSES = ("draft", "sealed", "delivered")
-ITEM_TYPES_V1 = ("artifact",)  # D11 草案全集 document|file|artifact 的 v1 子集
+# D11 草案全集三态全开（v1 曾只开 artifact；document/file 指针随版本表接线）
+ITEM_TYPES = ("artifact", "document", "file")
 
 
 class HandoverPackage(Base, TimestampMixin):
@@ -78,16 +80,23 @@ class HandoverPackage(Base, TimestampMixin):
 
 
 class HandoverPackageItem(Base, TimestampMixin):
-    """包内清单行：指针 + sha256 快照（校验锚）。同包同产物至多一行。"""
+    """包内清单行：指针 + sha256 快照（校验锚）。同包同指针至多一行。
+
+    三类型指针（SME 交付尾巴轮扩枚举，D11 草案全集）：artifact（run 产物）/
+    document（项目文档版本）/file（项目文件版本）。三指针互斥由
+    ck_handover_package_items_pointer 钉死（恰一指针非空）。
+    """
 
     __tablename__ = "handover_package_items"
     __table_args__ = (
         CheckConstraint(
-            "item_type IN ('artifact')",
+            "item_type IN ('artifact', 'document', 'file')",
             name="ck_handover_package_items_type",
         ),
         CheckConstraint(
-            "(item_type <> 'artifact') OR artifact_id IS NOT NULL",
+            "(item_type = 'artifact' AND artifact_id IS NOT NULL AND document_version_id IS NULL AND file_version_id IS NULL)"
+            " OR (item_type = 'document' AND artifact_id IS NULL AND document_version_id IS NOT NULL AND file_version_id IS NULL)"
+            " OR (item_type = 'file' AND artifact_id IS NULL AND document_version_id IS NULL AND file_version_id IS NOT NULL)",
             name="ck_handover_package_items_pointer",
         ),
         CheckConstraint("char_length(sha256) = 64", name="ck_handover_package_items_sha_len"),
@@ -98,10 +107,11 @@ class HandoverPackageItem(Base, TimestampMixin):
     package_id: Mapped[str] = mapped_column(
         ForeignKey("handover_packages.id", ondelete="CASCADE"), nullable=False
     )
-    # v1 只开 artifact（T-B1 验收面）；document/file 类型随版本表接线扩枚举
     item_type: Mapped[str] = mapped_column(String(16), nullable=False, default="artifact", server_default="artifact")
     # B#6 纪律：纯指针无 FK（产物本体在项目工作目录 storage_ref，库内只有指纹）
     artifact_id: Mapped[str | None] = mapped_column(String(36))
+    document_version_id: Mapped[str | None] = mapped_column(String(36))
+    file_version_id: Mapped[str | None] = mapped_column(String(36))
     # —— 快照投影（登记入包时刻的冻结值；seal 时与 live 产物行逐项复核）——
     run_id: Mapped[str | None] = mapped_column(String(36))
     kind: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — SME 交付尾巴轮·handover 三态＋交付清单模板：item_type 扩 document/file（SME 审计尾巴②清偿，迁移 86→87 单头，2026-11-17）
+
+承「SME 交付物优先级对照审计」（2026-11-15/17 两轮）尾巴清单第②项——handover 包 v1 只开 artifact、document/file 类型挂账未接线；本轮接线并补齐面向客户的交付件清单模板：
+
+- **item_type 三态全开**：`HandoverPackageItem` 增 `document_version_id`／`file_version_id` 两指针列（**零 FK**，B#6 指针纪律不变）；`ck_handover_package_items_type` 扩三值、`ck_handover_package_items_pointer` 重建为**恰一指针互斥**（artifact/document/file 三分支，CHECK 层钉死）。迁移 `e5c8b2d4f7a9` 挂 `d8b4f6a2c9e7`；与 AF1-WP4（`a1e5f9c3d7b2`，同挂）并行入线形成双头 → merge 收单头 `b7f2d9e4c6a8`（零 DDL 双头元组，M6-WP0 D11 先例；docstring 措辞避让迁移图解析正则的首行匹配）；存量行全为 artifact 行为逐位不变；downgrade 先清非 artifact 行再回枚举。
+- **入包状态闸（与 artifact reviewed 闸同构）**：document 只收 `confirmed` 文档版本（`document_not_confirmed` 409／缺 sha256 `document_fingerprint_missing` 422）；file 只收 `available` 文件版本（`file_not_available` 409／缺指纹 422）；跨项目同拒（`document_foreign_project`／`file_foreign_project` 409）。seal 逐项复核按类型分派（`_seal_check_document_version`／`_seal_check_file_version`），指纹漂移统一 `fingerprint_drift` 409。
+- **指针键自反推**：items 元素缺省 `item_type` 时按恰一带一个指针键（artifact_id/document_version_id/file_version_id）反推类型（裸 `artifact_id` 形态向后兼容零回归）；显式 `item_type` 与指针键不匹配即 422。去重键升级 `(item_type, 指针)`。
+- **挑选面三态**：`GET /handover-packages/artifacts?type=`（缺省 artifact 行为零变化）——document 回 confirmed 版本、file 回 available 版本，键闭集随类型投影；非闭集值 400。
+- **SME 交付件清单模板**：NEW `docs/templates/SME交付件清单与验收标准模板-v1.md`——15 项按「能连上/能对上/能用起来/能留下」四段编排，每项带系统来源与验收判据，并显式登记五项「明确不交付」裁剪边界（对齐 SME 审计结论）。
+- **验证**：`tests/test_handover_packages.py` 6→9 例（三态混合端到端含 manifest 三指针与挑选面三态／document·file 全闸族负例／file 指纹漂移），套件 9 passed；邻域回归（m6 商业隔离＋可见性 parity）30 passed；ruff clean；mypy 277 基线零新增。
+- **挂账**：桌面端挑选面与建包表单的三态接线（type 选择器＋document/file 列表拉取）归下一桌面轮，随轮重打包便携版。
+- 口径：**523 路由 / 55 蓝图 / 160 表 / 89 迁移单头 `b7f2d9e4c6a8`**（含 AF1-WP4 并行合流的 55 蓝图/523 路由/160 表基线；分支顶现测值）。
+
 ## [未发布] — billing_actor_policy 机制化轮：模拟域真模型评估记账主体服务账号（opt-in 配置＋双 ContextVar 注入＋fail-closed；零迁移零路由零表，2026-11-15）
 
 承接 `docs/goal-l2.0-AI原生化学习闭环2.0-任务书.md` §挂账登记 Level 评审发现④「billing_actor_policy 机制化＝动生产记账链路，需独立轮立项」——L6 候选卡的 `billing_actor_policy: "service_account"` 此前只是**声明字段**（政策常量），无任何机制真正保证模拟域跑批的 token 计费归到服务账号；本轮把它落实为**代码机制**：

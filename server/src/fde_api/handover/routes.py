@@ -87,11 +87,12 @@ def list_packages():
 @handover_blueprint.get("/handover-packages/artifacts")
 @require_auth
 def available_artifacts():
-    """封包挑选面：本项目已复核产物投影（只读；须先于 /<id> 路由注册）。"""
+    """封包挑选面：本项目过闸候选投影（type=artifact 缺省/document/file；须先于 /<id> 注册）。"""
     project_id = request.args.get("project_id")
     if not project_id:
         raise service.HandoverServiceError("invalid_request", "project_id 必填。", 400)
-    return _data(service.available_artifacts(actor=g.current_user, project_id=project_id))
+    item_type = request.args.get("type", "artifact")
+    return _data(service.available_artifacts(actor=g.current_user, project_id=project_id, item_type=item_type))
 
 
 @handover_blueprint.get("/handover-packages/<package_id>")

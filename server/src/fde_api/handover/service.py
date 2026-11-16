@@ -20,7 +20,7 @@ from fde_api.agents.models import AgentArtifact, AgentRun
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access, visible_project_ids
-from fde_api.handover.models import HandoverPackage, HandoverPackageItem
+from fde_api.handover.models import ITEM_TYPES, HandoverPackage, HandoverPackageItem
 from fde_api.workbench.models import Project, User
 
 MAX_LABEL_CHARS = 200
@@ -86,36 +86,197 @@ def _snapshot_item(artifact: AgentArtifact, display_name: str) -> dict[str, Any]
     }
 
 
+def _snapshot_document_version(version: Any, display_name: str) -> dict[str, Any]:
+    return {
+        "item_type": "document",
+        "document_version_id": version.id,
+        "run_id": None,
+        "kind": "document",
+        "display_name": display_name[:MAX_DISPLAY_NAME],
+        "storage_ref": f"document-version:{version.id}",
+        "sha256": version.sha256,
+    }
+
+
+def _snapshot_file_version(version: Any, display_name: str) -> dict[str, Any]:
+    return {
+        "item_type": "file",
+        "file_version_id": version.id,
+        "run_id": None,
+        "kind": "file",
+        "display_name": display_name[:MAX_DISPLAY_NAME],
+        "storage_ref": version.storage_key,
+        "sha256": version.sha256,
+    }
+
+
+def _require_display_name(raw: dict[str, Any], default: str) -> str:
+    display_name = raw.get("display_name")
+    if display_name is None:
+        display_name = default
+    if not isinstance(display_name, str) or not display_name.strip():
+        raise _error("invalid_items", "display_name 必须是非空字符串。", 422)
+    return display_name.strip()
+
+
 def _validate_item_payloads(session: Any, project_id: str, raw_items: Any) -> list[dict[str, Any]]:
-    """draft 清单编辑的形状与归属校验：快照取 live 产物行的当前指纹。"""
+    """draft 清单编辑的形状与归属校验：快照取 live 产物行的当前指纹。
+
+    item_type 三态（缺省 artifact 向后兼容）：artifact→AgentArtifact（须已人工
+    复核）；document→ProjectDocumentVersion（须 confirmed 且带 sha256）；
+    file→ProjectFileVersion（须 available 且带 sha256）。document/file 懒导入
+    documents/files 模型（跨域边界，架构纯净度钉）。
+    """
     if not isinstance(raw_items, list) or not raw_items:
         raise _error("invalid_items", "items 必须是非空数组。", 422)
     if len(raw_items) > MAX_ITEMS:
         raise _error("invalid_items", f"items 上限 {MAX_ITEMS} 行。", 422, {"limit": MAX_ITEMS})
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     snapshots: list[dict[str, Any]] = []
+    pointer_key_by_type = {
+        "artifact": "artifact_id",
+        "document": "document_version_id",
+        "file": "file_version_id",
+    }
     for raw in raw_items:
         if not isinstance(raw, dict):
             raise _error("invalid_items", "items 元素必须是对象。", 422)
-        artifact_id = raw.get("artifact_id")
-        if not isinstance(artifact_id, str) or not artifact_id:
-            raise _error("invalid_items", "items[].artifact_id 必填。", 422)
-        if artifact_id in seen:
-            raise _error("invalid_items", "同一产物在清单内重复。", 422)
-        seen.add(artifact_id)
-        artifact = session.get(AgentArtifact, artifact_id)
-        if artifact is None:
-            raise _error("artifact_not_found", f"产物不存在：{artifact_id}", 404)
-        run = session.get(AgentRun, artifact.run_id)
-        if run is None or run.project_id != project_id:
-            raise _error("artifact_foreign_project", "产物不属于该项目（跨项目封包拒绝）。", 409)
-        display_name = raw.get("display_name")
-        if display_name is None:
-            display_name = artifact.storage_ref.rsplit("/", 1)[-1]
-        if not isinstance(display_name, str) or not display_name.strip():
-            raise _error("invalid_items", "display_name 必须是非空字符串。", 422)
-        snapshots.append(_snapshot_item(artifact, display_name.strip()))
+        present = {
+            key: raw.get(key)
+            for key in pointer_key_by_type.values()
+            if isinstance(raw.get(key), str) and raw.get(key)
+        }
+        given_type = raw.get("item_type")
+        if given_type is None:
+            # 指针键自反推：恰带一个指针键即按键定型（向后兼容裸 artifact_id 形态）
+            if len(present) != 1:
+                raise _error(
+                    "invalid_items",
+                    "items[] 须恰带一个指针键（artifact_id/document_version_id/file_version_id）。",
+                    422,
+                )
+            item_type = next(key for key in ITEM_TYPES if pointer_key_by_type[key] in present)
+        else:
+            if given_type not in ITEM_TYPES:
+                raise _error(
+                    "invalid_items",
+                    f"items[].item_type 须为 {'/'.join(ITEM_TYPES)}。",
+                    422,
+                )
+            item_type = given_type
+            if pointer_key_by_type[item_type] not in present:
+                raise _error(
+                    "invalid_items",
+                    f"items[].{pointer_key_by_type[item_type]} 必填。",
+                    422,
+                )
+        if item_type == "artifact":
+            artifact_id = raw.get("artifact_id")
+            if not isinstance(artifact_id, str) or not artifact_id:
+                raise _error("invalid_items", "items[].artifact_id 必填。", 422)
+            if (item_type, artifact_id) in seen:
+                raise _error("invalid_items", "同一产物在清单内重复。", 422)
+            seen.add((item_type, artifact_id))
+            artifact = session.get(AgentArtifact, artifact_id)
+            if artifact is None:
+                raise _error("artifact_not_found", f"产物不存在：{artifact_id}", 404)
+            run = session.get(AgentRun, artifact.run_id)
+            if run is None or run.project_id != project_id:
+                raise _error("artifact_foreign_project", "产物不属于该项目（跨项目封包拒绝）。", 409)
+            display_name = _require_display_name(
+                raw, artifact.storage_ref.rsplit("/", 1)[-1]
+            )
+            snapshots.append(_snapshot_item(artifact, display_name))
+        elif item_type == "document":
+            document_version_id = raw.get("document_version_id")
+            if not isinstance(document_version_id, str) or not document_version_id:
+                raise _error("invalid_items", "items[].document_version_id 必填。", 422)
+            if (item_type, document_version_id) in seen:
+                raise _error("invalid_items", "同一文档版本在清单内重复。", 422)
+            seen.add((item_type, document_version_id))
+            version, document = _load_packable_document_version(session, project_id, document_version_id)
+            display_name = _require_display_name(
+                raw, f"{document.business_code} v{version.version_number}"
+            )
+            snapshots.append(_snapshot_document_version(version, display_name))
+        else:
+            file_version_id = raw.get("file_version_id")
+            if not isinstance(file_version_id, str) or not file_version_id:
+                raise _error("invalid_items", "items[].file_version_id 必填。", 422)
+            if (item_type, file_version_id) in seen:
+                raise _error("invalid_items", "同一文件版本在清单内重复。", 422)
+            seen.add((item_type, file_version_id))
+            version = _load_packable_file_version(session, project_id, file_version_id)
+            display_name = _require_display_name(raw, version.original_filename)
+            snapshots.append(_snapshot_file_version(version, display_name))
     return snapshots
+
+
+def _load_packable_document_version(session: Any, project_id: str, version_id: str) -> tuple[Any, Any]:
+    """document 入包前置：存在 / 本项目 / confirmed / 带 sha256（返回版本与文档行）。
+
+    display_name 默认值（business_code + 版本号，代号化安全）由调用方按本函数
+    返回值计算——先过状态闸再算展示名，错误码优先。
+    """
+    from fde_api.documents.models import ProjectDocument, ProjectDocumentVersion
+
+    version = session.get(ProjectDocumentVersion, version_id)
+    if version is None:
+        raise _error("document_not_found", f"文档版本不存在：{version_id}", 404)
+    document = session.get(ProjectDocument, version.document_id)
+    if document is None or document.project_id != project_id:
+        raise _error("document_foreign_project", "文档不属于该项目（跨项目封包拒绝）。", 409)
+    if version.status != "confirmed":
+        raise _error(
+            "document_not_confirmed",
+            "封包仅接受已确认（confirmed）的文档版本（与产物 reviewed 闸同构）。",
+            409,
+            {"document_version_id": version.id, "status": version.status},
+        )
+    if not version.sha256:
+        raise _error(
+            "document_fingerprint_missing",
+            "该文档版本缺少 sha256 指纹（DOCX 未生成或未落指纹），不可封包。",
+            422,
+            {"document_version_id": version.id},
+        )
+    return version, document
+
+
+def _load_packable_file_version(session: Any, project_id: str, version_id: str) -> Any:
+    """file 入包前置：存在 / 本项目 / available / 带 sha256。"""
+    from fde_api.files.models import ProjectFile, ProjectFileVersion
+
+    version = session.get(ProjectFileVersion, version_id)
+    if version is None:
+        raise _error("file_not_found", f"文件版本不存在：{version_id}", 404)
+    project_file = session.get(ProjectFile, version.file_id)
+    if project_file is None or project_file.project_id != project_id:
+        raise _error("file_foreign_project", "文件不属于该项目（跨项目封包拒绝）。", 409)
+    if version.status != "available":
+        raise _error(
+            "file_not_available",
+            "封包仅接受可用（available）状态的文件版本（与产物 reviewed 闸同构）。",
+            409,
+            {"file_version_id": version.id, "status": version.status},
+        )
+    if not version.sha256:
+        raise _error(
+            "file_fingerprint_missing",
+            "该文件版本缺少 sha256 指纹（扫描处理未完成），不可封包。",
+            422,
+            {"file_version_id": version.id},
+        )
+    return version
+
+
+def _item_pointer(row: dict[str, Any]) -> str:
+    """manifest 行指针稳定串（排序键；三类型统一，入参为投影 dict）。"""
+    if row["item_type"] == "document":
+        return row["document_version_id"] or ""
+    if row["item_type"] == "file":
+        return row["file_version_id"] or ""
+    return row["artifact_id"] or ""
 
 
 def _canonical_manifest(package: HandoverPackage, items: list[HandoverPackageItem]) -> dict[str, Any]:
@@ -128,6 +289,8 @@ def _canonical_manifest(package: HandoverPackage, items: list[HandoverPackageIte
                 {
                     "item_type": item.item_type,
                     "artifact_id": item.artifact_id,
+                    "document_version_id": item.document_version_id,
+                    "file_version_id": item.file_version_id,
                     "run_id": item.run_id,
                     "kind": item.kind,
                     "display_name": item.display_name,
@@ -136,7 +299,7 @@ def _canonical_manifest(package: HandoverPackage, items: list[HandoverPackageIte
                 }
                 for item in items
             ),
-            key=lambda row: row["artifact_id"] or "",
+            key=_item_pointer,
         ),
     }
 
@@ -180,6 +343,8 @@ def _serialize_package(row: HandoverPackage, *, detail: bool, session: Any) -> d
                 "id": item.id,
                 "item_type": item.item_type,
                 "artifact_id": item.artifact_id,
+                "document_version_id": item.document_version_id,
+                "file_version_id": item.file_version_id,
                 "run_id": item.run_id,
                 "kind": item.kind,
                 "display_name": item.display_name,
@@ -283,8 +448,81 @@ def update_package(*, actor: User, package_id: str, payload: dict[str, Any]) -> 
         return _serialize_package(package, detail=True, session=session)
 
 
+def _seal_check_artifact(session: Any, package: HandoverPackage, item: HandoverPackageItem) -> None:
+    artifact = session.get(AgentArtifact, item.artifact_id) if item.artifact_id else None
+    if artifact is None:
+        raise _error("artifact_missing", f"清单产物已不存在：{item.artifact_id}", 409)
+    run = session.get(AgentRun, artifact.run_id)
+    if run is None or run.project_id != package.project_id:
+        raise _error("artifact_foreign_project", "产物不属于该项目（跨项目封包拒绝）。", 409)
+    if not artifact.reviewed:
+        raise _error(
+            "artifact_not_reviewed",
+            "清单含未人工复核的产物——封包仅接受已复核产物（与 D11 草案 status 闸同构）。",
+            409,
+            {"artifact_id": artifact.id},
+        )
+    if artifact.sha256 != item.sha256:
+        raise _error(
+            "fingerprint_drift",
+            "清单快照指纹与产物现行指纹不一致。",
+            409,
+            {"artifact_id": artifact.id},
+        )
+
+
+def _seal_check_document_version(session: Any, package: HandoverPackage, item: HandoverPackageItem) -> None:
+    from fde_api.documents.models import ProjectDocument, ProjectDocumentVersion
+
+    version = session.get(ProjectDocumentVersion, item.document_version_id) if item.document_version_id else None
+    if version is None:
+        raise _error("document_missing", f"清单文档版本已不存在：{item.document_version_id}", 409)
+    document = session.get(ProjectDocument, version.document_id)
+    if document is None or document.project_id != package.project_id:
+        raise _error("document_foreign_project", "文档不属于该项目（跨项目封包拒绝）。", 409)
+    if version.status != "confirmed":
+        raise _error(
+            "document_not_confirmed",
+            "清单含未确认的文档版本——封包仅接受 confirmed 文档（与产物 reviewed 闸同构）。",
+            409,
+            {"document_version_id": version.id, "status": version.status},
+        )
+    if version.sha256 != item.sha256:
+        raise _error(
+            "fingerprint_drift",
+            "清单快照指纹与文档版本现行指纹不一致。",
+            409,
+            {"document_version_id": version.id},
+        )
+
+
+def _seal_check_file_version(session: Any, package: HandoverPackage, item: HandoverPackageItem) -> None:
+    from fde_api.files.models import ProjectFile, ProjectFileVersion
+
+    version = session.get(ProjectFileVersion, item.file_version_id) if item.file_version_id else None
+    if version is None:
+        raise _error("file_missing", f"清单文件版本已不存在：{item.file_version_id}", 409)
+    project_file = session.get(ProjectFile, version.file_id)
+    if project_file is None or project_file.project_id != package.project_id:
+        raise _error("file_foreign_project", "文件不属于该项目（跨项目封包拒绝）。", 409)
+    if version.status != "available":
+        raise _error(
+            "file_not_available",
+            "清单含不可用的文件版本——封包仅接受 available 文件（与产物 reviewed 闸同构）。",
+            409,
+            {"file_version_id": version.id, "status": version.status},
+        )
+    if version.sha256 != item.sha256:
+        raise _error(
+            "fingerprint_drift",
+            "清单快照指纹与文件版本现行指纹不一致。",
+            409,
+            {"file_version_id": version.id},
+        )
+
+
 def seal_package(*, actor: User, package_id: str) -> dict[str, Any]:
-    """封存：冻结清单 + 逐项校验（存在/本项目/已人工复核/指纹一致）+ manifest 规范化哈希。"""
+    """封存：冻结清单 + 逐项校验（存在/本项目/状态闸/指纹一致）+ manifest 规范化哈希。"""
     session = _session()
     now = datetime.now(UTC)
     with session.begin():
@@ -295,26 +533,12 @@ def seal_package(*, actor: User, package_id: str) -> dict[str, Any]:
         if not items:
             raise _error("empty_package", "空清单不可封存。", 422)
         for item in items:
-            artifact = session.get(AgentArtifact, item.artifact_id) if item.artifact_id else None
-            if artifact is None:
-                raise _error("artifact_missing", f"清单产物已不存在：{item.artifact_id}", 409)
-            run = session.get(AgentRun, artifact.run_id)
-            if run is None or run.project_id != package.project_id:
-                raise _error("artifact_foreign_project", "产物不属于该项目（跨项目封包拒绝）。", 409)
-            if not artifact.reviewed:
-                raise _error(
-                    "artifact_not_reviewed",
-                    "清单含未人工复核的产物——封包仅接受已复核产物（与 D11 草案 status 闸同构）。",
-                    409,
-                    {"artifact_id": artifact.id},
-                )
-            if artifact.sha256 != item.sha256:
-                raise _error(
-                    "fingerprint_drift",
-                    "清单快照指纹与产物现行指纹不一致。",
-                    409,
-                    {"artifact_id": artifact.id},
-                )
+            if item.item_type == "document":
+                _seal_check_document_version(session, package, item)
+            elif item.item_type == "file":
+                _seal_check_file_version(session, package, item)
+            else:
+                _seal_check_artifact(session, package, item)
         # 先落封存态再算 manifest（sealed_at 必须在清单里，否则摘要与呈现不一致）
         package.status = "sealed"
         package.sealed_by_user_id = actor.id
@@ -371,11 +595,64 @@ def deliver_package(*, actor: User, package_id: str) -> dict[str, Any]:
         return _serialize_package(package, detail=True, session=session)
 
 
-def available_artifacts(*, actor: User, project_id: str) -> dict[str, Any]:
-    """封包挑选面：本项目**已人工复核**产物投影（指针+指纹，不进 api_catalog）。"""
+def available_artifacts(*, actor: User, project_id: str, item_type: str = "artifact") -> dict[str, Any]:
+    """封包挑选面：本项目**过闸**候选投影（指针+指纹，不进 api_catalog）。
+
+    item_type 三态：artifact=已人工复核产物（既有行为零变化）；document=已确认
+    文档版本；file=可用文件版本。非 artifact 形状按类型投影（键闭集随类型）。
+    """
     session = _session()
+    if item_type not in ITEM_TYPES:
+        raise _error("invalid_request", f"type 须为 {'/'.join(ITEM_TYPES)}。", 400)
     with session.begin():
         project = _load_project_for(session, actor, project_id, manage=False)
+        if item_type == "document":
+            from fde_api.documents.models import ProjectDocument, ProjectDocumentVersion
+
+            rows = list(session.scalars(
+                select(ProjectDocumentVersion)
+                .join(ProjectDocument, ProjectDocumentVersion.document_id == ProjectDocument.id)
+                .where(ProjectDocument.project_id == project.id, ProjectDocumentVersion.status == "confirmed")
+                .order_by(ProjectDocumentVersion.created_at.desc())
+                .limit(_LIST_LIMIT_MAX)
+            ))
+            return {
+                "items": [
+                    {
+                        "document_version_id": row.id,
+                        "document_id": row.document_id,
+                        "version_number": row.version_number,
+                        "kind": "document",
+                        "storage_ref": f"document-version:{row.id}",
+                        "sha256": row.sha256,
+                    }
+                    for row in rows
+                ],
+                "truncated": len(rows) >= _LIST_LIMIT_MAX,
+            }
+        if item_type == "file":
+            from fde_api.files.models import ProjectFile, ProjectFileVersion
+
+            rows = list(session.scalars(
+                select(ProjectFileVersion)
+                .join(ProjectFile, ProjectFileVersion.file_id == ProjectFile.id)
+                .where(ProjectFile.project_id == project.id, ProjectFileVersion.status == "available")
+                .order_by(ProjectFileVersion.created_at.desc())
+                .limit(_LIST_LIMIT_MAX)
+            ))
+            return {
+                "items": [
+                    {
+                        "file_version_id": row.id,
+                        "file_id": row.file_id,
+                        "kind": "file",
+                        "storage_ref": row.storage_key,
+                        "sha256": row.sha256,
+                    }
+                    for row in rows
+                ],
+                "truncated": len(rows) >= _LIST_LIMIT_MAX,
+            }
         rows = list(session.scalars(
             select(AgentArtifact)
             .join(AgentRun, AgentArtifact.run_id == AgentRun.id)

@@ -2,9 +2,9 @@
  "route_count": 523,
  "blueprint_count": 55,
  "table_count": 160,
- "revision_count": 87,
+ "revision_count": 89,
  "heads": [
-  "a1e5f9c3d7b2"
+  "b7f2d9e4c6a8"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -229,6 +229,16 @@
    "create_tables": [],
    "add_column_tables": [
     "lead_diagnostic_sessions"
+   ]
+  },
+  "b7f2d9e4c6a8": {
+   "file": "b7f2d9e4c6a8_merge_handover_af1wp4.py",
+   "down_revision": "e5c8b2d4f7a9",
+   "create_tables": [],
+   "add_column_tables": [],
+   "down_revisions": [
+    "e5c8b2d4f7a9",
+    "a1e5f9c3d7b2"
    ]
   },
   "b8c2d6f0a4e7": {
@@ -611,6 +621,14 @@
     "ai_call_audits"
    ],
    "add_column_tables": []
+  },
+  "e5c8b2d4f7a9": {
+   "file": "e5c8b2d4f7a9_handover_item_types_document_file.py",
+   "down_revision": "d8b4f6a2c9e7",
+   "create_tables": [],
+   "add_column_tables": [
+    "handover_package_items"
+   ]
   },
   "e5c9f2a7d4b6": {
    "file": "e5c9f2a7d4b6_commercial_role_assignments.py",

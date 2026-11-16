@@ -5,7 +5,9 @@
   （items=指针+快照，零外键指向 agent_artifacts——metadata 扫描钉死）；
 - seal 冻结清单 + manifest 规范化哈希；sealed 编辑 409；unseal 仅 sealed→draft；
 - delivered（admin 专属）终态不可逆；
-- 封包仅接受已人工复核产物（与 D11 草案 status 闸同构）；跨项目产物拒绝。
+- 封包仅接受已人工复核产物（与 D11 草案 status 闸同构）；跨项目产物拒绝；
+- item_type 三态（SME 交付尾巴轮）：document=confirmed 文档版本 / file=
+  available 文件版本（状态闸与 reviewed 同构；跨项目同拒；指纹漂移同拒）。
 """
 from __future__ import annotations
 
@@ -23,6 +25,13 @@ from test_document_drafts_api import _persist_project
 
 from fde_api.agents.models import AgentArtifact, AgentRun
 from fde_api.auth.models import Base
+from fde_api.documents.models import (
+    DocumentTemplate,
+    DocumentTemplateVersion,
+    ProjectDocument,
+    ProjectDocumentVersion,
+)
+from fde_api.files.models import ProjectFile, ProjectFileVersion
 from fde_api.handover.models import HandoverPackage, HandoverPackageItem
 from fde_api.workbench.models import OperationEvent, ProjectMember
 
@@ -249,3 +258,228 @@ def test_read_faces_permissions_and_isolation_pin(db_session, d4_client, d4_sett
     assert "agent_artifacts" not in refs
     package_row = db_session.query(HandoverPackage).one()
     assert db_session.query(HandoverPackageItem).filter_by(package_id=package_row.id).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# SME 交付尾巴轮：item_type 三态（artifact/document/file）
+
+
+def _seed_available_file_version(
+    db_session, project, user, *, status: str = "available", sha: str | None = None
+) -> ProjectFileVersion:
+    project_file = ProjectFile(
+        project_id=project.id,
+        category="document",
+        display_name=f"交付文件-{uuid4().hex[:6]}",
+        status="active",
+        created_by_user_id=user.id,
+    )
+    db_session.add(project_file)
+    db_session.flush()
+    version = ProjectFileVersion(
+        file_id=project_file.id,
+        version_number=1,
+        source="manual_upload",
+        original_filename=f"deliverable-{uuid4().hex[:6]}.docx",
+        safe_filename="deliverable.docx",
+        extension=".docx",
+        mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        bucket="project-files",
+        storage_key=f"project-files/{project_file.id}/v1/deliverable.docx",
+        size_bytes=1024,
+        etag="etag",
+        sha256=sha if sha is not None else ("c" * 63) + "f",
+        scan_status="clean",
+        preview_status="none",
+        status=status,
+        uploaded_by_user_id=user.id,
+    )
+    db_session.add(version)
+    db_session.commit()
+    return version
+
+
+def _seed_confirmed_document_version(
+    db_session, project, leader_user, *, version_status: str = "confirmed", sha: str | None = None
+) -> tuple[ProjectDocument, ProjectDocumentVersion]:
+    doc_template = DocumentTemplate(
+        document_type=f"sow-{uuid4().hex[:8]}",
+        name="sow 模板",
+        description="",
+        industry_name="制造",
+    )
+    db_session.add(doc_template)
+    db_session.flush()
+    template_version = DocumentTemplateVersion(
+        template_id=doc_template.id,
+        version_number=1,
+        status="published",
+        mapping_json={"document_type": "sow", "name": "sow 模板", "modules": [], "field_map": {}, "research_keys": []},
+        sections_json={"sections": []},
+        table_loops_json={},
+        required_data_json={},
+        source_sha256="",
+        created_by_user_id=leader_user.id,
+    )
+    db_session.add(template_version)
+    db_session.flush()
+    document = ProjectDocument(
+        project_id=project.id,
+        document_type="sow",
+        business_code=f"SOW-{uuid4().hex[:6].upper()}",
+        source_template_version_id=template_version.id,
+        status="confirmed",
+        owner_user_id=leader_user.id,
+    )
+    db_session.add(document)
+    db_session.flush()
+    docx = _seed_available_file_version(db_session, project, leader_user)
+    version = ProjectDocumentVersion(
+        document_id=document.id,
+        version_number=1,
+        source="manual_upload",
+        status=version_status,
+        source_template_version_id=template_version.id,
+        source_snapshot_json={},
+        content_snapshot_json={},
+        docx_file_version_id=docx.id,
+        sha256=sha if sha is not None else ("d" * 63) + "e",
+        generated_by_user_id=leader_user.id,
+    )
+    db_session.add(version)
+    db_session.commit()
+    return document, version
+
+
+def test_document_and_file_items_end_to_end(db_session, d4_client, d4_settings) -> None:
+    """三态混合清单：快照投影 / seal 过闸 / manifest 带三指针 / 挑选面三态。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"TB4I{uuid4().hex[:4]}")
+    agent = seed_agent(db_session, d4_settings)
+    member, _user = _member_client(db_session, d4_client, d4_settings, project)
+    artifact = _seed_reviewed_artifact(db_session, project, member.user, agent.id)
+    document, doc_version = _seed_confirmed_document_version(db_session, project, leader.user)
+    file_version = _seed_available_file_version(db_session, project, member.user)
+
+    response = leader.post(
+        "/api/v1/handover-packages",
+        json={
+            "project_id": project.id,
+            "items": [
+                {"artifact_id": artifact.id},
+                {"document_version_id": doc_version.id},
+                {"file_version_id": file_version.id, "display_name": "验收报告原件"},
+            ],
+        },
+    )
+    assert response.status_code == 201, response.get_json()
+    package = response.get_json()["data"]
+    by_type = {row["item_type"]: row for row in package["items"]}
+    assert set(by_type) == {"artifact", "document", "file"}
+    assert by_type["document"]["sha256"] == doc_version.sha256
+    assert by_type["document"]["storage_ref"] == f"document-version:{doc_version.id}"
+    assert by_type["document"]["display_name"] == f"{document.business_code} v{doc_version.version_number}"
+    assert by_type["file"]["sha256"] == file_version.sha256
+    assert by_type["file"]["display_name"] == "验收报告原件"
+    assert by_type["file"]["storage_ref"] == file_version.storage_key
+
+    sealed = leader.post(f"/api/v1/handover-packages/{package['id']}/seal")
+    assert sealed.status_code == 200, sealed.get_json()
+    manifest_items = sealed.get_json()["data"]["manifest"]["items"]
+    assert any(row["document_version_id"] == doc_version.id for row in manifest_items)
+    assert any(row["file_version_id"] == file_version.id for row in manifest_items)
+
+    # 挑选面三态：document 回 confirmed 版本 / file 回 available 版本
+    docs = leader.get(f"/api/v1/handover-packages/artifacts?project_id={project.id}&type=document")
+    assert docs.status_code == 200, docs.get_json()
+    assert any(row["document_version_id"] == doc_version.id for row in docs.get_json()["data"]["items"])
+    files = leader.get(f"/api/v1/handover-packages/artifacts?project_id={project.id}&type=file")
+    assert files.status_code == 200, files.get_json()
+    assert any(row["file_version_id"] == file_version.id for row in files.get_json()["data"]["items"])
+    bogus = leader.get(f"/api/v1/handover-packages/artifacts?project_id={project.id}&type=bogus")
+    assert bogus.status_code == 400
+    assert bogus.get_json()["error"]["code"] == "invalid_request"
+
+
+def test_document_file_gates(db_session, d4_client, d4_settings) -> None:
+    """document/file 入包闸：状态闸 409 / 跨项目 409 / 缺指纹 422 / 闭集与去重 422。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"TB4J{uuid4().hex[:4]}")
+    other = _persist_project(db_session, leader.user, code=f"TB4K{uuid4().hex[:4]}")
+    member, _user = _member_client(db_session, d4_client, d4_settings, project)
+    other_member, _u2 = _member_client(db_session, d4_client, d4_settings, other)
+
+    _doc, draft_version = _seed_confirmed_document_version(db_session, project, leader.user, version_status="draft")
+    rejected = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "document", "document_version_id": draft_version.id}]},
+    )
+    assert rejected.status_code == 409
+    assert rejected.get_json()["error"]["code"] == "document_not_confirmed"
+
+    _foreign_doc, foreign_version = _seed_confirmed_document_version(db_session, other, leader.user)
+    foreign = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "document", "document_version_id": foreign_version.id}]},
+    )
+    assert foreign.status_code == 409
+    assert foreign.get_json()["error"]["code"] == "document_foreign_project"
+
+    _no_sha_doc, no_sha_version = _seed_confirmed_document_version(db_session, project, leader.user, sha="")
+    no_sha = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "document", "document_version_id": no_sha_version.id}]},
+    )
+    assert no_sha.status_code == 422
+    assert no_sha.get_json()["error"]["code"] == "document_fingerprint_missing"
+
+    deprecated_file = _seed_available_file_version(db_session, project, member.user, status="deprecated")
+    file_gate = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "file", "file_version_id": deprecated_file.id}]},
+    )
+    assert file_gate.status_code == 409
+    assert file_gate.get_json()["error"]["code"] == "file_not_available"
+
+    foreign_file = _seed_available_file_version(db_session, other, other_member.user)
+    file_foreign = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "file", "file_version_id": foreign_file.id}]},
+    )
+    assert file_foreign.status_code == 409
+    assert file_foreign.get_json()["error"]["code"] == "file_foreign_project"
+
+    bogus = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "bogus", "artifact_id": "x"}]},
+    )
+    assert bogus.status_code == 422
+    dup_source = _seed_available_file_version(db_session, project, member.user)
+    duplicate = leader.post(
+        "/api/v1/handover-packages",
+        json={
+            "project_id": project.id,
+            "items": [
+                {"item_type": "file", "file_version_id": dup_source.id},
+                {"item_type": "file", "file_version_id": dup_source.id},
+            ],
+        },
+    )
+    assert duplicate.status_code == 422
+
+
+def test_file_fingerprint_drift_rejected_at_seal(db_session, d4_client, d4_settings) -> None:
+    """file 指纹漂移：封包窗口内文件版本指纹变化 → 409 fingerprint_drift。"""
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"TB4L{uuid4().hex[:4]}")
+    member, _user = _member_client(db_session, d4_client, d4_settings, project)
+    file_version = _seed_available_file_version(db_session, project, member.user)
+    package = leader.post(
+        "/api/v1/handover-packages",
+        json={"project_id": project.id, "items": [{"item_type": "file", "file_version_id": file_version.id}]},
+    ).get_json()["data"]
+    file_version.sha256 = "f" * 64
+    db_session.commit()
+    sealed = leader.post(f"/api/v1/handover-packages/{package['id']}/seal")
+    assert sealed.status_code == 409
+    assert sealed.get_json()["error"]["code"] == "fingerprint_drift"
