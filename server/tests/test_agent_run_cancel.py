@@ -24,6 +24,7 @@ from test_agents_d4_harness import (
 from test_document_drafts_api import _persist_project
 
 from fde_api.agents.adapter import ArtifactFile
+from fde_api.agents.cancellation import _raise_if_cancelled
 from fde_api.agents.models import AgentRun
 from fde_api.agents import service as agents_service
 from test_agents_d4_harness import d4_app, d4_client, d4_settings  # noqa: F401  (pytest fixture)
@@ -138,7 +139,7 @@ def test_launch_guard_rejects_cancelled_row(db_session, d4_app, d4_client, d4_se
 
     with d4_app.app_context():
         with pytest.raises(agents_service.AgentsServiceError) as excinfo:
-            agents_service._raise_if_cancelled(cancelled.id)
+            _raise_if_cancelled(cancelled.id)
         assert excinfo.value.code == "agent_run_cancelled"
         assert excinfo.value.status == 409
-        assert agents_service._raise_if_cancelled(queued.id) is None
+        assert _raise_if_cancelled(queued.id) is None

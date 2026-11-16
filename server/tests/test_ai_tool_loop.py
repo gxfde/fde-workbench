@@ -543,9 +543,11 @@ def test_tool_loop_round_budget_reads_settings(app, db_session, ai_user, monkeyp
     )
 
     assert text == "预算耗尽，直接给结论。"
-    # 2 轮预算 + 1 次强制终答 = 3 次 provider 调用；第 3 个 tool_call 不会发出
-    assert len(session.calls) == 3
-    forced_body = session.calls[2][1]["json"]
+    # 口径沿既有语义：轮预算 2 = 3 次带工具 post（round 0/1/2——round 2 先
+    # post 后判超限）+ 1 次撤工具强制终答 = 4 次 provider 调用
+    assert len(session.calls) == 4
+    assert "tools" in session.calls[2][1]["json"]
+    forced_body = session.calls[3][1]["json"]
     assert "tools" not in forced_body
 
 

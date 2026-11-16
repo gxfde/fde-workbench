@@ -38,7 +38,7 @@ from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app
@@ -55,6 +55,7 @@ from fde_api.agents.adapter import (
     ZcodeAdapter,
 )
 from fde_api.agents.artifact_persistence import persist_completed_run_artifacts
+from fde_api.agents.cancellation import _make_cancel_check, _raise_if_cancelled
 from fde_api.agents.context import (
     SanitizationError,
     render_masked_context,
@@ -280,68 +281,6 @@ def _require_run_access(session: Any, actor: User, run_id: str) -> tuple[AgentRu
     if project is None or access is None or not access.can_view:
         raise _error("project_forbidden", "无权访问该 run 所属项目。", 403)
     return run, project
-
-
-def _raise_if_cancelled(run_id: str) -> None:
-    """启动守卫（AF1-WP1 定参①，docs/ai-fde/09 §1）：cancelled 行在
-    SandboxHandle.create 之前拦下——取消后的行永不拉起新容器（避免「取消
-    后仍 spawn」的泄漏窗口）；已入监听段的取消由 should_cancel 轮询收口。
-    """
-    with db.session() as session:
-        row = session.get(AgentRun, run_id)
-        if row is not None and row.status == "cancelled":
-            raise _error(
-                "agent_run_cancelled",
-                "run 已被取消，沙箱未启动、不计费。",
-                409,
-                detail={"run_id": run_id},
-            )
-
-
-def _make_cancel_check(run_id: str) -> Callable[[], bool]:
-    """默认取消检查：短会话重读 run 状态（生产库并发读安全）。
-
-    测试经 ``fde_agent_cancel_check_factory`` 扩展注入假检查，避免测试
-    单连接（StaticPool）下的会话竞争——与 clock/sleeper 注入缝同构。
-    """
-
-    def _check() -> bool:
-        with db.session() as session:
-            row = session.get(AgentRun, run_id)
-            return bool(row is not None and row.status == "cancelled")
-
-    return _check
-
-
-def cancel_run(*, actor: User, run_id: str) -> dict[str, Any]:
-    """取消 run（AF1-WP1 定参①）：幂等 + 诚实终态，沿 WorkflowRun
-    cancel_run 语义（workflows/executor.py:327：幂等重入 + 终态 409 +
-    事件留痕），不新造第二套取消语义。
-
-    - queued：直接取消（启动守卫拦住未开始的执行）；
-    - running（沙箱）：写行后监听段 should_cancel 收口，kill 恒定发生；
-    - host_running：宿主通道回执语义未含取消，本版显式拒绝（409）；
-    - 已 cancelled：幂等返回 cancelled=False；其余终态：409 already_terminal。
-    """
-    with db.session() as session, session.begin():
-        run, project = _require_run_access(session, actor, run_id)
-        access = project_access(actor, project)
-        may_cancel = run.initiated_by_user_id == actor.id or bool(access and access.can_manage)
-        if not may_cancel:
-            raise _error("run_cancel_forbidden", "仅发起人或项目管理员可取消 run。", 403)
-        if run.status == "cancelled":
-            return {"run": _serialize_run(session, run), "cancelled": False}
-        if run.status == "host_running":
-            raise _error(
-                "cancel_provider_unsupported",
-                "宿主通道 run 暂不支持取消（回执语义未含取消）；请等待回执或失联恢复。",
-                409,
-            )
-        if run.status not in IN_FLIGHT_STATUSES:
-            raise _error("already_terminal", f"运行已终态（{run.status}），不能取消。", 409)
-        run.status = "cancelled"
-        record_event(session, actor, "agent_run_cancelled", project, {"run_id": run.id})
-        return {"run": _serialize_run(session, run), "cancelled": True}
 
 
 def _serialize_run(session: Any, run: AgentRun, *, detail: bool = False) -> dict[str, Any]:
@@ -890,7 +829,8 @@ def _execute_run(
         egress="allowlist" if agent.sandbox_profile == "egress_allowlist" else "deny",
     )
     allowlist = [item for item in (settings.agent_allowed_egress or "").split(",") if item.strip()]
-    # AF1-WP1 定参①：启动守卫先于容器创建（cancelled 行永不落容器）。
+    # AF1-WP1 定参①（agents/cancellation.py）：启动守卫先于容器创建
+    # （cancelled 行永不落容器）；监听段收口由 should_cancel 装配承担。
     _raise_if_cancelled(run_id)
     try:
         handle = SandboxHandle.create(

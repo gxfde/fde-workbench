@@ -115,7 +115,7 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          lessons/prompt_overlays 两表 a9f3e5c7b1d2；均挂 c8e2a6f0b9d4 分叉）+
 #          merge 收单头 c2a9e7d5b3f1（零 DDL，down_revision=双头元组；
 #          P1 §7④ merge 非 rebase；细则②）
-HEAD_REVISION = "c2a9e7d5b3f1"
+HEAD_REVISION = "b3e7a1c9f4d2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",

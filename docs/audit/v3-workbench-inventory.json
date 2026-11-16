@@ -1,10 +1,10 @@
 {
- "route_count": 512,
+ "route_count": 513,
  "blueprint_count": 54,
  "table_count": 159,
- "revision_count": 84,
+ "revision_count": 85,
  "heads": [
-  "c2a9e7d5b3f1"
+  "b3e7a1c9f4d2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -135,6 +135,12 @@
     "gates",
     "workflow_runs"
    ]
+  },
+  "b3e7a1c9f4d2": {
+   "file": "b3e7a1c9f4d2_agent_run_cancelled_status.py",
+   "down_revision": "c2a9e7d5b3f1",
+   "create_tables": [],
+   "add_column_tables": []
   },
   "b3e7c9d1a5f2": {
    "file": "b3e7c9d1a5f2_commercial_g2_free_quota.py",

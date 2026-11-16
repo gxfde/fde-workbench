@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
-from fde_api.agents import service
+from fde_api.agents import cancellation, service
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
 from fde_api.extensions import db
@@ -67,8 +67,9 @@ def cancel_run(run_id):
 
     queued 直接取消（启动守卫拦未开始的执行）；running 沙箱经监听段
     cancel check 收口（kill 恒定发生，CR-015）；host_running 显式 409。
+    语义真身与启动守卫见 agents/cancellation.py（service 热点钉边界）。
     """
-    return _data(service.cancel_run(actor=g.current_user, run_id=run_id))
+    return _data(cancellation.cancel_run(actor=g.current_user, run_id=run_id))
 
 
 _LIST_LIMIT_DEFAULT = 50
