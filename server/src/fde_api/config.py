@@ -347,6 +347,22 @@ class Settings(BaseSettings):
     # 分离——证据包防伪面独立换钥）。缺省 None：导出/签收 fail-closed 503
     # evidence_pack_not_configured（宁可拒绝不可裸包出闸）。
     ontology_evidence_pack_hmac_key: SecretStr | None = Field(default=None, repr=False)
+    # AF1-WP1 定参④（docs/ai-fde/09 §2.2 方案 B①，P1 已批 2026-11-16）：自托管
+    # 默认端点（OpenAI 兼容面，如本机 Ollama）。配置后 system-default 档优先
+    # 解析自托管（红线：客户敏感数据不默认发公共模型）；未配置回落既有
+    # deepseek_* 槽位（向后兼容；显式 preference 恒最优先）。
+    ai_selfhosted_base_url: str = ""
+    ai_selfhosted_model: str = ""
+    ai_selfhosted_api_key: str = ""  # 本地端点不校验凭据时可留空（解析层补显式占位）
+
+    @model_validator(mode="after")
+    def validate_selfhosted_provider(self) -> "Settings":
+        if self.ai_selfhosted_base_url.strip() and not self.ai_selfhosted_model.strip():
+            raise ValueError(
+                "FDE_AI_SELFHOSTED_BASE_URL requires non-empty FDE_AI_SELFHOSTED_MODEL "
+                "(AF1-WP1 定参④：自托管默认须带模型名，防止空模型名静默失效)"
+            )
+        return self
 
     model_config = SettingsConfigDict(
         env_prefix="FDE_",

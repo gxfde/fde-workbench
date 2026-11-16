@@ -486,6 +486,37 @@ class OntologyClient:
             json_body={"pinned_version_id": version_id, "input": input_payload},
         )
 
+    def dry_validate_change_set(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        proposed_json: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """AF0-C1 / api-spec 1.3.6-af0：纯候选预检（零状态变更只读校验）。
+
+        verdict/violations/conflicting_entities 以 200 结果返回（violations 是
+        结果不是 HTTP 错误）；无幂等域——契约不要求 X-Idempotency-Key（零副
+        作用）。ontology_id/pinned_version 由调用方服务端从项目绑定注入
+        （S-13），本方法不接受调用方自报版本。
+        """
+        return self._request(
+            "POST",
+            "/api/v1/mcp/tools/dry_validate_change_set",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            idem=None,
+            json_body={
+                "ontology_id": ontology_id,
+                "pinned_version": version_id,
+                "proposed_json": proposed_json or {},
+            },
+        )
+
     def approve_action(
         self,
         *,

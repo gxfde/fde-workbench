@@ -773,6 +773,38 @@ def get_binding_action(
     )
 
 
+def dry_validate_binding_candidate(
+    *,
+    actor: Any,
+    project_id: str,
+    binding_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """AF0-C1（api-spec 1.3.6-af0）：项目绑定 pinned 版本上的纯候选预检。
+
+    S-13：ontology_id 与 pinned_version 由服务端从绑定注入，调用方只带
+    proposed_json；零状态变更（不改 ChangeSet、不写幂等/审计——调用留痕由
+    Workbench 侧 agent_tool_calls 承载）。violations/conflict 为 200 结果。
+    """
+    ensure_enabled()
+    session = db.session()
+    org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
+    client = client_from_settings()
+    proposed_json = payload.get("proposed_json")
+    if not isinstance(proposed_json, dict):
+        raise BindingError("proposed_json must be a JSON object", status=400, code="invalid_request")
+    return _translate_runtime_call(
+        lambda: client.dry_validate_change_set(
+            actor_id=str(actor.id),
+            org_id=org_id,
+            project_id=project_id,
+            ontology_id=binding.ontology_id,
+            version_id=binding.pinned_version_id,
+            proposed_json=proposed_json,
+        )
+    )
+
+
 def execute_binding_action(
     *,
     actor: Any,

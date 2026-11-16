@@ -176,6 +176,17 @@ def resolve_model_preference(session: Session, user_id: str, preference_id: str 
     if preference_id:
         raise ControlServiceError("not_found", "模型配置不存在或无权使用。", 404)
     settings = current_app.config["SETTINGS"]
+    # AF1-WP1 定参④（docs/ai-fde/09 §2.2 方案 B①，P1 已批）：自托管默认档——
+    # 配置了自托管端点时先于 deepseek_* 槽位解析（红线：客户敏感数据不默认
+    # 发公共模型）；显式 preference（用户/公共 default 行）恒最优先。
+    selfhost_base = (getattr(settings, "ai_selfhosted_base_url", "") or "").strip()
+    if selfhost_base:
+        return {"id": "system-selfhosted", "provider": _provider_for_base_url(selfhost_base),
+                "base_url": selfhost_base, "model": getattr(settings, "ai_selfhosted_model", ""),
+                # 本地端点（Ollama 类）不校验凭据：留空时补显式占位（直连契约要求
+                # api_key 非空；该占位不是凭据，也不出本机）
+                "api_key": (getattr(settings, "ai_selfhosted_api_key", "") or "") or "selfhosted-local",
+                "supports_tools": True}
     key = getattr(settings, "deepseek_api_key", "")
     if not key:
         raise ControlServiceError("model_not_configured", "请先在 AI 与扩展的模型管理中配置模型。", 409)

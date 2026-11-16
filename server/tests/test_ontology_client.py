@@ -252,3 +252,41 @@ def test_unavailable_message_carries_no_intranet_url(monkeypatch: pytest.MonkeyP
         client.get_change_set(actor_id="u", org_id="o", project_id="p", change_set_id="cs")
     assert intranet not in str(excinfo.value)
     assert "10.203.7.42" not in str(excinfo.value)
+
+
+def test_dry_validate_change_set_payload_and_no_idempotency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AF0-C1：纯预检——路径/请求体按 1.3.6-af0 契约；零副作用无幂等键。"""
+    captured: dict[str, object] = {}
+
+    def fake_request(method: str, url: str, **kwargs: object) -> _FakeResponse:
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers")
+        captured["json"] = kwargs.get("json")
+        return _FakeResponse(200, json.dumps(
+            {"verdict": "violations", "violations": [{"code": "validation_failed"}],
+             "conflicting_entities": []},
+        ).encode())
+
+    monkeypatch.setattr("fde_api.integrations.ontology_client.requests.request", fake_request)
+    client = _client()
+    out = client.dry_validate_change_set(
+        actor_id="u1", org_id="org1", project_id="p1",
+        ontology_id="ont-1", version_id="1.0.0",
+        proposed_json={"objects": [{"key": "batch"}]},
+    )
+    assert out["verdict"] == "violations"
+    assert out["_status"] == 200
+    assert captured["method"] == "POST"
+    assert isinstance(captured["url"], str) and captured["url"].endswith(
+        "/api/v1/mcp/tools/dry_validate_change_set"
+    )
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    # 零副作用契约：不要求 X-Idempotency-Key（1.3.6-af0 头注「刻意差异」）
+    assert "X-Idempotency-Key" not in headers
+    body = captured["json"]
+    assert isinstance(body, dict)
+    assert body["ontology_id"] == "ont-1"
+    assert body["pinned_version"] == "1.0.0"
+    assert body["proposed_json"] == {"objects": [{"key": "batch"}]}

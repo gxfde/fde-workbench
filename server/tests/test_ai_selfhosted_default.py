@@ -1,0 +1,54 @@
+"""AF1-WP1 定参④：自托管默认档（docs/ai-fde/09 §2.2 方案 B①，P1 已批）。
+
+resolve_model_preference 的 system-default 档：配置了 ai_selfhosted_* 时
+先于 deepseek_* 槽位解析（红线：客户敏感数据不默认发公共模型）；未配置
+回落既有槽位（向后兼容）。
+"""
+from __future__ import annotations
+
+import pytest
+
+from fde_api.auth.models import User
+from fde_api.control.model_preferences import resolve_model_preference
+
+
+@pytest.fixture
+def pref_user(app, db_session):
+    user = User(
+        username=f"selfhost-{id(db_session)}",
+        display_name="selfhost",
+        password_hash="unused",
+        role="admin",
+        is_active=True,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+def test_selfhosted_endpoint_wins_system_default(app, db_session, pref_user, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_base_url", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_model", "qwen3:14b")
+    out = resolve_model_preference(db_session, pref_user.id)
+    assert out["id"] == "system-selfhosted"
+    assert out["base_url"] == "http://127.0.0.1:11434/v1"
+    assert out["model"] == "qwen3:14b"
+    # 本地端点不校验凭据：留空 → 显式占位（直连契约要求非空；非真实凭据）
+    assert out["api_key"] == "selfhosted-local"
+    assert out["supports_tools"] is True
+
+
+def test_explicit_api_key_is_preserved(app, db_session, pref_user, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_base_url", "http://10.0.0.8:8000/v1")
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_model", "qwen3-32b")
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_api_key", "lan-token-1")
+    out = resolve_model_preference(db_session, pref_user.id)
+    assert out["api_key"] == "lan-token-1"
+    # 私网网关名不出现在 provider 标签（_provider_for_base_url 兜底 openai-compatible）
+    assert out["provider"] == "openai-compatible"
+
+
+def test_without_selfhosted_config_falls_back_to_deepseek_slot(app, db_session, pref_user) -> None:
+    out = resolve_model_preference(db_session, pref_user.id)
+    assert out["id"] == "system-default"
