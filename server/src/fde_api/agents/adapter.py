@@ -16,6 +16,7 @@ RunEventProvider/OutputScanner），超时/退避时钟可注入——断言全�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -25,6 +26,8 @@ from typing import Any, Protocol
 from fde_api.agents import zcode_contract as zc
 from fde_api.agents.sandbox import SandboxHandle
 from fde_api.agents.workspace_files import _MANIFEST_FILE
+
+logger = logging.getLogger(__name__)
 
 ADAPTER_KINDS: frozenset[str] = frozenset({"zcode", "codex", "claude_code", "opencode"})
 
@@ -202,8 +205,14 @@ class ZcodeAdapter:
         output_scanner: OutputScanner,
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> AgentRunResult:
-        """三段执行；超时/预算熔断在本段强制（B-1/B-2），kill 恒定发生。"""
+        """三段执行；超时/预算熔断在本段强制（B-1/B-2），kill 恒定发生。
+
+        AF1-WP1 定参①：``should_cancel``（每轮监听轮询调用）轮询到 True 即
+        诚实终态 cancelled——外部 cancel API 写行后经此收口，副作用停止仍走
+        finally kill（CR-015），不新造第二套回收语义。
+        """
         started = clock()
 
         # ① spawn：AGENTS.md 纪律已由 service 写入 workspace；此处拉起 CLI
@@ -217,6 +226,7 @@ class ZcodeAdapter:
                 output_scanner=output_scanner,
                 clock=clock,
                 sleeper=sleeper,
+                should_cancel=should_cancel,
             )
         finally:
             # goal-c CR-015：回收走 finally——监听段任何非 SandboxError 异常
@@ -234,6 +244,7 @@ class ZcodeAdapter:
         output_scanner: OutputScanner,
         clock: Callable[[], float],
         sleeper: Callable[[float], None],
+        should_cancel: Callable[[], bool] | None = None,
     ) -> AgentRunResult:
         """② 监听（超时/预算熔断）→ ③ 产物扫描；回收 kill 由调用方 finally 保证。"""
         deadline = started + ctx.timeout_ms / 1000
@@ -245,6 +256,18 @@ class ZcodeAdapter:
         status = "failed"  # 无 done 事件且未熔断 → 上游异常退出的保守终态
 
         while True:
+            if should_cancel is not None:
+                # AF1-WP1 定参①：取消探测先于超时判定（同轮同时命中时诚实终
+                # 态=cancelled，不落可重试的 timeout 族）；探测失效不改变超
+                # 时语义（降级为 False + 留痕，run 照常可走 timeout 收口）。
+                try:
+                    hit = should_cancel()
+                except Exception:
+                    logger.warning("cancel check failed; continue as not-cancelled", exc_info=True)
+                    hit = False
+                if hit:
+                    status = "cancelled"
+                    break
             now = clock()
             if now >= deadline:
                 status = "timeout"

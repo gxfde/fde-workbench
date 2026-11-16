@@ -55,6 +55,7 @@ from fde_api.agents.adapter import (
     ZcodeAdapter,
 )
 from fde_api.agents.artifact_persistence import persist_completed_run_artifacts
+from fde_api.agents.cancellation import _make_cancel_check, _raise_if_cancelled
 from fde_api.agents.context import (
     SanitizationError,
     render_masked_context,
@@ -460,7 +461,12 @@ def _finalize(
             and not failed_validation
             and not t2_gate_satisfied(session, run_id=run_id, solution_id=solution_id)
         )
-        if receipt_missing:
+        if run.status == "cancelled":
+            # AF1-WP1 竞窗收口：取消 API 晚于监听段最后一轮落库——取消胜出，
+            # 终态保持 cancelled；结果与门禁判定不入账（成本字段照实记账，
+            # 见下方 token_cost 赋值）。
+            pass
+        elif receipt_missing:
             # B#2 回执缺失：业务成功但回执没写——独立终态，拒绝同键重跑（业务
             # 动作不重执行）；人工盘点 output/ 后修复回执或另起任务。
             run.status = "succeeded_but_receipt_invalid"
@@ -481,6 +487,8 @@ def _finalize(
             run.degraded = True
         if l1_path:
             run.fallback_level = "L1"
+        elif run.status == "cancelled":
+            pass  # 取消 ≠ 降级——用户主动终态不进 L2 模板填空面
         elif result.status != "completed":
             # 决议②：B 类无产物 → 降级去向 L2 模板填空（自动交付 §3.2「L1 或 L2」取 L2）
             run.fallback_level = "L2"
@@ -774,12 +782,18 @@ def _execute_run(
                 503,
                 detail={"run_id": run_id, "fallback_level": "L2", "reason": str(error)},
             ) from error
+        cancelled_won = False
         with db.session() as session, session.begin():
+            # CAS 条件迁移（同容器路径竞窗收口）：仅 queued→running。
+            session.query(AgentRun).filter(
+                AgentRun.id == run_id, AgentRun.status == "queued"
+            ).update({"status": "running"}, synchronize_session=False)
+            session.expire_all()  # synchronize_session=False → 重读取新态
             run_row = session.get(AgentRun, run_id)
             if run_row is not None:
-                run_row.status = "running"
                 run_row.execution_provider = "host_channel"
                 run_row.workspace_ref = str(normalized_workspace)
+                cancelled_won = run_row.status == "cancelled"
             # ⑦ 出站审计持久化：与 run 状态写同事务（域名级计数+去重清单，
             # 有界 20 条；空审计零事件——未开启闸或无出站尝试都不留噪声）。
             if result.egress_audit:
@@ -787,6 +801,15 @@ def _execute_run(
                     "run_id": run_id,
                     **summarize_audit(result.egress_audit),
                 })
+        if cancelled_won:
+            # 出站审计已随上事务如实落账（取消不抹真实发生的外呼），结果与
+            # 计费不入账——诚实 409。
+            raise _error(
+                "agent_run_cancelled",
+                "run 已被取消，宿主执行结果不入账。",
+                409,
+                detail={"run_id": run_id},
+            )
         data, failures, gate_open = _finalize(
             db.session,
             run_id=run_id,
@@ -828,6 +851,9 @@ def _execute_run(
         egress="allowlist" if agent.sandbox_profile == "egress_allowlist" else "deny",
     )
     allowlist = [item for item in (settings.agent_allowed_egress or "").split(",") if item.strip()]
+    # AF1-WP1 定参①（agents/cancellation.py）：启动守卫先于容器创建
+    # （cancelled 行永不落容器）；监听段收口由 should_cancel 装配承担。
+    _raise_if_cancelled(run_id)
     try:
         handle = SandboxHandle.create(
             run_id=run_id,
@@ -847,9 +873,16 @@ def _execute_run(
         ) from error
 
     with db.session() as session, session.begin():
-        run_row = session.get(AgentRun, run_id)
-        if run_row is not None:
-            run_row.status = "running"
+        # CAS 条件迁移（AF1-WP1 竞窗收口）：仅 queued→running。取消 API 若
+        # 在启动守卫读取之后、本写点之前落库，此处零行命中——取消胜出，
+        # 沙箱不再拉起（守卫单点读覆盖不到的窗口由本 CAS 关闭）。
+        updated = (
+            session.query(AgentRun)
+            .filter(AgentRun.id == run_id, AgentRun.status == "queued")
+            .update({"status": "running"}, synchronize_session=False)
+        )
+    if not updated:
+        _raise_if_cancelled(run_id)  # 已取消 → 409；容器与监听段一律不启动
 
     adapter = current_app.extensions.get("fde_agent_adapter") or ZcodeAdapter(cli_command=settings.agent_cli_command)
     provider_factory = current_app.extensions.get("fde_agent_event_provider_factory")
@@ -860,6 +893,11 @@ def _execute_run(
     output_scanner: OutputScanner = (
         scanner_factory(run_id, workspace) if scanner_factory else ManifestOutputScanner(workspace / _OUTPUT_DIR)
     )
+    cancel_factory = current_app.extensions.get("fde_agent_cancel_check_factory")
+    if cancel_factory is not None:
+        should_cancel = cancel_factory(run_id)
+    else:
+        should_cancel = _make_cancel_check(run_id)
     credentials = {_credential_env_name(agent.credential_ref or ""): credentials_plaintext} if credentials_plaintext else {}
     ctx = AgentRunContext(
         run_id=run_id,
@@ -879,7 +917,8 @@ def _execute_run(
             run_kwargs["clock"] = injected_clock
         if injected_sleeper is not None:
             run_kwargs["sleeper"] = injected_sleeper
-        result = adapter.run(ctx, handle, event_provider=event_provider, output_scanner=output_scanner, **run_kwargs)
+        result = adapter.run(ctx, handle, event_provider=event_provider, output_scanner=output_scanner,
+                             should_cancel=should_cancel, **run_kwargs)
     except SandboxError as error:
         _mark_l2(db.session(), run_id, str(error))
         raise _error(

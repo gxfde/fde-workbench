@@ -515,3 +515,65 @@ def test_direct_loop_narrows_capabilities_and_allowed_tools(app, db_session, ai_
     }
     assert offered_names == {"project_read", "api_catalog"}
     assert trace == [{"tool": "system_status", "ok": False}]
+
+
+# --- tool-round budget（AF1-WP1 定参③：MAX_TOOL_ROUNDS 参数化，docs/ai-fde/09 §1）---
+
+
+def test_tool_loop_round_budget_reads_settings(app, db_session, ai_user, monkeypatch):
+    """settings.agent_max_tool_rounds 收紧轮数：预算耗尽即强制终答（工具撤下）。
+
+    monkeypatch 精确打点 app.config["SETTINGS"]（自动还原），不用模块级
+    fixture 覆盖——避免波及本文件其他依赖默认 6 轮的既有测试。
+    """
+    from fde_api.control import ai_tool_loop
+
+    monkeypatch.setattr(app.config["SETTINGS"], "agent_max_tool_rounds", 2)
+    monkeypatch.setattr(ai_tool_loop, "call_tool", lambda *a, **k: {"items": []})
+    session = FakeSession([
+        tool_call_response("project_list", {"query": "a"}, call_id="c1"),
+        tool_call_response("project_list", {"query": "b"}, call_id="c2"),
+        tool_call_response("project_list", {"query": "c"}, call_id="c3"),
+        final_response("预算耗尽，直接给结论。"),
+    ])
+
+    text, _, _ = direct_tool_completion(
+        model=provider_model(), prompt="查三轮也不给答案", user=ai_user,
+        project_id=None, execution_id="exec-rounds", session=session,
+    )
+
+    assert text == "预算耗尽，直接给结论。"
+    # 口径沿既有语义：轮预算 2 = 3 次带工具 post（round 0/1/2——round 2 先
+    # post 后判超限）+ 1 次撤工具强制终答 = 4 次 provider 调用
+    assert len(session.calls) == 4
+    assert "tools" in session.calls[2][1]["json"]
+    forced_body = session.calls[3][1]["json"]
+    assert "tools" not in forced_body
+
+
+def test_tool_loop_explicit_round_budget_overrides_settings(app, db_session, ai_user):
+    """显式 max_tool_rounds 参数优先于配置（调用方可按 run 收紧/放宽）。"""
+    session = FakeSession([
+        tool_call_response("project_list", {"query": "a"}),
+        final_response("一轮就够。"),
+    ])
+
+    text, _, _ = direct_tool_completion(
+        model=provider_model(), prompt="查一次", user=ai_user, project_id=None,
+        execution_id="exec-rounds2", session=session, max_tool_rounds=1,
+    )
+
+    assert text == "一轮就够。"
+    assert len(session.calls) == 2
+
+
+def test_tool_loop_rejects_non_positive_round_budget(app, db_session, ai_user):
+    """显式参数 <1 → ValueError（配置面由 Field ge=1 拦截，参数面在此钉死）。"""
+    session = FakeSession([])
+    with pytest.raises(ValueError):
+        direct_tool_completion(
+            model=provider_model(), prompt="你好", user=ai_user,
+            project_id=None, execution_id="exec-bad", session=session,
+            max_tool_rounds=0,
+        )
+    assert session.calls == []

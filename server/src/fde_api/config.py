@@ -201,6 +201,10 @@ class Settings(BaseSettings):
     agent_max_duration_ms: int = Field(default=300000, ge=1000)
     # 重试指数退避基长（秒）：第 n 次重试需等待 base*2^(n-1)；0 = 测试口径
     agent_retry_backoff_base_seconds: int = Field(default=30, ge=0)
+    # 工程修正循环轮数（AF1-WP1 定参③，docs/ai-fde/09 §1）：原 ai_tool_loop
+    # 硬编码 6 改可配；初值=6 维持现行为，AF1 开发集实测后冻结（05 §5 末段口径）；
+    # le=50 防配置笔误造成无界 provider 轮次（真要放宽走具名修订）
+    agent_max_tool_rounds: int = Field(default=6, ge=1, le=50)
     # egress allowlist：逗号分隔 IPv4 CIDR；空 = allowlist 档不可用（deny 基线不变）
     agent_allowed_egress: str = ""
     # 上下文脱敏禁区词（逗号分隔，真实客户名等）：命中即拒绝发起 run（fail-closed）
