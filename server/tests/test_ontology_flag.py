@@ -105,6 +105,11 @@ _EXPECTED_ENDPOINTS = {
         "POST",
         "/api/v1/projects/<project_id>/ontology-bindings/<binding_id>/actions/<action_key>/execute",
     ),
+    # M6-WP6：TrustBoard 交付链接签发（Workbench 侧出链，一次性交接令牌）
+    (
+        "POST",
+        "/api/v1/projects/<project_id>/ontology-bindings/trustboard/delivery-link",
+    ),
 }
 
 
@@ -116,7 +121,7 @@ def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
     """
     app = create_app(_settings(tmp_path, enabled=False))
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
-    assert len(_ontology_routes(app)) == 10  # 规则串去重后（M3 五规则 + M4 五规则）
+    assert len(_ontology_routes(app)) == 11  # 规则串去重后（M3 五 + M4 五 + M6 交付链接一）
     assert app.config["SETTINGS"].ontology_enabled is False
 
     client = app.test_client()
@@ -147,6 +152,12 @@ def test_flag_off_surface_registered_but_nonfunctional(tmp_path: Path) -> None:
             "GET",
             "/api/v1/projects/proj-1/ontology-bindings/bind-1/lineage",
             None,
+        ),
+        # M6-WP6：交付链接签发入口关闭态同样 404 not_found（写入口亦不得先行受理）
+        (
+            "POST",
+            "/api/v1/projects/proj-1/ontology-bindings/trustboard/delivery-link",
+            {},
         ),
     )
     for method, path, body in probes:
@@ -181,10 +192,11 @@ def test_flag_off_probe_indistinguishable_from_absent_path(tmp_path: Path) -> No
 
 
 def test_flag_on_mounts_bindings_api(tmp_path: Path) -> None:
-    """on：§5.2 四路径 + M3 D21 两路径 + M4 Logic/Action 五入口（共 11 个 method/rule 端点；去重规则 10 条）。"""
+    """on：§5.2 四路径 + M3 D21 两路径 + M4 Logic/Action 五入口 + M6 交付链接一
+    （共 12 个 method/rule 端点；去重规则 11 条）。"""
     app = create_app(_settings(tmp_path, enabled=True))
     routes = sorted(str(r) for r in app.url_map.iter_rules() if "ontology-bindings" in str(r))
-    assert len(routes) == 11, routes  # url_map 不去重：GET/POST 同串各计一条
+    assert len(routes) == 12, routes  # url_map 不去重：GET/POST 同串各计一条
     assert _ontology_endpoints(app) == _EXPECTED_ENDPOINTS
     assert any(r.endswith("/ontology-bindings") for r in routes)
     assert any("upgrade-proposal" in r for r in routes)
@@ -194,6 +206,7 @@ def test_flag_on_mounts_bindings_api(tmp_path: Path) -> None:
     assert any("/logic/" in r for r in routes)
     assert any("/actions/" in r for r in routes)
     assert any("action-requests" in r for r in routes)
+    assert any("trustboard/delivery-link" in r for r in routes)
 
 
 _INGEST_ENDPOINTS: set[tuple[str, str]] = {

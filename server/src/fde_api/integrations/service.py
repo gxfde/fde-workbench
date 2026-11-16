@@ -799,3 +799,67 @@ def execute_binding_action(
             request_id=request_id,
         )
     )
+
+
+def _trustboard_delivery_payload(issued: dict[str, Any]) -> dict[str, Any]:
+    """从 runtime **已翻译**响应体收敛为**最小暴露**载荷。
+
+    runtime 响应里同时含会话令牌（`token`）——那是程序化消费的常驻凭据，
+    **不回吐给 Workbench 调用方**（凭据最小暴露）：只给一次性消费的交付链接
+    与到期时刻。注意入参是 `_translate_runtime_call` 归一后的响应体（`_status`
+    已被其弹出）——本函数不再触 runtime 异常面。
+    """
+    delivery_path = str(issued.get("delivery_path", "")).strip()
+    if not delivery_path:
+        raise BindingError(
+            "delivery link issuance failed", status=502, code="delivery_link_failed"
+        )
+    return {
+        "delivery_path": delivery_path,
+        "expires_at": issued.get("handover_expires_at") or issued.get("expires_at"),
+        "single_use": True,
+    }
+
+
+def issue_trustboard_delivery_link(*, actor: User, project_id: str) -> dict[str, Any]:
+    """签发 TrustBoard 客户只读看板交付链接（M6-WP6；M6-WP6-R4 单次消费口径）。
+
+    - 链接**不落库、不进日志**：响应 no-store（路由层设头）；
+    - 项目无 active 绑定 → 404（不泄露存在性）；项目无 org 归属 → 409 fail-closed；
+    - 每次调用换一枚**新**链接（交付链接一次性消费：换设备/浏览器须重新签发）。
+    """
+    ensure_enabled()
+    session = db.session()
+    project = _load_accessible_project(session, actor, project_id)
+    org_id = _project_org(project)
+    binding = session.scalars(
+        select(ProjectOntologyBinding).where(
+            ProjectOntologyBinding.project_id == project_id,
+            ProjectOntologyBinding.status == "active",
+            ProjectOntologyBinding.active_marker.is_not(None),
+        )
+    ).first()
+    if binding is None:
+        raise BindingError("project has no active ontology binding", status=404, code="not_found")
+    # 只读路径不持事务：出站调用（换交付链接）前无写操作，与 list_bindings 一致——
+    # 不把 DB 事务挂在网络调用上。
+    client = client_from_settings()
+    try:
+        # 先经 _translate_runtime_call 归一 runtime 响应（异常映射 + 弹 _status），
+        # 再收敛最小暴露载荷——载荷推导不得夹进翻译 lambda（翻译只认原始响应体）。
+        issued = _translate_runtime_call(
+            lambda: client.issue_trustboard_delivery_link(
+                actor_id=str(actor.id),
+                org_id=org_id,
+                project_id=project_id,
+                ontology_id=binding.ontology_id,
+            )
+        )
+        return _trustboard_delivery_payload(issued)
+    except BindingError:
+        raise
+    except Exception as exc:
+        current_app.logger.exception("issue_trustboard_delivery_link failed")
+        raise BindingError(
+            "delivery link issuance failed", status=500, code="delivery_link_failed"
+        ) from exc
