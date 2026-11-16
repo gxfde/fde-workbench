@@ -403,7 +403,7 @@ class MockOntologyAdapter:
         project_id: str,
         ontology_id: str,
         version_id: str,
-        proposed_json: dict[str, Any] | None,
+        proposed_json: list[dict[str, Any]] | None,
     ) -> dict[str, Any]:
         """AF0-C1：纯候选预检（零状态变更）——mock 恒回 pass（形状/注入契约测试用）。"""
         return {"verdict": "pass", "violations": [], "conflicting_entities": [], "_status": 200}

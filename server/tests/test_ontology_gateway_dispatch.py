@@ -22,7 +22,10 @@ class _User:
     id = "u-1"
 
 
-def test_dry_validate_requires_object_payload() -> None:
+def test_dry_validate_requires_candidate_list_payload() -> None:
+    """AF1-WP1 收口批：proposed_json=候选条目数组（与 ChangeSet.proposed_json
+    同形，api-spec 1.3.6-af0 实装语义；WP1 第二批误钉 JSON 对象——真服务
+    端到端必 422，此处随实装对齐为 list 面）。"""
     with pytest.raises(ControlServiceError) as missing:
         ontology_gateway.call_ontology_tool(
             _NO_SESSION, user=_User(), name="ontology_dry_validate",
@@ -36,6 +39,13 @@ def test_dry_validate_requires_object_payload() -> None:
             execution_id="e1",
         )
     assert wrong_type.value.code == "invalid_request"
+    with pytest.raises(ControlServiceError) as object_shape:
+        ontology_gateway.call_ontology_tool(
+            _NO_SESSION, user=_User(), name="ontology_dry_validate",
+            arguments={"project_id": "p", "binding_id": "b", "proposed_json": {"objects": []}},
+            execution_id="e1",
+        )
+    assert object_shape.value.code == "invalid_request"
 
 
 def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,16 +57,30 @@ def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPa
 
     from fde_api.integrations import service as binding_service
     monkeypatch.setattr(binding_service, "dry_validate_binding_candidate", fake_dry_validate)
+    candidate_items: list[dict[str, object]] = [
+        {
+            "op": "create",
+            "entity_type": "property_definitions",
+            "entity_key": "equipment_serial_no",
+            "payload": {
+                "display_name": "设备序列号",
+                "object_type_id": "equipment",
+                "data_type": "string",
+            },
+        }
+    ]
     out = ontology_gateway.call_ontology_tool(
         _NO_SESSION, user=_User(), name="ontology_dry_validate",
-        arguments={"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
+        arguments={
+            "project_id": "p1", "binding_id": "b1", "proposed_json": candidate_items,
+        },
         execution_id="e1",
     )
     assert out == {"verdict": "pass", "violations": []}
     assert captured == {
         "project_id": "p1",
         "binding_id": "b1",
-        "payload": {"proposed_json": {"objects": []}},
+        "payload": {"proposed_json": candidate_items},
     }
 
 
@@ -74,18 +98,34 @@ def test_call_tool_dispatches_dry_validate_through_ontology_bridge(
         return {"verdict": "pass", "violations": []}
 
     monkeypatch.setattr(ontology_gateway, "call_ontology_tool", fake_bridge)
+    candidate_items: list[dict[str, object]] = [
+        {
+            "op": "create",
+            "entity_type": "property_definitions",
+            "entity_key": "equipment_serial_no",
+            "payload": {
+                "display_name": "设备序列号",
+                "object_type_id": "equipment",
+                "data_type": "string",
+            },
+        }
+    ]
     out = mcp_gateway.call_tool(
         _NO_SESSION,
         user=_User(),
         claims={"execution_id": "e1"},
         allowed=["ontology.read"],
         name="ontology_dry_validate",
-        arguments={"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
+        arguments={
+            "project_id": "p1", "binding_id": "b1", "proposed_json": candidate_items,
+        },
     )
     assert out == {"verdict": "pass", "violations": []}
     assert captured == {
         "name": "ontology_dry_validate",
-        "arguments": {"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
+        "arguments": {
+            "project_id": "p1", "binding_id": "b1", "proposed_json": candidate_items,
+        },
         "execution_id": "e1",
     }
     with pytest.raises(ControlServiceError) as excinfo:

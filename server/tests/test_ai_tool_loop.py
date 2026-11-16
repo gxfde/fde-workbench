@@ -613,40 +613,69 @@ def test_default_loop_whitelist_expands_with_ontology_capabilities():
 
 
 def test_tool_loop_feeds_validation_violations_back_for_correction(app, db_session, ai_user, monkeypatch):
-    """失败→修正形状：dry-validate 违规回灌 → 模型修正后走提议档。
+    """失败→修正形状：dry-validate 违规回灌 → 模型修正后再预检。
 
     AF1-WP1 验收锚的循环形状。脚本在 provider 边界；monkeypatch **整体替换**
     网关入口 call_tool——白名单过滤在本侧 _run_tools 行使、闭集/能力交集/
     execution_id 真闸由分派钉测试（test_ontology_gateway_dispatch）另行钉住。
-    真服务校验反馈的端到端在 WP2 dry_validate 实装后由 N-DV 系列补齐
-    （10 号修订件 §四）。
+    真服务（真模型+真 ontology-service）端到端由 af1_live 标记演示用例
+    tests/test_af1_live_demo.py 补齐（WP1 收口批；10 号修订件 §四）。
     """
     from fde_api.control import ai_tool_loop
 
     toll = {"n": 0}
+    verdicts: list[str] = []
 
     def fake_call_tool(session, *, user, claims, allowed, name, arguments):
         toll["n"] += 1
         if name == "ontology_dry_validate":
+            items = arguments.get("proposed_json") or []
+            corrected = bool(items) and items[0].get("payload", {}).get("data_type") == "string"
+            verdicts.append("pass" if corrected else "violations")
+            if corrected:
+                return {"verdict": "pass", "violations": []}
             return {"verdict": "violations",
-                    "violations": [{"code": "validation_failed",
-                                    "message": "对象 批次.批号 类型必须为 string"}]}
+                    "violations": [{"item_index": 0, "check": "data_type",
+                                    "message": "unknown data_type 'text'"}]}
         return {"verdict": "pass", "violations": []}
 
     monkeypatch.setattr(ai_tool_loop, "call_tool", fake_call_tool)
+    round1_items: list[dict[str, object]] = [
+        {
+            "op": "create",
+            "entity_type": "property_definitions",
+            "entity_key": "equipment_serial_no",
+            "payload": {
+                "display_name": "设备序列号",
+                "object_type_id": "equipment",
+                "data_type": "text",
+            },
+        }
+    ]
+    round2_items: list[dict[str, object]] = [
+        {
+            "op": "create",
+            "entity_type": "property_definitions",
+            "entity_key": "equipment_serial_no",
+            "payload": {
+                "display_name": "设备序列号",
+                "object_type_id": "equipment",
+                "data_type": "string",
+            },
+        }
+    ]
     session = FakeSession([
         tool_call_response(
             "ontology_dry_validate",
-            {"project_id": "p1", "binding_id": "b1", "proposed_json": {"objects": []}},
+            {"project_id": "p1", "binding_id": "b1", "proposed_json": round1_items},
             call_id="c1",
         ),
         tool_call_response(
-            "ontology_action_propose",
-            {"project_id": "p1", "binding_id": "b1",
-             "proposed_json": {"objects": [{"key": "批号", "type": "string"}]}},
+            "ontology_dry_validate",
+            {"project_id": "p1", "binding_id": "b1", "proposed_json": round2_items},
             call_id="c2",
         ),
-        final_response("已按预检违规修正类型并生成候选。"),
+        final_response("已按预检违规把 data_type 从 text 修正为 string，复检通过。"),
     ])
 
     text, usage, trace = direct_tool_completion(
@@ -656,11 +685,13 @@ def test_tool_loop_feeds_validation_violations_back_for_correction(app, db_sessi
         allowed_tools=["ontology_dry_validate", "ontology_action_propose"],
     )
 
-    assert text == "已按预检违规修正类型并生成候选。"
+    assert text == "已按预检违规把 data_type 从 text 修正为 string，复检通过。"
     assert toll["n"] == 2
+    # 评审 F8：两腿都钉——轮1 violations 回灌、轮2 修正值真复检 pass（非恒回假件）
+    assert verdicts == ["violations", "pass"]
     assert trace == [{"tool": "ontology_dry_validate", "ok": True},
-                     {"tool": "ontology_action_propose", "ok": True}]
+                     {"tool": "ontology_dry_validate", "ok": True}]
     # 违规确实回灌进第二轮 provider 消息（真实校验错误驱动修正——非假循环）
     second_body = session.calls[1][1]["json"]
     tool_messages = [m for m in second_body["messages"] if m.get("role") == "tool"]
-    assert any("类型必须为 string" in m["content"] for m in tool_messages)
+    assert any("unknown data_type 'text'" in m["content"] for m in tool_messages)

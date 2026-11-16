@@ -270,10 +270,13 @@ def test_dry_validate_change_set_payload_and_no_idempotency(monkeypatch: pytest.
 
     monkeypatch.setattr("fde_api.integrations.ontology_client.requests.request", fake_request)
     client = _client()
+    candidate_items: list[dict[str, object]] = [
+        {"op": "create", "entity_type": "object_types", "entity_key": "batch", "payload": {}},
+    ]
     out = client.dry_validate_change_set(
         actor_id="u1", org_id="org1", project_id="p1",
         ontology_id="ont-1", version_id="1.0.0",
-        proposed_json={"objects": [{"key": "batch"}]},
+        proposed_json=candidate_items,
     )
     assert out["verdict"] == "violations"
     assert out["_status"] == 200
@@ -289,4 +292,5 @@ def test_dry_validate_change_set_payload_and_no_idempotency(monkeypatch: pytest.
     assert isinstance(body, dict)
     assert body["ontology_id"] == "ont-1"
     assert body["pinned_version"] == "1.0.0"
-    assert body["proposed_json"] == {"objects": [{"key": "batch"}]}
+    # WP1 收口批对齐实装语义：候选条目数组（与 ChangeSet.proposed_json 同形）
+    assert body["proposed_json"] == candidate_items

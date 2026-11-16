@@ -792,8 +792,14 @@ def dry_validate_binding_candidate(
     org_id, binding = _load_active_binding_for_project(session, actor, project_id, binding_id)
     client = client_from_settings()
     proposed_json = payload.get("proposed_json")
-    if not isinstance(proposed_json, dict):
-        raise BindingError("proposed_json must be a JSON object", status=400, code="invalid_request")
+    if not isinstance(proposed_json, list) or not all(
+        isinstance(item, dict) for item in proposed_json
+    ):
+        raise BindingError(
+            "proposed_json must be a list of candidate items",
+            status=400,
+            code="invalid_request",
+        )
     return _translate_runtime_call(
         lambda: client.dry_validate_change_set(
             actor_id=str(actor.id),
