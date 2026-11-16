@@ -366,6 +366,49 @@ def test_capability_requirements_agent_entries() -> None:
         assert capability in system
 
 
+def test_capability_requirements_ontology_entries() -> None:
+    """AF1-WP1 收口批：ontology.* 两行入能力矩阵。
+
+    直连循环（ai_tool_loop）与 MCP token 派生（mcp_gateway.issue_mcp_token）
+    的 allowed 都从 ``capabilities_for_level`` 取——矩阵缺行时提议档三工具
+    在两张 provider 面上被定义过滤/能力闸双重拦死，永远不可达（WP1 第二批
+    单元用例被 provider 假件掩盖，真模型端到端必然 0 次工具调用）。
+    分级沿工具风险列：dry_validate/logic_run（effect=read）挂 read 行，
+    action_propose/execute（write_db，且真执行另有审批闸）挂 write 行。
+    """
+    assert CAPABILITY_REQUIREMENTS["ontology.read"] == "project_operator"
+    assert CAPABILITY_REQUIREMENTS["ontology.write"] == "project_manager"
+
+    viewer = capabilities_for_level("assistant_read")
+    assert "ontology.read" not in viewer
+    assert "ontology.write" not in viewer
+
+    operator = capabilities_for_level("project_operator")
+    assert "ontology.read" in operator
+    assert "ontology.write" not in operator
+
+    manager = capabilities_for_level("project_manager")
+    assert "ontology.read" in manager
+    assert "ontology.write" in manager
+
+    # 可达性非假件钉（verification-gap⑤）：直连循环定义面以真矩阵派生组合——
+    # 矩阵缺行时本断言即红（batch-2 既有用例手写注入 allowed，掩盖了该缺口）
+    from fde_api.control.ai_tool_loop import tool_definitions
+
+    names = {
+        item["function"]["name"]
+        for item in tool_definitions(
+            capabilities_for_level("project_manager"),
+            allowed_tools=[
+                "ontology_dry_validate", "ontology_action_propose",
+                "ontology_logic_run", "ontology_action_execute",
+            ],
+        )
+    }
+    assert {"ontology_dry_validate", "ontology_action_propose", "ontology_logic_run"} <= names
+    assert "ontology_action_execute" not in names
+
+
 def test_authorize_agent_system_tool_is_system_operator_only(db_session) -> None:
     # 档位 = system_operator（架构方案 §6.4 凭证分层），且不要求项目上下文
     operator = _user(db_session, role="admin")

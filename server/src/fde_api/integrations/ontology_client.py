@@ -509,14 +509,16 @@ class OntologyClient:
         project_id: str,
         ontology_id: str,
         version_id: str,
-        proposed_json: dict[str, Any],
+        proposed_json: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """AF0-C1 / api-spec 1.3.6-af0：纯候选预检（零状态变更只读校验）。
 
         verdict/violations/conflicting_entities 以 200 结果返回（violations 是
         结果不是 HTTP 错误）；无幂等域——契约不要求 X-Idempotency-Key（零副
         作用）。ontology_id/pinned_version 由调用方服务端从项目绑定注入
-        （S-13），本方法不接受调用方自报版本。
+        （S-13），本方法不接受调用方自报版本。proposed_json 为候选条目数组
+        （与 ChangeSet.proposed_json 同形；WP1 收口批随实装对齐，原对象形状
+        会被真服务 422 拒收）。
         """
         return self._request(
             "POST",

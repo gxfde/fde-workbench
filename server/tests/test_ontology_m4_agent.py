@@ -674,7 +674,7 @@ def test_binding_dry_validate_proxy_enforces_pinned_version_and_org(
             actor=user_a,
             project_id="proj-dry",
             binding_id="bind-dry-1",
-            payload={"proposed_json": {"objects": []}},
+            payload={"proposed_json": []},
         )
 
     assert out["verdict"] == "pass"

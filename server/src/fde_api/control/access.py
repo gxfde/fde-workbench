@@ -85,6 +85,12 @@ CAPABILITY_REQUIREMENTS = {
     "agent.module.deployment": "project_operator",
     "agent.module.acceptance": "project_operator",
     "agent.module.knowledge": "project_operator",
+    # AF1-WP1 收口批：ontology 工具面入矩阵。直连循环与 MCP token 派生的
+    # allowed 都从 capabilities_for_level 取——缺行时提议档三工具（分级见
+    # mcp_gateway.TOOLS：dry_validate/logic_run=read，action_propose/execute
+    # =write_db 且真执行另有审批闸）在两张 provider 面上永不可达。
+    "ontology.read": "project_operator",
+    "ontology.write": "project_manager",
 }
 
 

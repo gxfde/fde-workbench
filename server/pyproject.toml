@@ -78,7 +78,8 @@ enable_error_code = ["ignore-without-code"]
 testpaths = ["tests"]
 markers = [
   "mysql_observer: requires a same-instance privileged MySQL observer for deterministic lock inspection and bounded cleanup",
-  "oss: exercises the object-storage contract against the local adapter by default; real Aliyun OSS only when FDE_RUN_OSS_TESTS=1 and OSS credentials are supplied"
+  "oss: exercises the object-storage contract against the local adapter by default; real Aliyun OSS only when FDE_RUN_OSS_TESTS=1 and OSS credentials are supplied",
+  "af1_live: end-to-end failure→correction demo (real Ollama model + spawned ontology-service); runs only when FDE_AF1_LIVE_DEMO=1, skipped otherwise (AF1-WP1 收口批)"
 ]
 
 [tool.setuptools]

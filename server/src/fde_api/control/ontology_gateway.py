@@ -66,10 +66,16 @@ def call_ontology_tool(
             )
         if name == "ontology_dry_validate":
             # AF0-C1（api-spec 1.3.6-af0）：纯候选预检——零状态变更，本体与钉版
-            # 由绑定服务端注入（S-13），调用方只带 proposed_json。
+            # 由绑定服务端注入（S-13），调用方只带 proposed_json（候选条目数组，
+            # 与 ChangeSet.proposed_json 同形——WP1 收口批对齐实装语义，原对象
+            # 形状会被真服务 422 拒收）。
             proposed_json = arguments.get("proposed_json")
-            if not isinstance(proposed_json, dict):
-                raise ControlServiceError("invalid_request", "proposed_json 必须是 JSON 对象。", 400)
+            if not isinstance(proposed_json, list) or not all(
+                isinstance(item, dict) for item in proposed_json
+            ):
+                raise ControlServiceError(
+                    "invalid_request", "proposed_json 必须是候选条目数组。", 400
+                )
             return binding_service.dry_validate_binding_candidate(
                 actor=user,
                 project_id=project_id,

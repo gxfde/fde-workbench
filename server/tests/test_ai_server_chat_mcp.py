@@ -140,6 +140,24 @@ def test_tools_list_annotations_derive_from_effect_risk(ai_context, client):
     assert tools["lcsc_search"]["destructiveHint"] is False                               # risk 2 < 3
 
 
+def test_tools_list_ontology_propose_tier_reachability_by_level(ai_context, client):
+    """AF1-WP1 收口批（verification-gap⑤）：MCP 面 ontology 工具族可达性非假件钉。
+
+    token 派生（issue_mcp_token→capabilities_for_level）与 tools/list 过滤
+    （info[1] in allowed）全真链：矩阵补行后 manager 档 tools/list 含提议档
+    三件（execute 档 write 面在其能力内属矩阵事实，真执行另有审批闸）；
+    viewer 档（assistant_read）不可见。矩阵缺行时本测即红——batch-2 既有
+    用例不触 capabilities_for_level，掩盖了该缺口。"""
+    users, _ = ai_context
+    lead_token = issue_mcp_token(users["lead"], execution_id=str(uuid4()))
+    names = {item["name"] for item in mcp_request(client, lead_token).json["result"]["tools"]}
+    assert {"ontology_dry_validate", "ontology_action_propose", "ontology_logic_run"} <= names
+    viewer_token = issue_mcp_token(users["alice"], execution_id=str(uuid4()))
+    viewer_names = {item["name"] for item in mcp_request(client, viewer_token).json["result"]["tools"]}
+    assert "ontology_dry_validate" not in viewer_names
+    assert "ontology_action_propose" not in viewer_names
+
+
 def test_lcsc_record_read_is_owner_scoped_and_omits_image_payload(ai_context, client, db_session):
     from fde_api.control.lcsc_skills import LcscSkillRun
     users, _ = ai_context
