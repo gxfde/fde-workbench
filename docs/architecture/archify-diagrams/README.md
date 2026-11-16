@@ -29,7 +29,7 @@
 ## 取证版本说明
 
 2026-11-15 WP0 缝合刷新：六张统一钉 `0e08b2c2`（D11 缝合树；上一轮 2026-11-14 钉 `0e08b2c2`，融合树 `fork/main` `7e99b658` + 本分支文档同步；含多租户 `orgs` 隔离底座、公网免注册诊断/四入口注册、五席位分账+AI 派单推荐、单 run 宿主代理 `host_agent`+⑦出站白名单闸、AI 原生化 N1–N6 全链、学习闭环 2.0 L4 服务端与 E8 A 轨只读降级闭合）。
-实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**54 蓝图 / 515 路由 / 159 表 / 85 rev（单头 `b3e7a1c9f4d2`，M6-WP0 D11 缝合）/
+实测口径与 `docs/audit/v3-workbench-inventory.json` 逐项一致：**55 蓝图 / 523 路由 / 160 表 / 87 rev（单头 `a1e5f9c3d7b2`，AF1-WP4 工程台）/
 52 蓝图注册 `app.py::_BLUEPRINT_SPECS`（29-100）**。口径漂移由 `scripts/audit/check_archify_diagram_freshness.py`
 机械拦截（见下「防陈旧闸」）。
 链接模式为 `local-only`：fork/main 领先 upstream（gxfde），web 链接会指向不存在的上游 revision；
