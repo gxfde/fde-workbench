@@ -24,6 +24,87 @@
 - **验证**：`tests/test_handover_packages.py` 6→9 例（三态混合端到端含 manifest 三指针与挑选面三态／document·file 全闸族负例／file 指纹漂移），套件 9 passed；邻域回归（m6 商业隔离＋可见性 parity）30 passed；ruff clean；mypy 277 基线零新增。
 - **挂账**：桌面端挑选面与建包表单的三态接线（type 选择器＋document/file 列表拉取）归下一桌面轮，随轮重打包便携版。
 - 口径：**523 路由 / 55 蓝图 / 160 表 / 89 迁移单头 `b7f2d9e4c6a8`**（含 AF1-WP4 并行合流基线；分支顶现测值）。
+## [未发布] — goal-launchclose 上线收口轮：CI 定性复跑＋本机主栈带闸重建三验＋远端只读对照＋N1 关窗备料＋便携版 r53（2026-11-17）
+
+承接 `docs/goal-launchclose-上线收口-任务书-v1.md`（上线前评测报告 v1.1 判定 A 线「对外受控试用」有条件可放行，工程态三 P0 收口）：
+
+- **R1 CI 定性**：`gh run rerun 43867006517 --failed` 复跑 main tip 四 job——结果见 PROGRESS 回执（全绿则收口；仍红按真回归修复，禁 skip/放宽）。
+- **R2 本机主栈带闸重建三验**：`takeover_check.py --tree D:/test/fde-workbench --live` FAIL=0 前置闸 → `docker compose -p fde-workbench build api worker scheduler` → `up -d --force-recreate` → 容器内 `alembic upgrade head` → 三验四项（url_map 493→新值反向验证／`alembic current`＝`d8b4f6a2c9e7 (head)`／三容器镜像 ID 与本树构建产物逐位一致／ready+live 200）；qiflow-* 邻栈零 recreate（`docker ps` 前后对照留痕）。
+- **R3 远端只读现测**：6 项只读命令清单交 OPS/HOST 亲手执行（AI 零远端凭据零写面），回执回填一致性对照表（镜像版本与创建时间／容器内 `alembic current`／env 五键／ready-live 探活）；漂移即重开升版拍板。
+- **R4 N1 关窗备料**（时点锁 2026-11-19 到期当日执行）：Vex F2 核验成立——`agents/service.py:1625` `_require_host_poll_enabled` 开关 fail-closed 403 ＋ `:1634` `_verify_host_poll_token` sha256 恒比 403 ＋ run 级 `host_token_hash` 绑定；`test_host_poll.py` 六枚鉴权钉（含三枚令牌轮换钉）**6 passed** 实跑留痕。
+- **R5 随轮死线**：11-16 轮次七节补入（见上）＋台账/AGENTS 同步＋口径三件套现测（54 蓝图/515 路由/159 表/86 rev 单头 `d8b4f6a2c9e7`，inventory 与 archify 防陈旧闸逐项一致）＋便携版 r53 三源 bump＋asar 正反向字节验证。
+- 两份输入文档（评测报告 v1.1＋任务书）随本 PR 入库归档。
+
+## [未发布] — V3.3 双仓架构总览＋改进单 1–4 v1 落库（云端作战室边界／CEL 计算加固／OpenAPI 契约门禁／OaC 模板晋升流；纯文档零代码零迁移，2026-11-16）
+
+直接提交 `f638d236`（无 PR）。五文 463 行新增：`docs/architecture/` 下 V3.3 总览 v1（厘清 `fde-workbench` 云端作战室 ⇄ `Fde-Ontology` Clean-room 私有化/SaaS 运行时 ⇄ 禁商用参考仓三方边界）＋运行边界 v1＋CEL 计算加固规范 v1（改进单 2）＋OpenAPI 契约门禁规范 v1（改进单 3）＋OaC 模板晋升流规范 v1（改进单 4）。NEW `docs/architecture/` 5 件；口径全不动（54 蓝图/515 路由/159 表/86 rev 单头 `d8b4f6a2c9e7`）。
+
+## [未发布] — AF1-WP3 本体候选工程 Skill：制造业 SOP/字典→候选生成的工程规则面（builtin skill＋词表同源钉＋真模型 Skill 驱动实跑，2026-11-16）
+
+PR #494（merge `694c647e`，11 号 WP1 工作令 WP3）：
+
+- **builtin skill `ontology-candidate-engineering`**（published 种子，既有 T-S1 机制）：候选条目规则/证据纪律（quote 逐字溯源）/四分纪律（事实·缺失·假设·证据，缺失列 `unresolved_questions`）/歧义决策单（同义词·主键·单位不自裁决）/不凭置信度绕审批/修正循环＋失败行为（`injection_suspect` 出口/S-19 材料指令纪律）/治理（零物化，停待审）。
+- 种子升级指纹挂点（评审 F1）＋工具描述 `entity_key` 文案对齐 KEY_RE（评审 F2）。
+- 测试：词表**整串同源**钉（评审 F4 防子串掩蔽）＋纪律标记钉＋种子落库/分档可见性钉（全真链）；live demo（`af1_live` env 闸，CI 跳过）真 qwen3:14b 生成候选→violations→修正→pass 终局 133.5s；单元＋契约 24 passed＋本地全量 4000 passed/7 skipped/0 failed（35:47）；ruff/mypy 本批零错；Fde-Ontology 仓零改动。
+
+## [未发布] — AF1-WP1 收口批：真服务失败→修正端到端演示＋直连循环可达性修复＋dry_validate 形状对齐实装（2026-11-16）
+
+PR #493（merge `ddb2064b`，AF1-WP1 第三批）：
+
+- **验收锚**（WP1 残留唯一项）：NEW `tests/test_af1_live_demo.py`（`af1_live` marker＋`FDE_AF1_LIVE_DEMO=1` 闸，CI 恒跳过）——真模型（本机 Ollama qwen3:14b）＋自起 ontology-service（uvicorn subprocess，sqlite 临时库，随机密钥仅 env 注入）＋真 `dry_validate_change_set`（1.3.6-af0）：候选带口语词→真服务 violations→违规回灌→模型按词表修正→轮 2 `verdict=pass`，终局复跑 82.4s PASS；S-13 spy 只记录真响应（M4 同款）；usage 记账钉——**全真闭环非脚本化假循环**。
+- **直连循环可达性修复（真缺口）**：`access.py` 能力矩阵 **+ontology.read(project_operator)/+ontology.write(project_manager)**——`capabilities_for_level` 此前永不含 `ontology.*` ⇒ 直连循环 tools 定义被过滤＋`call_tool` 403；`issue_mcp_token` 同交集派生同病；呈 P1 追认 G。
+- **dry_validate proposed_json 形状对齐实装（跨仓缺口）**：api-spec 1.3.6-af0 路由块无 requestBody schema；ontology-service PR #20 实装＝候选条目数组（与 ChangeSet.proposed_json 同形），workbench PR #491 误钉 JSON 对象（端到端必 422）——mcp_gateway TOOLS 条目 array＋词表描述；gateway/integrations service+client+mock 对齐；既有测试 4 文件随批对齐。
+
+## [未发布] — W3 source 列仿真隔离正式化＋role_hours 角色工时明细（迁移 `d8b4f6a2c9e7` 85→86 单头，2026-11-16）
+
+PR #492（squash `a9a2743d`，报价模块 party 评审 W3 落地其余两项；「常量↔卡片对照测试」已在评审中被否决跳过）：
+
+- **W3-1 `quotes.source` 列**：迁移 `d8b4f6a2c9e7`（head `b3e7a1c9f4d2`→`d8b4f6a2c9e7`，86 文件单头）——String(12) NOT NULL，`server_default 'manual'` 存量行零回填零行为变化；simulator 构造的 Quote 显式写 `source='simulation'`；`finalize_quote` 首单计数加 `source != 'simulation'`（W1-2 的 Q-SIM- 前缀排除保留作双保险）——比纯前缀启发式更稳。
+- **W3-2 `role_hours` 角色工时明细**（P7 依据维度）：`create_quote` 接受可选 role_hours，**合计必须 == ideal_hours**（明细与总量互证防两张皮）；未填＝None 行为与存量逐位一致；JSON 列以 str 存（Decimal 序列化同 field_claims 法）；`quote_created` 事件记 `source`＋`role_names`（只记有无不落工时金额）。
+
+## [未发布] — W2-2 对外报价签字闸：拆内部预览/正式出口，全 accepted 才放行（新路由 513→514，2026-11-16）
+
+PR #490（squash `3ec9a572`，报价模块 party 评审 W2 三项 OWNER 拍板 2026-11-16 之②；①首单作用域维持全局/③回校缓冲维持锁死 ×2.0 零代码改动）：
+
+- **服务端闸**：NEW `export_quote_offer`＝`POST /quotes/<key>/offer`——11 个 claimable 字段必须全部 `accepted` 否则 409 `signoff_required`；空 claims（total=0）同样拒。
+- **对外版脱敏**：`_build_draft_html(external=True)` 公式价**整列删除**（非折叠——`<details>` 客户点开仍可见，折叠只防误读不防泄露）、无内部水印、无 v2.4.6 底稿出处；内部草稿路径行为逐字不变。
+- **留痕**：放行即落 `quote_offer_exported` 事件（actor/时间/claims 计数不落金额），已登记 `QUOTE_EVENT_TYPES` 进台账；前端「正式对外导出」按钮仅 `allAccepted` 可点。
+- 结构口径四层同步（route CSV、inventory JSON、candidate.json sublabel、archify README；防陈旧闸脚本 OK）。
+
+## [未发布] — AF1-WP1 第二批：提议档白名单接直连循环＋ontology_dry_validate 全链＋自托管默认档（2026-11-16）
+
+PR #491（merge `4ae9b34f`，承 #487 第一批；分支头 CI 全绿 3953 passed/8 skipped/0 failed，16m21s）：
+
+- **提议档白名单**：ai_tool_loop 循环面＝只读 ∪ 提议档（logic_run/dry_validate/action_propose，零直接副作用）；执行档仍剥离；降级腿（ai_server_client）显式钉回 READ_ONLY_TOOLS，automation 面经核实已被 `_read_only_tools_for` 钉死只读。
+- **ontology_dry_validate 全链**：mcp_gateway 五元（read/risk0/ontology.read）→ ontology_gateway 分派 → integrations service `dry_validate_binding_candidate`（**S-13**：ontology/钉版由绑定服务端注入）→ ontology_client `dry_validate_change_set`（1.3.6-af0 路由，无幂等键）。
+- **自托管默认档**：`ai_selfhosted_*` 配置（SecretStr/allow_public 公网冒名闸/supports_tools 开关/fail-closed validator）＋ resolve_model_preference system-default 档自托管优先（红线：客户敏感数据不默认发公共模型）；translator 归因同步。
+- 四层评审（bmad-code-review）patch 桶 14 文件全落地：SecretStr 红线、同义反复注册钉→call_tool 真闸钉、M4 同款 S-13 spy 钉、config 启动闸测试、显式偏好三分序钉、默认分支扩张钉＋降级只读钉、rollback 不变量如实化、工具描述去内部编号、审计声明如实化；ruff/mypy-baseline 零增量（277/102）。
+
+## [未发布] — M6-WP6 TrustBoard 交付链接 Workbench 侧一键出链（自动分发，单次消费口径，2026-11-16）
+
+PR #489（squash `b9b67e18`，原开放项②「交付链接自动分发」；runtime 侧零产品改动，直接复用既有 `POST /ui/session`）：
+
+- **客户端方法**：`integrations/ontology_client.py` NEW `issue_trustboard_delivery_link()`——POST runtime `/api/v1/ui/session`，每次调用用新幂等键（一次性交接令牌口径：换设备/浏览器须重新签发）；**不回吐** runtime 响应里的常驻会话令牌（凭据最小暴露，红线 §15）。
+- 交付团队此前须手工调 runtime 签发＋线下转发（截图/转发即凭据泄漏面）——本批在 Workbench 侧出一键出链入口。
+
+## [未发布] — AF1-WP1 第一批：AgentRun 取消入口＋工具循环轮数参数化（迁移 `b3e7a1c9f4d2`，2026-11-16）
+
+PR #487（squash `2ef9ad18`，docs/ai-fde/09 §1 定参①③，P1 戊单 2026-11-16「全部批准」）：
+
+- **取消入口**：NEW `POST /api/v1/agents/runs/{id}/cancel`——幂等（已取消 → `cancelled=false`）；终态 409 `already_terminal`；`host_running` 显式 409 `cancel_provider_unsupported`（宿主回执语义未含取消，如实拒绝）；权限＝发起人或项目 `can_manage`；事件 `agent_run_cancelled`。
+- **副作用停止**：监听段 `should_cancel` 轮询（默认短会话读行；测试经 `fde_agent_cancel_check_factory` 注入）→ 诚实终态 `cancelled`、产物沿 B-1 非 completed 一律不入库、kill 由 finally 恒定发生（CR-015）；启动守卫 `_raise_if_cancelled` 先于 `SandboxHandle.create`——取消后的行永不拉起新容器。
+- **迁移**：`b3e7a1c9f4d2` CHECK 置换 +cancelled（T-J2 `d9f4a7c2e6b1` 先例：纯 CHECK 置换零列重建；downgrade cancelled→failed 归位）。
+- **轮数参数化**：`agent_max_tool_rounds` 配置（初值＝历史硬编码 6，`ge=1`）＋ `direct_tool_completion(max_tool_rounds=None)` 显式参数优先＋超限强制终答语义不变；②续跑明写不做（决策登记 docs/ai-fde/09 §1）。
+
+## [未发布] — W1 报价六项零迁移加固：底牌脱敏/仿真隔离/沙箱守卫/偏差消歧（2026-11-16）
+
+PR #488（squash `ec317b39`，报价模块 party mode 专家会议（5 方独立评审）W1 决议落地；六项均零迁移、零新表、零新路由）：
+
+- **W1-1 底牌脱敏**：草稿三档公式价（成本×1.4）默认折叠＋表头标注「内部测算·不构成对外报价」，堵三档成本结构外泄。
+- **W1-2 首单计数防仿真污染**：finalize 首单计数按 `quote_key NOT LIKE 'Q-SIM-%'` 排除仿真单，防真实首单逃脱回校义务与三条硬约束。
+- **W1-3 沙箱守卫**：`run_simulation` 入口从 `session.connection().engine.url` 读库名守卫沙箱（仅 `_sim`/`_test` 后缀），堵直接 import 绕过 CLI 校验；测试库 `fde_workbench_test` 放行。
+- **W1-4 偏差消歧**：两个 deviation 字段标注分母——`deviation_pct` 对预估工时（回校）；`final_deviation_pct` 对锚点下沿（谈判）；不改 key 零 API 契约变更。
+- **W1-5 排除项一级化**：草稿补「本报价不含（排除项）」一级节；**W1-6** 删除悬空 `QUOTE_CARD_SOURCE` 死常量（指向从未交付的路径），代码即唯一事实源。
 
 ## [未发布] — billing_actor_policy 机制化轮：模拟域真模型评估记账主体服务账号（opt-in 配置＋双 ContextVar 注入＋fail-closed；零迁移零路由零表，2026-11-15）
 
