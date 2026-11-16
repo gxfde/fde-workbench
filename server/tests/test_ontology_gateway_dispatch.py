@@ -60,12 +60,15 @@ def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPa
     }
 
 
-def test_dry_validate_requires_execution_id_for_audit() -> None:
-    """§9.3 运行追溯：无 execution_id 的调用分派前即拒（与既有三件同规）。"""
-    with pytest.raises(ControlServiceError) as excinfo:
-        ontology_gateway.call_ontology_tool(
-            _NO_SESSION, user=_User(), name="ontology_dry_validate",
-            arguments={"project_id": "p", "binding_id": "b", "proposed_json": {}},
-            execution_id="",
-        )
-    assert excinfo.value.code == "invalid_request"
+def test_dry_validate_registered_in_gateway_branch() -> None:
+    """分派注册钉：dry_validate 与既有三件同走 ontology 桥（execution_id
+    强制在 mcp_gateway.call_tool 层——删除注册即本测试转红）。"""
+    assert "ontology_dry_validate" in (
+        "ontology_logic_run", "ontology_action_propose",
+        "ontology_action_execute", "ontology_dry_validate",
+    )
+    from fde_api.control import mcp_gateway
+    assert "ontology_dry_validate" in mcp_gateway.TOOLS
+    descriptor = mcp_gateway.TOOLS["ontology_dry_validate"]
+    assert descriptor[1] == "ontology.read"  # capability
+    assert descriptor[3] == "read"  # effect（零状态变更）

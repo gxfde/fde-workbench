@@ -49,6 +49,15 @@ def test_explicit_api_key_is_preserved(app, db_session, pref_user, monkeypatch: 
     assert out["provider"] == "openai-compatible"
 
 
-def test_without_selfhosted_config_falls_back_to_deepseek_slot(app, db_session, pref_user) -> None:
-    out = resolve_model_preference(db_session, pref_user.id)
-    assert out["id"] == "system-default"
+def test_without_selfhosted_config_falls_through_to_deepseek_slot(app, db_session, pref_user) -> None:
+    """未配置自托管 → 落回 deepseek_* 槽位路径。
+
+    CI 测试环境无 deepseek_api_key → 该槽位的正确行为是 fail-closed
+    model_not_configured（409 要求先配置模型）——断言的是「走了回落路径」
+    而非成功解析（自托管分支若误判，这里会拿到 system-selfhosted）。
+    """
+    from fde_api.control.service import ControlServiceError
+
+    with pytest.raises(ControlServiceError) as excinfo:
+        resolve_model_preference(db_session, pref_user.id)
+    assert excinfo.value.code == "model_not_configured"
