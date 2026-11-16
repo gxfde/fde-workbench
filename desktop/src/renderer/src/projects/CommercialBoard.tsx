@@ -188,6 +188,9 @@ export function CommercialBoard({ projectId, canManage }: CommercialBoardProps) 
   const [error, setError] = useState("")
   const [actionError, setActionError] = useState("")
   const [draftHtml, setDraftHtml] = useState<{ key: string; html: string } | null>(null)
+  // W2-2 签字闸：正式对外件（POST /offer，服务端校验全 accepted 才放行），
+  // 与内部草稿预览（GET /draft，无闸）分状态展示，互不覆盖。
+  const [offerHtml, setOfferHtml] = useState<{ key: string; html: string } | null>(null)
   const [options, setOptions] = useState<WorkbenchOptions>(FALLBACK_OPTIONS)
   const sequenceRef = useRef(0)
   const enc = encodeURIComponent(projectId)
@@ -272,6 +275,16 @@ export function CommercialBoard({ projectId, canManage }: CommercialBoardProps) 
     [apiRequest, enc],
   )
 
+  // W2-2：对外件导出是留痕动作（POST），非幂等读取——与草稿 GET 分开。
+  const exportOffer = useCallback(
+    async (quoteKey: string): Promise<string> => {
+      const data = await post(`/quotes/${encodeURIComponent(quoteKey)}/offer`, {})
+      if (!isRecord(data) || typeof data.html !== "string") throw new Error("invalid offer")
+      return data.html
+    },
+    [post],
+  )
+
   const summary = useMemo(() => {
     if (!board) return null
     const dunning = board.summary.dunning_counts
@@ -309,6 +322,9 @@ export function CommercialBoard({ projectId, canManage }: CommercialBoardProps) 
                 loadDraft={loadDraft}
                 draftHtml={draftHtml}
                 setDraftHtml={setDraftHtml}
+                exportOffer={exportOffer}
+                offerHtml={offerHtml}
+                setOfferHtml={setOfferHtml}
               />
             ))}
           </div>
@@ -522,6 +538,9 @@ function QuoteCard({
   loadDraft,
   draftHtml,
   setDraftHtml,
+  exportOffer,
+  offerHtml,
+  setOfferHtml,
 }: {
   quote: QuoteDto
   canManage: boolean
@@ -532,6 +551,10 @@ function QuoteCard({
   loadDraft: (quoteKey: string) => Promise<string>
   draftHtml: { key: string; html: string } | null
   setDraftHtml: (value: { key: string; html: string } | null) => void
+  /** W2-2 签字闸：正式对外件导出（POST /offer，服务端校验全 accepted） */
+  exportOffer: (quoteKey: string) => Promise<string>
+  offerHtml: { key: string; html: string } | null
+  setOfferHtml: (value: { key: string; html: string } | null) => void
 }) {
   const [calActual, setCalActual] = useState("")
   const [calReason, setCalReason] = useState("")
@@ -556,6 +579,23 @@ function QuoteCard({
       setDraftHtml({ key: quote.quote_key, html })
     } catch (caught) {
       setDraftHtml(null)
+      setDraftError(errorText(caught))
+    }
+  }
+
+  // W2-2 签字闸：正式对外件。409 signoff_required 由服务端闸返回，前端如实展示。
+  const showOffer = async (): Promise<void> => {
+    if (offerHtml?.key === quote.quote_key) {
+      setOfferHtml(null)
+      return
+    }
+    setDraftError("")
+    setOfferHtml({ key: quote.quote_key, html: "" })
+    try {
+      const html = await exportOffer(quote.quote_key)
+      setOfferHtml({ key: quote.quote_key, html })
+    } catch (caught) {
+      setOfferHtml(null)
       setDraftError(errorText(caught))
     }
   }
@@ -701,6 +741,16 @@ function QuoteCard({
           <button type="button" className="secondary-button compact" onClick={() => void showDraft()}>
             {draftHtml?.key === quote.quote_key ? "收起草稿" : "预览报价单草稿"}
           </button>
+          {/* W2-2 签字闸：仅数字全核验可点；未核验时禁用并提示 reason */}
+          <button
+            type="button"
+            className="primary-button compact"
+            disabled={!allAccepted}
+            title={allAccepted ? "生成正式对外报价单（服务端留痕）" : "先把全部数字字段核验到 accepted，才能导出对外件"}
+            onClick={() => void showOffer()}
+          >
+            {offerHtml?.key === quote.quote_key ? "收起对外件" : "正式对外导出"}
+          </button>
         </div>
       ) : null}
       {draftError ? <p className="form-error banner" role="alert">{draftError}</p> : null}
@@ -709,6 +759,18 @@ function QuoteCard({
           <iframe title="报价单草稿" sandbox="" srcDoc={draftHtml.html} className="quote-draft-frame" />
         ) : (
           <p className="supporting-copy">加载草稿……</p>
+        )
+      ) : null}
+      {offerHtml?.key === quote.quote_key ? (
+        offerHtml.html ? (
+          <>
+            <p className="supporting-copy">
+              正式对外版（公式价已整列移除；本次导出已留痕）。请人工复核后再发给客户。
+            </p>
+            <iframe title="正式对外报价单" sandbox="" srcDoc={offerHtml.html} className="quote-draft-frame" />
+          </>
+        ) : (
+          <p className="supporting-copy">正在生成对外件……</p>
         )
       ) : null}
     </article>

@@ -32,6 +32,7 @@ from fde_api.projects.quote_service import (
     QuoteServiceError,
     calibrate_quote,
     create_quote,
+    export_quote_offer,
     finalize_quote,
     list_quotes,
     render_quote_draft,
@@ -332,6 +333,25 @@ def quote_draft_route(project_id: str, quote_key: str):
     """对外报价单 HTML 草稿（三档格式，无内部系数；草稿不自动发客户）。"""
     try:
         data = render_quote_draft(
+            actor=g.current_user, project_id=project_id, quote_key=quote_key
+        )
+        return jsonify({"data": data, "error": None})
+    except QuoteServiceError as error:
+        return _quote_error(error)
+
+
+@projects_blueprint.post("/<project_id>/quotes/<quote_key>/offer")
+@require_auth
+def quote_offer_route(project_id: str, quote_key: str):
+    """正式对外报价单出口（W2-2 签字闸）。
+
+    POST（非 GET）：生成对外件是一次留痕动作（quote_offer_exported），
+    非幂等读取。服务端校验全部数字字段 claim_status == accepted 才放行，
+    否则 409 signoff_required——SKILL-03「人逐条核对签字才可发出」的
+    服务端落点。返回的 HTML 为对外版：公式价整列删除、无内部水印。
+    """
+    try:
+        data = export_quote_offer(
             actor=g.current_user, project_id=project_id, quote_key=quote_key
         )
         return jsonify({"data": data, "error": None})

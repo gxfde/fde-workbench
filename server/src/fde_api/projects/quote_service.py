@@ -737,7 +737,66 @@ def render_quote_draft(*, actor: User, project_id: str, quote_key: str) -> dict[
         session.close()
 
 
-def _build_draft_html(project: Project, quote: Quote) -> str:
+def export_quote_offer(*, actor: User, project_id: str, quote_key: str) -> dict[str, Any]:
+    """正式对外报价单出口（W2-2 签字闸，party 评审 B 案）。
+
+    红线落点（SKILL-03:43 / v2:54）：AI/系统起草的对外报价稿必须经人逐条
+    核对并签字后才可发出。服务端闸：全部 claimable 字段 claim_status ==
+    accepted 才放行，否则 409 signoff_required；放行即视为"人已签字"，
+    落 quote_offer_exported 事件留痕（actor + 发生时间，OperationEvent）。
+
+    与 render_quote_draft（内部草稿预览，无闸）分工：草稿供核对过程使用，
+    本出口是唯一对外正式件生成通道，且公式价整列删除（非折叠）。
+    """
+    session = db.session()
+    try:
+        with session.begin():
+            project = _load_project(session, actor, project_id, manage=False)
+            quote = _load_quote(session, project.id, quote_key)
+            claims = dict(quote.field_claims)
+            total = len(CLAIMABLE_FIELDS)
+            accepted = sum(
+                1 for field in CLAIMABLE_FIELDS if claims.get(field) == "accepted"
+            )
+            if total == 0 or accepted != total:
+                raise QuoteServiceError(
+                    "signoff_required",
+                    f"正式对外报价须经人逐条核对签字：claims {accepted}/{total} "
+                    "accepted（先把 11 个数字字段逐条 claim 前进到 accepted，"
+                    "再导出对外版）。",
+                    409,
+                )
+            html_body = _build_draft_html(project, quote, external=True)
+            record_event(
+                session,
+                actor,
+                "quote_offer_exported",
+                quote,
+                {
+                    "quote_key": quote.quote_key,
+                    "tier": quote.tier,
+                    "anchor_mode": quote.anchor_mode,
+                    "claims_accepted": accepted,
+                    "claims_total": total,
+                    # 不落任何金额：留痕只记"谁在何时签发了对外件"，
+                    # 金额本身已在 Quote 行与 quote_finalized 事件里。
+                },
+            )
+        return {"html": html_body, "quote_key": quote.quote_key, "external": True}
+    finally:
+        session.close()
+
+
+def _build_draft_html(project: Project, quote: Quote, *, external: bool = False) -> str:
+    """报价单 HTML。
+
+    external=False：内部草稿（W1-1 口径——公式价折叠、内部水印，供人核对）。
+    external=True：正式对外版（W2-2 签字闸出口）——公式价**整列删除**（不是
+    折叠：客户侧 <details> 点开仍可见成本结构，折叠只防误读不防泄露）、内部
+    水印与底稿出处删除；仅经 export_quote_offer（claims 全 accepted）可达，
+    并落 quote_offer_exported 事件留痕（SKILL-03:43「人逐条核对签字才可发出」
+    的服务端落点）。
+    """
     esc = html.escape
     tiers_html: list[str] = []
     for tier, spec in TIERS.items():
@@ -757,22 +816,36 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
         recommended = "（推荐）" if tier == quote.tier else ""
         if branch == "C":
             range_text = "当前参数下超锚点，需缩范围/拆分期后另出"
+            note_text = "需缩范围或拆分期后另出"
         else:
             range_text = f"¥{low:,.0f} – ¥{high:,.0f}"
+            note_text = "—"
         # W1-1 底牌脱敏：公式价 = 成本×1.4，三档全量外露等于把成本结构交给客户。
-        # 默认折叠（details 不设 open），仅内部需要时点开；对外只见建议区间与分支。
-        basis_cell = (
-            "<details class='internal-only'><summary>内部测算 · 展开可见</summary>"
-            f"¥{computed['formula_price']:,.0f}</details>"
-        )
-        tiers_html.append(
-            "<tr>"
-            f"<td>{esc(TIER_LABELS[tier])}{recommended}</td>"
-            f"{basis_cell}"
-            f"<td>{range_text}</td>"
-            f"<td>{branch}</td>"
-            "</tr>"
-        )
+        # 内部草稿默认折叠（details 不设 open），仅内部需要时点开；对外版（W2-2）
+        # 整列删除，对外只见建议区间与分支。
+        if external:
+            basis_cell = ""
+            row = (
+                "<tr>"
+                f"<td>{esc(TIER_LABELS[tier])}{recommended}</td>"
+                f"<td>{range_text}</td>"
+                f"<td>{note_text}</td>"
+                "</tr>"
+            )
+        else:
+            basis_cell = (
+                "<details class='internal-only'><summary>内部测算 · 展开可见</summary>"
+                f"¥{computed['formula_price']:,.0f}</details>"
+            )
+            row = (
+                "<tr>"
+                f"<td>{esc(TIER_LABELS[tier])}{recommended}</td>"
+                f"{basis_cell}"
+                f"<td>{range_text}</td>"
+                f"<td>{branch}</td>"
+                "</tr>"
+            )
+        tiers_html.append(row)
     d_banner = ""
     if quote.data_factor == Decimal("1.6"):
         d_banner = (
@@ -780,9 +853,27 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
             "数据治理工作量与排期在报价单与排期表单列（不藏在\u201c数据准备\u201d内），"
             "总周期约 30% 留给数据治理；口径变更时映射表工时重做规则见下。</p>"
         )
+    if external:
+        title = f"报价单 · {esc(project.enterprise_code)}"
+        heading = "FDE 交付服务 · 报价单"
+        notice = "本报价单经内部逐项核对后出具；最终价格与付款节奏以双方签署的合同为准。"
+        head_cells = "<tr><th>档位</th><th>建议报价区间</th><th>备注</th></tr>"
+        provenance = ""
+    else:
+        title = f"报价单草稿 · {esc(project.enterprise_code)}"
+        heading = "FDE 交付服务 · 参考报价（草稿）"
+        notice = (
+            "内部草稿 · 不自动发送客户 · 对外以工具包 §6-C 三档格式出具 · "
+            "最终价格以双方确认为准"
+        )
+        head_cells = (
+            "<tr><th>档位</th><th>参考基准价（内部测算 · 不构成对外报价）</th>"
+            "<th>建议报价区间</th><th>锚点分支</th></tr>"
+        )
+        provenance = "<p class=\"meta\">出处：《FDE个人接单工具包与表单模板-v2.4.6》§6-C/§6-D · 报价口径 v1.1（对内底稿）</p>"
     return f"""<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
-<title>报价单草稿 · {esc(project.enterprise_code)}</title>
+<title>{title}</title>
 <style>
  body{{font-family:"Microsoft YaHei",system-ui,sans-serif;color:#1f2933;max-width:760px;margin:24px auto;padding:0 16px}}
  h1{{font-size:20px;border-bottom:2px solid #1e3a5f;padding-bottom:8px}}
@@ -796,12 +887,12 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
  .internal-only summary{{cursor:pointer;color:#b3261e}}
  .watermark{{color:#b3261e;font-weight:600}}
 </style></head><body>
-<h1>FDE 交付服务 · 参考报价（草稿）</h1>
+<h1>{heading}</h1>
 <p class="meta">项目：{esc(project.name)}（{esc(project.enterprise_code)}）</p>
 <p class="meta">报价编号：{esc(quote.quote_key)} ｜ 出具日期：____-__-__ ｜ 有效期：__ 天</p>
-<p class="watermark">内部草稿 · 不自动发送客户 · 对外以工具包 §6-C 三档格式出具 · 最终价格以双方确认为准</p>
+{f'<p class="meta">{notice}</p>' if external else f'<p class="watermark">{notice}</p>'}
 <h3>三档参考价</h3>
-<table><tr><th>档位</th><th>参考基准价（内部测算 · 不构成对外报价）</th><th>建议报价区间</th><th>锚点分支</th></tr>
+<table>{head_cells}
 {''.join(tiers_html)}
 </table>
 {d_banner}
@@ -823,7 +914,7 @@ def _build_draft_html(project: Project, quote: Quote) -> str:
 </ul>
 <p>上述排除项如需纳入，须另出报价或变更单，经双方书面确认后生效。</p>
 </div>
-<p class="meta">出处：《FDE个人接单工具包与表单模板-v2.4.6》§6-C/§6-D · 报价口径 v1.1（对内底稿）</p>
+{provenance}
 </body></html>"""
 
 
@@ -895,6 +986,7 @@ QUOTE_EVENT_TYPES = (
     "quote_claim_updated",
     "quote_calibrated",
     "quote_finalized",
+    "quote_offer_exported",  # W2-2 签字闸：对外件签发留痕（who/when，不落金额）
 )
 
 
