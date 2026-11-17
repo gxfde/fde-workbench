@@ -513,3 +513,55 @@ def test_overlay_release_gates_and_side_by_side_preview(admin, db_session):
     assert "【平台动态经验条款】" in ov["effective_prompt"]
     assert isinstance(ov["calls_last_30d"], int)
 
+
+# ---------------------------------------------------------------------------
+# DB 落库面钉（R2 收尾轮）：materialized / retired_payload 必须持久化进
+# release_json——2026-11-17 实弹：先赋值后原地改，_materialize_payload 内部
+# flush 先把未含 materialized 的版本写入 DB，非 mutable JSON 列对 flush 后的
+# 原地变更不可见 ⇒ 活库 release_json 缺 materialized 段（响应面测试抓不住）。
+# ---------------------------------------------------------------------------
+
+
+def test_release_persists_materialized_into_release_json(admin, db_session):
+    row = _proposal(
+        db_session, status="approved",
+        regression_plan={"cases": ["r1"]},
+        candidate_payload={
+            "lesson_entry": {
+                "text": "交付类任务先核对回款凭证清单再开工。",
+                "capability_tags": ["agent.module.delivery"],
+            }
+        },
+    )
+    response = _release(admin, row.id)
+    assert response.status_code == 200
+    # 关键：以 DB 持久化值为准（expire 掉内存缓存再读）
+    db_session.expire(row)
+    release_json = dict(row.release_json or {})
+    materialized = release_json.get("materialized")
+    assert isinstance(materialized, dict), release_json
+    assert materialized["lesson"]["entry_id"] == f"LESS-DYN-{row.proposal_key}"
+    assert materialized["lesson"]["text_sha256"]
+
+
+def test_rollback_persists_retired_payload_into_release_json(admin, db_session):
+    row = _proposal(
+        db_session, status="approved",
+        regression_plan={"cases": ["r1"]},
+        candidate_payload={
+            "lesson_entry": {
+                "text": "回滚留痕须持久化进 release_json 的 rollback 段。",
+                "capability_tags": ["agent.module.delivery"],
+            }
+        },
+    )
+    assert _release(admin, row.id).status_code == 200
+    rolled_back = _rollback(admin, row.id)
+    assert rolled_back.status_code == 200
+    db_session.expire(row)
+    release_json = dict(row.release_json or {})
+    rollback_block = release_json.get("rollback") or {}
+    retired = rollback_block.get("retired_payload")
+    assert isinstance(retired, dict), release_json
+    assert retired["lesson"] == [f"LESS-DYN-{row.proposal_key}"]
+

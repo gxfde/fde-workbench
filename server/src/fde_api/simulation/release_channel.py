@@ -340,10 +340,13 @@ def release_proposal(*, actor: User, proposal_id: str, payload: dict[str, Any]) 
             "rollback": None,
         }
         row.status = "published"
-        row.release_json = release
         materialized = _materialize_payload(session, row)
         if materialized:
             release["materialized"] = materialized
+        # 落库赋值须在 materialized 合入之后：JSON 列非 mutable，_materialize_payload
+        # 内部的 flush 会先把当前值写库，flush 后的原地变更对 DB 不可见
+        # （2026-11-17 实弹：活库 release_json 缺 materialized 段——lesson 实际落表）。
+        row.release_json = release
         _release_event(
             session,
             actor,
@@ -389,10 +392,11 @@ def rollback_release(*, actor: User, proposal_id: str, payload: dict[str, Any]) 
             "rollback_note": note,
         }
         row.status = "approved"
-        row.release_json = release
         retired = _retire_payload_rows(session, row)
         if retired["lesson"] or retired["overlay"]:
             release["rollback"]["retired_payload"] = retired
+        # 同 release_proposal：赋值须在 retired_payload 合入后（flush 后原地变更不可见）
+        row.release_json = release
         _release_event(
             session,
             actor,
