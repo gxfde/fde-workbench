@@ -53,8 +53,11 @@ PROBE_MAX_TOKENS = 512
 # 会把预算整段烧在思考上——8192 默认值实测 reasoning_tokens=8189 正文零产出）。
 # 4096 的旧标定在 2026-11-17 回归三连实弹翻车：analyze-final 尚可（3924 收尾），
 # design JSON 契约更大 ⇒ 三 run 全部 design 阶段 ai_output_truncated ⇒ 回归判定
-# 被执行伪影污染。16384 与评估腿同源标定（MiniMax-M3.1-Flash 全组合实测稳定）。
-PHASE_MAX_TOKENS = 16384
+# 被执行伪影污染。16384 与评估腿同源标定后复测仍有一档：同日复跑中 vague/complex
+# 两 variant 成功（design 10755 收尾），normal variant 仍两连截断（推理单独烧穿
+# 16384，29.7s/4.1s 正文零产出）⇒ 标定 32768（MiniMax-M3.1-Flash 接受度已探明
+# HTTP 200；预算是上限不是目标，成功收尾的调用不因上限抬高而变贵）。
+PHASE_MAX_TOKENS = 32768
 
 # analyze/design 的 mock 同款 JSON 契约描述（用户消息内动态拼装）
 _ANALYZE_CONTRACT = (
