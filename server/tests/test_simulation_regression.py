@@ -621,3 +621,211 @@ def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(ope
     ensure_default_handlers()
     assert get_handler(SIMULATION_REGRESSION_JOB_TYPE) is not None
 
+
+# ---------------------------------------------------------------------------
+# 排除纪律（L6 收尾轮）：执行失败的 run 不进判定分母
+# 2026-11-17 实弹：三候选 run design 阶段 ai_output_truncated 全 failed，
+# 残缺 transcript 仍被打分（维度缺席计 0＋HF-04）⇒ 判定伪装成 regressed。
+# ---------------------------------------------------------------------------
+
+
+def _make_candidate_proposal(operator) -> dict:
+    """造带 candidate_payload 的提案（lesson 载体——学习闭环第一圈同款形状）。"""
+    from fde_api.extensions import db
+
+    proposal = _proposal(operator)
+    with db.session() as session:
+        row = session.get(ImprovementProposal, proposal["id"])
+        assert row is not None
+        row.candidate_payload_json = {
+            "lesson_entry": {
+                "text": "逐项追问三类跨系统对齐问题（主键/物料编码/字段结构化）。",
+                "capability_tags": ["agent.module.presales"],
+                "industries": ["制造"],
+            }
+        }
+        session.commit()
+    return proposal
+
+
+def _patch_group_run_simulation(monkeypatch, *, fail_when) -> None:
+    """替换 regression_service.run_simulation：fail_when(run_row) 为真 ⇒ 该 run
+    标记 failed（error_json＝design 阶段截断），否则放行真执行。
+
+    原函数从 runner 模块本体取（不取 regression_service 现值）——同测内二次
+    patch 时不会被前一个 wrapper 链式包裹。"""
+    from fde_api.extensions import db
+    from fde_api.simulation import regression_service, runner
+    from fde_api.simulation.models import SimulationRun
+
+    original = runner.run_simulation
+
+    def wrapper(run_id: str) -> None:
+        with db.session() as session:
+            row = session.get(SimulationRun, run_id)
+            should_fail = bool(fail_when(row))
+        if should_fail:
+            with db.session() as session:
+                target = session.get(SimulationRun, run_id)
+                assert target is not None
+                target.status = "failed"
+                target.error_json = {
+                    "code": "adapter_unavailable",
+                    "phase": "design",
+                    "reason": "workbench_model_failed:ai_output_truncated",
+                }
+                session.commit()
+            return
+        original(run_id)
+
+    monkeypatch.setattr(regression_service, "run_simulation", wrapper)
+
+
+def _is_candidate_run(row) -> bool:
+    return isinstance(row.context_json, dict) and "candidate_payload" in row.context_json
+
+
+def test_regression_failed_runs_excluded_and_verdict_inconclusive(operator, monkeypatch):
+    """全排除 ⇒ after 无可评分 run ⇒ verdict inconclusive＋排除明细＋note 留痕；
+    失败 run 不得被评估（残缺 transcript 不打分、不烧评估成本）。"""
+    from fde_api.extensions import db
+    from fde_api.simulation.models import SimulationEvaluation, SimulationRun
+
+    scenario = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L6-EXCL")
+    ).get_json()["data"]
+    suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "排除纪律套件",
+            "split": "train",
+            "scenario_ids": [scenario["id"]],
+            "baseline_config": {"max_rounds": 4, "probe_quality": 0.0},
+        },
+    ).get_json()["data"]
+    proposal = _make_candidate_proposal(operator)
+
+    _patch_group_run_simulation(monkeypatch, fail_when=_is_candidate_run)
+
+    response = operator.post(
+        f"/api/v1/simulation/regression/suites/{suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert response.status_code == 201, response.get_json()
+    data = response.get_json()["data"]
+
+    assert data["before"]["runs"] == 1
+    assert data["after"]["runs"] == 0
+    assert data["verdict"] == "inconclusive"
+    excluded = data["deltas"]["excluded_runs"]
+    assert len(excluded) == 1
+    assert excluded[0]["error_code"] == "adapter_unavailable"
+    assert excluded[0]["retry_run_id"]  # 预算内联重试已执行且仍失败
+    assert "排除" in (data["note"] or "")
+    assert "inconclusive" in (data["note"] or "")
+    # 失败 run（含重试 attempt）零评估行
+    failed_ids = [excluded[0]["run_id"], excluded[0]["retry_run_id"]]
+    with db.session() as session:
+        rows = list(
+            session.scalars(
+                select(SimulationEvaluation).where(SimulationEvaluation.run_id.in_(failed_ids))
+            )
+        )
+    assert rows == []
+    # attempted ids 含原始 run 与重试 run（留痕可审计）
+    assert set(failed_ids).issubset(set(data["after_run_ids"]))
+
+
+def test_regression_retry_recovers_failed_run_for_scoring(operator, monkeypatch):
+    """重试环：穿越既有失败 attempt（created=False 不耗预算）⇒ 新 attempt 成功
+    即正常评分，verdict 脱离 inconclusive；幂等指纹绕行＝清结果行（生产等价＝换新套件）。"""
+    from fde_api.extensions import db
+    from fde_api.simulation.models import RegressionResult, SimulationRun
+
+    scenario = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L6-RETRY")
+    ).get_json()["data"]
+    suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "重试恢复套件",
+            "split": "train",
+            "scenario_ids": [scenario["id"]],
+            "baseline_config": {"max_rounds": 4, "probe_quality": 0.0},
+        },
+    ).get_json()["data"]
+    proposal = _make_candidate_proposal(operator)
+
+    # 第一次执行：候选 run 全失败 ⇒ inconclusive
+    _patch_group_run_simulation(monkeypatch, fail_when=_is_candidate_run)
+    first = operator.post(
+        f"/api/v1/simulation/regression/suites/{suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert first.status_code == 201
+    assert first.get_json()["data"]["verdict"] == "inconclusive"
+
+    with db.session() as session:
+        session.execute(delete(RegressionResult))
+        session.commit()
+
+    # 第二次执行：attempt 1 失败链照旧，attempt ≥ 2 的新执行放行（mock 完成可评分）
+    def fail_only_first_attempt(row) -> bool:
+        return _is_candidate_run(row) and int(row.attempt or 1) == 1
+
+    _patch_group_run_simulation(monkeypatch, fail_when=fail_only_first_attempt)
+    second = operator.post(
+        f"/api/v1/simulation/regression/suites/{suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert second.status_code == 201, second.get_json()
+    data = second.get_json()["data"]
+
+    assert data["deltas"]["excluded_runs"] == []
+    assert data["after"]["runs"] == 1
+    assert data["verdict"] != "inconclusive"
+    with db.session() as session:
+        scored = session.get(SimulationRun, data["after_run_ids"][-1])
+        assert scored.status == "completed"
+        assert int(scored.attempt) >= 2
+
+
+def test_regression_partial_exclusion_forces_inconclusive(operator, monkeypatch):
+    """幸存者偏差闸：候选组部分失败时，只按幸存样本判「无回归」＝伪装达成
+    （执行失败可能与候选本身相关）⇒ 一律强制 inconclusive＋逐 run 排除明细。"""
+    scenario_a = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L6-PARTA")
+    ).get_json()["data"]
+    scenario_b = operator.post(
+        "/api/v1/simulation/scenarios", json=_scenario_payload("CASE-L6-PARTB")
+    ).get_json()["data"]
+    suite = operator.post(
+        "/api/v1/simulation/regression/suites",
+        json={
+            "name": "部分排除套件",
+            "split": "train",
+            "scenario_ids": [scenario_a["id"], scenario_b["id"]],
+            "baseline_config": {"max_rounds": 4, "probe_quality": 0.0},
+        },
+    ).get_json()["data"]
+    proposal = _make_candidate_proposal(operator)
+
+    def fail_only_scenario_a(row) -> bool:
+        return _is_candidate_run(row) and row.scenario_id == scenario_a["id"]
+
+    _patch_group_run_simulation(monkeypatch, fail_when=fail_only_scenario_a)
+
+    response = operator.post(
+        f"/api/v1/simulation/regression/suites/{suite['id']}/run",
+        json={"proposal_id": proposal["id"]},
+    )
+    assert response.status_code == 201, response.get_json()
+    data = response.get_json()["data"]
+
+    assert data["after"]["runs"] == 1  # b 场景正常评分进 summary
+    assert data["verdict"] == "inconclusive"  # 但幸存者样本不得宣判
+    excluded = data["deltas"]["excluded_runs"]
+    assert len(excluded) == 1
+    assert excluded[0]["scenario_id"] == scenario_a["id"]
+    assert "1 个 run" in (data["note"] or "")
+

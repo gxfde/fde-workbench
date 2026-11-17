@@ -49,7 +49,12 @@ WORKBENCH_PROMPT_VERSION = version_of(
 
 # 每次 execute_ai_prompt 的 completion 上限（probe 一句话；analyze/design JSON 契约）
 PROBE_MAX_TOKENS = 512
-PHASE_MAX_TOKENS = 4096
+# PHASE 预算与评估腿 EVALUATION_MAX_TOKENS 同尺（model_evaluation.py 先例：推理模型
+# 会把预算整段烧在思考上——8192 默认值实测 reasoning_tokens=8189 正文零产出）。
+# 4096 的旧标定在 2026-11-17 回归三连实弹翻车：analyze-final 尚可（3924 收尾），
+# design JSON 契约更大 ⇒ 三 run 全部 design 阶段 ai_output_truncated ⇒ 回归判定
+# 被执行伪影污染。16384 与评估腿同源标定（MiniMax-M3.1-Flash 全组合实测稳定）。
+PHASE_MAX_TOKENS = 16384
 
 # analyze/design 的 mock 同款 JSON 契约描述（用户消息内动态拼装）
 _ANALYZE_CONTRACT = (

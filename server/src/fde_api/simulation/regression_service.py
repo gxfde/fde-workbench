@@ -20,6 +20,7 @@ from fde_api.simulation import evaluator, run_service
 from fde_api.simulation.evaluation_rules import RUBRIC_VERSION
 from fde_api.simulation.models import (
     ADAPTER_MODES,
+    RUN_TERMINAL_STATUSES,
     ImprovementProposal,
     RegressionResult,
     RegressionSuite,
@@ -40,6 +41,11 @@ SUITE_SPLITS = ("train", "regression", "blind", "mixed")
 MAX_SUITE_SCENARIOS = 40
 SIMULATION_REGRESSION_JOB_TYPE = "simulation.regression"
 MODEL_MODES = ("stub", "server")
+# 可重试终态（与 run_service.retry_run 闸同闭集：failed 非 hard/timeout/cancelled）
+RUN_RETRIABLE_STATUSES = ("failed", "timeout", "cancelled")
+# 组内单 run 的重试预算＝「新执行」次数上限（穿越既有失败链不计数）——
+# 重复执行回归时每次最多新增 2 个 attempt，成本有界；耗尽即排除 fail-closed。
+MAX_GROUP_RUN_RETRIES = 2
 
 
 def _serialize_suite(row: RegressionSuite) -> dict[str, Any]:
@@ -261,6 +267,67 @@ def _prepare_regression_inputs(
     )
 
 
+def _run_error_code(row: SimulationRun | None) -> str:
+    if row is None or not row.error_json:
+        return ""
+    code = row.error_json.get("code")
+    return str(code) if code else ""
+
+
+def _materialize_group_run(
+    *,
+    actor: User,
+    run: dict[str, Any],
+    scenario_id: str,
+) -> tuple[str | None, dict[str, Any] | None, list[str]]:
+    """确保组内 run 达到可评分状态；不可评分 ⇒ 返回排除明细（不评分）。
+
+    排除纪律（unavailable 不进判定，L6 收尾轮）：执行失败的 run 不得进回归
+    判定分母——残缺 transcript 的维度缺席会被 summarize 计 0 分、把执行伪影
+    伪装成「regressed」（2026-11-17 实弹：三 run design 阶段截断 ⇒ 假
+    regressed）。处置：
+
+    - failed（非 hard）/timeout/cancelled 沿 ``run_service.retry_run`` 文档
+      语义**内联重试**（attempt+1 派生新键）；重试预算按「新执行」计数
+      （``MAX_GROUP_RUN_RETRIES``）——穿越既有失败链（retry_run 返回
+      created=False 的历史失败 attempt）不消耗预算，保证重复执行回归时
+      能继续向前派生新 attempt 而不是永久卡死在同一失败链上；
+    - ``failed_hard`` 不可重试（重试只会重复烧钱）直接排除；
+    - 预算耗尽仍失败 ⇒ 排除（fail-closed）。
+
+    返回 ``(scored_run_id | None, exclusion | None, attempted_ids)``。
+    """
+    run_id = str(run["id"])
+    attempted = [run_id]
+    if run.get("status") not in RUN_TERMINAL_STATUSES:
+        run_simulation(run_id)
+    fresh_executions = 0
+    while True:
+        with db.session() as session:
+            row = session.get(SimulationRun, run_id)
+            status = row.status if row is not None else "failed"
+            if status == "completed":
+                return run_id, None, attempted
+            if status not in RUN_RETRIABLE_STATUSES or fresh_executions >= MAX_GROUP_RUN_RETRIES:
+                exclusion = {
+                    "run_id": str(run["id"]),
+                    "retry_run_id": run_id if run_id != str(run["id"]) else None,
+                    "scenario_id": scenario_id,
+                    "status": status,
+                    "error_code": _run_error_code(row),
+                }
+                return None, exclusion, attempted
+        retried = run_service.retry_run(actor=actor, run_id=run_id)
+        retried_id = str(retried["id"])
+        if retried.get("created"):
+            fresh_executions += 1
+        if retried_id != run_id:
+            attempted.append(retried_id)
+        if retried.get("status") not in RUN_TERMINAL_STATUSES:
+            run_simulation(retried_id)
+        run_id = retried_id
+
+
 def _run_group(
     *,
     actor: User,
@@ -268,12 +335,16 @@ def _run_group(
     config: dict[str, Any],
     adapter_mode: str = "mock",
     model_mode: str = "stub",
-) -> list[RunSummary]:
+) -> tuple[list[RunSummary], list[dict[str, Any]], list[str]]:
     """跑一组场景（基线组或候选组）并汇总评估结论。
 
     参数化支持 mock/workbench 执行面与 stub/server 评估面；在回归批作业内，
     即使 adapter_mode=="workbench" 也直接在当前 worker 同步跑完单题（create_run
     execute=False + run_simulation），避免嵌套入队死锁。
+
+    返回 ``(summaries, excluded, attempted_ids)``：``summaries`` 只含可评分
+    （completed）run；``excluded`` 为执行失败 run 的排除明细（进入结果
+    deltas_json 留痕）；``attempted_ids`` 为全部尝试过的 run id（含重试）。
     """
     run_config = {
         k: v
@@ -281,6 +352,8 @@ def _run_group(
         if k not in ("adapter_mode", "model_mode", "noise_band")
     }
     summaries: list[RunSummary] = []
+    excluded: list[dict[str, Any]] = []
+    attempted: list[str] = []
     for scenario_id in scenario_ids:
         run = run_service.create_run(
             actor=actor,
@@ -291,10 +364,16 @@ def _run_group(
                 "config": run_config,
             },
         )
-        if run.get("status") not in ("completed", "failed", "failed_hard", "timeout", "cancelled"):
-            run_simulation(run["id"])
+        scored_id, exclusion, attempted_ids = _materialize_group_run(
+            actor=actor, run=run, scenario_id=scenario_id
+        )
+        attempted.extend(attempted_ids)
+        if scored_id is None:
+            assert exclusion is not None
+            excluded.append(exclusion)
+            continue
         evaluation = evaluator.evaluate_run(
-            actor=actor, run_id=run["id"], model_mode=model_mode
+            actor=actor, run_id=scored_id, model_mode=model_mode
         )
         model_block = evaluation.get("model") if isinstance(evaluation.get("model"), dict) else None
         model_total: float | None = None
@@ -305,16 +384,16 @@ def _run_group(
         rubric_ver = str((evaluation.get("meta") or {}).get("rubric_version") or RUBRIC_VERSION)
         eval_axis = f"{rubric_ver}|model:{model_mode}"
         with db.session() as session:
-            run_row = session.get(SimulationRun, run["id"])
+            run_row = session.get(SimulationRun, scored_id)
             failure_codes = tuple(
                 row.code
                 for row in session.scalars(
-                    select(SimulationFinding).where(SimulationFinding.run_id == run["id"])
+                    select(SimulationFinding).where(SimulationFinding.run_id == scored_id)
                 )
             )
             summaries.append(
                 RunSummary(
-                    run_id=run["id"],
+                    run_id=scored_id,
                     scenario_id=scenario_id,
                     split=run_row.split if run_row else "train",
                     total_score=float(evaluation["total_score"]),
@@ -330,7 +409,7 @@ def _run_group(
                     evaluator_axis=eval_axis,
                 )
             )
-    return summaries
+    return summaries, excluded, attempted
 
 
 def execute_regression_sync(
@@ -348,30 +427,37 @@ def execute_regression_sync(
             current_axis,
         ) = _prepare_regression_inputs(session, suite_id=suite_id, proposal_id=proposal_id)
 
-    before = _run_group(
+    before, before_excluded, before_ids = _run_group(
         actor=actor,
         scenario_ids=scenario_ids,
         config=baseline_config,
         adapter_mode=adapter_mode,
         model_mode=model_mode,
     )
-    after = (
-        _run_group(
+    if proposal_id:
+        after, after_excluded, after_ids = _run_group(
             actor=actor,
             scenario_ids=scenario_ids,
             config=candidate_config,
             adapter_mode=adapter_mode,
             model_mode=model_mode,
         )
-        if proposal_id
-        else before
-    )
+        excluded_runs = [*before_excluded, *after_excluded]
+    else:
+        after, after_ids = before, before_ids
+        excluded_runs = list(before_excluded)
     report = compare(
         before=before,
         after=after,
         noise_band=band,
         noise_band_axis=current_axis,
     )
+    if excluded_runs:
+        # 幸存者偏差闸（L6 收尾轮）：候选组执行失败可能与候选本身相关
+        # （如注入后输出变长触发截断），只在幸存样本上判「无回归」＝伪装
+        # 达成 ⇒ 排除纪律触发时一律 fail-closed 判 inconclusive。
+        report["verdict"] = "inconclusive"
+    report["excluded_runs"] = excluded_runs
 
     fingerprint = result_fingerprint(
         suite_id=suite_id,
@@ -387,12 +473,28 @@ def execute_regression_sync(
         )
         if existing is not None:
             return {**_serialize_result(existing), "created": False}
+        note: str | None = None
+        if excluded_runs:
+            detail = "；".join(
+                f"{item.get('run_id', '')[:8]}({item.get('status')}:{item.get('error_code') or 'n/a'})"
+                for item in excluded_runs
+            )
+            note = (
+                f"{len(excluded_runs)} 个 run 执行失败被排除（unavailable 不进判定，"
+                f"防残缺 transcript 伪装判定）：{detail} ⇒ 判据不可信，verdict 强制 inconclusive。"
+            )
+        if report["overfit_risk"]:
+            overfit_note = (
+                "过拟合风险：训练集增益显著高于盲测集增益（泛化差 "
+                f"{report['generalization_gap']} > 0.15）⇒ 不得进入发布审批。"
+            )
+            note = f"{note} {overfit_note}" if note else overfit_note
         row = RegressionResult(
             suite_id=suite_id,
             proposal_id=proposal_id,
             fingerprint=fingerprint,
-            before_run_ids_json=[summary.run_id for summary in before],
-            after_run_ids_json=[summary.run_id for summary in after],
+            before_run_ids_json=before_ids,
+            after_run_ids_json=after_ids,
             before_summary_json=report["before"],
             after_summary_json=report["after"],
             deltas_json={
@@ -408,18 +510,14 @@ def execute_regression_sync(
                 "model_total_delta": report["model_total_delta"],
                 "noise_band": report["noise_band"],
                 "noise_band_axis": report["noise_band_axis"],
+                "excluded_runs": excluded_runs,
             },
             new_hard_failures_json=report["new_hard_failures"],
             resolved_hard_failures_json=report["resolved_hard_failures"],
             generalization_gap=report["generalization_gap"],
             overfit_risk=report["overfit_risk"],
             verdict=report["verdict"],
-            note=(
-                "过拟合风险：训练集增益显著高于盲测集增益（泛化差 "
-                f"{report['generalization_gap']} > 0.15）⇒ 不得进入发布审批。"
-                if report["overfit_risk"]
-                else None
-            ),
+            note=note,
         )
         session.add(row)
         session.flush()

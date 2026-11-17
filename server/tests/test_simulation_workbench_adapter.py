@@ -498,3 +498,17 @@ def test_simulation_run_job_handler_idempotent_on_terminal(operator, app):
                 list(check.scalars(select(SimulationTrace).where(SimulationTrace.run_id == run["id"])))
             )
         assert traces_before == traces_after
+
+
+def test_phase_budget_calibrated_to_evaluation_leg():
+    """PHASE 预算与评估腿 EVALUATION_MAX_TOKENS 同尺（回归钉）。
+
+    2026-11-17 实弹：4096 旧标定在 MiniMax 推理模型下 design 阶段三连
+    ai_output_truncated（analyze-final 3924 尚可、design JSON 契约更大）⇒
+    回归三 run 全 failed、判定被执行伪影污染成假 regressed。标定下限＝
+    评估腿 16384（model_evaluation.py 同源标定，全模型×预算组合实测稳定）。
+    """
+    from fde_api.simulation.adapters.workbench import PHASE_MAX_TOKENS
+    from fde_api.simulation.model_evaluation import EVALUATION_MAX_TOKENS
+
+    assert PHASE_MAX_TOKENS >= EVALUATION_MAX_TOKENS
