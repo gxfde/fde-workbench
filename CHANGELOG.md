@@ -2,6 +2,19 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 学习闭环收尾轮：回归判定环收口＝回归通过＋首个改善向信号＋双缺陷修复＋三载体收尾（五 PR，2026-11-18）
+
+MiniMax 配额恢复（蔡工确认）＋夜轮四拍板（范围全开／按已登记判据裁决／L-C 只读视图／CI 四绿即合并部署）下，学习闭环挂账全清偿。NEW `docs/audit/学习闭环收尾轮-回归判定环收口报告-2026-11-18.md`（证据链全录）。**零迁移零路由零表**：口径不变（523 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。
+
+- NEW #510 `e43e729a`：回归判定环伪影双修——workbench `PHASE_MAX_TOKENS` 4096→16384 标定（推理模型烧穿先例族）＋**failed run 排除纪律**（unavailable 不进判定分母：预算化重试＋failed_hard 直排＋排除触发幸存者偏差闸 verdict 强制 inconclusive＋`excluded_runs` 留痕＋失败 run 不再评估）；4 钉＋变异三连红→sha256 还原→绿。
+- NEW #511 `9a03b88c`：release_channel `materialized`/`retired_payload` **落库丢失修复**（JSON 列对 flush 后原地变更不可见——赋值移到载荷合入后）；NEW 两枚 DB 落库面钉（TDD 先红后修）；活库 PROP-BE6DE878 release_json 审计段四重守卫补录（前后 sha256 留痕宿主）。
+- NEW #512 `74722cf1`：**seed 压制消解**——published 动态行保底 1 席（seeds 让末席；无动态行逐字节零变化；seeds 稀缺时动态按序补足）；3 钉＋变异红→还原→绿。
+- NEW #513 `6612691b`：**L-C 原文核对只读视图**——发现卡证据条原文展开（party 裁定「只给人看」面落地；G7b 条款③只读面收口，改判写面留后续轮）；桌面 104 文件 1232 passed＋typecheck 零错。
+- NEW #514 `f8aa4d1b`：`PHASE_MAX_TOKENS` 16384→**32768**（复测一档：vague/complex 16384 已成功〔design 10755 收尾〕、normal variant 推理单独两连烧穿；provider 32768 接受度探明）。
+- **判定环收口（v3 套件 `0c04a56f` 三 variant 全 completed 零排除）**：两登记判据全过——D1 族判据不降（MI-1 0.583→1.0）＋同 run 重评极差 **0.0071** 带内（0.1049）；模型轴 **+0.2318 ⇒ model_verdict=improved**（0.6333→0.8651，首个改善向信号，不升档）；规则层 mixed（D3 解决方案质量 −0.3 如实登记）；FA-01/FA-02 failure codes 全消除。「反哺信号有效」维持未知（单场景族单点证据）。
+- 便携版 **r56**（asar `30d858e2206aa4b1bde5de544732675f677c70a0daa34e94312c20ec18414351`，marker「原文核对」正向 1／r54·r55 反向 0）落主树 `release/蔡工FDE-0.3.0-便携版-r56`；RELEASE-COUNTER／package.json／web-bridge 三源同步。
+- 活体部署两轮三验全绿（16384 轮 api `d0903855731c`／32768 轮 api `4e34d64ee8c9`；url_map 523／alembic `b7f2d9e4c6a8 (head)`／镜像逐位／ready 200）；指纹幂等操作纪律登记＝复判定须新建套件（同套件＋同提案重跑返回既有结果行）。
+
 ## [未发布] — 注册制试用开闸轮：SMTP 发信通道 provider 无关化＋注册面开闸三条件修订＋登录页注册入口（goal-regtrial R1–R5，2026-11-17）
 
 承蔡工「注册制登录试用」评估与「SES 因审批不下来已废弃、改直发」纠偏——SES 生产权限 2026-11-05 被 AWS 拒绝、路线冻结，注册面验证邮件改走 **provider 无关 SMTP 通道**（Zoho 形态，AI外贸获客 backend 同款模式 2026-11-09 实发验证过）。**零迁移零路由零蓝图零新表**：口径不变（523 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。

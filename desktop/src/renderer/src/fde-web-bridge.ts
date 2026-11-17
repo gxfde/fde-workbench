@@ -327,7 +327,7 @@ const bridge: FdeBridge = {
     capture: async () => fail({ code: "bridge_platform", message: "浏览器版无宿主计划任务，无法手动采集。" }),
   },
   app: {
-    version: async () => "0.3.0-r55-web",
+    version: async () => "0.3.0-r56-web",
     setLcscEnabled: async () => {},
     openLcscBrowser: async (url: string) => {
       // CR-070：与桌面 main 层 allowsLcscUrl 同尺三域 https 白名单——
