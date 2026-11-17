@@ -700,6 +700,9 @@ def test_crashing_tool_rolls_back_the_shared_db_session(app, db_session, ai_user
         def rollback(self):
             rollbacks.append(self.open)
 
+        def get(self, model, pk):  # S08 轮间复核的重读面：替身返回未撤权 user
+            return ai_user
+
     monkeypatch.setattr(ai_tool_loop, "db",
                        type("SpyDB", (), {"session": staticmethod(lambda: RecordingSession())}))
     provider = FakeSession([tool_call_response("file_read", {"project_id": "p1", "file_id": "f1"}),
@@ -1125,3 +1128,128 @@ def test_tool_loop_feeds_validation_violations_back_for_correction(app, db_sessi
     second_body = session.calls[1][1]["json"]
     tool_messages = [m for m in second_body["messages"] if m.get("role") == "tool"]
     assert any("unknown data_type 'text'" in m["content"] for m in tool_messages)
+
+
+# --- S08 拍板落地（批5 决策单，2026-11-18 P1「全部批准」）：直连循环轮间复核 ---
+
+def test_direct_loop_recheck_revocation_between_rounds(app, db_session, ai_user, monkeypatch):
+    """轮间撤权 → 后续轮不执行（401 语义 DSHRuntimeError，第二次 provider 请求不发）。
+
+    MCP 面每请求复核（mcp_gateway._identity）已钉；本钉对齐直连循环面：
+    每轮工具执行前 DB 重读 user，校验 is_active 与 auth_version == claims["ver"]。
+    """
+    from fde_api.extensions import db as _db
+
+    import traceback
+
+    tool_execs: list[int] = []
+
+    def _revoke_during_first_round(*args, **kwargs):
+        # 第一轮工具执行时点撤销执行者（改密语义：auth_version 前进）
+        tool_execs.append(1)
+        try:
+            ai_user.is_active = False
+            ai_user.auth_version = (ai_user.auth_version or 0) + 1
+            db_session.commit()
+        except Exception:
+            traceback.print_exc()
+            raise
+        return {"items": []}
+
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.call_tool", _revoke_during_first_round)
+    session = FakeSession([
+        tool_call_response("project_list", {"query": "a"}, call_id="c1"),
+        tool_call_response("project_list", {"query": "b"}, call_id="c2"),
+        final_response("第二轮不该发生。"),
+    ])
+
+    with pytest.raises(DSHRuntimeError) as caught:
+        direct_tool_completion(
+            model=provider_model(), prompt="两轮工具调用", user=ai_user,
+            project_id=None, execution_id="exec-s08-revoke", session=session)
+
+    assert caught.value.code == "ai_authorization_revoked"
+    # 推荐案语义（决策单③）：拦在「本轮工具执行前」——第二轮 provider 往返
+    # 已发生（响应解析后复核），但该轮工具绝不执行（trace 仍 1 条）
+    assert len(session.calls) == 2
+    assert len(tool_execs) == 1  # 第二轮工具未执行（复核拦截）
+
+
+# --- S-SERV A 案（批5 决策单，2026-11-18 P1「全部批准」）：手动工具调用档 ---
+
+
+def test_manual_tool_call_parser_tolerant_chain():
+    """tolerant 解析链三形态：完好块/括号失衡修复/双败保留原文（不伪造）。"""
+    from fde_api.control import manual_tool_call as mtc
+
+    # 完好块
+    calls, residue = mtc.parse_tool_call_blocks(
+        '前置<tool_call>{"name": "project_list", "arguments": {"query": "a"}}</tool_call>尾')
+    assert len(calls) == 1 and calls[0]["function"]["name"] == "project_list"
+    assert json.loads(calls[0]["function"]["arguments"]) == {"query": "a"}
+    assert residue == "前置尾"
+    # 破损块（多处未闭合+漏 closer——qwen3 实测形态）→ 修复成功
+    broken = ('<tool_call>{"name": "ontology_dry_validate", '
+              '"arguments": {"proposed_json": [{"op": "create"}}</tool_call>')
+    calls2, residue2 = mtc.parse_tool_call_blocks(broken)
+    assert len(calls2) == 1  # 修复链补齐括号后可解析
+    # 全非 dict（无 name）不伪造
+    calls3, _ = mtc.parse_tool_call_blocks("<tool_call>[1,2]</tool_call>")
+    assert calls3 == []
+    # 纯文本无块
+    calls4, residue4 = mtc.parse_tool_call_blocks("直接回答。")
+    assert calls4 == [] and residue4 == "直接回答。"
+
+
+def test_manual_mode_request_shape_and_response_parse(app, db_session, ai_user, monkeypatch):
+    """开关开：请求剥 tools+格式指令入 system；<tool_call> 文本响应被解析执行。"""
+    from fde_api.control import manual_tool_call as mtc
+
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_manual_tool_calling", True)
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.call_tool",
+                        lambda *a, **k: {"items": ["x"]})
+    # 模型以 <tool_call> 文本形态发起调用（原生 tools 面不可靠的场景）
+    manual_tool_response = FakeResponse(200, {
+        "choices": [{"message": {
+            "content": '<tool_call>{"name": "project_list", "arguments": {"query": "a"}}</tool_call>'},
+            "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+    })
+    session = FakeSession([manual_tool_response, final_response("查到了，共 1 条。")])
+
+    text, usage, trace = direct_tool_completion(
+        model=provider_model(), prompt="列项目", user=ai_user, project_id=None,
+        execution_id="exec-manual", session=session)
+
+    # 请求面：无 tools/tool_choice，system 含格式指令
+    first_body = session.calls[0][1]["json"]
+    assert "tools" not in first_body and "tool_choice" not in first_body
+    system_msg = first_body["messages"][0]
+    assert system_msg["role"] == "system" and "<tool_call>" in system_msg["content"]
+    # 响应面：<tool_call> 被解析执行（trace 1 条 tool 消息），最终文本终答
+    assert text == "查到了，共 1 条。"
+    assert [t["tool"] for t in trace] == ["project_list"]
+
+
+def test_manual_mode_off_keeps_native_tools(app, db_session, ai_user, monkeypatch):
+    """开关关（默认）：请求仍带原生 tools——生产行为不变。"""
+    monkeypatch.setattr(app.config["SETTINGS"], "ai_selfhosted_manual_tool_calling", False)
+    session = FakeSession([final_response("普通回答。")])
+    text, _usage, _trace = direct_tool_completion(
+        model=provider_model(), prompt="你好", user=ai_user, project_id=None,
+        execution_id="exec-native", session=session)
+    first_body = session.calls[0][1]["json"]
+    assert "tools" in first_body  # 原生面不变
+    assert text == "普通回答。"
+
+
+def test_manual_tool_format_instruction_lists_tools_without_inline_json():
+    """格式指令含工具名与参数清单；与描述收口纪律一致（无内嵌 JSON 示例）。"""
+    from fde_api.control.ai_tool_loop import tool_definitions
+    from fde_api.control.manual_tool_call import tool_format_instruction
+
+    defs = tool_definitions(["ontology.read"], allowed_tools=["ontology_dry_validate"])
+    text = tool_format_instruction(defs)
+    assert "ontology_dry_validate" in text and "<tool_call>" in text
+    assert "参数(类型):" in text  # 类型提示随列（v3 作废根因修复）
+    assert "array of object" in text

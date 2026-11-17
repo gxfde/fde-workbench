@@ -84,6 +84,36 @@ def test_dry_validate_dispatches_to_binding_service(monkeypatch: pytest.MonkeyPa
     }
 
 
+def test_call_tool_rejects_forged_ontology_or_version_arguments() -> None:
+    """AF1-WP5 批1（S01/S05-AF1）：本体与钉版由服务端从绑定注入（S-13），
+    调用方参数闭集不含 ontology_id/pinned_version_id——塞入伪造上下文键
+    （多余参数）必须 403，不得静默忽略后透传。"""
+    from fde_api.control import mcp_gateway
+
+    for forged in (
+        {"ontology_id": "ont-forged"},
+        {"pinned_version_id": "ver-forged"},
+        {"ontology_id": "ont-forged", "pinned_version_id": "ver-forged"},
+    ):
+        arguments = {
+            "project_id": "p1",
+            "binding_id": "b1",
+            "proposed_json": [{"op": "create"}],
+            **forged,
+        }
+        with pytest.raises(ControlServiceError) as rejected:
+            mcp_gateway.call_tool(
+                _NO_SESSION,
+                user=_User(),
+                claims={"execution_id": "e1"},
+                allowed=["ontology.read"],
+                name="ontology_dry_validate",
+                arguments=arguments,
+            )
+        assert rejected.value.code == "forbidden", forged
+        assert rejected.value.status == 403, forged
+
+
 def test_call_tool_scopes_ontology_tools_to_execution_claims() -> None:
     """AF1-WP5 G2 追认落地：ontology 工具族与其他工具面同闸——execution
     claims 钉定项目时（project-scoped 授权），Agent 传其他 project_id 必须

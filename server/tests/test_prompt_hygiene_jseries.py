@@ -54,6 +54,9 @@ _KNOWN_EXCEPTION_VARIABLES = {
     "SYSTEM_PROMPT",             # research_form_prompt.py 模块常量
     "system_content",            # simulation/adapters/workbench.py DB 载荷 overlay 内插（L4）
     "overlay_system_content",    # ai/overlays.py 已发布 PromptOverlay 治理面直连腿注入（L5）
+    "manual_instruction",        # ai_tool_loop.py 手动工具调用档格式指令（S-SERV A 案，
+                                 # 2026-11-18 P1「全部批准」；契约 §2 表行 13——代码常量
+                                 # 格式说明+治理面工具清单渲染+system_prompt 形参直传）
     "instruction",               # lcsc_desktop.py 函数内常量拼接
     "RULES",                     # lcsc_other.py 模块常量
     "file_content",              # guidance/ai_prompt.py:51（已登记例外）

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.auth.models import User
 from fde_api.control.access import capabilities_for_level, effective_ai_access
+from fde_api.control import manual_tool_call
 from fde_api.control.mcp_gateway import DATA_QUALITY_FEEDBACK_TOOL, TOOLS, call_tool, tool_is_granted
 from fde_api.control.payload_audit import MAX_AUDIT_PAYLOAD_BYTES, audit_payload
 from fde_api.control.service import ControlServiceError
@@ -54,6 +55,24 @@ def _configured_max_tool_rounds() -> int:
     except RuntimeError:
         return MAX_TOOL_ROUNDS
     return int(getattr(settings, "agent_max_tool_rounds", MAX_TOOL_ROUNDS))
+
+
+def _manual_tool_calling(explicit: bool | None) -> bool:
+    """S-SERV A 案（批5 决策单，2026-11-18 P1「全部批准」）：手动工具调用档。
+
+    ``explicit``（调用方直传）优先；否则回落 settings
+    ``ai_selfhosted_manual_tool_calling``（默认 False——生产行为不变）。
+    无应用上下文时按关处理。
+    """
+    if explicit is not None:
+        return bool(explicit)
+    try:
+        from flask import current_app
+
+        settings = current_app.config["SETTINGS"]
+        return bool(getattr(settings, "ai_selfhosted_manual_tool_calling", False))
+    except RuntimeError:
+        return False
 
 
 # A single tool result may not exceed this many characters when fed back to
@@ -267,6 +286,7 @@ def direct_tool_completion(
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
     grant_quality_feedback: bool = False,
     private_context: bool = False,
+    manual_tool_calling: bool | None = None,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
     """Call the provider with tools and run the tool loop locally.
 
@@ -305,9 +325,19 @@ def direct_tool_completion(
     claims = _claims_for(user, project_id=project_id, execution_id=execution_id, allowed=allowed)
     if quality_feedback_project_id:
         claims["quality_feedback_project_id"] = quality_feedback_project_id
+    # S-SERV A 案：手动工具调用档（serving 工具解析器不可靠时降到文本面）
+    manual_mode = _manual_tool_calling(manual_tool_calling)
 
     messages: list[dict[str, Any]] = []
-    if system_prompt:
+    if manual_mode:
+        # 手动档：格式指令（工具清单 + <tool_call> 块格式）随 system 首位注入；
+        # body 不带 tools/tool_choice（serving 解析器退出路径）。
+        # J-1 登记形态：content=单变量（拼接移出消息字面量），契约 §2 表行 13
+        manual_instruction = manual_tool_call.tool_format_instruction(definitions)
+        if system_prompt:
+            manual_instruction = manual_instruction + "\n\n" + system_prompt
+        messages.append({"role": "system", "content": manual_instruction})
+    elif system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
@@ -331,7 +361,7 @@ def direct_tool_completion(
                 "messages": messages,
                 "max_tokens": max_tokens,
             }
-            if definitions:
+            if definitions and not manual_mode:
                 body["tools"] = definitions
                 body["tool_choice"] = "auto"
             try:
@@ -361,6 +391,13 @@ def direct_tool_completion(
             message = choice.get("message") or {}
             content = message.get("content")
             tool_calls = message.get("tool_calls") or []
+            if manual_mode and isinstance(content, str) and "<tool_call>" in content:
+                # 手动档响应解析：<tool_call> 文本块 → 兼容形 tool_calls
+                # （tolerant 链；解析失败保留原文走文本终答——破损可见计入测量）
+                parsed_calls, residue = manual_tool_call.parse_tool_call_blocks(content)
+                if parsed_calls:
+                    tool_calls = parsed_calls
+                    content = residue
             usage = payload.get("usage")
             if isinstance(usage, dict):
                 usage_calls.append({
@@ -397,6 +434,19 @@ def direct_tool_completion(
 
             messages.append({"role": "assistant", "content": content or "",
                              "tool_calls": tool_calls})
+            # S08（批5 决策单，2026-11-18 P1「全部批准」）：每轮工具执行前
+            # 复核执行者状态——DB 重读 user，校验 is_active 与 auth_version。
+            # 与 MCP 面（mcp_gateway._identity 每请求复核）对齐：撤权/改密/
+            # 停用在「循环开始 → 下一轮」窗口内立即生效（原缺口=秒-分钟级
+            # 窗口，v1 安静窗口实测单 run 时延可达 489s）。401 语义立即停止。
+            current = db_session.get(User, user.id)
+            if (
+                current is None
+                or not current.is_active
+                or current.auth_version != claims.get("ver")
+            ):
+                raise DSHRuntimeError(
+                    "ai_authorization_revoked", "账号授权已失效，执行已停止。", retryable=False)
             results, tool_metas = _run_tools(user=user, claims=claims, allowed=allowed,
                                              tool_calls=tool_calls, session=db_session,
                                              allowed_tools=allowed_tools)

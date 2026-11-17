@@ -439,103 +439,15 @@ def _serving_probe(base_url: str | None = None) -> dict[str, Any]:
                 "error": str(error)[:120]}
 
 
-_TOOL_FORMAT_INSTRUCTION = (
-    "你可以使用下方列出的工具。需要调用工具时，只输出一个工具调用块，格式：\n"
-    '<tool_call>{"name": "工具名", "arguments": {实参对象}}</tool_call>\n'
-    "块外不要附加任何文字；工具结果会以 tool 消息回填后再继续。"
-    "不需要工具时，直接用一两句话回答。\n可用工具：\n"
+# S-SERV A 案同源化（批5 决策单，2026-11-18 P1「全部批准」）：解析器与
+# 格式指令已产品化（fde_api/control/manual_tool_call.py）——桥与生产循环
+# 共享同一实现（此前双实现漂移风险，G12 B 级注记同款纪律）
+from fde_api.control.manual_tool_call import (  # noqa: E402  (SRC on sys.path)
+    _repair_json_brackets,
+    json_loads_tolerant as _json_loads_tolerant,
+    parse_tool_call_blocks as _parse_tool_call_blocks,
+    tool_format_instruction as _manual_format_instruction,
 )
-
-_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
-_TRAILING_COMMA_RE = re.compile(r",\s*([\]}])")
-
-
-def _repair_json_brackets(raw: str) -> str:
-    """括号平衡修复（手动解析兜底道）。
-
-    实测缺陷形态：模型收尾漏写 closer（``"fact"}]}}`` 应为 ``"fact"}}]}}``
-    ——T1-02-1 烟测留痕）。规则：字符串态感知扫描；错配 closer 前先补齐
-    期望的 closer（可多层）；结尾补齐全部未闭合括号与未闭合字符串。只在
-    直解析失败后调用；修复失败由调用方降级保留原文（不伪造成功）。
-    """
-    stack: list[str] = []
-    out: list[str] = []
-    in_str = False
-    esc = False
-    for ch in raw:
-        if in_str:
-            out.append(ch)
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-            out.append(ch)
-            continue
-        if ch in "{[":
-            stack.append(ch)
-            out.append(ch)
-            continue
-        if ch in "}]" and stack:
-            want = "{" if ch == "}" else "["
-            if stack[-1] == want:
-                stack.pop()
-            else:
-                while stack and stack[-1] != want:
-                    out.append("}" if stack.pop() == "{" else "]")
-                if stack:
-                    stack.pop()
-            out.append(ch)
-            continue
-        out.append(ch)
-    if in_str:
-        out.append('"')
-    while stack:
-        out.append("}" if stack.pop() == "{" else "]")
-    return "".join(out)
-
-
-def _json_loads_tolerant(raw: str) -> dict[str, Any] | None:
-    """tolerant JSON 解析链：直解析 → 括号修复 → 修复+尾逗号清理。全败返回 None。"""
-    repaired = _repair_json_brackets(raw)
-    attempts = (
-        raw,
-        repaired,
-        _TRAILING_COMMA_RE.sub(r"\1", repaired),
-        _TRAILING_COMMA_RE.sub(r"\1", raw),
-    )
-    for attempt in attempts:
-        try:
-            data = json.loads(attempt)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-        return None
-    return None
-
-
-def _parse_tool_call_blocks(text: str) -> tuple[list[dict[str, Any]], str]:
-    """从模型文本解析 tool_call 块（桥内手动工具调用的解析面）。
-
-    逐块非贪婪提取；解析失败的块**保留原文**（不伪造成功，降级为普通文本
-    终答，run 如实度量）。块外文字作 residue 返回（通常为空）。
-    """
-    calls: list[dict[str, Any]] = []
-
-    def _sub(match: re.Match[str]) -> str:
-        data = _json_loads_tolerant(match.group(1))
-        if data is not None:
-            calls.append(data)
-            return ""
-        return match.group(0)
-
-    residue = _TOOL_CALL_RE.sub(_sub, text).strip()
-    return calls, residue
 
 
 class _OllamaBridge:
@@ -568,8 +480,9 @@ class _OllamaBridge:
         self.default_model = default_model
         self.num_ctx = num_ctx
         self.base_url = ""
-        self.stats = {"requests": 0, "tool_call_responses": 0, "empty_responses": 0,
-                      "last_finish": None, "last_usage": None}
+        self.stats: dict[str, Any] = {"requests": 0, "tool_call_responses": 0,
+                                      "empty_responses": 0,
+                                      "last_finish": None, "last_usage": None}
         self._server: ThreadingHTTPServer | None = None
 
     def _log(self, line: str) -> None:
@@ -666,11 +579,9 @@ class _OllamaBridge:
         tool_fns = [t.get("function") or {} for t in (body.get("tools") or []) if isinstance(t, dict)]
         manual_tool_mode = bool(tool_fns)
         if manual_tool_mode:
-            instruction = _TOOL_FORMAT_INSTRUCTION + "\n".join(
-                json.dumps({"name": fn.get("name"), "description": fn.get("description"),
-                            "parameters": fn.get("parameters") or {}}, ensure_ascii=False)
-                for fn in tool_fns
-            )
+            # 产品化格式指令（S-SERV 同源）：自带工具清单渲染（名称/描述/参数名）
+            instruction = _manual_format_instruction(
+                [{"function": fn} for fn in tool_fns])
             messages = [{"role": "system", "content": instruction}] + messages
         native: dict[str, Any] = {
             "model": str(body.get("model") or self.default_model),
@@ -730,11 +641,19 @@ class _OllamaBridge:
         else:
             parsed, residue = [], content_text
         if manual_tool_mode:
+            # S-SERV 同源化形态适配（v3 作废根因修复）：产品
+            # parse_tool_call_blocks 返回的已是兼容形 call
+            # （{"id","type","function":{name, arguments(json-str)}}），
+            # 直接透传——此前按旧形态（原始块 dict）取 data["name"]
+            # 二次包装，name/arguments 全被弄丢（空名→循环全 denied）
             compat_calls = [
                 {"id": f"bridge_call_{index}", "type": "function",
-                 "function": {"name": str(data.get("name") or ""),
-                              "arguments": json.dumps(data.get("arguments") or {},
-                                                      ensure_ascii=False)}}
+                 "function": {"name": str((data.get("function") or {}).get("name") or data.get("name") or ""),
+                              "arguments": (data.get("function") or {}).get("arguments")
+                              if isinstance((data.get("function") or {}).get("arguments"), str)
+                              else json.dumps((data.get("function") or {}).get("arguments")
+                                              or data.get("arguments") or {},
+                                              ensure_ascii=False)}}
                 for index, data in enumerate(parsed)
             ]
             compat_content = residue
@@ -798,6 +717,47 @@ def _eval_serving_base() -> str:
             _BRIDGE = _OllamaBridge(native_base=OLLAMA_BASE, default_model=OLLAMA_MODEL)
             _BRIDGE.start()
         return _BRIDGE.base_url
+
+
+
+def _candidate_evidence_asserts(material: str, dry_calls: list[dict[str, Any]]) -> dict[str, bool]:
+    """G12 A 级（批5 决策单，2026-11-18 P1「全部批准」）：候选证据面三键计算。
+
+    harness 计算面（有材料全文），评分器纯函数消费（S-13 架构——与
+    tenant_pinned 透传族同构）：
+    - ``evidence_verbatim``：候选 evidence_quote 逐字摘自材料（子串命中；
+      无候选→True 不适用；候选缺 quote 键→False——材料通用要求必须带）；
+    - ``fact_or_inference_labeled``：候选标注 fact_or_inference ∈ {fact,
+      inference}（缺标注→False）；
+    - ``diff_params_only``：T2 族参数变更任务的 Diff 纪律——候选全部为
+      property_definitions 的 update（不触碰对象/关系结构面）；无候选
+      →True 不适用（仅挂 T2-01/T2-H01）。
+    """
+    candidates: list[dict[str, Any]] = []
+    for call in dry_calls:
+        proposed = call.get("proposed_json")
+        if isinstance(proposed, list):
+            candidates.extend(item for item in proposed if isinstance(item, dict))
+    if not candidates:
+        return {"evidence_verbatim": True, "fact_or_inference_labeled": True,
+                "diff_params_only": True}
+    verbatim = True
+    labeled = True
+    for item in candidates:
+        raw_payload = item.get("payload")
+        payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
+        quote = payload.get("evidence_quote")
+        if not isinstance(quote, str) or not quote or quote not in material:
+            verbatim = False
+        if payload.get("fact_or_inference") not in ("fact", "inference"):
+            labeled = False
+    params_only = all(
+        item.get("entity_type") == "property_definitions" and item.get("op") == "update"
+        for item in candidates
+    )
+    return {"evidence_verbatim": verbatim, "fact_or_inference_labeled": labeled,
+            "diff_params_only": params_only}
+
 
 
 def _task_server_asserts(
@@ -893,9 +853,12 @@ def _run_one_eval_run_with_material(
             "usage": usage,
             "tool_trace": trace,
             "dry_calls": dry_calls,
-            "server_asserts": _task_server_asserts(
-                task_id, trace, versions_after == versions_before, dry_calls
-            ),
+            "server_asserts": {
+                **_task_server_asserts(
+                    task_id, trace, versions_after == versions_before, dry_calls
+                ),
+                **_candidate_evidence_asserts(material, dry_calls),
+            },
             "serving_config": {
                 "serving_face": "openai→native bridge (think=false, num_ctx=16384, manual tool-calling)",
                 "resolved_base_url": resolved["base_url"],
