@@ -150,23 +150,45 @@ def knowledge_snippets_for(
         # SystemExit 是 BaseException 直系——load_entries 的 fail-closed 异常
         # 也必须被软失败接住（种子缺文件/形状坏都不炸 run 路径）。
         return ()
-    entries = list(seed_entries)
-    # 学习闭环 2.0 L5：seeds 底座 ∪ published 动态行（DB 腿零模块级缓存）。
-    # seeds 在前 ⇒ top_k 竞争由静态底座优先；动态腿按 (created_at, id) 追加。
-    if session is not None:
-        entries.extend(dynamic_published_entries(session))
     industry: str | None = None
     snapshot = getattr(project, "template_snapshot", None)
     if isinstance(snapshot, dict):
         industry = snapshot.get("industry_name") or None
-    picked = select_lessons(
-        entries,
-        capability_tier=str(getattr(agent, "capability_tier", "") or ""),
+    capability_tier = str(getattr(agent, "capability_tier", "") or "")
+    top_k = int(getattr(settings, "agent_lessons_top_k", 3))
+    max_chars = int(getattr(settings, "agent_lessons_max_chars", 400))
+    # 学习闭环 2.0 L5：seeds 底座 ∪ published 动态行（DB 腿零模块级缓存）。
+    # seed 压制消解（收尾轮 R4）：seeds 恒在前 ⇒ top_k 竞争由静态底座优先，
+    # 匹配的动态经验（学习闭环整条链的价值＝真实交付反哺注入）会被挤掉。
+    # 处置＝动态行**保底 1 席**：有匹配动态行时 seeds 让出末席；无匹配动态行
+    # 时走纯 seeds 选择（逐字节零行为变化）。动态行多余 seeds 缺口时按序补足
+    # （seeds 未占满的席位归动态行）。
+    dynamic_picked = select_lessons(
+        dynamic_published_entries(session) if session is not None else [],
+        capability_tier=capability_tier,
         project_industry=industry,
-        top_k=int(getattr(settings, "agent_lessons_top_k", 3)),
-        max_chars=int(getattr(settings, "agent_lessons_max_chars", 400)),
+        top_k=top_k,
+        max_chars=max_chars,
     )
-    return tuple(picked)
+    if not dynamic_picked:
+        return tuple(
+            select_lessons(
+                list(seed_entries),
+                capability_tier=capability_tier,
+                project_industry=industry,
+                top_k=top_k,
+                max_chars=max_chars,
+            )
+        )
+    seed_picked = select_lessons(
+        list(seed_entries),
+        capability_tier=capability_tier,
+        project_industry=industry,
+        top_k=max(top_k - 1, 0),
+        max_chars=max_chars,
+    )
+    remaining = max(top_k - len(seed_picked), 1)
+    return tuple([*seed_picked, *dynamic_picked[:remaining]])
 
 
 def seed_ids_and_hashes(path: Path | None = None) -> tuple[frozenset[str], frozenset[str]]:

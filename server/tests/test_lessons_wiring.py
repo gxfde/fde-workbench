@@ -350,3 +350,80 @@ def test_knowledge_snippets_session_none_behavior_byte_identical(tmp_path, monke
         )
     assert [row["id"] for row in picked] == ["S-0", "S-1"]
     dyn_spy.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# seed 压制消解（收尾轮 R4）：published 动态行保底 1 席
+# v1 局限＝seeds 恒在前 top_k 竞争中挤掉动态经验——学习闭环整条链的价值
+# （真实交付反哺注入）被静态底座压制。修＝动态行保底 1 席，无动态行零变化。
+# ---------------------------------------------------------------------------
+
+
+def _fake_session(rows):
+    """dynamic_published_entries 只用 session.scalars(...).all()——假会话直返行。"""
+    return SimpleNamespace(scalars=lambda *a, **k: SimpleNamespace(all=lambda: rows))
+
+
+def _dyn_lesson_row(entry_id="LESS-DYN-R4", tier="agent.module.solution"):
+    return SimpleNamespace(
+        entry_id=entry_id,
+        capability_tags=[tier],
+        text="动态经验：交付前先核对回款凭证清单。",
+        source_ref="PROP-R4TEST",
+        text_sha256="a" * 64,
+        industries=None,
+    )
+
+
+def _seed_entries(count: int) -> list[dict]:
+    return [
+        {"id": f"LESS-SOP-R4-{i}", "capability_tags": ["agent.module.solution"], "text": f"SOP-{i}"}
+        for i in range(count)
+    ]
+
+
+def test_dynamic_lesson_gets_reserved_slot_when_seeds_fill_top_k(monkeypatch):
+    """seeds 占满 top_k ⇒ 匹配的 published 动态行保底 1 席（seeds 让出末席）。"""
+    monkeypatch.setattr(lessons, "load_entries", lambda **kwargs: _seed_entries(3))
+    agent = SimpleNamespace(capability_tier="agent.module.solution")
+    project = SimpleNamespace(template_snapshot=None)
+    session = _fake_session([_dyn_lesson_row()])
+    picked = lessons.knowledge_snippets_for(
+        project=project, agent=agent, settings=_settings(), session=session
+    )
+    ids = [row["id"] for row in picked]
+    assert ids == ["LESS-SOP-R4-0", "LESS-SOP-R4-1", "LESS-DYN-R4"]
+    assert len(ids) == 3
+
+
+def test_no_dynamic_rows_keeps_seed_selection_byte_identical(monkeypatch):
+    """无匹配动态行 ⇒ 纯 seeds 选择（逐字节零行为变化——既有路径零回归）。"""
+    seeds = _seed_entries(4)
+    monkeypatch.setattr(lessons, "load_entries", lambda **kwargs: seeds)
+    agent = SimpleNamespace(capability_tier="agent.module.solution")
+    project = SimpleNamespace(template_snapshot=None)
+    picked = lessons.knowledge_snippets_for(
+        project=project, agent=agent, settings=_settings()
+    )
+    assert picked == tuple(
+        lessons.select_lessons(
+            seeds,
+            capability_tier="agent.module.solution",
+            project_industry=None,
+            top_k=3,
+            max_chars=400,
+        )
+    )
+
+
+def test_dynamic_rows_fill_remaining_slots_when_seeds_scarce(monkeypatch):
+    """seeds 稀缺 ⇒ 动态行按序补足剩余席位（不止保底 1 席）。"""
+    monkeypatch.setattr(lessons, "load_entries", lambda **kwargs: _seed_entries(1))
+    agent = SimpleNamespace(capability_tier="agent.module.solution")
+    project = SimpleNamespace(template_snapshot=None)
+    session = _fake_session([_dyn_lesson_row("LESS-DYN-R4-A"), _dyn_lesson_row("LESS-DYN-R4-B")])
+    picked = lessons.knowledge_snippets_for(
+        project=project, agent=agent, settings=_settings(), session=session
+    )
+    ids = [row["id"] for row in picked]
+    assert ids == ["LESS-SOP-R4-0", "LESS-DYN-R4-A", "LESS-DYN-R4-B"]
