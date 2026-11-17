@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 桌面 handover 三态接线轮：挑选面 type 选择器＋document/file 分型拉取＋分型指针提交（SME 尾巴②桌面段清偿＋活体三验销项，2026-11-17）
+
+承 #495 挂账「桌面端挑选面与建包表单的三态接线归下一桌面轮」——零服务端改动零迁移零路由（口径不变：523 路由/55 蓝图/160 表/89 迁移单头 `b7f2d9e4c6a8`）：
+
+- **`HandoverPackagesPanel` 三态接线**：入包类型三键切换组（已复核产物/文档版本/文件版本，`role=group`＋`aria-pressed`，零新 CSS 类零新依赖）；挑选面 `GET /handover-packages/artifacts?type=` 分型拉取（缺省 artifact 行为零变化），切型先清旧行防误勾；勾选**跨型累计**（键=`${item_type}:${pointerId}`，同包三态混装——服务端 `_validate_item_payloads` 本就支持混装）；提交体按型落指针键（artifact_id/document_version_id/file_version_id，服务端按键自反推 item_type）；document/file `display_name` 缺省交服务端默认（`business_code v{n}`／原文件名，代号化安全）；空态提示与挑选面标题随型；详情清单表新增「类型」列（产物/文档/文件），`PackageItemDto`/manifest items 类型补 `document_version_id`/`file_version_id` 字段形状。
+- **测试**：`handover-packages-panel.test.tsx` 5→8 例（新增文档型 `document_version_id` 提交／文件型 `file_version_id` 提交／跨型混装双指针同包提交／详情三态类型列），`npm run typecheck` 零错＋vitest **104 文件 1230 passed**。
+- **活体三验销项回执（SME 尾巴轮挂账，2026-11-17 07:15）**：接管检查器 FAIL=0 → 主树 `compose build api worker scheduler`＋`up -d --force-recreate`＋容器内 `alembic upgrade head`（`d8b4f6a2c9e7` 分支点 → 三段 → `b7f2d9e4c6a8 (head)`）→ 三验全绿（url_map 515→**523**／alembic current＝`b7f2d9e4c6a8 (head) (mergepoint)`／三镜像 `e81f2e7035f4`·`616c9685c629`·`95645f92d473` 与本树构建逐位一致）＋`/api/v1/health/ready` 200（database/redis ok）＋活库抽检（handover 两新列＋`ck_handover_package_items_pointer` 三态 CHECK＋agent_tool_calls 12 列全在位）。
+- **便携版 r54**：`release-version.mjs bump` 三源同步（RELEASE-COUNTER 53→54＋package.json `0.3.0-r54`＋web-bridge `0.3.0-r54-web`，parity 静态闸过）；asar sha256 `674e1c3f563813e1d3b986bfd3b813c20f73f115ce76c8f96ef3cc0f1c505e9f`（中文 marker 字节验证正向两枚全命中＋旧包 r52 反向 0 命中；worktree 独立 `release/` 输出绕主树句柄锁）。
+- **AGENTS 当前状态行**：挂账区刷新（桌面三态接线＝✅／活体三验＝✅／剩余仅改进单 1 三件 PLANNED）。
+
 ## [未发布] — SME 交付尾巴轮·文档刷新：改进单 1–4 状态行实态化＋AGENTS 口径刷新（纯文档零代码零迁移零路由，2026-11-17）
 
 承「SME 交付物优先级对照审计」（2026-11-15/17）尾巴清单第①项——四份改进单头部状态行自 2026-11-14 落盘后从未随实施推进刷新（文档漂移，违反「口径引用前现测」纪律的精神），本轮只做文档实态化：

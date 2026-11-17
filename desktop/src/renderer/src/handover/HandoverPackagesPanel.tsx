@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
@@ -7,6 +7,8 @@ import { useAuth } from "../auth/AuthProvider"
 // 生命周期 draft→sealed→delivered；封存冻结清单+manifest 指纹；交付登记=
 // admin 专属终态不可逆（D11 草案「delivered（登记对外交付）=admin」）。
 // 清单只收指针+指纹（真相原则：文件本体留在项目工作目录，原件永不进库）。
+// 挑选面三态（#495 服务端 ?type= 分型投影）：artifact/document/file 分型
+// 拉取、勾选跨型累计、提交体按型落指针键（服务端按键自反推 item_type）。
 
 interface PackageRowDto {
   id: string
@@ -26,6 +28,8 @@ interface PackageItemDto {
   id: string
   item_type: string
   artifact_id: string | null
+  document_version_id: string | null
+  file_version_id: string | null
   run_id: string | null
   kind: string
   display_name: string
@@ -39,13 +43,53 @@ interface PackageDetailDto extends PackageRowDto {
     package_id: string
     label: string | null
     sealed_at: string | null
-    items: Array<{ artifact_id: string | null; run_id: string | null; kind: string; display_name: string; storage_ref: string; sha256: string }>
+    items: Array<{
+      item_type: string
+      artifact_id: string | null
+      document_version_id: string | null
+      file_version_id: string | null
+      run_id: string | null
+      kind: string
+      display_name: string
+      storage_ref: string
+      sha256: string
+    }>
   }
 }
 
 interface PackageListDto {
   items: PackageRowDto[]
   truncated: boolean
+}
+
+// 挑选面三态（#495 服务端 ?type= 分型投影）：artifact=已复核产物／
+// document=已确认文档版本／file=可用文件版本。指针键随类型（恰一互斥）。
+type PickerKind = "artifact" | "document" | "file"
+
+const PICKER_TYPES: PickerKind[] = ["artifact", "document", "file"]
+
+const PICKER_TYPE_LABEL: Record<PickerKind, string> = {
+  artifact: "已复核产物",
+  document: "文档版本",
+  file: "文件版本",
+}
+
+const PICKER_CAPTION: Record<PickerKind, string> = {
+  artifact: "已复核产物（勾选入包）",
+  document: "已确认文档版本（勾选入包）",
+  file: "可用文件版本（勾选入包）",
+}
+
+const PICKER_EMPTY_HINT: Record<PickerKind, string> = {
+  artifact: "暂无已复核产物——先在「智能体」页对 run 产物「标记复核」，再回来组包。",
+  document: "暂无已确认（confirmed）文档版本——项目文档确认后再入包。",
+  file: "暂无可用（available）文件版本——项目文件处理完成后再入包。",
+}
+
+const ITEM_TYPE_LABEL: Record<string, string> = {
+  artifact: "产物",
+  document: "文档",
+  file: "文件",
 }
 
 interface PickerArtifactDto {
@@ -57,9 +101,44 @@ interface PickerArtifactDto {
   reviewed_at: string | null
 }
 
+interface PickerDocumentDto {
+  document_version_id: string
+  document_id: string
+  version_number: number
+  kind: string
+  storage_ref: string
+  sha256: string
+}
+
+interface PickerFileDto {
+  file_version_id: string
+  file_id: string
+  kind: string
+  storage_ref: string
+  sha256: string
+}
+
+type PickerRowDto = PickerArtifactDto | PickerDocumentDto | PickerFileDto
+
 interface PickerDto {
-  items: PickerArtifactDto[]
+  items: PickerRowDto[]
   truncated: boolean
+}
+
+function pickerRowMeta(row: PickerRowDto): { itemType: PickerKind; pointerKey: string; pointerId: string } {
+  if ("document_version_id" in row) {
+    return { itemType: "document", pointerKey: "document_version_id", pointerId: row.document_version_id }
+  }
+  if ("file_version_id" in row) {
+    return { itemType: "file", pointerKey: "file_version_id", pointerId: row.file_version_id }
+  }
+  return { itemType: "artifact", pointerKey: "artifact_id", pointerId: row.artifact_id }
+}
+
+// 行副标签：文档版本带版本号（人类可读），其余沿 kind
+function pickerRowCaption(row: PickerRowDto): string {
+  if ("version_number" in row) return `文档 v${row.version_number}`
+  return row.kind
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -91,32 +170,29 @@ interface HandoverPackagesPanelProps {
 export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: HandoverPackagesPanelProps) {
   const { apiRequest } = useAuth()
   const [packages, setPackages] = useState<PackageRowDto[]>([])
-  const [picker, setPicker] = useState<PickerArtifactDto[]>([])
+  const [picker, setPicker] = useState<PickerRowDto[]>([])
+  const [pickerType, setPickerType] = useState<PickerKind>("artifact")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [formOpen, setFormOpen] = useState(false)
   const [label, setLabel] = useState("")
+  // 勾选跨类型累计（同包可混装三态）：键 = `${item_type}:${pointerId}`，值 = display_name 缺省
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<PackageDetailDto | null>(null)
+  // 挑选面响应序号：快速连点类型钮时弃过期响应（慢响应后到会覆盖新类型行）
+  const pickerSeqRef = useRef(0)
 
   const reload = useCallback(async () => {
     try {
-      const [list, pickerData] = await Promise.all([
-        apiRequest<PackageListDto>(
-          `/api/v1/handover-packages?project_id=${encodeURIComponent(projectId)}`,
-          { method: "GET" },
-        ),
-        apiRequest<PickerDto>(
-          `/api/v1/handover-packages/artifacts?project_id=${encodeURIComponent(projectId)}`,
-          { method: "GET" },
-        ),
-      ])
+      const list = await apiRequest<PackageListDto>(
+        `/api/v1/handover-packages?project_id=${encodeURIComponent(projectId)}`,
+        { method: "GET" },
+      )
       setPackages(list.items)
-      setPicker(pickerData.items)
       setError("")
     } catch {
       // 加载失败静默降级（沿面板族 fail-静默纪律；动作失败走 alert）
@@ -125,9 +201,33 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
     }
   }, [apiRequest, projectId])
 
+  const loadPicker = useCallback(async (type: PickerKind) => {
+    const seq = ++pickerSeqRef.current
+    try {
+      const pickerData = await apiRequest<PickerDto>(
+        `/api/v1/handover-packages/artifacts?project_id=${encodeURIComponent(projectId)}&type=${type}`,
+        { method: "GET" },
+      )
+      if (seq !== pickerSeqRef.current) return // 已切到其他类型：过期响应丢弃
+      setPicker(pickerData.items)
+    } catch {
+      // 同上：挑选面失败静默降级
+    }
+  }, [apiRequest, projectId])
+
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    void loadPicker(pickerType)
+  }, [loadPicker, pickerType])
+
+  const switchPickerType = (type: PickerKind) => {
+    if (type === pickerType) return
+    setPickerType(type)
+    setPicker([]) // 先清旧类型行，防换型瞬间误勾
+  }
 
   const toggleDetail = async (row: PackageRowDto) => {
     if (expandedId === row.id) {
@@ -149,9 +249,9 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
 
   const createPackage = async () => {
     if (saving) return
-    const artifactIds = Object.keys(selected)
-    if (!artifactIds.length) {
-      setError("请至少勾选一个已复核产物。")
+    const pickedKeys = Object.keys(selected)
+    if (!pickedKeys.length) {
+      setError("请至少勾选一项入包内容。")
       return
     }
     setSaving(true)
@@ -163,7 +263,16 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
         body: {
           project_id: projectId,
           label: label || undefined,
-          items: artifactIds.map((artifactId) => ({ artifact_id: artifactId, display_name: selected[artifactId] || undefined })),
+          // 三态指针键：服务端按键自反推 item_type（恰一键）；document/file
+          // display_name 缺省交服务端默认（business_code v{n} / 原文件名）。
+          items: pickedKeys.map((key) => {
+            const sep = key.indexOf(":")
+            const itemType = key.slice(0, sep)
+            const pointerId = key.slice(sep + 1)
+            const pointerKey =
+              itemType === "document" ? "document_version_id" : itemType === "file" ? "file_version_id" : "artifact_id"
+            return { [pointerKey]: pointerId, display_name: selected[key] || undefined }
+          }),
         },
       })
       setNotice("草稿交付包已创建（清单为指针+指纹快照）。")
@@ -205,7 +314,7 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
         <div className="panel-heading">
           <div>
             <h2>结项交付包</h2>
-            <p>清单=已复核产物指针+sha256 快照（原件留在项目工作目录）；封存冻结并生成 manifest 指纹；交付登记为管理员终态动作。</p>
+            <p>清单=产物/文档/文件版本指针+sha256 快照（原件留在项目工作目录）；封存冻结并生成 manifest 指纹；交付登记为管理员终态动作。</p>
           </div>
           {canManage ? (
             <button className="secondary-button compact" onClick={() => setFormOpen((open) => !open)}>
@@ -219,34 +328,56 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void createPackage() }}>
             <label htmlFor="handover-label">包名（可选）</label>
             <input id="handover-label" value={label} onChange={(event) => setLabel(event.target.value)} maxLength={200} placeholder="如：初诊项目结项交付包" />
-            <p className="handover-picker-caption">已复核产物（勾选入包）</p>
+            <div role="group" aria-label="入包类型">
+              {PICKER_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={type === pickerType ? "primary-button compact" : "secondary-button compact"}
+                  aria-pressed={type === pickerType}
+                  onClick={() => switchPickerType(type)}
+                >
+                  {PICKER_TYPE_LABEL[type]}
+                </button>
+              ))}
+            </div>
+            <p className="handover-picker-caption">{PICKER_CAPTION[pickerType]}</p>
             {picker.length ? (
               <div className="handover-picker">
-                {picker.map((artifact) => (
-                  <label key={artifact.artifact_id} className="handover-picker-row" htmlFor={`handover-pick-${artifact.artifact_id}`}>
-                    <input
-                      id={`handover-pick-${artifact.artifact_id}`}
-                      type="checkbox"
-                      checked={artifact.artifact_id in selected}
-                      onChange={(event) => {
-                        setSelected((prev) => {
-                          const next = { ...prev }
-                          if (event.target.checked) {
-                            next[artifact.artifact_id] = artifact.storage_ref.split("/").pop() || artifact.storage_ref
-                          } else {
-                            delete next[artifact.artifact_id]
-                          }
-                          return next
-                        })
-                      }}
-                    />
-                    <code>{artifact.storage_ref}</code>
-                    <small>{artifact.kind} · {artifact.sha256.slice(0, 12)}…</small>
-                  </label>
-                ))}
+                {picker.map((row) => {
+                  const meta = pickerRowMeta(row)
+                  const pickKey = `${meta.itemType}:${meta.pointerId}`
+                  return (
+                    <label key={pickKey} className="handover-picker-row" htmlFor={`handover-pick-${meta.pointerId}`}>
+                      <input
+                        id={`handover-pick-${meta.pointerId}`}
+                        type="checkbox"
+                        checked={pickKey in selected}
+                        onChange={(event) => {
+                          setSelected((prev) => {
+                            const next = { ...prev }
+                            if (event.target.checked) {
+                              // artifact 缺省名=storage_ref 文件名；document/file 交服务端默认
+                              // （business_code v{n}／原文件名，代号化安全）
+                              next[pickKey] =
+                                meta.itemType === "artifact"
+                                  ? row.storage_ref.split("/").pop() || row.storage_ref
+                                  : ""
+                            } else {
+                              delete next[pickKey]
+                            }
+                            return next
+                          })
+                        }}
+                      />
+                      <code>{row.storage_ref}</code>
+                      <small>{pickerRowCaption(row)} · {row.sha256.slice(0, 12)}…</small>
+                    </label>
+                  )
+                })}
               </div>
             ) : (
-              <p className="empty-state">暂无已复核产物——先在「智能体」页对 run 产物「标记复核」，再回来组包。</p>
+              <p className="empty-state">{PICKER_EMPTY_HINT[pickerType]}</p>
             )}
             <div>
               <button className="primary-button" type="submit" disabled={saving || !Object.keys(selected).length}>
@@ -310,6 +441,7 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
               <thead>
                 <tr>
                   <th scope="col">名称</th>
+                  <th scope="col">类型</th>
                   <th scope="col">种类</th>
                   <th scope="col">指针</th>
                   <th scope="col">sha256</th>
@@ -319,6 +451,7 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
                 {detail.items.map((item) => (
                   <tr key={item.id}>
                     <td>{item.display_name}</td>
+                    <td>{ITEM_TYPE_LABEL[item.item_type] ?? item.item_type}</td>
                     <td>{item.kind}</td>
                     <td><code>{item.storage_ref}</code></td>
                     <td><code>{item.sha256.slice(0, 12)}…</code></td>
