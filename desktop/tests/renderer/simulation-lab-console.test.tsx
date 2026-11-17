@@ -165,7 +165,9 @@ function routeApi(overrides: Record<string, unknown> = {}) {
             severity: "high",
             dimension: "D1",
             description: "判据 D1-01 未达标",
-            evidence_refs: [{ kind: "expected_missing" }],
+            evidence_refs: [
+              { kind: "expected_missing", text: "初访未索取知识采集清单——第二访补齐后仍缺失" },
+            ],
             root_causes: [
               { code: "访谈追问不足", confidence: "confirmed", analysis: "直接命中" },
             ],
@@ -295,6 +297,21 @@ it("失败分析显示根因置信度与「可生成改进提案」提示", asyn
   })
   expect(screen.getByText("已确认")).toBeInTheDocument()
   expect(screen.getByText("可生成改进提案")).toBeInTheDocument()
+})
+
+it("失败分析发现卡提供「原文核对」只读展开：证据条原文呈现并标注 AI 蒸馏面不携带（L-C 复核对读入口）", async () => {
+  routeApi()
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText("未发现客户真实需求")).toBeInTheDocument()
+  })
+  expect(screen.getByText(/原文核对（1）/)).toBeInTheDocument()
+  expect(screen.getByText(/AI 蒸馏面不携带/)).toBeInTheDocument()
+  expect(
+    screen.getByText("初访未索取知识采集清单——第二访补齐后仍缺失"),
+  ).toBeInTheDocument()
 })
 
 it("改进提案页呈现「审批 ≠ 发布」并在缺密码时提示", async () => {

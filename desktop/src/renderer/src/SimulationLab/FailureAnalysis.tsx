@@ -462,6 +462,27 @@ export function FailureAnalysis({
                     </li>
                   ))}
                 </ul>
+                {finding.evidence_refs.length > 0 ? (
+                  <details className="simulation-evidence-refs">
+                    <summary>
+                      原文核对（{finding.evidence_refs.length}）——AI 蒸馏面不携带，仅人工 L-C 复核对读
+                    </summary>
+                    <ul>
+                      {finding.evidence_refs.map((ref, index) => (
+                        <li key={index}>
+                          {typeof ref.kind === "string" && ref.kind ? (
+                            <span className="simulation-hint">{ref.kind}</span>
+                          ) : null}
+                          <blockquote>
+                            {typeof ref.text === "string" && ref.text
+                              ? ref.text
+                              : JSON.stringify(ref)}
+                          </blockquote>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
                 <footer>
                   <span>证据 {finding.evidence_refs.length} 条</span>
                   {confirmed ? (
