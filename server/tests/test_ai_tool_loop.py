@@ -541,6 +541,29 @@ def test_tool_definitions_use_openai_function_schema():
     assert project_list["function"]["description"]
 
 
+def test_tool_descriptions_contain_no_inline_json_examples():
+    """工具描述须短且不得内嵌 JSON 大括号示例。
+
+    AF1-WP5 评测矩阵实证（2026-11-17，scratch probe_bisect_*，贪心确定性
+    二分）：qwen3 级模型在长描述（531 字含候选形状枚举/JSON 示例）下生成
+    **不可解析**的 tool call，Ollama 0.34.4 原生面解析失败后整段丢弃
+    （content 空 + tool_calls 空 + finish=stop；182 字头段 100% 正常，
+    required/参数结构无关）。约束信息以行文表达并收口长度——候选形状由
+    Skill 规则面 + 服务端 violations 闭环承载，语义零变化；此钉防回填。
+    """
+    for definition in tool_definitions(["ontology.read", "project.read", "file.search"]):
+        description = definition["function"]["description"]
+        name = definition["function"]["name"]
+        assert '{"' not in description, (
+            f"{name}: 描述含内嵌 JSON 示例——qwen3 级模型会模仿示例生成不可解析"
+            f"tool call 被服务端整段丢弃，改中文行文表达"
+        )
+        assert len(description) <= 300, (
+            f"{name}: 描述 {len(description)} 字符超 300 闸——长描述实证触发"
+            f"tool call 解析失败整段丢弃，形状约束移 Skill 规则面/服务端"
+        )
+
+
 def test_truncate_marks_oversized_tool_results():
     payload = {"blob": "x" * (MAX_TOOL_RESULT_CHARS + 100)}
     text = _truncate(payload)

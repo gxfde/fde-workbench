@@ -44,24 +44,29 @@ def test_ontology_skill_registered_with_read_capability() -> None:
 
 
 def test_ontology_skill_vocabulary_matches_tool_description() -> None:
-    """词表同源钉：skill 文本与工具描述的词表**整串同现**（评审 F4——逐值子串
-    会被 datetime/enum_values/ref_object_type_id 掩蔽，整串断言同时钉顺序）。
+    """词表同源钉（2026-11-17 收口决策后口径）：skill 文本侧词表**整串同现**
+    钉顺序与完整集（评审 F4——逐值子串会被 datetime/enum_values/
+    ref_object_type_id 掩蔽）；工具描述侧**反向钉**——形状约束（词表整串/
+    键形状文案）由 Skill 规则面承载，描述面收口后不得回塞（09 §4.2 实证：
+    工具描述长度/内嵌形状是 serving 工具调用失败触发因子，收口双闸见
+    test_ai_tool_loop.test_tool_descriptions_contain_no_inline_json_examples）。
     跨仓不可 import：真身（ontology-service validation.py DATA_TYPES/OPS/
-    ENTITY_TYPES）漂移由 live demo 行为锚与 WP5 评分兜底，本钉守 workbench
-    侧三处互证。"""
+    ENTITY_TYPES）漂移由 live demo 行为锚与 WP5 评分兜底，本钉守
+    「Skill 面完整、描述面干净」两处互证。"""
     instructions = _instructions()
     tool_description = TOOLS["ontology_dry_validate"][0]
     data_type_series = "/".join(DATA_TYPES)
     assert data_type_series in instructions, "skill 词表须整串同现（钉顺序与完整集）"
-    assert data_type_series in tool_description, "工具描述词表须整串同现（同源失守）"
+    assert data_type_series not in tool_description, "描述面收口后不得回塞形状词表"
     for value in OPS:
         assert value in instructions
     for value in ENTITY_TYPES:
         assert value in instructions
     # entity_key 形状文案与真身 KEY_RE 同源（评审 F2：短横线-only 文案会与
-    # KEY_RE 允许下划线矛盾，live 材料的下划线键会被测试「奖励违规」）
+    # KEY_RE 允许下划线矛盾，live 材料的下划线键会被测试「奖励违规」）——
+    # 形状文案同样归 Skill 面（收口决策），描述面反向钉
     assert "下划线" in instructions
-    assert "下划线" in tool_description
+    assert "下划线" not in tool_description
 
 
 def test_ontology_skill_discipline_pins() -> None:

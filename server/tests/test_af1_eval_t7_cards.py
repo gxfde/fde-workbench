@@ -36,6 +36,7 @@ from test_af1_eval_panel import (  # noqa: F401  (eval_env fixture 供给方)
     _build_prompt,
     _ontology_service_root,
     _out_dir,
+    _serving_probe,
     _skill_instructions,
     eval_env,
 )
@@ -74,10 +75,12 @@ def _write_card_record(
     final_answer: str,
     model: str = "harness-api",
     extra: dict[str, Any] | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """场景卡 RunRecord 落盘（契约与面板执行体同形；input_sha256 对场景卡
     取场景卡文本摘要占位——API 卡无外部输入材料，可复验性由 trace 逐步
-    承载）。"""
+    承载）。``usage``：模型面卡（T7-06）必须传直连循环真实记账——
+    2026-11-17 仪器修正：原实现硬编码空 calls，真实 token 记账未入记录。"""
     record: dict[str, Any] = {
         "task_id": task_id,
         "run_index": run_index,
@@ -87,7 +90,7 @@ def _write_card_record(
         "model": model,
         "duration_ms": duration_ms,
         "final_answer": final_answer,
-        "usage": {"complete": model != "harness-api", "calls": []},
+        "usage": usage or {"complete": model != "harness-api", "calls": []},
         "tool_trace": trace,
         "dry_calls": [],
         "server_asserts": server_asserts,
@@ -495,6 +498,7 @@ def _card_t7_06(env: dict[str, Any], run_index: int, monkeypatch: pytest.MonkeyP
     # 卡内任务段与 harness 指令同形，模型按规则面执行
     rules = _skill_instructions(env["db_session"])
     prompt = _build_prompt(rules, material, env["project_id"], env["binding_id"])
+    probe = _serving_probe(env.get("serving_base"))  # 配置 v2：与面板执行体同款探针归因列（走同一翻译桥）
     trace: list[dict[str, Any]] = []
     text = ""
     usage: dict[str, Any] = {"complete": False, "calls": []}
@@ -506,6 +510,8 @@ def _card_t7_06(env: dict[str, Any], run_index: int, monkeypatch: pytest.MonkeyP
                 model=model, prompt=prompt, user=env["actor"],
                 project_id=env["project_id"],
                 execution_id=f"af1-eval-t7-06-{run_index}",
+                # system 级 /no_think 已弃用（兼容面实证不可靠，v2 ①证伪）；
+                # thinking 抑制在 serving 面翻译桥（think=False）
                 max_tool_rounds=1,
                 capabilities=["ontology.read"],
                 allowed_tools=["ontology_dry_validate"])
@@ -523,7 +529,9 @@ def _card_t7_06(env: dict[str, Any], run_index: int, monkeypatch: pytest.MonkeyP
         terminal={"status": "budget_exceeded" if budget_exhausted else "completed",
                   "awaiting_human": False},
         duration_ms=duration_ms, final_answer=answer, model=OLLAMA_MODEL,
+        usage=usage,
         extra={"input_sha256": material_sha, "budget_clamp": {"max_tool_rounds": 1},
+               "serving_probe": probe,
                "infra_error": infra})
     return record
 
