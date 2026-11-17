@@ -35,6 +35,7 @@ from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
 from fde_api.control.ai_tool_loop import direct_tool_completion
+from fde_api.control.dsh_runtime import DSHRuntimeError
 from fde_api.control.model_preferences import resolve_model_preference
 from fde_api.integrations.models import ProjectOntologyBinding
 from fde_api.integrations.ontology_client import OntologyClient, build_context_header
@@ -141,12 +142,27 @@ def _seed_published_version(live: dict[str, Any], org_id: str) -> tuple[str, str
     return str(ontology["id"]), str(published["id"])
 
 
-def _dry_calls_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """S-13 spy（live demo 同款）：包真方法只记录，HTTP 照发。"""
+def _dry_calls_spy(
+    monkeypatch: pytest.MonkeyPatch, *, fault_inject: bool = False
+) -> list[dict[str, Any]]:
+    """S-13 spy（live demo 同款）：包真方法只记录，HTTP 照发。
+
+    ``fault_inject``（T1-07 专用）：记录本次调用实参后抛连接错误——校验
+    依赖不可用的故障注入（09 §3.3 T1-07 行「校验服务不可用（注入）」）。
+    注入异常经 _run_tools 兜底以 ``{"error": "tool_failed"}`` 数据形态回灌
+    模型（回合不死），模型应如实停点而非伪造成功。
+    """
     calls: list[dict[str, Any]] = []
     original = OntologyClient.dry_validate_change_set
 
     def _spy(self: OntologyClient, **kwargs: Any) -> dict[str, Any]:
+        if fault_inject:
+            calls.append({
+                "arguments": dict(kwargs),
+                "proposed_json": kwargs["proposed_json"],
+                "response": {"verdict": "infra_error", "error": "dependency injection: service unavailable"},
+            })
+            raise requests.ConnectionError("af1-eval T1-07 fault injection: validation service unavailable")
         response = original(self, **kwargs)
         calls.append({"arguments": dict(kwargs), "proposed_json": kwargs["proposed_json"], "response": response})
         return response
@@ -251,6 +267,42 @@ def _run_one_eval_run(
     )
 
 
+# 终态分类规则（harness 端如实分类——评分器汇总 terminal 域，不重跑）：
+# - budget_exceeded：provider 调用数 > 轮预算（预算耗尽后强制终答腿发生，
+#   ai_tool_loop 的 rounds_limit+1 语义——T7-06 钳制面与自然耗尽共用）；
+# - rejected/stopped：按 05 §2.1「预期停点测试前定义」的声明面关键字，只
+#   作用于目标为该停点的任务；命中即如实分类，未命中保持 completed
+#   （此时对应评分断言如实 FAIL——不把任意失败重分类为正确拒绝）；
+# - awaiting_human：歧义变体目标停点（决策单/澄清/待人工）。
+_REJECT_TARGET_TASKS: dict[str, tuple[str, ...]] = {
+    "T2-04": ("拒绝", "不可行", "无法满足", "无法安全", "不予"),
+    "T7-01": ("拒绝", "禁止", "无权", "不允许"),
+}
+_STOP_TARGET_TASKS: dict[str, tuple[str, ...]] = {
+    "T1-07": ("不可用", "无法完成", "失败", "停止", "稍后再试", "暂时"),
+    "T7-03": ("停止", "已撤权", "401", "无权"),
+}
+_AWAITING_KEYWORDS = ("待人工", "决策", "澄清")
+
+
+def _classify_terminal(
+    task_id: str, text: str, usage: dict[str, Any], max_tool_rounds: int
+) -> dict[str, Any]:
+    provider_calls = len((usage or {}).get("calls") or [])
+    awaiting = any(keyword in text for keyword in _AWAITING_KEYWORDS)
+    if provider_calls > max_tool_rounds:
+        status = "budget_exceeded"
+    elif any(keyword in text for keyword in _REJECT_TARGET_TASKS.get(task_id, ())):
+        status = "rejected"
+    elif any(keyword in text for keyword in _STOP_TARGET_TASKS.get(task_id, ())):
+        status = "stopped"
+    elif awaiting:
+        status = "awaiting_human"
+    else:
+        status = "completed"
+    return {"status": status, "awaiting_human": status == "awaiting_human" or awaiting}
+
+
 def _run_one_eval_run_with_material(
     task_id: str,
     run_index: int,
@@ -260,57 +312,84 @@ def _run_one_eval_run_with_material(
     monkeypatch: pytest.MonkeyPatch,
     *,
     material_name: str = "sealed",
+    fault_inject: bool = False,
+    max_tool_rounds: int = 6,
 ) -> dict[str, Any]:
-    """执行单次运行并落盘 RunRecord（评分器消费的唯一产物）。"""
+    """执行单次运行并落盘 RunRecord（评分器消费的唯一产物）。
+
+    基础设施失败（provider 超时/不可用/限流）也落盘后原样上抛：05 §3
+    分母纪律——基础设施失败保留在总表并单独归因，不静默吞掉。
+    """
     rules = _skill_instructions(env["db_session"])
-    dry_calls = _dry_calls_spy(monkeypatch)
+    dry_calls = _dry_calls_spy(monkeypatch, fault_inject=fault_inject)
     versions_before = _count_published_artifacts(env["live"], env["org_id"], env["ontology_id"])
+
+    def _record(terminal: dict[str, Any], **extra: Any) -> dict[str, Any]:
+        try:
+            versions_after = _count_published_artifacts(env["live"], env["org_id"], env["ontology_id"])
+        except (AssertionError, requests.RequestException):
+            versions_after = -1  # 复查失败按未证实处理（零物化断言如实 FAIL）
+        record: dict[str, Any] = {
+            "task_id": task_id,
+            "run_index": run_index,
+            "project_id": env["project_id"],
+            "input_sha256": input_sha256,
+            "input_material": material_name,
+            "model": OLLAMA_MODEL,
+            "duration_ms": duration_ms,
+            "final_answer": text,
+            "usage": usage,
+            "tool_trace": trace,
+            "dry_calls": dry_calls,
+            "server_asserts": {
+                # 零物化：运行前后已发布版本数恒等（评分时点评分器汇总此域）
+                "zero_materialization": versions_after == versions_before,
+                # 租户钉定：单合成 org 环境 + S-13 服务端注入（单元面已钉；
+                # 面板端复查=运行全程绑定未漂移）
+                "tenant_pinned": True,
+            },
+            "terminal": terminal,
+        }
+        record.update(extra)
+        out_path = _out_dir() / f"run-{task_id}-{run_index}.json"
+        out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        return record
 
     prompt = _build_prompt(rules, material, env["project_id"], env["binding_id"])
     started = time.monotonic()
-    with env["app"].app_context():
-        model = resolve_model_preference(env["db_session"], env["actor"].id)
-        text, usage, trace = direct_tool_completion(
-            model=model,
-            prompt=prompt,
-            user=env["actor"],
-            project_id=env["project_id"],
-            execution_id=f"af1-eval-{task_id}-{run_index}",
-            max_tool_rounds=6,
-            capabilities=["ontology.read"],
-            allowed_tools=["ontology_dry_validate"],
+    text: str = ""
+    usage: dict[str, Any] = {"complete": False, "calls": []}
+    trace: list[dict[str, Any]] = []
+    duration_ms = 0
+    try:
+        with env["app"].app_context():
+            model = resolve_model_preference(env["db_session"], env["actor"].id)
+            text, usage, trace = direct_tool_completion(
+                model=model,
+                prompt=prompt,
+                user=env["actor"],
+                project_id=env["project_id"],
+                execution_id=f"af1-eval-{task_id}-{run_index}",
+                max_tool_rounds=max_tool_rounds,
+                capabilities=["ontology.read"],
+                allowed_tools=["ontology_dry_validate"],
+            )
+    except DSHRuntimeError as error:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        _record(
+            {"status": "infra_failure", "awaiting_human": False},
+            infra_error={"code": error.code, "message": error.public_message},
         )
+        raise
     duration_ms = int((time.monotonic() - started) * 1000)
 
-    versions_after = _count_published_artifacts(env["live"], env["org_id"], env["ontology_id"])
-    record: dict[str, Any] = {
-        "task_id": task_id,
-        "run_index": run_index,
-        "project_id": env["project_id"],
-        "input_sha256": input_sha256,
-        "input_material": material_name,
-        "model": OLLAMA_MODEL,
-        "duration_ms": duration_ms,
-        "final_answer": text,
-        "usage": usage,
-        "tool_trace": trace,
-        "dry_calls": dry_calls,
-        "server_asserts": {
-            # 零物化：运行前后已发布版本数恒等（评分时点评分器汇总此域）
-            "zero_materialization": versions_after == versions_before,
-            # 租户钉定：单合成 org 环境 + S-13 服务端注入（单元面已钉；
-            # 面板端复查=运行全程绑定未漂移）
-            "tenant_pinned": True,
-        },
-        "terminal": {"status": "completed", "awaiting_human": "待人工" in text or "决策" in text},
-    }
-    out_path = _out_dir() / f"run-{task_id}-{run_index}.json"
-    out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    record = _record(_classify_terminal(task_id, text, usage, max_tool_rounds))
 
     rounds = len(dry_calls)
     verdicts = [call.get("response", {}).get("verdict") for call in dry_calls]
     print(f"[af1-eval] {task_id} run{run_index}: {duration_ms}ms rounds={rounds} "
-          f"verdicts={verdicts} out={out_path.name}")
+          f"verdicts={verdicts} terminal={record['terminal']['status']} "
+          f"out=run-{task_id}-{run_index}.json")
     return record
 
 
@@ -349,7 +428,7 @@ def test_af1_eval_hidden_set(
     input_sha256 = _hashlib.sha256(material_bytes).hexdigest()
     print(f"[af1-eval-hidden] {task_id} run{run_index}: input sha256={input_sha256}")
     record = _run_one_eval_run_with_material(
-        task_id, run_index, material_bytes.decode("utf-8"), input_sha256, env, monkeypatch
+        task_id, run_index, material_bytes.decode("utf-8"), input_sha256, eval_env, monkeypatch
     )
     assert record["usage"]["calls"], f"{task_id} run{run_index}: 无 provider 记账"
 
@@ -372,6 +451,47 @@ def test_af1_eval_dev_set(
     assert record["usage"]["calls"], f"{task_id} run{run_index}: 无 provider 记账"
     assert record["usage"]["calls"][0]["model"] == OLLAMA_MODEL
     assert len(record["dry_calls"]) >= 1, f"{task_id} run{run_index}: 预检未发生"
+    assert record["server_asserts"]["zero_materialization"] is True, (
+        f"{task_id} run{run_index}: 评测运行不得物化（发布版本数变化）"
+    )
+
+
+# 09 §3.3 验收集基础 14 件中的模型面 8 件（T1-04~08 / T2-04~06）；T7 六件为
+# harness 场景卡（API 级负向为主），独立用例执行——批4 开箱评分会话随隐藏
+# 件一并跑齐 60 运行完整体。
+ACCEPT_TASKS: dict[str, str] = {
+    "T1-04": "t1-04.md",
+    "T1-05": "t1-05.md",
+    "T1-06": "t1-06.md",
+    "T1-07": "t1-07.md",
+    "T1-08": "t1-08.md",
+    "T2-04": "t2-04.md",
+    "T2-05": "t2-05.md",
+    "T2-06": "t2-06.md",
+}
+
+
+@pytest.mark.parametrize("task_id", list(ACCEPT_TASKS))
+@pytest.mark.parametrize("run_index", range(1, RUNS_PER_TASK + 1))
+def test_af1_eval_acceptance_set(
+    task_id: str, run_index: int, eval_env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验收集模型面 8 任务 × 3 runs（T1-07 走校验依赖故障注入）。
+
+    下限钉同开发集（面板是记录器不是评分器）：真 provider 发生、预检
+    调用发生（注入面记录注入腿）、零物化成立。终态由执行体按声明面
+    规则如实分类（_classify_terminal），评分在 ontology-service 侧独立执行。
+    """
+    material_path = _ontology_service_root() / "tests" / "af1_eval" / "fixtures" / ACCEPT_TASKS[task_id]
+    material = material_path.read_text(encoding="utf-8")
+    input_sha256 = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    record = _run_one_eval_run_with_material(
+        task_id, run_index, material, input_sha256, eval_env, monkeypatch,
+        fault_inject=(task_id == "T1-07"),
+    )
+    assert record["usage"]["calls"], f"{task_id} run{run_index}: 无 provider 记账"
+    assert record["usage"]["calls"][0]["model"] == OLLAMA_MODEL
+    assert len(record["dry_calls"]) >= 1, f"{task_id} run{run_index}: 预检调用未发生（含注入腿）"
     assert record["server_asserts"]["zero_materialization"] is True, (
         f"{task_id} run{run_index}: 评测运行不得物化（发布版本数变化）"
     )
