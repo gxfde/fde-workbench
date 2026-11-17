@@ -10,6 +10,7 @@
 - **贯通验证器入库**：NEW `scripts/verify/verify_order_to_delivery_e2e.py`（登录/token 双模式＋接单人凭证 `--deliverer-token`/`--deliverer-password`，都不给则降级 admin 代接并 SKIP 视角步骤；非首单库两分支兼容——首单库走回校负例 409、非首单库 finalize 直接成交且 SKIP 回校步；每跑一次新建独立项目可重复执行）。边界：合成数据机制验证不代表真实业务拍板；首次执行消耗全库「工作室首单」语义名额；不含 agent run（发起权归人）。
 - **贯通验收报告**：NEW `docs/audit/贯通验收报告-接单到交付-2026-11-17.md`（30 步逐项回执＋缺陷根因＋闸验证汇总＋如实登记：首单语义消耗／闸动作均为合成数据验证／商机报备线与 claim 模式与 artifact 型封包未覆盖）。
 - **如实登记**：验证执行使活库全库非仿真 `finalized` 计数 0→2（首跑+复跑各一次成交），「工作室首单」判定分支已被消耗；首跑断链残链（项目 `dc9db38d`，已回校未成交）留库无害。商机报备线（`commercial_opportunities`，售卖闸授权面）与 claim 模式（全城开关关闭）与 artifact 型封包（须 run 发起权归人）不在本轮范围。
+- **活体应用回执（合并后同日，#504 → `39c3e3bd`）**：主树 `compose up -d` recreate api/worker/scheduler（redis 未动；**镜像未重建**）→ 容器内验证：`./resources` 挂载 18 模板 DOCX 在位、`FDE_DOCUMENT_TEMPLATE_DIR` env 在位、`seed-document-templates` 幂等 `created=0 skipped=17 missing=0` → 三验全绿（url_map **523** non-static／容器内 alembic `b7f2d9e4c6a8 (head)`／三镜像 `e81f2e7035f4`·`616c9685c629`·`95645f92d473` 与本树构建逐位一致）＋ ready 200＋四容器 healthy。部署态「结项交付包」段自此在真实容器态可用。
 
 ## [未发布] — 桌面 handover 三态接线轮：挑选面 type 选择器＋document/file 分型拉取＋分型指针提交（SME 尾巴②桌面段清偿＋活体三验销项，2026-11-17）
 
