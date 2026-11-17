@@ -40,7 +40,7 @@
 
 | 项目工作台 | 交付门禁与商务 | AI 与平台管理 |
 | --- | --- | --- |
-| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离；任务与工作流产物可自动挂为证据候选（建议性，采纳仍走人工提交闸） | AI 模型、Skills（治理态与效果统计）、工作流控制台、AI 用量月度预算与审计账本、插件、AI Server、微信/ClawBot 集成 |
+| 项目、成员、任务、甘特关系和阶段管理；文件库、调研工作台、术语表、AI 机会、方案设计与交付文档、结项交付包 | **门禁引擎 G1–G9**：pending → evidence → passed/failed 状态机（G9 支持 conditional_pass）；证据只存 URI + sha256 指针，claimed 与 accepted 分离；任务与工作流产物可自动挂为证据候选（建议性，采纳仍走人工提交闸） | AI 模型、Skills（治理态与效果统计）、工作流控制台、AI 用量月度预算与审计账本、插件、AI Server、微信/ClawBot 集成 |
 | 项目负责人、FDE 工程师、查看者等角色权限 | **报价 / 收款（里程碑）/ 合同**商务看板；标准 FDE 项目模板一键派生 | 行业模板、文档模板、模块管理、用户管理、系统配置 |
 | 集成桥：本地 openfde / fdeops 工作目录在台内的只读投影 | 任务中心：后台任务、自动化执行与工作流人工审批集中可见 | 桌面端内嵌「使用帮助」：模块操作 + 门禁流程 + 实操示例 |
 
@@ -61,7 +61,7 @@
 | 后台进程 | 容器 worker / scheduler | 文件处理、异步任务与自动化调度 |
 | 部署 | Docker Compose（redis / api / worker / scheduler） | API 只绑定 `127.0.0.1:8010`；数据库复用网络上已有的 PostgreSQL 16 实例 |
 
-> 整套交互式架构图（总体架构 / 交付流程 / 工作流执行时序 / 集成桥证据数据流 / 运行状态机，五视角）已用 archify 从本仓库真实代码取证生成，见 [docs/architecture/archify-diagrams/index.html](docs/architecture/archify-diagrams/index.html)（每张为独立 standalone HTML，含通过回执与行号级证据）。
+> 整套交互式架构图（总体架构 / 交付流程 / 工作流执行时序 / 集成桥证据数据流 / 运行状态机 / 降级与失败路径，六视角）已用 archify 从本仓库真实代码取证生成，见 [docs/architecture/archify-diagrams/index.html](docs/architecture/archify-diagrams/index.html)（每张为独立 standalone HTML，含通过回执与行号级证据）。
 
 ## 环境要求
 
@@ -253,7 +253,7 @@ worker / scheduler 不监听端口，光看「容器 Up」看不出循环是否�
 把整套工作台搬到新电脑：
 
 1. **装基础软件**：Docker（含 Compose v2）；需要开发或重新打包桌面端时另装 Node.js 22+。
-2. **带走的文件**（都不在 git 里）：仓库根 `.env`、`server/.env`（含 `FDE_JWT_SECRET`，必须原样携带，否则已有加密配置解不开）、桌面便携版文件夹（如 `release/蔡工FDE-0.2.0-便携版/`）。
+2. **带走的文件**（都不在 git 里）：仓库根 `.env`、`server/.env`（含 `FDE_JWT_SECRET`，必须原样携带，否则已有加密配置解不开）、桌面便携版文件夹（如 `release/蔡工FDE-0.3.0-便携版-r54/`）。
 3. **导出数据**（旧机；容器名按第 1 步自建的是 `fde-postgres`，复用其他实例时换成对应容器或用宿主 pg_dump）：
    ```bash
    docker exec fde-postgres pg_dump -U postgres -d fde_workbench -Fc > fde_workbench.dump
@@ -297,7 +297,7 @@ CI（`.github/workflows/ci.yml`）对 push 与 PR 运行四个 job：`server-tes
 Windows x64 NSIS 安装包：
 
 ```bash
-npm run package:win    # 先 electron-vite build，再 electron-builder --win nsis
+npm run package:win    # 先 bump 注入轮次＋electron-vite build，再 electron-builder --win nsis
 ```
 
 Windows x64 便携版（免安装目录，日常使用形态）：
@@ -308,7 +308,19 @@ npm run build
 npx electron-builder --win dir --x64   # 产物在 release/win-unpacked/，整个文件夹拷走即用
 ```
 
-版本与打包轮次（2026-11-13 起）：打包前跑 `node scripts/release-version.mjs bump`，会把轮次注入 `desktop/package.json`（如 `0.3.0-r46`），应用侧栏、exe 元数据与 `app.getVersion()` 随之显示；轮次计数在仓库根 `RELEASE-COUNTER`（跨发布列车续接）。`package:win` / `package:mac` 已内置 bump，无需手动调。发布列车升版（如 0.3.0→0.4.0）用 `node scripts/release-version.mjs train minor`，自动同步 `desktop/package.json` 与 `server/pyproject.toml` 双文件；README 徽章与 AGENTS 口径行随升版 PR 人工顺带改，tag `v0.4.0` 打在 fork。`node scripts/release-version.mjs show` 可随时查看当前轮次与下次将注入的版本。
+产物验证（交付前两道都过才算数；`win-unpacked` 拷走前做）：
+
+```bash
+cd release/win-unpacked/resources
+sha256sum app.asar                        # ① 记录 sha256 到交付说明，供用户侧核对
+printf '门禁与阶段唯一映射' > marker.txt    # ② 中文 marker 字节法：选一段本次改动新增的 UI 文案
+grep -acf marker.txt app.asar             # 输出 ≥1 即命中；0 = 打的是旧包
+rm marker.txt
+```
+
+> 控制台直接 `grep 中文 app.asar` 会因编码转换假阴性，必须用 marker 文件法；marker 应选本次改动独有的文案——旧版本也有的句子验证不出新旧。交付目录命名 `蔡工FDE-<version>-便携版-r<N>`，旧版本目录**永不覆盖**（用户回退要靠它）。
+
+版本与打包轮次（2026-11-13 起）：打包前跑 `node scripts/release-version.mjs bump`，会把轮次注入 `desktop/package.json` 与 web 桥版本字面量（如 `0.3.0-r54` / `0.3.0-r54-web`），应用侧栏、exe 元数据与 `app.getVersion()` 随之显示；轮次计数在仓库根 `RELEASE-COUNTER`（跨发布列车续接）。`package:win` / `package:mac` 已内置 bump，无需手动调。发布列车升版（如 0.3.0→0.4.0）用 `node scripts/release-version.mjs train minor`，自动同步三源（`desktop/package.json`＋web 桥字面量＋`server/pyproject.toml`，`web-bridge-version-parity` 静态闸钉一致）；README 徽章与 AGENTS 口径行随升版 PR 人工顺带改，tag `v0.4.0` 打在 fork。`node scripts/release-version.mjs show` 可随时查看当前轮次与下次将注入的版本。
 
 macOS Apple Silicon（arm64）DMG：
 
@@ -322,7 +334,7 @@ npm run package:mac
 
 ### 版本号约定
 
-发布升版时，`desktop/package.json` 与 `server/pyproject.toml` 的 `version` 同步修改（根目录 `VERSION` 文件同步作展示用），并在 fork 上打附注标签（如 `v0.2.0`）。客户端构建号取自 `desktop/package.json`。
+发布升版时，`desktop/package.json` 与 `server/pyproject.toml` 的 `version` 同步修改（根目录 `VERSION` 文件同步作展示用），并在 fork 上打附注标签（如 `v0.3.0`）。客户端构建号取自 `desktop/package.json`。
 
 ### 更换 Logo 与安装图标
 
