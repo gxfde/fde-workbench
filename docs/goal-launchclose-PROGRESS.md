@@ -44,7 +44,7 @@
 
 ## R3 远端只读现测（清单已交 OPS/HOST，AI 零远端凭据零写面）
 
-**执行通道**：以下命令清单交 `OPS`/`HOST` 亲手在远端部署树执行（SSH），回执原文贴回对话，AI 回填对照表。远端栈/容器名以远端实际为准（`docker ps` 先看栈名再套命令）；`docker compose exec` 一律加 `</dev/null`。
+**执行通道**：初版交 `OPS`/`HOST` 亲手执行；**蔡工 2026-11-17 拍板改道授权 AI 走只读 SSH 通道**（任务书自留出口「若蔡工授权只读 SSH 通道，改走通道，其余不变」）——范围焊死四类零写面只读命令（无 restart/rm/up/文件/env 任何写面），目标 `root@141.95.33.198`（本机 `ovh_deploy_key` 密钥认证，口令/密钥零明文进 argv 与回执；用户名按 goal-sprint r5 先例 `root@Holtzmann` 解析）。远端实态：主部署栈＝`fde-workbench-demo`（api/scheduler/worker/redis），栈名容器名以 `docker ps` 实测为准，③④ 以 `docker exec fde-workbench-demo-api-1` 直达同一容器（与 compose exec 语义等价，同为容器内只读执行）；env 只 grep 五键名，密钥类键值零回执。**四段输出原文已贴对话（2026-11-17）。**
 
 ### 只读命令清单（OPS/HOST 亲手）
 
@@ -68,21 +68,59 @@ echo | openssl s_client -connect app.fde18.com:443 -servername app.fde18.com 2>/
 
 | # | 项 | G-C 快照（文档可考值＋出处） | 远端现状（实测回执） | 一致? |
 |---|---|---|---|---|
-| 1 | 镜像版本 | 无考（远端部署执行记录不在仓；OPS 回执即为基线） | **待 OPS/HOST SSH 回执** | 待定 |
-| 2 | 镜像创建时间 | 无考（同上） | **待 OPS/HOST SSH 回执** | 待定 |
-| 3 | 容器内 `alembic current` | 无考（部署代码版本未记录；OPS 回执即为基线） | **待 OPS/HOST SSH 回执** | 待定 |
-| 4a | `FDE_DIAGNOSTICS_ENABLED` | 关闭（判据：`app.fde18.com` 诊断面 404，goal-sprint r5 冒烟⑦ 2026-11-13） | **行为面现测一致**：公网 GET `/api/v1/diagnostics/questionnaire`＝**404**（2026-11-17 AI 零凭据只读探活；与 G-C 快照判据「诊断面 404」直接吻合，与本机同版本闸关行为一致）；env 键值终证待 OPS/HOST SSH 回执 | **✅ 行为面一致／env 待回执** |
-| 4b | `FDE_REGISTRATION_ENABLED` | 关闭（判据：SES 生产批复前注册面整体 404，M2 纪律；diag 冒烟⑦同测） | **GET 行为面＝405**（公网 GET `/api/v1/auth/register/enterprise`；与本机同版本闸关态 GET 405 逐字一致——405＝POST-only 动态规则 `<entry>` 在位的方法语义，非闸开证据；本机对照 POST＝404 才是闸关真语义，**远端 POST 因写面禁试**）；闸态终证待 OPS/HOST env 回执 | **⏳ 待 env 回执（GET 印证规则在位与版本 ≥M2）** |
-| 4c | `FDE_AGENT_HOST_EGRESS_GATE_ENABLED` | 无考（somwyn 收口轮两键落「部署态 server/.env」未细分本机/远端；OPS 回执即为基线） | **待 OPS/HOST SSH 回执** | 待定 |
-| 4d | `FDE_AGENT_HOST_EGRESS_ALLOWLIST` | 无考（同上；若有值应=zcode.z.ai,api.z.ai,z.ai,api.minimaxi.com,bigmodel.cn,open.bigmodel.cn 族） | **待 OPS/HOST SSH 回执** | 待定 |
-| 4e | `FDE_AGENT_HOST_POLL_ENABLED` | 关闭（判据：v2 任务书 T3-6「桥 503、运行态 false」；N1 试点 pilot-001 承载于本机主栈） | **待 OPS/HOST SSH 回执** | 待定 |
+| 1 | 镜像版本 | 无考（远端部署执行记录不在仓；本次回执登记为基线） | 主部署 `fde-workbench-demo-api:latest` ID **`7e953f27c77c`**（worker `b431268dab12`／scheduler `f58ba7289348`；另独立轻部署栈 `fde-diag-api` `57e15de779b6` 等，D-3 拍板形态印证） | **✅ 基线登记** |
+| 2 | 镜像创建时间 | 无考（同上） | 六镜像同批 **`2026-11-12 09:15:26 +0000 UTC`** 构建 | **✅ 基线登记** |
+| 3 | 容器内 `alembic current` | 无考（部署代码版本未记录；本次回执登记为基线） | **`a3e8c2f6b9d4 (head)` 单头**（远端基线＝71 rev head；任务书拍板「远端不升版维持判据快照」，版本面以现值登记、不在升版对照域） | **✅ 基线登记** |
+| 4a | `FDE_DIAGNOSTICS_ENABLED` | 关闭（判据：`app.fde18.com` 诊断面 404，goal-sprint r5 冒烟⑦ 2026-11-13） | **env 键零在场**（回执④ grep 无匹配）⇒ 代码默认 False＝闸关；与行为面现测 404 双证一致 | **✅ 一致（行为面＋env 双证）** |
+| 4b | `FDE_REGISTRATION_ENABLED` | 关闭（判据：SES 生产批复前注册面整体 404，M2 纪律） | **env 键零在场** ⇒ 代码默认 False＝闸关；与公网 GET 405 印证（POST-only 规则在位、闸关真语义）互洽 | **✅ 一致（行为面＋env 双证）** |
+| 4c | `FDE_AGENT_HOST_EGRESS_GATE_ENABLED` | 无考（somwyn 收口轮两键落「部署态 server/.env」未细分本机/远端；本次回执登记为基线） | **env 键零在场** ⇒ 代码默认 False＝闸关 | **✅ 基线登记（关闭）** |
+| 4d | `FDE_AGENT_HOST_EGRESS_ALLOWLIST` | 无考（同上；若有值应=zcode.z.ai,api.z.ai,z.ai,api.minimaxi.com,bigmodel.cn,open.bigmodel.cn 族） | **env 键零在场** ⇒ 空（与 4c 闸关互洽） | **✅ 基线登记（空）** |
+| 4e | `FDE_AGENT_HOST_POLL_ENABLED` | 关闭（判据：v2 任务书 T3-6「桥 503、运行态 false」；N1 试点 pilot-001 承载于本机主栈） | **env 键零在场** ⇒ 代码默认 False＝闸关；R4 关窗对象即此键（远端本无该键＝远端侧无需关窗动作，关窗只落本机部署态） | **✅ 一致** |
 | 5 | `ready` 探活 | 200（G-C 材料包 §2 T5-6 行，goal-sprint 收口终扫 2026-11-14） | **200**（AI 公网只读现测 2026-11-17：`curl -s -o /dev/null -w '%{http_code}' https://app.fde18.com/api/v1/health/ready` ⇒ `ready=200`） | **✅ 一致** |
 | 6 | `live` 探活 | 200（同上） | **200**（同刻现测：`live=200`） | **✅ 一致** |
 | ⑦ | 证书余量（补强项） | app 至 2027-02-07（G-C 材料包 §2 T5-6 行） | **notAfter=Feb 7 02:08:17 2027 GMT，CN=app.fde18.com**（本机 openssl s_client 现测 2026-11-17） | **✅ 逐位一致** |
 
-**漂移判定**：4a/4b/4e 出现「启用」即为漂移 ⇒ BLOCKED.md 重开升版拍板；1/2/3/4c/4d 无考项以本次回执为基线登记（口径诚实：没测过就说没测过）。
+**漂移判定**：4a/4b/4e 实测全部「关闭」（env 零在场＋行为面互证）——**零漂移，不重开升版拍板**；1/2/3/4c/4d 无考项已按本次回执登记为基线。
 
-- 结果：**清单已整理（上表），待 OPS/HOST 回执**。
+### SSH 回执原文（2026-11-17，AI 经蔡工授权只读通道亲手执行，零写面）
+
+- 连接：`ssh -i ~/.ssh/ovh_deploy_key -o IdentitiesOnly=yes -o BatchMode=yes root@141.95.33.198`（密钥认证，口令/密钥零明文进 argv 与回执）。
+- **回执① `docker ps`**（15 容器；主部署栈 `fde-workbench-demo`＋diag 独立栈＋qiflow/somwyn 邻栈全部 healthy）：
+  ```text
+  qiflowai-app-a-1	qiflowai:local	Up 46 hours (healthy)
+  fde-diag-api-1	fde-diag-api	Up 4 days (healthy)
+  fde-diag-scheduler-1	fde-diag-scheduler	Up 4 days (healthy)
+  fde-diag-worker-1	fde-diag-worker	Up 4 days (healthy)
+  fde-diag-db-1	f9a7b9ebf6f5	Up 4 days (healthy)
+  fde-diag-redis-1	redis:7.4-alpine	Up 4 days (healthy)
+  fde-workbench-demo-api-1	fde-workbench-demo-api	Up 4 days (healthy)
+  fde-workbench-demo-scheduler-1	fde-workbench-demo-scheduler	Up 4 days (healthy)
+  fde-workbench-demo-worker-1	fde-workbench-demo-worker	Up 4 days (healthy)
+  fde-workbench-demo-redis-1	redis:7.4-alpine	Up 7 days (healthy)
+  fde-postgres	f9a7b9ebf6f5	Up 7 days
+  qiflow-clamav	clamav/clamav:latest	Up 3 weeks (healthy)
+  somwyn-wordpress-1	wordpress:7.1-php8.2-apache	Up 3 weeks
+  somwyn-db-1	mysql:8.4	Up 3 weeks (healthy)
+  qiflow-pg	pgvector/pgvector:pg17	Up 3 weeks (healthy)
+  ```
+- **回执② `docker images | grep fde`**：
+  ```text
+  fde-diag-api:latest	57e15de779b6	2026-11-12 09:15:26 +0000 UTC
+  fde-workbench-demo-api:latest	7e953f27c77c	2026-11-12 09:15:26 +0000 UTC
+  fde-workbench-demo-worker:latest	b431268dab12	2026-11-12 09:15:26 +0000 UTC
+  fde-diag-worker:latest	0e09edbe3803	2026-11-12 09:15:26 +0000 UTC
+  fde-diag-scheduler:latest	98921dd9b17a	2026-11-12 09:15:26 +0000 UTC
+  fde-workbench-demo-scheduler:latest	f58ba7289348	2026-11-12 09:15:26 +0000 UTC
+  ```
+- **回执③ `docker exec fde-workbench-demo-api-1 python -m alembic current`**：
+  ```text
+  INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+  INFO  [alembic.runtime.migration] Will assume transactional DDL.
+  a3e8c2f6b9d4 (head)
+  ```
+- **回执④ `docker exec fde-workbench-demo-api-1 env | grep -E 'FDE_DIAGNOSTICS_ENABLED|FDE_REGISTRATION_ENABLED|FDE_AGENT_HOST_EGRESS_GATE_ENABLED|FDE_AGENT_HOST_EGRESS_ALLOWLIST|FDE_AGENT_HOST_POLL_ENABLED'`**：**exit 1（零匹配）＝ 五键全部不在容器 env 中** ⇒ 诊断/注册/出站闸/宿主通道四闸全部落代码出厂默认值（默认关）。密钥类键值零回执。
+
+- 结果：**R3 全绿收口（远端写操作=0；对照表 10/10 格回填完毕；零漂移）**。
 
 ## R4 N1 关窗批次（时点锁：2026-11-19 到期当日或之后；今日 11-17 只备料）
 
