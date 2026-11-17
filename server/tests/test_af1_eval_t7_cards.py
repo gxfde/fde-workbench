@@ -228,21 +228,29 @@ def _card_t7_02(env: dict[str, Any], run_index: int, monkeypatch: pytest.MonkeyP
 
     calls: list[dict[str, Any]] = []
 
-    def _spy_batch_assign(**kwargs: Any) -> dict[str, Any]:
+    def _business_failure(**kwargs: Any) -> dict[str, Any]:
+        # 业务替身抛业务错（unit 钉同款）：完整性闸放行到达业务层，但业务
+        # 失败不误置 executed——审批单保持 approved 供漂移腿对照
         calls.append(kwargs)
-        return {"assigned": 0}
+        from fde_api.projects.service import ProjectServiceError
+        raise ProjectServiceError("task_cancelled", "Cancelled tasks cannot be assigned.", 409)
 
     monkeypatch.setattr(control_service, "batch_assign_project_tasks_in_session",
-                        _spy_batch_assign)
+                        _business_failure)
 
-    # 步骤1：基线（参数与指纹相符）→ 闸放行到达业务层
+    # 步骤1：基线（参数与指纹相符）→ 闸放行（业务层错误透传，非 integrity 拒绝）
+    baseline_code = ""
     with env["app"].app_context():
-        intact = control_service.execute_approved_dsh_tool(approval_id=approval.id)
-    baseline_reached = len(calls) == 1
+        try:
+            control_service.execute_approved_dsh_tool(approval_id=approval.id)
+            baseline_code = "EXECUTED"
+        except ControlServiceError as error:
+            baseline_code = f"{error.status}:{error.code}"
+    baseline_reached = "task_cancelled" in baseline_code
     trace: list[dict[str, Any]] = [{"tool": "execute_approved_dsh_tool", "ok": True,
                                     "decision": "allowed",
                                     "arguments": {"step": "intact-baseline"},
-                                    "result": f"status={intact.get('status')} 业务调用={baseline_reached}"}]
+                                    "result": baseline_code}]
 
     # 步骤2：漂移（审批落库后参数被改）→ 409 approval_integrity_failed，业务替身零调用
     approval.arguments_json = {**ARGUMENTS, "mode": "collaborator"}
