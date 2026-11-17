@@ -186,3 +186,16 @@ API_READY (3s)
 ## BLOCKED
 
 见 `docs/goal-regtrial-BLOCKED.md`（OWNER 清单三项：SMTP 真凭据 / 远端公网开闸 / 真发信轮复跑）。
+
+---
+
+## 合并回执（2026-11-18）
+
+| 项 | 内容 |
+|---|---|
+| PR | #503（`feat/regtrial-smtp` → `main`），**squash 合并＝`af8577c4`**，mergedAt 2026-11-17T17:12:59Z（授权：蔡工 2026-11-18 交互拍板「A｜授权我合并 #503」） |
+| 合并前处置 | 合并前 main 已被并发线推进（#504 接单→交付贯通验证轮 → #505/#506/#507/#508）⇒ **先 rebase 到新 main**：冲突仅 `AGENTS.md` 当前状态行与 `CHANGELOG.md` 节标题各一处，双方内容**逐字并存**（我方摘要在前、上游节序在后，AGENTS 行合成一行不丢两侧），结构终扫＝两侧内容锚 1/1 命中、冲突标记清零 → 强推 `6063695f` → 重跑 CI |
+| CI（rebase 后两轮） | push run `44131095987` ＝ **success**；PR run `44131103464` ＝ **success**；四 job（desktop／server-tests／secrets-scan／pseudonymization）全 success |
+| squash 漏笔核验 | `git show af8577c4` 文件表 **21 个**（与合并前一致）＋八处内容锚逐项命中（SmtplibClient／resolve_channel／test_mailing_smtp／企业自助注册／本文件「R4 本机端到端」／BLOCKED／CHANGELOG 节／AGENTS 红线）⇒ **无漏笔**（照 #496→#500 家族教训执行） |
+| 主树 ff 核对 | `git pull --ff-only fork main` → main＝fork/main＝`af8577c4`，**双向偏移 0 笔**；main 侧内容锚复核命中；本线三份文档（任务书／PROGRESS／BLOCKED）已在库 |
+| 合并未带出的事 | 远端写操作＝**0**；**本机主栈未重建**（本线代码尚未上活体）；便携版 **r55** 在主树 `release/蔡工FDE-0.3.0-便携版-r55/`（asar `cb54a006…`）；OWNER 三项（真凭据／远端公网开闸／真发信轮）仍未执行 |
