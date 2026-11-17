@@ -38,6 +38,11 @@ services:
       FDE_REDIS_URL: redis://redis:6379/0
       FDE_API_HOST: 0.0.0.0
       FDE_API_PORT: "8010"
+      # E2E 贯通轮（2026-11-17）：文档模板目录显式指向挂载点。
+      # build context=./server 不含仓库根 resources/ ⇒ 镜像内无模板 DOCX ⇒
+      # seed-document-templates 全 missing ⇒ 部署态 document_templates 恒空
+      # ⇒ 文档型/文件型交付件（封包闸前置）整段不可用。挂载＋本 env 消解。
+      FDE_DOCUMENT_TEMPLATE_DIR: /app/resources/document-templates
     ports:
       # 只绑回环：桌面端/采集器都连 127.0.0.1，不对局域网开放（登录无限流）。
       - "127.0.0.1:8010:8010"
@@ -52,6 +57,9 @@ services:
       # 把 migrations 目录挂出来：alembic revision 生成的迁移文件在容器内，
       # 挂载后宿主机可直接看到并纳入 git（否则生成物会随容器销毁）
       - ./server/migrations:/app/migrations
+      # E2E 贯通轮（2026-11-17）：文档模板只读挂载（与 migrations 同构先例）。
+      # seed CLI 与文档生成 fallback 都从 FDE_DOCUMENT_TEMPLATE_DIR 读 DOCX。
+      - ./resources:/app/resources:ro
     healthcheck:
       # I4：走 /ready（校验数据库与 Redis 就绪）而不是 /ready 之前用的 /live
       # ——/live 只证明进程活着，DB 挂了容器照样 healthy。
@@ -80,6 +88,8 @@ services:
       FDE_REDIS_URL: redis://redis:6379/0
       FDE_API_HOST: 0.0.0.0
       FDE_API_PORT: "8010"
+      # 同 api：document.generate job 在 worker 消费，生成 fallback 读模板盘上文件。
+      FDE_DOCUMENT_TEMPLATE_DIR: /app/resources/document-templates
     command: ["flask", "--app", "fde_api.wsgi:app", "worker"]
     restart: unless-stopped
     # I4：worker 不监听端口，「进程还在」不等于「还在干活」。循环每轮写一次
@@ -99,6 +109,7 @@ services:
     volumes:
       - fde_storage:/app/.fde-storage
       - fde_transcript_drafts:/app/.fde-transcript-drafts  # T-A9 草稿独立根（与 fde_storage 分卷）
+      - ./resources:/app/resources:ro  # E2E 贯通轮：与 api 同挂（文档模板只读）
 
   scheduler:
     # v0.3: 自动化调度器。与 worker 分开：worker 只消费已入队的事件，
@@ -112,6 +123,8 @@ services:
       FDE_REDIS_URL: redis://redis:6379/0
       FDE_API_HOST: 0.0.0.0
       FDE_API_PORT: "8010"
+      # 同 api：保持三服务模板目录一致（scheduler 本身不消费模板，防漂移）。
+      FDE_DOCUMENT_TEMPLATE_DIR: /app/resources/document-templates
     command: ["flask", "--app", "fde_api.wsgi:app", "scheduler"]
     restart: unless-stopped
     # I4：同 worker——心跳键 fde:health:scheduler（TTL 900s，覆盖最大 300s 间隔）。
@@ -129,6 +142,7 @@ services:
     volumes:
       - fde_storage:/app/.fde-storage
       - fde_transcript_drafts:/app/.fde-transcript-drafts  # T-A9 草稿独立根（与 fde_storage 分卷）
+      - ./resources:/app/resources:ro  # E2E 贯通轮：三服务一致（防模板目录漂移）
 
   sandbox-runner:
     # goal-d3（技术实施方案 §4 / 决议 D4）：agent 执行沙箱基座。

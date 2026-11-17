@@ -2,6 +2,15 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 接单→交付贯通验证轮：端到端真机走通＋文档模板部署态缺口修复（2026-11-17）
+
+首次以合成代号案例（企业代号 `E2E贯通·制造·佛山`，零真实客户资料、真相层零接触）在真实活体上走通「接单→交付」全链 30 步（真实 HTTP API，含 4 道闸负例全拦：首单回校闸 `calibration_required`／对外签字闸 `signoff_required`／接单人 member 无 can_manage 403×2）——立项→机会主体→方案→报价→回校→成交→claims×11→对外件→交付包发布→指派→接单人本人令牌接单（乐观锁）→自动交接（进项目成员 role=member）→交付执行（任务/证据）→交付件（文档 manual 修订一次产出 document+file 双交付件）→封包→封存（manifest_sha256 冻结）→交付登记（delivered 终态）。口径不变（零迁移零路由零表：523/55/160/89 单头 `b7f2d9e4c6a8`）。
+
+- **★部署态真缺陷修复（本轮主发现）**：`server/Dockerfile` 未 COPY 仓库根 `resources/`（build context=`./server` 不可达）⇒ 容器内 `seed-document-templates` 全 missing ⇒ 部署态 `document_templates` 恒空 ⇒ 「项目文档/结项交付包」整段 422 `document_template_not_published`／文档型与文件型封包无上游——somwyn 十步未触此段故从未暴露。修复＝**compose 三服务（api/worker/scheduler）只读挂载 `./resources:/app/resources:ro` ＋ `FDE_DOCUMENT_TEMPLATE_DIR=/app/resources/document-templates`**（与 migrations 挂载同构；worker 需要模板字节因 document.generate fallback 读盘）＋ README「迁移与初始化」节补 `seed-document-templates` 步骤。**换机重建/远端部署后须跑一次该 seed**（幂等）。
+- **贯通验证器入库**：NEW `scripts/verify/verify_order_to_delivery_e2e.py`（登录/token 双模式＋接单人凭证 `--deliverer-token`/`--deliverer-password`，都不给则降级 admin 代接并 SKIP 视角步骤；非首单库两分支兼容——首单库走回校负例 409、非首单库 finalize 直接成交且 SKIP 回校步；每跑一次新建独立项目可重复执行）。边界：合成数据机制验证不代表真实业务拍板；首次执行消耗全库「工作室首单」语义名额；不含 agent run（发起权归人）。
+- **贯通验收报告**：NEW `docs/audit/贯通验收报告-接单到交付-2026-11-17.md`（30 步逐项回执＋缺陷根因＋闸验证汇总＋如实登记：首单语义消耗／闸动作均为合成数据验证／商机报备线与 claim 模式与 artifact 型封包未覆盖）。
+- **如实登记**：验证执行使活库全库非仿真 `finalized` 计数 0→2（首跑+复跑各一次成交），「工作室首单」判定分支已被消耗；首跑断链残链（项目 `dc9db38d`，已回校未成交）留库无害。商机报备线（`commercial_opportunities`，售卖闸授权面）与 claim 模式（全城开关关闭）与 artifact 型封包（须 run 发起权归人）不在本轮范围。
+
 ## [未发布] — 桌面 handover 三态接线轮：挑选面 type 选择器＋document/file 分型拉取＋分型指针提交（SME 尾巴②桌面段清偿＋活体三验销项，2026-11-17）
 
 承 #495 挂账「桌面端挑选面与建包表单的三态接线归下一桌面轮」——零服务端改动零迁移零路由（口径不变：523 路由/55 蓝图/160 表/89 迁移单头 `b7f2d9e4c6a8`）：

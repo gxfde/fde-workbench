@@ -125,6 +125,10 @@ docker compose exec api flask --app fde_api.wsgi:app bootstrap-open-source
 docker compose exec api python load_seeds.py
 # 可选：灌入平台工作流模板三套（V3.1 P0-4；幂等，依赖 bootstrap 已灌的公共技能）
 docker compose exec api flask --app fde_api.wsgi:app seed-workflow-templates
+# 可选：灌入文档模板 17 类（E2E 贯通轮 2026-11-17 起；幂等；模板 DOCX 经
+# ./resources 只读挂载进容器（compose 已配 FDE_DOCUMENT_TEMPLATE_DIR）——
+# 不灌则「项目文档/结项交付包」段 422 document_template_not_published
+docker compose exec api flask --app fde_api.wsgi:app seed-document-templates
 ```
 
 初始化命令可重复执行，不会覆盖已有数据。全新数据库会创建一个必须首次改密的管理员：
