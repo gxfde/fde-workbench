@@ -140,6 +140,14 @@ echo | openssl s_client -connect app.fde18.com:443 -servername app.fde18.com 2>/
 - [x] **便携版 r53**：`node scripts/release-version.mjs bump` 三源同步（RELEASE-COUNTER 52→53＋package.json `0.3.0-r53`＋fde-web-bridge.ts `0.3.0-r53-web`）→ `npm run typecheck` 零错 → `npm run test:desktop` **104 文件 1223 passed** → GUI 回归 **11/11 PASS**（fde-gui-regression 关卡）→ `electron-vite build` ✓ → `electron-builder --win dir --x64` ✓（worktree 独立输出目录 `release/`，无句柄锁）→ **asar 双证**：sha256 `5697cdeb898df6f9b3ef4ec11b273d5ad9f7d0452ea86b7c530703c09b63fdc4`；正向 marker「正式对外导出」（#490 新增）＝1 命中＋版本串「0.3.0-r53」＝1 命中；**r52 反向对照**（asar `bd309b15…`）＝0 命中——marker 区分新旧包成立；交付目录 `release/蔡工FDE-0.3.0-便携版-r53`。
 - 结果：**R5 全链收口**。
 
+## G-C 签署终态（2026-11-17，转录登记非代拍）
+
+- **T5-7 PASS**：`2026-11-17／手机浏览器+外部网络／登录✓ 改密✓ 写操作✓`——OWNER（TOM）亲手验过；回执此前误贴管理者会话，本对话补登。
+- **G-C 签署**：`2026-11-17 / OPS=OPS / OWNER=TOM / 结论：放行上线`——签署原件留仓外载体（不进 git/数据库/截图）；OWNER 代号与 G-A（2026-11-09）/G-B（2026-11-10）同签署人。
+- 佐证：远端库审计事件 `user_password_changed` @ `2026-11-17 00:24:37 UTC`＋`guest01` `must_change_password=f`（OWNER 提供·管理者会话独立取证·**AI 未复核**——超出只读 SSH 通道四类命令授权，如实标注）。
+- 材料包同步：`docs/deployment/对外受控试用-G-C签署材料包-2026-11-14.md` §1 G-C 行 ⬜→✅、§2 T5-7 行 ⬜→✅、头部签署登记注记。
+- **A 线工程侧「G-C 可签」→ G-C 已签（放行上线），本线目标达成**；剩余尾巴＝R4 关窗执行锁 2026-11-19 09:30（automation-48ce31bb，远端零动作只落本机）。
+
 ## BLOCKED
 
 （暂无）
