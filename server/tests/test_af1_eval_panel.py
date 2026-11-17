@@ -864,6 +864,11 @@ def _run_one_eval_run_with_material(
     实证不可靠，已弃用）＋ ``num_ctx=16384`` 修实载 4096 缺口；每 run
     serving 探针归因列；max_tokens 维持 16384 不加码（V31-P1 实证钉）。
     """
+    # 批5 评审 G1（泄题防护）：材料文件头的 HTML 注释（SYNTHETIC_PILOT 登记
+    # 注：含 09 §3.3 评分预期）是**仓内记录面**，不是来料正文——投喂模型前
+    # 剥离，否则等于把评分标准抄给被评对象（v1/v2 已测数字因此带偏乐观偏差，
+    # 09 §4.3 降级登记）。sha256 复核仍用原文件字节（input_sha256 不变）。
+    material = re.sub(r"<!--.*?-->", "", material, flags=re.DOTALL).strip()
     rules = _skill_instructions(env["db_session"])
     dry_calls = _dry_calls_spy(monkeypatch, fault_inject=fault_inject)
     versions_before = _count_published_artifacts(env["live"], env["org_id"], env["ontology_id"])
