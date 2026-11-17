@@ -45,6 +45,7 @@ from fde_api.auth.models import ROLE_PROJECT_LEAD, ROLE_VIEWER, User
 from fde_api.commercial.enterprise_service import register_enterprise
 from fde_api.commercial.quota_service import normalize_subject_key
 from fde_api.config import Settings
+from fde_api.mailing.channel import channel_enabled
 from fde_api.mailing.service import MailingServiceError, send_email
 from fde_api.orgs.models import ORG_TYPE_ENTERPRISE, Org
 from fde_api.projects.events import record_event
@@ -108,12 +109,15 @@ def _error(code: str, message: str, status: int = 400) -> RegistrationError:
 def surface_open(settings: Settings) -> bool:
     """注册面整体开关（ADR-M4 §2 fail-closed，OWNER 拍板过渡形态）。
 
-    部署闸 AND SES 启用 AND 公网根地址——任一缺失 ⇒ 关闭（404，不确认面存在）。
-    没有 SES 就没有邮箱验证；没有邮箱验证就不允许注册放行。
+    部署闸 AND 发信通道启用（SMTP 或 SES）AND 公网根地址——任一缺失 ⇒ 关闭
+    （404，不确认面存在）。没有发信通道就没有邮箱验证；没有邮箱验证就不允许
+    注册放行。**通道无关**：注册制试用开闸 R1 起，SES 生产权限被 AWS 拒绝
+    （路线冻结），验证邮件改走 SMTP——开闸三条件的第二项由「SES 启用」改为
+    「发信通道启用」。
     """
     return (
         settings.registration_enabled
-        and settings.ses_enabled
+        and channel_enabled(settings)
         and bool(settings.public_base_url.strip())
     )
 

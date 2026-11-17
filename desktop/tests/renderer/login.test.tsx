@@ -38,6 +38,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
+  // hash 路由是窗口级状态：公开注册面用例会把它改成 #enterprise-register，
+  // 不还原会污染后续用例（jsdom 同一文件共享 window）。
+  window.location.hash = ""
 })
 
 describe("desktop authentication experience", () => {
@@ -188,6 +191,21 @@ describe("desktop authentication experience", () => {
     expect(
       screen.queryByRole("heading", { name: "项目工作台" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("offers a public enterprise registration entry from the login page", async () => {
+    // 注册制试用开闸 R3：#enterprise-register 路由本就挂载（App.tsx 公开面），
+    // 但登录页此前没有可见入口 ⇒ 试用者拿不到入口。本例钉住「入口在 + 跳得进」。
+    installBridge(bridge())
+    const user = userEvent.setup()
+    renderApp(<App />)
+
+    await screen.findByRole("heading", { name: PRODUCT_NAME })
+    const entry = screen.getByRole("link", { name: "企业自助注册" })
+    expect(entry).toHaveAttribute("href", "#enterprise-register")
+
+    await user.click(entry)
+    expect(await screen.findByRole("heading", { name: "企业注册" })).toBeVisible()
   })
 
   it("hides user management from engineers and clears session even if logout fails", async () => {

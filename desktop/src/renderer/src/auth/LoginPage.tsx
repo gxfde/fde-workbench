@@ -119,6 +119,14 @@ export function LoginPage() {
             {submitting ? "正在登录" : "登录"}
           </button>
         </form>
+        {/*
+          自助注册是**公开面**（未登录可达；服务端按来源 IP 限流）。注册制试用
+          开闸 R3：登录页给出可见入口——此前只有 #enterprise-register 路由挂载
+          （App.tsx），无导航入口 ⇒ 试用者拿不到入口。
+        */}
+        <p className="supporting-copy auth-register-entry">
+          还没有账号？<a className="button-link" href="#enterprise-register">企业自助注册</a>
+        </p>
       </section>
     </main>
   )

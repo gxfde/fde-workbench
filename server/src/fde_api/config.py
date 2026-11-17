@@ -184,6 +184,20 @@ class Settings(BaseSettings):
     ses_topic_arn: str = ""
     ses_daily_limit: int = Field(default=10, ge=1)
     ses_configuration_set: str = ""
+    # provider 无关 SMTP 发信通道（注册制试用开闸 R1，2026-11-17）：SES 生产权限
+    # 已被 AWS 拒绝（路线冻结），注册面邮箱验证邮件改走 SMTP（Zoho 形态：
+    # smtp.zoho.com:587 ＋ STARTTLS ＋ 账号登录；AI外贸获客线同款 2026-11-09
+    # 实发验证过）。**与 SES 二选一**：两开关同开＝配置歧义＝启动失败 fail-closed。
+    # 发信域纪律与 SES 通道同款：FROM 必须落在 smtp_send_subdomain 允许域根内
+    # （主域不发信，避免 SPF/DKIM 面扩大到主域全部邮件）。TLS 一律加密：
+    # 端口 465 走隐式 TLS，其余端口走 STARTTLS（不支持即失败，不回落明文）。
+    smtp_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password: SecretStr | None = Field(default=None, repr=False)
+    smtp_from: str = ""
+    smtp_send_subdomain: str = ""
     # goal-d3 沙箱基座（技术实施方案 §4 / 决议 D4）：默认参数面向 docker CLI
     # 可注入后端；镜像与容器名口径见 agents/sandbox.py。断网/资源上限/
     # 一次性 workspace 是基线事实，不随配置开放（egress allowlist 已随 d4
@@ -502,4 +516,39 @@ class Settings(BaseSettings):
 
         if not is_allowed_sender_domain(domain, self.ses_send_subdomain):
             raise ValueError("ses_sender_domain_forbidden")
+        return self
+
+    @model_validator(mode="after")
+    def validate_smtp_configuration(self) -> "Settings":
+        """SMTP 通道配置校验（注册制试用开闸 R1）。
+
+        两条纪律：
+        1. **两通道互斥**：SES 与 SMTP 同开＝配置歧义 ⇒ 启动失败（fail-closed，
+           不静默择一）；
+        2. **启用即校验必填齐**：主机/账号/口令/FROM/允许域根缺一不可，
+           FROM 必须落在允许域根内（与 SES 通道同款发信域纪律）。
+        """
+        if self.smtp_enabled and self.ses_enabled:
+            raise ValueError("smtp_and_ses_enabled_conflict")
+        if not self.smtp_enabled:
+            return self
+        missing = [
+            name
+            for name in (
+                "smtp_host",
+                "smtp_username",
+                "smtp_from",
+                "smtp_send_subdomain",
+            )
+            if not str(getattr(self, name) or "").strip()
+        ]
+        if self.smtp_password is None or not self.smtp_password.get_secret_value().strip():
+            missing.append("smtp_password")
+        if missing:
+            raise ValueError("missing_smtp_configuration")
+        domain = self.smtp_from.rsplit("@", 1)[-1]
+        from fde_api.mailing.policy import is_allowed_sender_domain
+
+        if not is_allowed_sender_domain(domain, self.smtp_send_subdomain):
+            raise ValueError("smtp_sender_domain_forbidden")
         return self

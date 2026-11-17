@@ -28,12 +28,19 @@ from sqlalchemy.orm import Session
 
 from fde_api.config import Settings
 from fde_api.mailing import policy
+from fde_api.mailing.channel import (
+    CHANNEL_SES,
+    CHANNEL_SMTP,
+    MailChannelConflictError,
+    resolve_channel,
+)
 from fde_api.mailing.models import (
     SUPPRESSING_TYPES,
     MailingEvent,
     MailingSend,
 )
 from fde_api.mailing.ses_client import SesClient, SesSendError, create_ses_client
+from fde_api.mailing.smtp_client import create_smtp_client
 
 SNS_CERT_URL_PATTERN = re.compile(r"^https://sns\.[a-z0-9-]+\.amazonaws\.com(:443)?/")
 # SNS Signature-1 的字段拼接顺序（AWS 文档固定）：Notification 无 Subject 时为
@@ -65,6 +72,24 @@ def _sender_domain(address: str) -> str:
     return address.rsplit("@", 1)[-1].strip().rstrip(".").lower()
 
 
+def create_mail_client(settings: Settings) -> SesClient | None:
+    """按生效通道构造发信客户端（SES / SMTP 二选一；都未启用返回 None）。
+
+    **SES 键路径一字未动**：本函数只在既有 ``create_ses_client`` 前面加一道
+    通道分支——模块级名字在调用时解析，既有以
+    ``fde_api.mailing.service.create_ses_client`` 打桩的测试仍命中同一条 SES 路径。
+    """
+    try:
+        channel = resolve_channel(settings)
+    except MailChannelConflictError:
+        return None
+    if channel == CHANNEL_SMTP:
+        return create_smtp_client(settings)
+    if channel == CHANNEL_SES:
+        return create_ses_client(settings)
+    return None
+
+
 def send_email(
     *,
     settings: Settings,
@@ -80,15 +105,27 @@ def send_email(
 
     闸门顺序（policy.decide_send）：开关 → 幂等键 → 收件人抑制 → 当日限额。
     发信域约束在闸门前先查（FROM 必须落在配置子域内，主域不发信）。
+    闸门全部通道无关（注册制试用开闸 R1：发信通道 SES 或 SMTP 由配置择一）。
     """
-    resolved = client if client is not None else create_ses_client(settings)
+    try:
+        channel = resolve_channel(settings)
+    except MailChannelConflictError as error:
+        raise MailingServiceError(
+            policy.DROP_DISABLED, "发信通道配置冲突（SES 与 SMTP 不可同开）。", 409
+        ) from error
+    resolved = client if client is not None else create_mail_client(settings)
     # 闸门前置拦截顺序与 policy 一致：先「开关」（关闭=disabled，与子域是否
     # 配置无关），再「发信域约束」（FROM 必须落在允许子域，主域不发信）。
-    if resolved is None or not settings.ses_enabled:
-        raise MailingServiceError(policy.DROP_DISABLED, "SES 发信模块未启用。", 409)
-    sender = settings.ses_from_address
+    if resolved is None or channel is None:
+        raise MailingServiceError(policy.DROP_DISABLED, "发信通道未启用。", 409)
+    if channel == CHANNEL_SES:
+        sender = settings.ses_from_address
+        allowed_root = settings.ses_send_subdomain
+    else:
+        sender = settings.smtp_from
+        allowed_root = settings.smtp_send_subdomain
     domain = _sender_domain(sender)
-    if not policy.is_allowed_sender_domain(domain, settings.ses_send_subdomain):
+    if not policy.is_allowed_sender_domain(domain, allowed_root):
         raise MailingServiceError(
             policy.DROP_DOMAIN,
             f"发件域 {domain} 不在允许子域内。",
@@ -107,7 +144,7 @@ def send_email(
         .where(MailingSend.sent_at >= _today_start_utc(now()))
     )
     decision = policy.decide_send(
-        enabled=settings.ses_enabled,
+        enabled=channel is not None,
         message_id=idempotency_key,
         seen_message_ids=seen_keys,
         recipient_suppressed=suppressed,

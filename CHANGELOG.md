@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 注册制试用开闸轮：SMTP 发信通道 provider 无关化＋注册面开闸三条件修订＋登录页注册入口（goal-regtrial R1–R5，2026-11-17）
+
+承蔡工「注册制登录试用」评估与「SES 因审批不下来已废弃、改直发」纠偏——SES 生产权限 2026-11-05 被 AWS 拒绝、路线冻结，注册面验证邮件改走 **provider 无关 SMTP 通道**（Zoho 形态，AI外贸获客 backend 同款模式 2026-11-09 实发验证过）。**零迁移零路由零蓝图零新表**：口径不变（523 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。
+
+- **R1 SMTP 发信通道（核心）**：NEW `mailing/smtp_client.py`——`SmtplibClient` 实现既有 `SesClient` 协议（标准库 smtplib；`smtplib.SMTP`＋`starttls()`＋`login`＋`send_message`；返回 **message-id 头形态标识**，幂等台账语义不变）；NEW `mailing/channel.py`＝「哪条通道生效」的**唯一权威**（`resolve_channel`／`channel_enabled`；两通道同开＝`MailChannelConflictError` fail-closed）；`mailing/service.py` 的 `send_email` 改为**通道无关**（五步闸门一字不动：开关→幂等→抑制→限额→发信域；发件人/允许域根按通道取）。**既有 `FDE_SES_*` 键与 `test_mailing_ses.py` 27 例零改动**（`create_ses_client` 仍是 SES 路径唯一入口，模块级名字调用时解析——既有四处 `monkeypatch` 打桩继续命中同一路径）。
+- **R1 配置面（新增 7 键，出厂全关）**：`FDE_SMTP_ENABLED`（开关）／`FDE_SMTP_HOST`／`FDE_SMTP_PORT`（缺省 587）／`FDE_SMTP_USERNAME`／`FDE_SMTP_PASSWORD`（`SecretStr`，日志与 repr 不外泄）／`FDE_SMTP_FROM`／`FDE_SMTP_SEND_SUBDOMAIN`（允许发信域根）；**启用即校验必填齐**（`missing_smtp_configuration`）＋**两通道互斥**（`smtp_and_ses_enabled_conflict`，启动失败）＋**发信域纪律同款**（FROM 必须落在允许域根内，主域不发信→`smtp_sender_domain_forbidden`）。**TLS 一律加密**：465 走隐式 TLS、其余端口走 STARTTLS，**STARTTLS 不可用即失败、不回落明文**（凭据不落明面）；错误分类沿用既有两分类（4xx/连接失败＝`throttle` 可重试，5xx/认证/拒收＝`message_rejected` 不可重试）。
+- **R2 红线与配置面修订**：AGENTS「注册面公开写面纪律」开闸三条件第二项由「SES 启用」→**「发信通道启用（SMTP 或 SES）」**（注记 OWNER 拍板与 SES 冻结事实）；③限流上限由「保守占位待填实数」→**实数 10/日/IP**（代码缺省 20 不动、部署面按 10 配；`FDE_REGISTRATION_RATE_FAIL_CLOSED` 公网须设 1＝fail-closed）；`.env.example` 增 SMTP 段与修订三条件注释。
+- **R3 前端注册入口（现测＋补链接）**：现测＝`#enterprise-register` 路由**已挂载**（`App.tsx` 公开面分支＋`useHashRoute` 解析）但**无任何可见导航入口**（登录页无链接）⇒ 补 `LoginPage.tsx`「企业自助注册」入口（桌面/网页同构一个 PR）；`login.test.tsx` 增 1 例（入口在＋跳得进）；`npm run typecheck` 零错＋vitest **104 文件 1231 passed**（+1）。
+- **R4 本机端到端全链 PASS（假 SMTP 真握手）**：NEW `scripts/verify/dummy_smtp_server.py`（STARTTLS 真握手＋自签证书＋落盘 JSONL）与 `scripts/verify/verify_registration_trial.py`（逐环实测并贴输出；取信支持本地落盘与真实 IMAP 两种）＋`scripts/verify/verify_smtp_mutation.py`（变异自证）。实测链：**探活 200 → 注册 201（`verification_email=sent`，SMTP 捕获 725 字节/tls=True）→ 取令牌（43 字符）→ 邮箱验证 200（`registration_state=active`）→ 登录 200（`role=project_lead`）→ 试用写动作 201（建项目 `project_id` 落库）→ 读回 200**。**真发信轮（SMTP 真服务器＋真口令）与远端开闸＝OWNER 清单，未执行**（见 BLOCKED）。
+- **测试与变异**：NEW `test_mailing_smtp.py` **32 例**（STARTTLS/隐式 TLS 路径、Message-ID 形态、错误分类五参、连接失败节流、STARTTLS 不支持即失败且**不 login**、工厂分支与 SES 路径零改动、配置校验四例、`send_email` 通道无关三例、注册面开闸通道无关四例）＋既有 `test_mailing_ses.py` **27 例零回归**＋注册面回归套件全绿（**116 passed**）；**变异四连全数「红→绿」**（M1 通道解析分支／M2 4xx 可重试性／M3 注册面闸退回单通道／M4 摘除 STARTTLS）且**字节级还原一致**（脚本自证，非人工声称）；`ruff --select F401,F841` 全过＋**mypy 基线 277 零新增**（`OK: no new type errors (baseline 277 occurrences / 102 distinct, current 277)`）。
+- **便携版 r55**：`release-version.mjs bump` 三源同步（RELEASE-COUNTER 54→55＋package.json `0.3.0-r55`＋web-bridge `0.3.0-r55-web`）＋asar 中文 marker 字节双证（见交付回执）。
+- **遗留（OWNER）**：①SMTP 真凭据（建议 Zoho 上给 `fde18.com` 域建发信邮箱，如 `noreply@fde18.com`）带外提供——到位后跑真发信轮（同一 e2e 脚本换 `--imap-*` 取信）；②远端部署树开闸（公网写面）**AI 不代开**，OWNER 清单随交付上交；③注册面限流实数 10/日/IP 与 `RATE_FAIL_CLOSED=1` 由 OWNER 在部署 `.env` 落值。
 ## [未发布] — 接单→交付三线补验轮：artifact 封包／claim 抢单／商机七步链全部实跑闭合（纯验证零代码，2026-11-17）
 
 贯通轮（#504/#505）登记的三项未覆盖面当日全部补验闭合，零迁移零路由零表（口径 523/55/160/89 单头 `b7f2d9e4c6a8` 不变）；回执补章入 `docs/audit/贯通验收报告-接单到交付-2026-11-17.md` §7（§5 遗留表同步销项）：
