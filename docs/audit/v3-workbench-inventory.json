@@ -1,10 +1,10 @@
 {
- "route_count": 527,
+ "route_count": 528,
  "blueprint_count": 56,
  "table_count": 161,
- "revision_count": 90,
+ "revision_count": 91,
  "heads": [
-  "c3d8e7a2f1b6"
+  "d5e6f7a8b9c0"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -497,6 +497,14 @@
    "create_tables": [],
    "add_column_tables": [
     "automation_approvals"
+   ]
+  },
+  "d5e6f7a8b9c0": {
+   "file": "d5e6f7a8b9c0_data_profiles_connector_anchor.py",
+   "down_revision": "c3d8e7a2f1b6",
+   "create_tables": [],
+   "add_column_tables": [
+    "data_profiles"
    ]
   },
   "d5f9a3c7e1b4": {

@@ -746,6 +746,97 @@ class MockOntologyAdapter:
             "_status": 200,
         }
 
+    def introspect_data_source(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        data_source_key: str,
+    ) -> dict[str, Any]:
+        """AF2 D5 双胞胎：连接器侧 DB 内省画像（与 api-spec 1.3.8-af2 同契约）。
+
+        掩码在 ontology-service 连接器沙箱侧完成（单一真身）——mock 返回的
+        samples 已是掩码后形态，workbench 侧只透传不二次脱敏；未绑定表
+        row_sample=None（只出结构不出样本，最小暴露）。"""
+        self._maybe_fault()
+        ver = self._versions.get((ontology_id, version_id))
+        if ver is None:
+            return {"code": "not_found", "message": "version not found", "_status": 404}
+        if data_source_key != "mes_sql":
+            return {"code": "not_found", "message": "data_source not bound", "_status": 404}
+        return {
+            "ontology_id": ontology_id,
+            "ontology_version_id": version_id,
+            "version": ver["version"],
+            "snapshot_sha256": canonical_json_sha256(ver["snapshot"]),
+            "data_source_key": data_source_key,
+            "ds_kind": "sqlite",
+            "tables": {
+                "equipment": {
+                    "columns": [
+                        {"name": "eq_id", "data_type": "TEXT", "nullable": False,
+                         "is_primary_key": True},
+                        {"name": "eq_name", "data_type": "TEXT", "nullable": True,
+                         "is_primary_key": False},
+                        {"name": "secret_token", "data_type": "TEXT", "nullable": True,
+                         "is_primary_key": False},
+                    ],
+                    "primary_key": ["eq_id"],
+                    "foreign_keys": [],
+                    "row_sample": {
+                        "rows_scanned": 2,
+                        "columns": {
+                            "eq_id": {"mask_strategy": "none", "null_count": 0,
+                                      "distinct_approx": 2, "samples": ["EQ-01", "EQ-02"]},
+                            "eq_name": {"mask_strategy": "none", "null_count": 0,
+                                        "distinct_approx": 2,
+                                        "samples": ["一号涂布机", "二号分切机"]},
+                            "secret_token": {"mask_strategy": "redact", "null_count": 0,
+                                             "distinct_approx": 2,
+                                             "samples": ["***REDACTED***", "***REDACTED***"]},
+                        },
+                    },
+                },
+                "work_order": {
+                    "columns": [
+                        {"name": "wo_id", "data_type": "TEXT", "nullable": False,
+                         "is_primary_key": True},
+                        {"name": "eq_id", "data_type": "TEXT", "nullable": True,
+                         "is_primary_key": False},
+                    ],
+                    "primary_key": ["wo_id"],
+                    "foreign_keys": [
+                        {"column": "eq_id", "references_table": "equipment",
+                         "references_column": "eq_id"}
+                    ],
+                    "row_sample": {
+                        "rows_scanned": 2,
+                        "columns": {
+                            "wo_id": {"mask_strategy": "none", "null_count": 0,
+                                      "distinct_approx": 2, "samples": ["WO-100", "WO-101"]},
+                            "eq_id": {"mask_strategy": "none", "null_count": 0,
+                                      "distinct_approx": 2, "samples": ["EQ-01", "EQ-02"]},
+                        },
+                    },
+                },
+                "raw_archive": {
+                    "columns": [
+                        {"name": "arch_id", "data_type": "TEXT", "nullable": False,
+                         "is_primary_key": True},
+                        {"name": "note", "data_type": "TEXT", "nullable": True,
+                         "is_primary_key": False},
+                    ],
+                    "primary_key": ["arch_id"],
+                    "foreign_keys": [],
+                    "row_sample": None,
+                },
+            },
+            "_status": 200,
+        }
+
     def get_lineage(
         self,
         *,

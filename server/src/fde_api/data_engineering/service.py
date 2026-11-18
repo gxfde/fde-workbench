@@ -87,6 +87,122 @@ def create_profile(*, actor, project_id: str, filename: str, data: bytes) -> dic
         session.close()
 
 
+def _adapter_from_app():
+    """本体 adapter 出口：flag 关 fail-closed 503（零出站调用，§15 红线）。"""
+    from flask import current_app
+
+    from fde_api.integrations.service import client_from_settings
+
+    settings = current_app.config["SETTINGS"]
+    if not getattr(settings, "ontology_enabled", False):
+        raise _error("ontology_disabled", "本体运行时未启用。", 503)
+    return client_from_settings()
+
+
+def _fk_relation_candidates(tables: dict[str, Any]) -> list[dict[str, Any]]:
+    """catalog 外键 = 关系候选硬证据（D5 ④）：status 恒 ``candidate``，无翻产
+    通道（03 §77）；无外键的表不产生候选（同名列降级判断归画像消费面）。"""
+    candidates: list[dict[str, Any]] = []
+    for table_name in sorted(tables):
+        for fk in tables[table_name].get("foreign_keys") or []:
+            candidates.append(
+                {
+                    "left_table": table_name,
+                    "right_table": str(fk["references_table"]),
+                    "left_column": str(fk["column"]),
+                    "right_column": str(fk["references_column"]),
+                    "basis": "fk_catalog",
+                    "status": "candidate",
+                }
+            )
+    return candidates
+
+
+def create_connector_profile(
+    *,
+    actor,
+    project_id: str,
+    ontology_id: str,
+    version_id: str,
+    data_source_key: str,
+    org_id: str,
+    adapter=None,
+) -> dict[str, Any]:
+    """连接器侧 DB 内省画像（AF2-WP1 第二批 / D5）：掩码出边界在 ontology-service
+    连接器沙箱内完成（单一真身），本侧只透传统计 + 掩码样本落库，不二次脱敏。
+
+    ``org_id`` 为本体运行时租户上下文（interim 显式传参；binding 集成后收窄为
+    服务端从绑定解析——消费接线批）。画像行带快照锚四件（版本快照钉版本）。
+    """
+    session: Session = db.session()
+    try:
+        project = _require_project(session, actor, project_id)
+        client = adapter if adapter is not None else _adapter_from_app()
+        try:
+            report = client.introspect_data_source(
+                actor_id=str(actor.id),
+                org_id=org_id,
+                project_id=project_id,
+                ontology_id=ontology_id,
+                version_id=version_id,
+                data_source_key=data_source_key,
+            )
+        except DataEngineeringError:
+            raise
+        except Exception as error:  # OntologyClient 异常族 → 显性映射（禁吞错，§14-4）
+            raise _error("ontology_unavailable", "本体运行时内省调用失败。", 503) from error
+        status = int(report.get("_status") or 0)
+        if status == 404:
+            raise _error("data_source_not_found", "数据源不在该版本快照中。", 404)
+        if status == 422:
+            raise _error("introspection_unsupported", "该数据源类型不支持内省。", 422)
+        if status != 200:
+            raise _error("ontology_unavailable", "本体运行时内省调用失败。", 503)
+
+        tables = report.get("tables") or {}
+        row = DataProfile(
+            project_id=project.id,
+            source_name=f"connector:{data_source_key}",
+            input_sha256=str(report.get("snapshot_sha256") or ""),
+            table_count=len(tables),
+            source_kind="connector",
+            ontology_id=ontology_id,
+            ontology_version_id=version_id,
+            snapshot_sha256=str(report.get("snapshot_sha256") or ""),
+            data_source_key=data_source_key,
+            tables_json=tables,
+            relation_candidates_json=_fk_relation_candidates(tables),
+            samples_json={
+                name: t["row_sample"]
+                for name, t in sorted(tables.items())
+                if isinstance(t.get("row_sample"), dict)
+            },
+            created_by_user_id=actor.id,
+        )
+        session.add(row)
+        session.flush()
+        record_event(
+            session,
+            actor,
+            "data_profile_created",
+            project,
+            {
+                "profile_id": row.id,
+                "source_kind": row.source_kind,
+                "source_name": row.source_name,
+                "ontology_id": ontology_id,
+                "ontology_version_id": version_id,
+                "data_source_key": data_source_key,
+                "snapshot_sha256": row.snapshot_sha256,
+                "table_count": row.table_count,
+            },
+        )
+        session.commit()
+        return row.snapshot()
+    finally:
+        session.close()
+
+
 def list_profiles(*, actor, project_id: str) -> list[dict[str, Any]]:
     session: Session = db.session()
     try:

@@ -33,6 +33,14 @@ class DataProfile(Base, TimestampMixin):
     input_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     table_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 画像来源二态（AF2-WP1 第二批 / D5）：file=资料侧上传（第一批）；connector=
+    # 连接器侧 DB 内省（经 ontology_client 1.3.8-af2，掩码在 runtime 沙箱完成）
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="file")
+    # connector 快照锚四件（版本快照钉版本；file 画像为 NULL）
+    ontology_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ontology_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    snapshot_sha256: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    data_source_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # JSON 产物三件：表+列统计 / 关系候选（status 恒 candidate）/ 掩码样本
     tables_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     relation_candidates_json: Mapped[list[dict[str, Any]]] = mapped_column(
@@ -48,7 +56,12 @@ class DataProfile(Base, TimestampMixin):
             "id": self.id,
             "project_id": self.project_id,
             "source_name": self.source_name,
+            "source_kind": self.source_kind,
             "input_sha256": self.input_sha256,
+            "ontology_id": self.ontology_id,
+            "ontology_version_id": self.ontology_version_id,
+            "snapshot_sha256": self.snapshot_sha256,
+            "data_source_key": self.data_source_key,
             "truncated": self.truncated,
             "table_count": self.table_count,
             "tables": self.tables_json,
