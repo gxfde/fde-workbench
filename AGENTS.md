@@ -25,6 +25,8 @@
 
 ## 常用命令
 
+- 优化循环入口：[leader 任务书](docs/optimization/goal-optimize-leader.md) 与 [实际进度](docs/optimization/PROGRESS.md)。发布候选离线核验命令见 README「生产部署要点」；候选通过不替代接管检查与活体三验。
+
 - 桌面端：`npm run typecheck`、`npm run test:desktop`；服务端：`npm run test:server`（用例数等口径以「当前状态」台账为准，不在此重复）。
 - 服务端代码烤进镜像：改 `server/` 后必须 `docker compose build && docker compose up -d`，再执行 `alembic upgrade head`（只跑 up -d 无效）。
 - 集成桥手动采集：`schtasks //Run //TN "FDE-Bridge-Poll"`（Git Bash 下双斜杠），或桌面端集成桥页「立即采集」按钮（同一代码路径）。

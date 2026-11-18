@@ -240,6 +240,16 @@ worker / scheduler 不监听端口，光看「容器 Up」看不出循环是否�
 
 ### 生产部署要点
 
+发布候选先做离线核验（Python 3.12+、Git；在受信任且静止的仓库上运行）：
+
+```bash
+python scripts/deploy/release_preflight.py --tree <仓库根> --expected-commit <已批准的40位提交SHA>
+```
+
+输出一个 JSON：exit 0 为 `candidate_consistent`，exit 1 为候选拒绝，exit 2 为参数或环境不可用；`--help` 输出帮助文本。工具检查提交、干净状态、默认迁移目录的静态单头图，并记录发布输入指纹。仅支持普通仓或标准 linked worktree；不支持子模块、部分克隆、Git include/filter/外部辅助配置路径、迁移自定义目录或动态元数据。`live_status` 始终为 `not_checked`：通过后仍须接管检查、备份与部署三验。它不读取部署 `.env`、不执行迁移、不连接数据库，也不提供部署锁或原子快照。范围和限制见 [R1a 核验规格](docs/optimization/R1a-发布候选核验-实施规格.md)。
+
+工具回归命令：`python -m unittest discover -s tests/deploy -p test_*.py -v`。
+
 - compose 的 api 服务已用 Gunicorn（2 worker）承载并绑定 `127.0.0.1:8010`；远程访问须经 HTTPS 反向代理，不要将 Flask 开发服务器用于生产。
 - PostgreSQL、Redis、OSS 使用独立最小权限账号；Redis 不发布宿主端口（compose 默认不发布）。
 - 本地文件存储目录（容器卷 `fde_storage`）、数据库和管理员配置密文必须一起备份。
