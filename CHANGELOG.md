@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 便携版 r58 打包与 P0 写入安全收尾（2026-11-18）
+
+从合并后的 main（`e24fb441`＝#522 条件写保护＋#525 回退暂停单点）打 Windows x64 便携版 r58。
+
+- **版本注入**：`node scripts/release-version.mjs bump` → `0.3.0-r58`（三源同步：`desktop/package.json`＋`desktop/src/renderer/src/fde-web-bridge.ts`＋根 `RELEASE-COUNTER`＝58）。
+- **构建**：`cd desktop && npm run build`（electron-vite，26.53s）→ `npx electron-builder --win dir --x64`（electron 43.4.1／x64）→ 产物 `release/win-unpacked/`，归档 `release/蔡工FDE-0.3.0-便携版-r58/`（旧目录 r56／r57 未覆盖）。
+- **sha256 指纹**：`app.asar`＝`8a57bfc6b8984ebeb5f9298b8eaa85fc64a814ab9b19e3f253c93e35c0b4d686`（归档件与构建件逐字节一致）。
+- **中文 marker 字节验证**：正向「判定未提交并解除占用」命中 1（本次桌面新增文案）；版本字面量 `0.3.0-r58` 命中 1、`0.3.0-r57` 命中 0；旧包 `蔡工FDE-0.3.0-便携版-r57` 反向零命中（0）——新包与旧包可区分。
+- 打包源为已合并代码（main tip `e24fb441`），未打包任何未合并分支；桌面改动＝#522 的任务草稿三方比较、交付登记待核对出口、字段级 403 与任务说明只读。
+
 ## [未发布] — 写入安全 P0 收尾：回退暂停单点开关（2026-11-18）
 
 补上实施任务书 G4 里最后一项工程缺口：回退到无保护版本之前，三条「确认快照」写入必须先停住，否则回退窗口内的写入不受保护却会以正常成功事件落库。
