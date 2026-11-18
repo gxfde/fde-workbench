@@ -698,6 +698,7 @@ def _submit_all_evidence(authorized: AuthorizedClient, gates_url: str, gate_key:
     response = authorized.post(
         f"{gates_url}/{gate_key}/evidence",
         json={
+            "expected_revision": gate["revision"],
             "items": [
                 {
                     "label": item["label"],
@@ -709,6 +710,7 @@ def _submit_all_evidence(authorized: AuthorizedClient, gates_url: str, gate_key:
         },
     )
     assert response.status_code == 200, response.get_data(as_text=True)
+    return response.json["data"]["revision"]
 
 
 def test_g8_pass_marks_acceptance_and_accrues_settlements(g8_project, db_session):
@@ -730,10 +732,10 @@ def test_g8_pass_marks_acceptance_and_accrues_settlements(g8_project, db_session
     assert g4_settlement.delivery_amount == Decimal("4000")
 
     # ② 执行人 admin 提交证据，leader 拍板过门（P0-5 分离 + P0-4 联动）
-    _submit_all_evidence(g8_project["admin_client"], g8_project["gates_url"], "G8")
+    revision = _submit_all_evidence(g8_project["admin_client"], g8_project["gates_url"], "G8")
     decided = g8_project["leader_client"].post(
         f"{g8_project['gates_url']}/G8/decision",
-        json={"result": "pass", "decision": "proceed"},
+        json={"expected_revision": revision, "result": "pass", "decision": "proceed"},
     )
     assert decided.status_code == 200, decided.get_data(as_text=True)
     acceptance = decided.json["data"]["acceptance_marked"]

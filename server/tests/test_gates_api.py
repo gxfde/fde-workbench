@@ -9,18 +9,22 @@ goal-c CR-009：G8 stop 结算联动（flag_g8_stop_settlement）两条分支补
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from threading import Event
+from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, inspect, select, text, update
 
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.evidence.models import ProjectEvidence
+from fde_api.projects import gate_service
 from fde_api.workbench.models import (
     Gate,
     IndustryTemplate,
@@ -122,32 +126,77 @@ def gate_project(admin_client, client, db_session, settings):
     )
 
 
-def _submit_all_evidence(admin_client, gates_url: str, gate_key: str) -> None:
-    gates = admin_client.get(gates_url).json["data"]["gates"]
-    gate = next(g for g in gates if g["gate_key"] == gate_key)
+def _gate_snapshot(client, gates_url, gate_key):
+    view = client.get(gates_url).json["data"]
+    assert view["write_preconditions"] == "v1"
+    return next(g for g in view["gates"] if g["gate_key"] == gate_key)
+
+
+def test_gate_authorizes_after_locking_project_and_loading_members(
+    admin_client, gate_project, app, monkeypatch
+):
+    """记录合法请求的 SQL 顺序，验证鉴权读到的是项目锁内的成员关系。"""
+    _project, gates_url, leader_client = gate_project
+    engine = app.extensions["fde_api_db"]
+    if engine.dialect.name != "postgresql":
+        pytest.skip("需要 PostgreSQL 的行锁查询")
+    steps = []
+    original_access = gate_service.project_access
+
+    def after_execute(conn, cursor, statement, parameters, context, executemany):
+        if "FROM projects" in statement and "FOR NO KEY UPDATE" in statement:
+            steps.append("project_lock")
+        if "FROM project_members" in statement:
+            steps.append("members_loaded")
+
+    def checked_access(actor, project):
+        assert steps[-2:] == ["project_lock", "members_loaded"]
+        assert "members" not in inspect(project).unloaded
+        steps.append("authorized")
+        return original_access(actor, project)
+
+    monkeypatch.setattr(gate_service, "project_access", checked_access)
+    event.listen(engine, "after_cursor_execute", after_execute)
+    try:
+        revision = _submit_all_evidence(admin_client, gates_url, "G6")
+        response = leader_client.post(
+            f"{gates_url}/G6/decision", json={"result": "pass", "expected_revision": revision}
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+    finally:
+        event.remove(engine, "after_cursor_execute", after_execute)
+    assert steps.count("authorized") == 3  # GET、提交、裁定
+
+
+def _submit_all_evidence(admin_client, gates_url: str, gate_key: str) -> int:
+    gate = _gate_snapshot(admin_client, gates_url, gate_key)
     response = admin_client.post(
         f"{gates_url}/{gate_key}/evidence",
         json={
+            "expected_revision": gate["revision"],
             "items": [
                 {
                     "label": item["label"],
-                    "source_uri": f"fdeops://p3/{gate_key}",
+                    "source_uri": f"fdeops://p3/{gate_key}/{index}",
                     "content_hash": hashlib.sha256(item["label"].encode()).hexdigest(),
                 }
-                for item in gate["checklist"]
+                for index, item in enumerate(gate["checklist"])
             ]
         },
     )
     assert response.status_code == 200, response.get_data(as_text=True)
+    revision = response.json["data"]["revision"]
+    assert revision == gate["revision"] + 1
+    return revision
 
 
 def test_g8_conditional_pass_is_rejected(admin_client, gate_project):
     """G8 试点毕业门不允许 conditional_pass：必须书面三态拍板（A1 回归钉）。"""
     _project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
     response = leader_client.post(
-        f"{gates_url}/G8/decision", json={"result": "conditional_pass"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "conditional_pass"}
     )
 
     assert response.status_code == 400
@@ -159,10 +208,10 @@ def test_g8_conditional_pass_is_rejected(admin_client, gate_project):
 def test_g9_conditional_pass_still_allowed(admin_client, gate_project):
     """conditional_pass 仅限 G9 上线门：修复不得误伤。"""
     _project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G9")
+    revision = _submit_all_evidence(admin_client, gates_url, "G9")
 
     response = leader_client.post(
-        f"{gates_url}/G9/decision", json={"result": "conditional_pass"}
+        f"{gates_url}/G9/decision", json={"expected_revision": revision, "result": "conditional_pass"}
     )
 
     assert response.status_code == 200
@@ -172,9 +221,9 @@ def test_g9_conditional_pass_still_allowed(admin_client, gate_project):
 def test_g8_pass_requires_written_decision(admin_client, gate_project):
     """G8 过门必须带 proceed/pivot/stop 三态拍板。"""
     _project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
-    response = leader_client.post(f"{gates_url}/G8/decision", json={"result": "pass"})
+    response = leader_client.post(f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass"})
 
     assert response.status_code == 400
     assert response.json["error"]["code"] == "gate_decision_required"
@@ -183,10 +232,10 @@ def test_g8_pass_requires_written_decision(admin_client, gate_project):
 def test_g8_pass_with_decision_proceeds(admin_client, gate_project):
     """G8 + pass + decision 正常过门，decision 落库。"""
     _project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
     response = leader_client.post(
-        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "proceed"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass", "decision": "proceed"}
     )
 
     assert response.status_code == 200, response.get_data(as_text=True)
@@ -197,10 +246,10 @@ def test_g8_pass_with_decision_proceeds(admin_client, gate_project):
 def test_non_g8_gate_rejects_conditional_pass(admin_client, gate_project):
     """非 G8/G9 门禁的 conditional_pass 一律拒绝。"""
     _project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G6")
+    revision = _submit_all_evidence(admin_client, gates_url, "G6")
 
     response = leader_client.post(
-        f"{gates_url}/G6/decision", json={"result": "conditional_pass"}
+        f"{gates_url}/G6/decision", json={"expected_revision": revision, "result": "conditional_pass"}
     )
 
     assert response.status_code == 400
@@ -271,10 +320,10 @@ def test_g8_stop_flags_g8_settlement_when_row_exists(admin_client, gate_project,
     + 事件 flagged=true + note 追加结算说明；B 尾款照收（不因 stop 免除）。"""
     project, gates_url, leader_client = gate_project
     row = _g8_stop_payment_row(db_session, project)
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
     response = leader_client.post(
-        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "stop"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass", "decision": "stop"}
     )
     assert response.status_code == 200, response.get_data(as_text=True)
     assert response.json["data"]["g8_stop_settlement"] == {"flagged": True, "milestone_key": "G8"}
@@ -298,10 +347,10 @@ def test_g8_stop_flags_g8_settlement_when_row_exists(admin_client, gate_project,
 def test_g8_stop_without_settlement_row_only_records_event(admin_client, gate_project, db_session):
     """CR-009：无 G8 尾款行（计划未建）→ 只留事件 flagged=false，不落标记（建计划时人工确认）。"""
     project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
     response = leader_client.post(
-        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "stop"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass", "decision": "stop"}
     )
     assert response.status_code == 200, response.get_data(as_text=True)
     assert response.json["data"]["g8_stop_settlement"] == {"flagged": False, "milestone_key": "G8"}
@@ -411,15 +460,85 @@ def test_gate_decision_matching_expected_revision_passes_and_bumps(
     assert row.decided_by_user_id is not None
 
 
-def test_gate_decision_without_expected_revision_legacy_allowed(admin_client, gate_project):
-    """B#28 兼容：不带 expected_revision 的旧客户端照常拍板（version 照常推进）。"""
+def test_gate_missing_preconditions_strict_default(admin_client, gate_project):
     _project, gates_url, leader_client = gate_project
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    submitted = admin_client.post(f"{gates_url}/G6/evidence", json={"items": [{
+        "label": gate["checklist"][0]["label"], "source_uri": "fdeops://g6/test", "content_hash": "a" * 64,
+    }]})
+    assert submitted.status_code == 428
+    assert submitted.json["error"]["code"] == "gate_revision_required"
+    assert _gate_snapshot(admin_client, gates_url, "G6") == gate
+
     _submit_all_evidence(admin_client, gates_url, "G6")
+    fresh = _gate_snapshot(admin_client, gates_url, "G6")
+    decided = leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass"})
+    assert decided.status_code == 428
+    assert decided.json["error"]["code"] == "gate_revision_required"
+    assert _gate_snapshot(admin_client, gates_url, "G6") == fresh
 
-    response = leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass"})
 
-    assert response.status_code == 200, response.get_data(as_text=True)
-    assert response.json["data"]["status"] == "passed"
+def test_gate_compatibility_still_validates_supplied_revision(admin_client, gate_project, settings, monkeypatch):
+    monkeypatch.setattr(settings, "ux_write_preconditions_required", False)
+    _project, gates_url, leader_client = gate_project
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    items = [{"label": item["label"], "source_uri": "fdeops://legacy", "content_hash": "a" * 64}
+             for item in gate["checklist"]]
+    submitted = admin_client.post(f"{gates_url}/G6/evidence", json={"items": items})
+    assert submitted.status_code == 200
+    assert submitted.json["data"]["revision"] == gate["revision"] + 1
+    denied = leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass", "expected_revision": gate["revision"]})
+    assert denied.status_code == 409
+    invalid = admin_client.post(f"{gates_url}/G6/evidence", json={"items": items, "expected_revision": None})
+    assert invalid.status_code == 400
+    decided = leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass"})
+    assert decided.status_code == 200
+
+
+def test_gate_compatibility_leaves_a_trace_for_every_skipped_precondition(
+    admin_client, gate_project, settings, monkeypatch, db_session
+):
+    """兼容期放行必须留痕：否则事后无法区分「确认过」与「未确认」。"""
+    monkeypatch.setattr(settings, "ux_write_preconditions_required", False)
+    _project, gates_url, leader_client = gate_project
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    items = [{"label": item["label"], "source_uri": "fdeops://legacy", "content_hash": "a" * 64}
+             for item in gate["checklist"]]
+    assert admin_client.post(f"{gates_url}/G6/evidence", json={"items": items}).status_code == 200
+    assert leader_client.post(f"{gates_url}/G6/decision", json={"result": "pass"}).status_code == 200
+
+    skipped = db_session.scalars(
+        select(OperationEvent)
+        .where(OperationEvent.event_type == "gate_write_precondition_skipped")
+        .order_by(OperationEvent.occurred_at)
+    ).all()
+    assert [event.changes["action"] for event in skipped] == ["evidence", "decision"]
+    assert {event.changes["gate_key"] for event in skipped} == {"G6"}
+
+
+def test_gate_strict_mode_records_no_skipped_precondition(
+    admin_client, gate_project, db_session
+):
+    """严格模式（默认）下所有写都带条件，不得出现放行留痕。"""
+    _project, gates_url, leader_client = gate_project
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    items = [{"label": item["label"], "source_uri": "fdeops://strict", "content_hash": "b" * 64}
+             for item in gate["checklist"]]
+    submitted = admin_client.post(
+        f"{gates_url}/G6/evidence",
+        json={"items": items, "expected_revision": gate["revision"]},
+    )
+    assert submitted.status_code == 200
+    revision = submitted.json["data"]["revision"]
+    assert leader_client.post(
+        f"{gates_url}/G6/decision",
+        json={"result": "pass", "expected_revision": revision},
+    ).status_code == 200
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(OperationEvent)
+        .where(OperationEvent.event_type == "gate_write_precondition_skipped")
+    ) == 0
 
 
 def test_gate_decision_rejects_non_integer_expected_revision(admin_client, gate_project):
@@ -427,7 +546,7 @@ def test_gate_decision_rejects_non_integer_expected_revision(admin_client, gate_
     _project, gates_url, leader_client = gate_project
     _submit_all_evidence(admin_client, gates_url, "G6")
 
-    for bad in ("1", True, 0):
+    for bad in ("1", True, 0, None):
         response = leader_client.post(
             f"{gates_url}/G6/decision", json={"result": "pass", "expected_revision": bad}
         )
@@ -480,8 +599,9 @@ def test_gate_view_exposes_revision_and_decision_accepts_it(
     assert response.json["data"]["revision"] == fresh["revision"] + 1
 
 
+@pytest.mark.parametrize("already_decided", [False, True], ids=["awaiting-review", "passed"])
 def test_gate_evidence_superseded_flag_detects_recollected_source(
-    admin_client, gate_project, db_session
+    admin_client, gate_project, db_session, already_decided
 ):
     """B#30-A 前置复核：同一 source_uri 被重新采集（换 hash）⇒ 项级证据已换版。
 
@@ -492,12 +612,18 @@ def test_gate_evidence_superseded_flag_detects_recollected_source(
     门禁状态机五值、claim_status、拍板有效性均不变（呈现即提示）。
     """
     project, gates_url, leader_client = gate_project
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
 
-    gates = admin_client.get(gates_url).json["data"]["gates"]
-    g8 = next(gate for gate in gates if gate["gate_key"] == "G8")
+    g8 = _gate_snapshot(admin_client, gates_url, "G8")
     item = g8["checklist"][0]
     assert item["evidence_superseded"] is False
+    if already_decided:
+        decided = leader_client.post(
+            f"{gates_url}/G8/decision",
+            json={"result": "pass", "decision": "proceed", "expected_revision": revision},
+        )
+        assert decided.status_code == 200, decided.get_data(as_text=True)
+        g8 = decided.json["data"]
     original_uri = item["source_uri"]
     original_hash = item["content_hash"]
     original_evidence_id = item["evidence_id"]
@@ -527,9 +653,10 @@ def test_gate_evidence_superseded_flag_detects_recollected_source(
     assert after_item["evidence_superseded"] is True
     assert after_item["evidence_id"] == original_evidence_id  # 仍指向原行（不自动改指针）
     # 四不动：状态机五值 / claim_status / 拍板有效性 均不变
-    assert after_g8["status"] == g8["status"] == "evidence"
-    assert after_item["claim_status"] == g8["checklist"][0]["claim_status"] == "claimed"
-    assert after_g8["decision"] == g8["decision"] is None
+    assert after_g8["status"] == g8["status"]
+    assert after_item["claim_status"] == g8["checklist"][0]["claim_status"]
+    assert after_g8["decision"] == g8["decision"]
+    assert after_g8["revision"] == g8["revision"]  # 只读换版提示
     # 不携带新行指针（跳转走既有 evidence 登记簿面）
     assert "superseded_evidence_id" not in after_item
 
@@ -547,3 +674,155 @@ def test_gate_evidence_superseded_flag_stays_false_without_recollection(
     # 未提交的清单项（无 evidence_id）不得带此键为真
     pending = next(gate for gate in gates if gate["gate_key"] == "G1")
     assert all(item["evidence_superseded"] is False for item in pending["checklist"])
+
+
+@pytest.mark.parametrize("initially_empty", [True, False], ids=["first-fill", "replace"])
+def test_stale_evidence_leaves_gate_candidate_registry_and_audit_unchanged(
+    admin_client, gate_project, db_session, initially_empty
+):
+    project, gates_url, leader_client = gate_project
+    if not initially_empty:
+        _submit_all_evidence(admin_client, gates_url, "G6")
+    old = _gate_snapshot(admin_client, gates_url, "G6")
+    label = old["checklist"][0]["label"]
+    candidate = {"source_uri": "fdeops://g6/candidate", "content_hash": "c" * 64}
+    db_session.execute(update(Gate).where(Gate.project_id == project["id"], Gate.gate_key == "G6")
+                       .values(evidence_candidates=[candidate]))
+    db_session.commit()
+    winning_item = {"label": label, "source_uri": "fdeops://g6/winning", "content_hash": "b" * 64}
+    winner = leader_client.post(f"{gates_url}/G6/evidence", json={
+        "items": [winning_item], "expected_revision": old["revision"],
+    })
+    assert winner.status_code == 200
+    view = admin_client.get(gates_url).json["data"]
+    before_count = _evidence_count(db_session, project["id"])
+    loser = admin_client.post(f"{gates_url}/G6/evidence", json={
+        "items": [{"label": label, **candidate}], "expected_revision": old["revision"],
+    })
+    assert loser.status_code == 409
+    assert loser.json["error"]["code"] == "gate_revision_conflict"
+    assert admin_client.get(gates_url).json["data"] == view
+    assert _evidence_count(db_session, project["id"]) == before_count
+    assert _gate_snapshot(admin_client, gates_url, "G6")["evidence_candidates"]
+
+
+def _evidence_count(session, project_id):
+    return session.scalar(select(func.count()).select_from(ProjectEvidence)
+                          .where(ProjectEvidence.project_id == project_id))
+
+
+def test_same_evidence_with_new_submitter_invalidates_open_decision(admin_client, gate_project):
+    _project, gates_url, leader_client = gate_project
+    old_revision = _submit_all_evidence(leader_client, gates_url, "G6")
+    old = _gate_snapshot(admin_client, gates_url, "G6")
+    new_revision = _submit_all_evidence(admin_client, gates_url, "G6")
+    fresh = _gate_snapshot(leader_client, gates_url, "G6")
+    assert fresh["checklist"] == old["checklist"]
+    assert fresh["submitted_by_user_id"] != old["submitted_by_user_id"]
+    denied = leader_client.post(f"{gates_url}/G6/decision", json={
+        "result": "pass", "expected_revision": old_revision,
+    })
+    assert denied.status_code == 409
+    assert denied.json["error"]["code"] == "gate_revision_conflict"
+    assert _gate_snapshot(leader_client, gates_url, "G6") == fresh
+    accepted = leader_client.post(f"{gates_url}/G6/decision", json={
+        "result": "pass", "expected_revision": new_revision,
+        "accepted_labels": [item["label"] for item in fresh["checklist"]],
+    })
+    assert accepted.status_code == 200
+    assert accepted.json["data"]["status"] == "passed"
+
+
+@pytest.mark.parametrize("contender_action", ["evidence", "decision"])
+def test_gate_writes_overlap_in_postgres(admin_client, gate_project, db_session, app, contender_action):
+    """确认竞争写请求在 PostgreSQL 上等待证据写入事务。"""
+    project, gates_url, leader_client = gate_project
+    engine = app.extensions["fde_api_db"]
+    if engine.dialect.name != "postgresql":
+        pytest.skip("需要 PostgreSQL 的 pg_blocking_pids 实证")
+
+    revision = _submit_all_evidence(admin_client, gates_url, "G6")
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    label = gate["checklist"][0]["label"]
+    writer_flushed = Event()
+    release_writer = Event()
+    contender_waiting = Event()
+    pids = {}
+
+    def before_execute(conn, cursor, statement, parameters, context, executemany):
+        if (
+            conn.info.get("ux_gate_test_role") == "contender"
+            and "FROM projects" in statement
+            and "FOR NO KEY UPDATE" in statement
+        ):
+            contender_waiting.set()
+
+    def after_execute(conn, cursor, statement, parameters, context, executemany):
+        # 门禁 UPDATE 已真正执行，事务尚未提交。
+        if conn.info.get("ux_gate_test_role") == "evidence" and statement.startswith("UPDATE gates SET"):
+            writer_flushed.set()
+            assert release_writer.wait(10), "未释放证据写事务"
+
+    def tag_connection(conn):
+        from threading import current_thread
+
+        role = current_thread().name.split("_")[0]
+        if role in ("evidence", "contender"):
+            conn.info["ux_gate_test_role"] = role
+            pids[role] = conn.connection.driver_connection.info.backend_pid
+        else:
+            conn.info.pop("ux_gate_test_role", None)
+
+    def post(person, action, payload):
+        return app.test_client().post(f"{gates_url}/G6/{action}", json=payload, headers=person.headers)
+
+    event.listen(engine, "engine_connect", tag_connection)
+    event.listen(engine, "before_cursor_execute", before_execute)
+    event.listen(engine, "after_cursor_execute", after_execute)
+    try:
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="evidence") as winners,              ThreadPoolExecutor(max_workers=1, thread_name_prefix="contender") as losers:
+            evidence = winners.submit(post, admin_client, "evidence", {
+                "expected_revision": revision,
+                "items": [{"label": label, "source_uri": "fdeops://g6/concurrent", "content_hash": "d" * 64}],
+            })
+            try:
+                assert writer_flushed.wait(10), "证据写入未到达 UPDATE"
+                contender_payload = {"expected_revision": revision}
+                if contender_action == "decision":
+                    contender_payload.update(result="pass", accepted_labels=[label])
+                else:
+                    contender_payload["items"] = [{
+                        "label": gate["checklist"][1]["label"],
+                        "source_uri": "fdeops://g6/stale-concurrent",
+                        "content_hash": "e" * 64,
+                    }]
+                contender = losers.submit(post, leader_client, contender_action, contender_payload)
+                assert contender_waiting.wait(10), "竞争事务未发起加锁查询"
+                with engine.connect() as connection:
+                    deadline = monotonic() + 4
+                    while monotonic() < deadline:
+                        blocking = connection.scalar(text("SELECT pg_blocking_pids(:pid)"), {"pid": pids["contender"]})
+                        if pids["evidence"] in blocking:
+                            break
+                        sleep(0.01)
+                    else:
+                        pytest.fail("未观察到竞争事务被证据写入事务锁阻塞")
+            finally:
+                release_writer.set()
+            assert evidence.result(timeout=10).status_code == 200
+            denied = contender.result(timeout=10)
+            assert denied.status_code == 409
+            assert denied.json["error"]["code"] == "gate_revision_conflict"
+    finally:
+        event.remove(engine, "engine_connect", tag_connection)
+        event.remove(engine, "before_cursor_execute", before_execute)
+        event.remove(engine, "after_cursor_execute", after_execute)
+
+    view = admin_client.get(gates_url).json["data"]
+    gate = next(gate for gate in view["gates"] if gate["gate_key"] == "G6")
+    assert gate["revision"] == revision + 1
+    assert gate["status"] == "evidence"
+    assert gate["checklist"][0]["claim_status"] == "claimed"
+    assert not any(row["event_type"] == "gate_decided" for row in view["events"])
+    assert sum(row["event_type"] == "gate_evidence_submitted" for row in view["events"]) == 2
+    assert _evidence_count(db_session, project["id"]) == len(gate["checklist"]) + 1

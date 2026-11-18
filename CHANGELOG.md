@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 桌面写入安全 P0：任务语义合并／事实批审范围／门禁条件写／交付登记绑定封存批次（2026-11-18）
+
+承 `docs/design/ux-p0/`（#521 归档的设计、体验方案、两轮评审与实施任务书）。本轮把「用户确认过的内容」变成服务端可校验的写入前置条件：**零迁移零新路由零新表**，口径不变（524 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。活体部署、严格切换与正式打包均未执行。
+
+- **G2 门禁条件写**（`server/src/fde_api/projects/gate_service.py`、`desktop/src/renderer/src/projects/GateBoard.tsx`）：证据提交与人工裁定共用一个门禁 `revision`；打开确认时冻结版本，服务端在同一门禁行锁内比对，证据提交成功同事务推进版本。新增 `_require_gate_revision`（缺条件 428 `gate_revision_required`／非正整数 400／陈旧 409 `gate_revision_conflict`）。**锁内重新鉴权**：先取项目行锁并 `populate_existing` 刷新项目与成员，再按最新权限判定，堵住「等待锁期间负责人被换」的窗口；取锁顺序固定为项目行 → 门禁行。候选目标默认留空，替换前预览旧/新引用与「替换后待核验」；冲突不自动换版本重发。
+- **G3 交付登记绑定封存批次**（`server/src/fde_api/handover/service.py`、`routes.py`、`desktop/src/renderer/src/handover/HandoverPackagesPanel.tsx`）：登记必须携带用户确认时看到的完整 `expected_manifest_sha256` 与 `expected_unsealed_count`，在同包行锁与同一事务内复核项目授权、admin、状态与预期批次后才写终态与成功事件。新增 `_lock_package`（写路径 `FOR UPDATE`、详情路径共享锁，避免包头与清单混读），编辑/封存/解封/登记共用同一把锁；**同清单解封重封也作废旧确认**。缺条件 428 `write_preconditions_required`、条件不全或非法 422 `invalid_write_preconditions`、批次不符 409 `handover_snapshot_conflict`。界面区分「本次登记成功」与「回读发现已登记」；结果未知时即使回读仍是同一封存批次也保持「待核对」并锁住登记/解封，只留查询入口。
+- **G3a 封包含读取反馈**：列表与各类候选分别呈现加载、真实空、读取失败、已有数据未更新四种状态，支持分区原地重试并保留跨类型勾选。
+- **G1 任务语义合并**（`desktop/src/renderer/src/projects/TaskEditor.tsx`）：保存基线改为 `{draft, version}`，按 `DRAFT_GROUPS`（状态/进度/阻塞原因、开始/结束/工期、负责人/协作人、前置任务、说明）做三方比较；只发送变更组，组间独立改动自动重基，同组双改展示「打开时／最新值／我的草稿」并要求选择。刷新失败保留草稿并继续拦截；管理权限丢失或 403/404 后禁止再次提交。服务端 CAS 与 `_normalized_scalar_values` 联动规则未改。
+- **G1 事实批审范围**（`server/src/fde_api/discovery/service.py`、`desktop/src/renderer/src/discovery/DiscoveryPanel.tsx`）：批量请求携带 `expected_review_status`，服务端在行锁内先判权限再判前置状态（离开 pending 409 `fact_review_state_changed`，非法条件 400 `invalid_review_precondition`），单条人工澄清后采纳流程不受影响。界面冻结「当前筛选 · 已加载 · 明确勾选」的预览 ID，用 `loadGeneration` 丢弃上一筛选的迟到列表响应，只有当前查询已加载且状态筛选为全部或待审时才允许进入批量选择。
+- **兼容与严格**：新增 `Settings.ux_write_preconditions_required`（`FDE_UX_WRITE_PRECONDITIONS_REQUIRED`，代码默认严格）。兼容期只对**完全省略**条件的旧请求放行；部分、非法或陈旧条件一律拒绝，不存在部分放宽。客户端以显式 `write_preconditions: "v1"` 判断服务端能力，不以既有 `revision`/摘要字段存在为据。
+- **调用方同步**：`scripts/gate-engine-smoke.py`、`scripts/commercial-smoke.py`、`scripts/verify/verify_order_to_delivery_e2e.py` 改为先读确认快照再写；贯通脚本 S29 读封存摘要、S30 携带批次登记。
+- 测试：服务端新增门禁条件写与双事务真实重叠（`pg_blocking_pids`）、封包批次绑定与并发串行、事实前置状态等用例；桌面新增任务组冲突、事实批审范围、门禁确认、登记回读等待核对等用例。隔离环境实测服务端全量 4105 通过／7 跳过、桌面 1253 通过、类型检查与两处构建退出 0；证据与被排除项见 `docs/design/ux-p0/隔离验收记录-2026-11-18.md`。
+- **未完成（发布前置）**：回退时的写入暂停需覆盖桌面直连与脚本入口，仓库现无统一暂停开关；门禁人工裁定与事实批审的真机走查；正式便携版与 asar 字节核验；活体部署与严格切换。以上均待单独授权。
+
 ## [未发布] — L-C 改判写面轮：条款③后半四项拍板全落实施（W1 服务端＋W2 桌面，2026-11-18）
 
 承设计稿 `docs/architecture/L-C改判写面-设计稿-v1.md`（#516）与蔡工四项交互拍板（全落推荐项：**supersede＝查询口径收敛（零写面零迁移）／裁定留痕＝detail_json 追加（不加 operation_event）／实施时点＝现在就开 W1+W2**）。**+1 路由（523→524）零迁移零表**：口径 524 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`。

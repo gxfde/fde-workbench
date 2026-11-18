@@ -11,7 +11,14 @@
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from threading import Event
+from time import monotonic, sleep
 from uuid import uuid4
+
+import pytest
+from sqlalchemy import text
 
 from test_agents_d4_harness import (
     ApiClient,
@@ -32,6 +39,7 @@ from fde_api.documents.models import (
     ProjectDocumentVersion,
 )
 from fde_api.files.models import ProjectFile, ProjectFileVersion
+from fde_api.handover import service as handover_service
 from fde_api.handover.models import HandoverPackage, HandoverPackageItem
 from fde_api.workbench.models import OperationEvent, ProjectMember
 
@@ -192,6 +200,155 @@ def test_fingerprint_drift_rejected_at_seal(db_session, d4_client, d4_settings) 
     assert sealed.get_json()["error"]["code"] == "fingerprint_drift"
 
 
+def _delivery_conditions(snapshot: dict) -> dict:
+    return {
+        "expected_manifest_sha256": snapshot["manifest_sha256"],
+        "expected_unsealed_count": snapshot["unsealed_count"],
+    }
+
+
+@pytest.fixture
+def delivery_case(db_session, d4_client, d4_settings):
+    leader = api_client(d4_client, db_session, d4_settings, "project_lead")
+    project = _persist_project(db_session, leader.user, code=f"G3{uuid4().hex[:8]}")
+    agent = seed_agent(db_session, d4_settings)
+    artifact = _seed_reviewed_artifact(db_session, project, leader.user, agent.id)
+    package = _create_package(leader, project, [artifact.id])
+    return leader, _make_admin_client(db_session, d4_client, d4_settings), f"/api/v1/handover-packages/{package['id']}"
+
+
+def test_reseal_same_digest_invalidates_old_confirmation(delivery_case, db_session, monkeypatch) -> None:
+    leader, admin, path = delivery_case
+    frozen = datetime.now(UTC)
+
+    class FrozenDateTime:
+        @staticmethod
+        def now(_tz):
+            return frozen
+
+    monkeypatch.setattr(handover_service, "datetime", FrozenDateTime)
+    first = leader.post(f"{path}/seal").get_json()["data"]
+    assert leader.post(f"{path}/unseal").status_code == 200
+    second = leader.post(f"{path}/seal").get_json()["data"]
+    assert first["manifest_sha256"] == second["manifest_sha256"]
+    assert second["unsealed_count"] == first["unsealed_count"] + 1
+    for conditions in (_delivery_conditions(first), {**_delivery_conditions(second), "expected_manifest_sha256": "0" * 64}):
+        stale = admin.post(f"{path}/deliver", json=conditions)
+        assert stale.status_code == 409
+        assert stale.get_json()["error"]["code"] == "handover_snapshot_conflict"
+    assert admin.get(path).get_json()["data"] == second
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").count() == 0
+    assert admin.post(f"{path}/deliver", json=_delivery_conditions(second)).status_code == 200
+    event = db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").one()
+    assert event.changes["manifest_sha256"] == second["manifest_sha256"]
+    assert event.changes["unsealed_count"] == second["unsealed_count"]
+
+
+def test_compatibility_only_allows_absent_conditions(delivery_case, d4_app, monkeypatch) -> None:
+    leader, admin, path = delivery_case
+    monkeypatch.setattr(d4_app.config["SETTINGS"], "ux_write_preconditions_required", False)
+    sealed = leader.post(f"{path}/seal").get_json()["data"]
+    assert admin.get(path).get_json()["data"]["write_preconditions"] == "v1"
+    assert admin.post(f"{path}/deliver", json={"expected_unsealed_count": 0}).status_code == 422
+    assert admin.post(f"{path}/deliver", data="null", content_type="application/json").status_code == 400
+    assert admin.post(f"{path}/deliver", json={**_delivery_conditions(sealed), "expected_unsealed_count": 1}).status_code == 409
+    assert admin.post(f"{path}/deliver").status_code == 200
+
+
+def test_compatibility_records_a_trace_when_conditions_are_absent(
+    delivery_case, d4_app, db_session, monkeypatch
+) -> None:
+    """兼容期放行必须留痕：否则该终态与「确认过」在审计里不可区分。"""
+    leader, admin, path = delivery_case
+    monkeypatch.setattr(d4_app.config["SETTINGS"], "ux_write_preconditions_required", False)
+    package_id = path.rsplit("/", 1)[-1]
+    leader.post(f"{path}/seal")
+    assert admin.post(f"{path}/deliver").status_code == 200
+    skipped = db_session.query(OperationEvent).filter_by(event_type="handover_precondition_skipped").one()
+    assert skipped.changes["package_id"] == package_id
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").count() == 1
+
+
+def test_strict_mode_records_no_skipped_precondition(delivery_case, db_session) -> None:
+    """严格模式（默认）登记带条件，不得出现放行留痕。"""
+    leader, admin, path = delivery_case
+    sealed = leader.post(f"{path}/seal").get_json()["data"]
+    assert admin.post(f"{path}/deliver", json=_delivery_conditions(sealed)).status_code == 200
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_precondition_skipped").count() == 0
+
+
+@pytest.mark.parametrize(("first_action", "second_action", "error_code"), [
+    ("seal", "edit", "package_not_draft"),
+    ("unseal", "deliver", "package_not_sealed"),
+    ("deliver", "unseal", "package_not_sealed"),
+    ("deliver", "deliver", "already_delivered"),
+])
+def test_package_mutations_serialize_in_postgres(
+    delivery_case, d4_app, db_session, monkeypatch, first_action, second_action, error_code,
+) -> None:
+    leader, admin, path = delivery_case
+    conditions = {}
+    if first_action != "seal":
+        sealed = leader.post(f"{path}/seal").get_json()["data"]
+        conditions = _delivery_conditions(sealed)
+
+    entered, release = Event(), Event()
+    blocker_pid: list[int] = []
+    original = handover_service.record_event
+
+    def pause_before_commit(session, actor, event_type, *args, **kwargs):
+        if event_type == f"handover_package_{first_action}ed" and not blocker_pid:
+            blocker_pid.append(session.scalar(text("SELECT pg_backend_pid()")))
+            entered.set()
+            assert release.wait(12), "first mutation was not released"
+        return original(session, actor, event_type, *args, **kwargs)
+
+    monkeypatch.setattr(handover_service, "record_event", pause_before_commit)
+
+    def request(action, client):
+        with d4_app.test_client() as http:
+            if action == "edit":
+                return http.patch(path, headers=client.headers, json={"label": "不应覆盖封存包"})
+            return http.post(f"{path}/{action}", headers=client.headers, json=conditions)
+
+    second_admin = admin
+    if first_action == second_action == "deliver":
+        second_admin = _make_admin_client(db_session, d4_app.test_client(), d4_app.config["SETTINGS"])
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(request, first_action, admin if first_action == "deliver" else leader)
+        try:
+            assert entered.wait(8), "first mutation did not reach the held transaction"
+            second = pool.submit(request, second_action, second_admin if second_action == "deliver" else leader)
+            deadline = monotonic() + 8
+            # PostgreSQL confirms overlap without relying on a timing-only assertion.
+            while monotonic() < deadline:
+                db_session.commit()  # pg_stat_activity is cached until observer transaction ends
+                if db_session.scalar(text("""
+                    SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                    WHERE :blocker = ANY(pg_blocking_pids(pid)))
+                """), {"blocker": blocker_pid[0]}):
+                    break
+                assert not second.done(), "second mutation finished before first committed"
+                sleep(0.02)
+            else:
+                pytest.fail("second mutation never blocked on first transaction")
+        finally:
+            release.set()
+        assert first.result(timeout=8).status_code == 200
+        rejected = second.result(timeout=8)
+    assert rejected.status_code == 409
+    assert rejected.get_json()["error"]["code"] == error_code
+    final = admin.get(path).get_json()["data"]
+    expected = {"seal": "sealed", "unseal": "draft", "deliver": "delivered"}
+    assert final["status"] == expected[first_action]
+    assert final["label"] == "结项交付包"
+    delivered_events = db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").all()
+    assert len(delivered_events) == int(first_action == "deliver")
+    if delivered_events:
+        assert delivered_events[0].changes["manifest_sha256"] == final["manifest_sha256"]
+        assert delivered_events[0].changes["unsealed_count"] == final["unsealed_count"]
+
+
 def test_deliver_admin_only_and_irreversible(db_session, d4_client, d4_settings) -> None:
     """交付登记=admin 专属（D11 草案权限）；delivered 终态不可逆。"""
     leader = api_client(d4_client, db_session, d4_settings, "project_lead")
@@ -209,8 +366,23 @@ def test_deliver_admin_only_and_irreversible(db_session, d4_client, d4_settings)
     assert manager_deliver.status_code == 403
     assert manager_deliver.get_json()["error"]["code"] == "admin_required"
 
-    assert leader.post(f"/api/v1/handover-packages/{package['id']}/seal").status_code == 200
-    delivered = admin.post(f"/api/v1/handover-packages/{package['id']}/deliver")
+    path = f"/api/v1/handover-packages/{package['id']}"
+    assert leader.post(f"{path}/seal").status_code == 200
+    sealed = admin.get(path).get_json()["data"]
+    assert sealed["write_preconditions"] == "v1"
+    missing = admin.post(f"{path}/deliver")
+    assert missing.status_code == 428
+    assert missing.get_json()["error"]["code"] == "write_preconditions_required"
+    conditions = _delivery_conditions(sealed)
+    for invalid in (
+        {"expected_manifest_sha256": conditions["expected_manifest_sha256"]},
+        {**conditions, "expected_unsealed_count": False},
+        {**conditions, "expected_unsealed_count": -1},
+        {**conditions, "expected_manifest_sha256": "a" * 12},
+    ):
+        assert admin.post(f"{path}/deliver", json=invalid).status_code == 422
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").count() == 0
+    delivered = admin.post(f"{path}/deliver", json=conditions)
     assert delivered.status_code == 200
     body = delivered.get_json()["data"]
     assert body["status"] == "delivered"

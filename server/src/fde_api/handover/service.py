@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -63,6 +64,17 @@ def _load_package_for(session: Any, actor: User, package_id: str, *, manage: boo
         raise _error("package_not_found", "交付包不存在。", 404)
     project = _load_project_for(session, actor, package.project_id, manage=manage)
     return package, project
+
+
+def _lock_package(session: Any, package_id: str, *, read: bool = False) -> HandoverPackage:
+    # 先授权再锁；等待另一事务后必须覆盖 identity map 里的旧状态。
+    package = session.scalar(
+        select(HandoverPackage).where(HandoverPackage.id == package_id)
+        .with_for_update(read=read).execution_options(populate_existing=True)
+    )
+    if package is None:
+        raise _error("package_not_found", "交付包不存在。", 404)
+    return package
 
 
 def _require_admin(actor: User) -> None:
@@ -337,6 +349,7 @@ def _serialize_package(row: HandoverPackage, *, detail: bool, session: Any) -> d
     if row.status != "draft":
         data["manifest_sha256"] = row.manifest_sha256
     if detail:
+        data["write_preconditions"] = "v1"
         items = list(session_items(session, row.id))
         data["items"] = [
             {
@@ -424,14 +437,17 @@ def list_packages(*, actor: User, project_id: str | None, limit: int, offset: in
 def get_package(*, actor: User, package_id: str) -> dict[str, Any]:
     session = _session()
     with session.begin():
-        package, _project = _load_package_for(session, actor, package_id, manage=False)
+        _load_package_for(session, actor, package_id, manage=False)
+        # 包头与清单分两条 SELECT；共享锁确保详情不会混合两个批次。
+        package = _lock_package(session, package_id, read=True)
         return _serialize_package(package, detail=True, session=session)
 
 
 def update_package(*, actor: User, package_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     session = _session()
     with session.begin():
-        package, _project = _load_package_for(session, actor, package_id, manage=True)
+        _load_package_for(session, actor, package_id, manage=True)
+        package = _lock_package(session, package_id)
         if package.status != "draft":
             raise _error("package_not_draft", "只有草稿包可编辑（封存后清单冻结；解封后回草稿再编辑）。", 409)
         if "label" in payload:
@@ -524,9 +540,10 @@ def _seal_check_file_version(session: Any, package: HandoverPackage, item: Hando
 def seal_package(*, actor: User, package_id: str) -> dict[str, Any]:
     """封存：冻结清单 + 逐项校验（存在/本项目/状态闸/指纹一致）+ manifest 规范化哈希。"""
     session = _session()
-    now = datetime.now(UTC)
     with session.begin():
-        package, project = _load_package_for(session, actor, package_id, manage=True)
+        _, project = _load_package_for(session, actor, package_id, manage=True)
+        package = _lock_package(session, package_id)
+        now = datetime.now(UTC)
         if package.status != "draft":
             raise _error("package_not_draft", "只有草稿包可封存。", 409)
         items = list(session_items(session, package.id))
@@ -555,9 +572,10 @@ def seal_package(*, actor: User, package_id: str) -> dict[str, Any]:
 
 def unseal_package(*, actor: User, package_id: str) -> dict[str, Any]:
     session = _session()
-    now = datetime.now(UTC)
     with session.begin():
-        package, project = _load_package_for(session, actor, package_id, manage=True)
+        _, project = _load_package_for(session, actor, package_id, manage=True)
+        package = _lock_package(session, package_id)
+        now = datetime.now(UTC)
         if package.status != "sealed":
             raise _error("package_not_sealed", "只有已封存包可解封（draft 无需解封；delivered 不可逆）。", 409)
         package.status = "draft"
@@ -574,25 +592,53 @@ def unseal_package(*, actor: User, package_id: str) -> dict[str, Any]:
         return _serialize_package(package, detail=True, session=session)
 
 
-def deliver_package(*, actor: User, package_id: str) -> dict[str, Any]:
-    """交付登记（admin 专属）：sealed→delivered，终态不可逆（指纹链已出系统，需人工处置）。"""
+def deliver_package(*, actor: User, package_id: str, payload: Any, preconditions_required: bool = True) -> dict[str, Any]:
+    """交付登记（admin 专属）：只有用户确认的封存批次可以进入终态。"""
     session = _session()
-    now = datetime.now(UTC)
     with session.begin():
-        package, project = _load_package_for(session, actor, package_id, manage=True)
+        _, project = _load_package_for(session, actor, package_id, manage=True)
         _require_admin(actor)
+        package = _lock_package(session, package_id)
         if package.status == "delivered":
             raise _error("already_delivered", "该包已登记交付（终态不可逆）。", 409)
         if package.status != "sealed":
-            raise _error("package_not_sealed", "只有已封存包可登记交付。", 409)
+            raise _error("package_not_sealed", "只有已封存包可登记交付。请重新读取交付包。", 409)
+        skipped = _require_delivery_snapshot(package, payload, required=preconditions_required)
         package.status = "delivered"
         package.delivered_by_user_id = actor.id
-        package.delivered_at = now
+        package.delivered_at = datetime.now(UTC)
+        if skipped:
+            # 兼容期放行省略条件的登记必须留痕，否则该终态与「确认过」不可区分。
+            record_event(session, actor, "handover_precondition_skipped", project, {
+                "package_id": package.id,
+                "manifest_sha256": package.manifest_sha256,
+                "unsealed_count": package.unsealed_count,
+            })
         record_event(session, actor, "handover_package_delivered", project, {
             "package_id": package.id,
             "manifest_sha256": package.manifest_sha256,
+            "unsealed_count": package.unsealed_count,
         })
         return _serialize_package(package, detail=True, session=session)
+
+
+def _require_delivery_snapshot(package: HandoverPackage, payload: Any, *, required: bool) -> bool:
+    """True 表示兼容期放行了省略条件的登记（调用方须留痕）。"""
+    if not isinstance(payload, dict):
+        raise _error("invalid_request", "请求内容必须为 JSON 对象。", 400)
+    digest_key = "expected_manifest_sha256"
+    count_key = "expected_unsealed_count"
+    if digest_key not in payload and count_key not in payload:
+        if required:
+            raise _error("write_preconditions_required", "交付登记需要封存批次确认。请升级客户端并重新读取交付包。", 428)
+        return True
+    digest = payload.get(digest_key)
+    count = payload.get(count_key)
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) or type(count) is not int or count < 0:
+        raise _error("invalid_write_preconditions", "交付登记需要完整的封存摘要和有效的解封次数。", 422)
+    if digest != package.manifest_sha256 or count != package.unsealed_count:
+        raise _error("handover_snapshot_conflict", "封存批次已变化，本次未登记。请重新读取并确认交付包。", 409)
+    return False
 
 
 def available_artifacts(*, actor: User, project_id: str, item_type: str = "artifact") -> dict[str, Any]:

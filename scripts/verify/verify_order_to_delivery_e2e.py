@@ -454,13 +454,28 @@ def main() -> None:
     status, data = data_of(call("POST", f"/api/v1/handover-packages/{hpack_id}/seal", admin_token,
                                 base_url=args.base_url))
     manifest = (data or {}).get("manifest_sha256")
+    sealed_count = (data or {}).get("unsealed_count")
     step(29, "封存（manifest 冻结）", status == 200 and bool(manifest),
          f"manifest={str(manifest)[:16]}…")
 
-    # S30 交付登记
+    # S30 从授权详情读能力与封存批次，再登记（无兼容回退）。
+    status, snapshot = data_of(call("GET", f"/api/v1/handover-packages/{hpack_id}",
+                                    admin_token, base_url=args.base_url))
+    snapshot = snapshot or {}
+    count = snapshot.get("unsealed_count")
+    if (status != 200 or snapshot.get("write_preconditions") != "v1"
+            or snapshot.get("status") != "sealed" or snapshot.get("manifest_sha256") != manifest
+            or type(count) is not int or count < 0 or count != sealed_count):
+        step(30, "交付登记（终态）", False, "未取得支持条件写的同一封存批次")
+        return
     status, data = data_of(call("POST", f"/api/v1/handover-packages/{hpack_id}/deliver",
-                                admin_token, base_url=args.base_url))
-    step(30, "交付登记（终态）", status == 200 and (data or {}).get("status") == "delivered", "")
+                                admin_token, body={
+                                    "expected_manifest_sha256": manifest,
+                                    "expected_unsealed_count": count,
+                                }, base_url=args.base_url))
+    data = data or {}
+    step(30, "交付登记（终态）", status == 200 and data.get("status") == "delivered"
+         and data.get("manifest_sha256") == manifest and data.get("unsealed_count") == count, "")
 
     print("\n===== 贯通链收束 =====")
     print(json.dumps({

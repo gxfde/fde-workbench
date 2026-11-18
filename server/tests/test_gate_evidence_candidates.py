@@ -236,11 +236,13 @@ def test_adoption_prunes_candidate_and_claims_item(admin_client, leader_client, 
         admin_client, project["id"], _tasks(admin_client, project["id"])[0],
         gate="G6", evidence_uri=URI_A, evidence_hash=HASH_A, status="completed",
     )
-    label = _gate(admin_client, project["id"], "G6")["checklist"][0]["label"]
+    before = _gate(admin_client, project["id"], "G6")
+    label = before["checklist"][0]["label"]
 
     response = admin_client.post(
         f"/api/v1/projects/{project['id']}/gates/G6/evidence",
         json={
+            "expected_revision": before["revision"],
             "items": [
                 {"label": label, "source_uri": URI_A, "content_hash": HASH_A.upper()}
             ]
@@ -274,7 +276,7 @@ def test_partial_adoption_keeps_other_candidates(admin_client, candidate_project
 
     response = admin_client.post(
         f"/api/v1/projects/{project['id']}/gates/G6/evidence",
-        json={"items": [{"label": label, "source_uri": URI_A, "content_hash": HASH_A}]},
+        json={"expected_revision": gate["revision"], "items": [{"label": label, "source_uri": URI_A, "content_hash": HASH_A}]},
     )
     assert response.status_code == 200, response.get_data(as_text=True)
     remaining = response.json["data"]["evidence_candidates"]
@@ -295,6 +297,7 @@ def test_decide_gate_ignores_candidates(admin_client, leader_client, candidate_p
     response = admin_client.post(
         f"/api/v1/projects/{project['id']}/gates/G6/evidence",
         json={
+            "expected_revision": gate["revision"],
             "items": [
                 {
                     "label": label,
@@ -311,7 +314,7 @@ def test_decide_gate_ignores_candidates(admin_client, leader_client, candidate_p
 
     decide = leader_client.post(
         f"/api/v1/projects/{project['id']}/gates/G6/decision",
-        json={"result": "pass", "accepted_labels": labels},
+        json={"result": "pass", "accepted_labels": labels, "expected_revision": response.json["data"]["revision"]},
     )
     assert decide.status_code == 200, decide.get_data(as_text=True)
     assert decide.json["data"]["status"] == "passed"

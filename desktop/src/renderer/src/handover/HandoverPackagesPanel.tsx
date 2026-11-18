@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
+import { Modal, UiButton } from "../components/ui"
 
 // T-B1 封包半（goal-tb tb4）：结项交付包面板（delivery tab，方案设计下方）。
 // 生命周期 draft→sealed→delivered；封存冻结清单+manifest 指纹；交付登记=
@@ -39,6 +40,7 @@ interface PackageItemDto {
 
 interface PackageDetailDto extends PackageRowDto {
   items: PackageItemDto[]
+  write_preconditions?: string
   manifest?: {
     package_id: string
     label: string | null
@@ -167,12 +169,33 @@ interface HandoverPackagesPanelProps {
   isAdmin: boolean
 }
 
-export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: HandoverPackagesPanelProps) {
+type DeliverySnapshot = Readonly<{
+  id: string
+  label: string
+  itemCount: number
+  sealedAt: string
+  digest: string
+  unsealedCount: number
+}>
+
+function matchesBatch(data: PackageRowDto, snapshot: DeliverySnapshot): boolean {
+  return data.id === snapshot.id && data.manifest_sha256 === snapshot.digest && data.unsealed_count === snapshot.unsealedCount
+}
+
+export function HandoverPackagesPanel(props: HandoverPackagesPanelProps) {
+  return <ProjectHandoverPackagesPanel key={props.projectId} {...props} />
+}
+
+function ProjectHandoverPackagesPanel({ projectId, canManage, isAdmin }: HandoverPackagesPanelProps) {
   const { apiRequest } = useAuth()
   const [packages, setPackages] = useState<PackageRowDto[]>([])
   const [picker, setPicker] = useState<PickerRowDto[]>([])
+  const [pickerTruncated, setPickerTruncated] = useState(false)
   const [pickerType, setPickerType] = useState<PickerKind>("artifact")
   const [loading, setLoading] = useState(true)
+  const [listFailed, setListFailed] = useState(false)
+  const [pickerState, setPickerState] = useState<Partial<Record<PickerKind, "loading" | "ready" | "failed">>>({})
+  const listSeqRef = useRef(0)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -181,28 +204,36 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [delivery, setDelivery] = useState<DeliverySnapshot | null>(null)
+  const [pendingReadbacks, setPendingReadbacks] = useState<ReadonlyMap<string, DeliverySnapshot>>(new Map())
+  const [deliveryBusy, setDeliveryBusy] = useState(false)
+  const deliveryBusyRef = useRef(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<PackageDetailDto | null>(null)
   // 挑选面响应序号：快速连点类型钮时弃过期响应（慢响应后到会覆盖新类型行）
   const pickerSeqRef = useRef(0)
 
   const reload = useCallback(async () => {
+    const seq = ++listSeqRef.current
+    setLoading(true)
     try {
       const list = await apiRequest<PackageListDto>(
         `/api/v1/handover-packages?project_id=${encodeURIComponent(projectId)}`,
         { method: "GET" },
       )
+      if (seq !== listSeqRef.current) return
       setPackages(list.items)
-      setError("")
+      setListFailed(false)
     } catch {
-      // 加载失败静默降级（沿面板族 fail-静默纪律；动作失败走 alert）
+      if (seq === listSeqRef.current) setListFailed(true)
     } finally {
-      setLoading(false)
+      if (seq === listSeqRef.current) setLoading(false)
     }
   }, [apiRequest, projectId])
 
   const loadPicker = useCallback(async (type: PickerKind) => {
     const seq = ++pickerSeqRef.current
+    setPickerState((prev) => ({ ...prev, [type]: "loading" }))
     try {
       const pickerData = await apiRequest<PickerDto>(
         `/api/v1/handover-packages/artifacts?project_id=${encodeURIComponent(projectId)}&type=${type}`,
@@ -210,8 +241,10 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
       )
       if (seq !== pickerSeqRef.current) return // 已切到其他类型：过期响应丢弃
       setPicker(pickerData.items)
+      setPickerTruncated(pickerData.truncated)
+      setPickerState((prev) => ({ ...prev, [type]: "ready" }))
     } catch {
-      // 同上：挑选面失败静默降级
+      if (seq === pickerSeqRef.current) setPickerState((prev) => ({ ...prev, [type]: "failed" }))
     }
   }, [apiRequest, projectId])
 
@@ -225,6 +258,8 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
 
   const switchPickerType = (type: PickerKind) => {
     if (type === pickerType) return
+    pickerSeqRef.current += 1
+    setPickerState((prev) => ({ ...prev, [type]: "loading" }))
     setPickerType(type)
     setPicker([]) // 先清旧类型行，防换型瞬间误勾
   }
@@ -285,7 +320,128 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
     }
   }
 
-  const act = async (packageId: string, action: "seal" | "unseal" | "deliver", done: string) => {
+  const readDelivery = (packageId: string) => apiRequest<PackageDetailDto>(
+    `/api/v1/handover-packages/${encodeURIComponent(packageId)}`,
+    { method: "GET" },
+  )
+
+  const openDelivery = async (packageId: string) => {
+    if (!isAdmin || !canManage || busyId || deliveryBusyRef.current || pendingReadbacks.has(packageId)) return
+    deliveryBusyRef.current = true
+    setDeliveryBusy(true)
+    setError(""); setNotice("")
+    try {
+      const data = await readDelivery(packageId)
+      if (data.write_preconditions !== "v1") {
+        setError("当前服务端不支持封存批次确认，未提交登记。请联系管理员升级服务端。")
+        return
+      }
+      if (data.id !== packageId || data.project_id !== projectId || data.status !== "sealed"
+        || !data.sealed_at || !Array.isArray(data.items) || typeof data.manifest_sha256 !== "string"
+        || !/^[0-9a-f]{64}$/.test(data.manifest_sha256)
+        || !Number.isSafeInteger(data.unsealed_count) || data.unsealed_count < 0) {
+        setError("无法确认有效的封存批次，未提交登记。请重新读取交付包。")
+        await reload()
+        return
+      }
+      setDelivery({
+        id: data.id, label: data.label ?? data.id, itemCount: data.items.length,
+        sealedAt: data.sealed_at, digest: data.manifest_sha256, unsealedCount: data.unsealed_count,
+      })
+    } catch (caught) {
+      setError(`读取确认信息失败，未提交登记。${errorMessage(caught)}`)
+    } finally {
+      deliveryBusyRef.current = false
+      setDeliveryBusy(false)
+    }
+  }
+
+  const readBack = async (snapshot: DeliverySnapshot) => {
+    try {
+      const data = await readDelivery(snapshot.id)
+      if (data.id !== snapshot.id || data.project_id !== projectId) throw new Error("包标识不匹配")
+      if (data.status === "delivered") {
+        setNotice(matchesBatch(data, snapshot)
+          ? "回读查到该批次已登记，无法确认是否由本次请求完成。"
+          : "回读查到交付包已登记，但并非此次确认的封存批次。")
+      } else {
+        const count = data.unsealed_count
+        const validCount = Number.isSafeInteger(count) && count >= snapshot.unsealedCount
+        const batchChanged = validCount && (
+          (data.status === "draft" && count > snapshot.unsealedCount)
+          || (data.status === "sealed" && typeof data.manifest_sha256 === "string"
+            && /^[0-9a-f]{64}$/.test(data.manifest_sha256) && !matchesBatch(data, snapshot))
+        )
+        // GET 可能先于结果未知的 POST 提交。同批次仍封存时必须继续等待核对。
+        if (!batchChanged) return
+        setNotice("回读发现封存批次已变化。请重新核对，系统未重发登记。")
+      }
+      setPendingReadbacks((current) => {
+        const next = new Map(current)
+        next.delete(snapshot.id)
+        return next
+      })
+      setError("")
+      if (expandedId === snapshot.id) setDetail(data)
+      setPackages((current) => current.map((row) => row.id === data.id ? data : row))
+    } catch {
+      setError("登记结果未知，暂无法回读。请先重试查询登记状态；系统不会重发登记。")
+    }
+  }
+
+  const confirmDelivery = async () => {
+    if (!canManage || !isAdmin || !delivery || busyId || deliveryBusyRef.current || pendingReadbacks.has(delivery.id)) return
+    const snapshot = delivery
+    deliveryBusyRef.current = true
+    setDeliveryBusy(true)
+    setError(""); setNotice("")
+    try {
+      const data = await apiRequest<PackageDetailDto>(`/api/v1/handover-packages/${encodeURIComponent(snapshot.id)}/deliver`, {
+        method: "POST",
+        retryAfterAuthRefresh: false,
+        body: { expected_manifest_sha256: snapshot.digest, expected_unsealed_count: snapshot.unsealedCount },
+      })
+      if (data.project_id !== projectId || data.status !== "delivered" || !matchesBatch(data, snapshot)) {
+        throw new Error("无法确认登记回执")
+      }
+      if (expandedId === snapshot.id) setDetail(data)
+      setNotice("本次登记成功（终态不可逆）。")
+      await reload()
+    } catch (caught) {
+      if (caught instanceof ApiClientError && caught.status !== undefined && caught.status >= 400 && caught.status < 500
+        && caught.status !== 408 && caught.code !== "already_delivered") {
+        setError(errorMessage(caught))
+        if (caught.status === 409) {
+          setDetail(null)
+          setExpandedId(null)
+          await reload()
+        }
+      } else {
+        setPendingReadbacks((current) => new Map(current).set(snapshot.id, snapshot))
+        await readBack(snapshot)
+      }
+    } finally {
+      setDelivery(null)
+      deliveryBusyRef.current = false
+      setDeliveryBusy(false)
+    }
+  }
+
+  const retryReadback = async (snapshot: DeliverySnapshot) => {
+    if (busyId || delivery || deliveryBusyRef.current || !pendingReadbacks.has(snapshot.id)) return
+    deliveryBusyRef.current = true
+    setDeliveryBusy(true)
+    setError(""); setNotice("")
+    try {
+      await readBack(snapshot)
+    } finally {
+      deliveryBusyRef.current = false
+      setDeliveryBusy(false)
+    }
+  }
+
+  const act = async (packageId: string, action: "seal" | "unseal", done: string) => {
+    if (busyId || deliveryBusyRef.current || delivery || pendingReadbacks.has(packageId)) return
     setBusyId(packageId)
     setError(""); setNotice("")
     try {
@@ -306,8 +462,6 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
     }
   }
 
-  if (loading) return <p className="empty-copy" role="status">正在加载结项交付包…</p>
-
   return (
     <div className="page-stack">
       <section className="panel">
@@ -322,8 +476,62 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
             </button>
           ) : null}
         </div>
+        {loading ? <p className="empty-copy" role="status">正在加载结项交付包…</p> : null}
+        {listFailed ? <div>
+          <p role="alert">{packages.length ? "交付包列表刷新失败，显示上次读取结果。" : "交付包列表读取失败。"}</p>
+          <button type="button" disabled={loading} onClick={() => void reload()}>重试读取交付包</button>
+        </div> : null}
         {notice ? <p className="notice" role="status">{notice}</p> : null}
         {error ? <p className="form-error banner" role="alert">{error}</p> : null}
+        {[...pendingReadbacks.values()].map((snapshot) => (
+          <div key={snapshot.id}>
+            <p role="status">{snapshot.label}：登记结果待核对。请继续查询登记状态。</p>
+            <UiButton disabled={Boolean(busyId || delivery || deliveryBusy)} onClick={() => void retryReadback(snapshot)}>
+              查询登记状态
+            </UiButton>
+            {/*
+              回读仍显示同一封存批次时，说明 POST 大概率没落地；但「没落地」无法被
+              证明。给出显式退出：解除占用后允许重新确认，若原请求其实已生效，
+              重新登记会拿到 already_delivered，不会重复登记。
+            */}
+            <UiButton
+              disabled={Boolean(busyId || delivery || deliveryBusy)}
+              onClick={() => {
+                setPendingReadbacks((current) => {
+                  const next = new Map(current)
+                  next.delete(snapshot.id)
+                  return next
+                })
+                setNotice(`${snapshot.label}：已解除待核对（本次未确认登记结果）。如需登记请重新读取批次后确认。`)
+              }}
+            >
+              判定未提交并解除占用
+            </UiButton>
+          </div>
+        ))}
+        {delivery && canManage && isAdmin ? (
+          <Modal
+            title="确认交付登记"
+            tone="warning"
+            description="只登记当前封存批次。登记后不可解封，不代表客户签收。"
+            busy={deliveryBusy}
+            onClose={() => setDelivery(null)}
+            footer={<>
+              <UiButton disabled={deliveryBusy} onClick={() => setDelivery(null)}>取消</UiButton>
+              <UiButton variant="primary" disabled={deliveryBusy} onClick={() => void confirmDelivery()}>
+                {deliveryBusy ? "正在核实…" : "确认登记"}
+              </UiButton>
+            </>}
+          >
+            <dl>
+              <dt>包名</dt><dd>{delivery.label}</dd>
+              <dt>件数</dt><dd>{delivery.itemCount} 件</dd>
+              <dt>封存时间</dt><dd>{formatDateTime(delivery.sealedAt)}</dd>
+              <dt>解封次数</dt><dd>{delivery.unsealedCount}</dd>
+              <dt>封存摘要（SHA-256）</dt><dd><code style={{ overflowWrap: "anywhere" }}>{delivery.digest}</code></dd>
+            </dl>
+          </Modal>
+        ) : null}
         {formOpen && canManage ? (
           <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void createPackage() }}>
             <label htmlFor="handover-label">包名（可选）</label>
@@ -342,7 +550,15 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
               ))}
             </div>
             <p className="handover-picker-caption">{PICKER_CAPTION[pickerType]}</p>
-            {picker.length ? (
+            {pickerState[pickerType] === "failed" ? <div>
+              <p role="alert">候选读取失败，已保留勾选，暂无法核对该类型候选。</p>
+              <button type="button" onClick={() => void loadPicker(pickerType)}>重试读取候选</button>
+            </div> : null}
+            {(!pickerState[pickerType] || pickerState[pickerType] === "loading") ? <p role="status">正在读取候选…</p> : null}
+            {pickerState[pickerType] === "ready" && pickerTruncated ? (
+              <p role="status">候选仅显示部分结果，未列出的勾选会保留。</p>
+            ) : null}
+            {pickerState[pickerType] === "ready" && (picker.length ? (
               <div className="handover-picker">
                 {picker.map((row) => {
                   const meta = pickerRowMeta(row)
@@ -378,7 +594,7 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
               </div>
             ) : (
               <p className="empty-state">{PICKER_EMPTY_HINT[pickerType]}</p>
-            )}
+            ))}
             <div>
               <button className="primary-button" type="submit" disabled={saving || !Object.keys(selected).length}>
                 {saving ? "正在创建…" : "创建草稿包"}
@@ -417,13 +633,13 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
                       </button>
                     ) : null}
                     {canManage && row.status === "sealed" ? (
-                      <button className="secondary-button" disabled={busyId === row.id} onClick={() => { void act(row.id, "unseal", "已解封回草稿（解封次数已留痕）。") }}>
+                      <button className="secondary-button" disabled={Boolean(busyId === row.id || delivery || deliveryBusy || pendingReadbacks.has(row.id))} onClick={() => { void act(row.id, "unseal", "已解封回草稿（解封次数已留痕）。") }}>
                         {busyId === row.id ? "正在提交…" : "解封"}
                       </button>
                     ) : null}
-                    {isAdmin && row.status === "sealed" ? (
-                      <button className="secondary-button" disabled={busyId === row.id} onClick={() => { void act(row.id, "deliver", "已登记交付（终态不可逆）。") }}>
-                        {busyId === row.id ? "正在提交…" : "交付登记"}
+                    {canManage && isAdmin && row.status === "sealed" ? (
+                      <button className="secondary-button" disabled={Boolean(busyId || delivery || deliveryBusy || pendingReadbacks.has(row.id))} onClick={() => void openDelivery(row.id)}>
+                        交付登记
                       </button>
                     ) : null}
                   </td>
@@ -431,9 +647,9 @@ export function HandoverPackagesPanel({ projectId, canManage, isAdmin }: Handove
               ))}
             </tbody>
           </table>
-        ) : (
+        ) : !loading && !listFailed ? (
           <p className="empty-state">暂无结项交付包。项目结项时把已复核的 run 产物组包封存，交付登记后进入对外交付留痕。</p>
-        )}
+        ) : null}
         {expandedId && detail ? (
           <div className="detail-block">
             <h3>{detail.label ?? "交付包清单"}</h3>

@@ -106,6 +106,7 @@ def _submit_evidence_as(env, gate_key: str, who) -> None:
     response = who.post(
         f"{env['gates_url']}/{gate_key}/evidence",
         json={
+            "expected_revision": gate["revision"],
             "items": [
                 {
                     "label": item["label"],
@@ -120,7 +121,10 @@ def _submit_evidence_as(env, gate_key: str, who) -> None:
 
 
 def _decide(env, gate_key: str, payload: dict[str, Any]):
-    return env["leader"].post(f"{env['gates_url']}/{gate_key}/decision", json=payload)
+    gates = env["leader"].get(env["gates_url"]).json["data"]["gates"]
+    gate = next(g for g in gates if g["gate_key"] == gate_key)
+    return env["leader"].post(f"{env['gates_url']}/{gate_key}/decision",
+                              json={"expected_revision": gate["revision"], **payload})
 
 
 # ---------------------------------------------------------------- ② 迁移与 ORM
@@ -542,9 +546,16 @@ def test_acceptance_contract_role_and_items_enforced(m5_env, db_session, monkeyp
     # G5：leader 提交（执行人=leader），admin 拍板——P0-5 过（异人），
     # 契约闸拦 platform role=admin ≠ acceptor_role=project_lead → 403
     _submit_evidence_as(env, "G5", env["leader"])
-    blocked = env["admin"].post(f"{env['gates_url']}/G5/decision", json={"result": "pass"})
+    gates = env["admin"].get(env["gates_url"]).json["data"]["gates"]
+    gate = next(g for g in gates if g["gate_key"] == "G5")
+    blocked = env["admin"].post(
+        f"{env['gates_url']}/G5/decision", json={"result": "pass", "expected_revision": gate["revision"]}
+    )
     assert blocked.status_code == 403, blocked.get_data(as_text=True)
     assert blocked.json["error"]["code"] == "gate_acceptor_role_required"
+    no_condition = env["admin"].post(f"{env['gates_url']}/G5/decision", json={"result": "pass"})
+    assert no_condition.status_code == 403
+    assert no_condition.json["error"]["code"] == "gate_acceptor_role_required"
 
     # G6：admin 提交（执行人=admin），project_lead（契约 acceptor 角色）拍板
     # → 过门，契约快照进回执输入快照

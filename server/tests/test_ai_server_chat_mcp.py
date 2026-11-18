@@ -237,7 +237,7 @@ def test_mcp_membership_removal_takes_effect_for_existing_token(ai_context, clie
 
 
 def test_gates_read_returns_ordered_read_only_summary(ai_context, client, db_session):
-    from fde_api.projects.gate_service import decide_gate, submit_gate_evidence
+    from fde_api.projects.gate_service import decide_gate, list_project_gates, submit_gate_evidence
     users, _ = ai_context
     project = make_project(db_session, users["lead"])
     token = issue_mcp_token(users["lead"])
@@ -250,16 +250,19 @@ def test_gates_read_returns_ordered_read_only_summary(ai_context, client, db_ses
     assert set(g1["checklist"][0]) == {"label", "claim_status"}
     assert (g1["accepted"], g1["total"]) == (0, 1)
     assert data["note"]  # 只读边界提示必须随摘要返回
-    submit_gate_evidence(
+    gates_view = list_project_gates(actor=users["lead"], project_id=project.id)
+    submitted = submit_gate_evidence(
         actor=users["lead"], project_id=project.id, gate_key="G1",
-        payload={"items": [{"label": g1["checklist"][0]["label"],
+        payload={"expected_revision": gates_view["gates"][0]["revision"],
+                 "items": [{"label": g1["checklist"][0]["label"],
                             "source_uri": "fdeops://engagements/x/.fde/gates/G1-评分记录.md",
                             "content_hash": "a" * 64}]},
     )
     data = tool_data(tool_request(client, token, "gates_read", {"project_id": project.id}))
     assert data["gates"][0]["status"] == "evidence"
     assert data["gates"][0]["checklist"][0]["claim_status"] == "claimed"
-    decide_gate(actor=users["admin"], project_id=project.id, gate_key="G1", payload={"result": "pass"})
+    decide_gate(actor=users["admin"], project_id=project.id, gate_key="G1",
+                payload={"result": "pass", "expected_revision": submitted["revision"]})
     data = tool_data(tool_request(client, token, "gates_read", {"project_id": project.id}))
     assert data["gates"][0]["status"] == "passed"
     assert data["gates"][0]["accepted"] == 1 and data["gates"][0]["decided_at"]

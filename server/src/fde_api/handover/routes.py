@@ -5,7 +5,7 @@
 交付登记=**admin**（D11 草案「delivered（登记对外交付）=admin」）。
 """
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from fde_api.auth.decorators import require_auth
 from fde_api.errors import error_response
@@ -126,5 +126,10 @@ def unseal_package(package_id):
 @handover_blueprint.post("/handover-packages/<package_id>/deliver")
 @require_auth
 def deliver_package(package_id):
-    """交付登记（admin）：sealed→delivered 终态不可逆。"""
-    return _data(service.deliver_package(actor=g.current_user, package_id=package_id))
+    """交付登记（admin）：绑定封存批次，sealed→delivered 终态不可逆。"""
+    return _data(service.deliver_package(
+        actor=g.current_user,
+        package_id=package_id,
+        payload=request.get_json(silent=True) if request.get_data() else {},
+        preconditions_required=current_app.config["SETTINGS"].ux_write_preconditions_required,
+    ))

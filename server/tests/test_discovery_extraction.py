@@ -629,6 +629,15 @@ def test_review_fact_and_requirement_flow(db_session, d4_client, d4_settings) ->
     )
     db_session.add(fact2)
     db_session.commit()
+    stale_batch = leader.patch(
+        f"/api/v1/business-facts/{fact2.id}/review",
+        json={"review_status": "accepted", "expected_review_status": "pending"},
+    )
+    assert stale_batch.status_code == 409
+    assert stale_batch.get_json()["error"]["code"] == "fact_review_state_changed"
+    assert db_session.query(OperationEvent).filter_by(
+        target_id=fact2.id, event_type="business_fact_reviewed"
+    ).count() == 0
     assert leader.patch(
         f"/api/v1/business-facts/{fact2.id}/review", json={"review_status": "accepted"}
     ).status_code == 200

@@ -73,11 +73,6 @@ interface GateDto {
   fail_exit: string | null
   decision_semantics: string[] | null
   template_source_uri: string | null
-  /**
-   * B#28 门禁 revision CAS 基准：服务端回传的当前 revision。
-   * 拍板时随 expected_revision 带回，服务端做版本复核（并发拍板先到者胜）。
-   * 旧服务端载荷可能缺此键——缺省时不带 expected_revision（服务端按旧客户端处理）。
-   */
   revision?: number
 }
 
@@ -93,7 +88,15 @@ interface GatesView {
   sop_phase: string
   gates: GateDto[]
   events: GateEventDto[]
+  write_preconditions?: unknown
 }
+
+type EvidenceItem = { label: string; source_uri: string; content_hash: string }
+type GateConfirmation =
+  | { kind: "evidence"; gate: GateDto; items: EvidenceItem[] }
+  | { kind: "decision"; gate: GateDto; result: string; accepted_labels: string[]; decision?: string; note?: string }
+
+type WriteOutcome = "saved" | "rejected" | "recheck"
 
 interface GateBoardProps {
   projectId: string
@@ -186,7 +189,9 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [actionError, setActionError] = useState("")
-  const [busyGate, setBusyGate] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [needsReload, setNeedsReload] = useState(false)
+  const writing = useRef(false)
   const sequenceRef = useRef(0)
 
   // J1：选项表由服务端下发；取不到就用本地兜底（界面照常渲染，不阻断读路径）
@@ -212,9 +217,10 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
         { method: "GET" },
       )
       if (sequence !== sequenceRef.current) return
-      if (!isGatesView(data)) throw new Error("invalid gates view")
+      if (!isGatesView(data) || data.project_id !== projectId) throw new Error("invalid gates view")
       setView(data)
       setError("")
+      setNeedsReload(false)
     } catch (caught) {
       if (sequence !== sequenceRef.current) return
       setError(gateError(caught))
@@ -230,52 +236,43 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
     void load()
   }, [load])
 
-  const submitEvidence = useCallback(
-    async (gate: GateDto, items: Array<{ label: string; source_uri: string; content_hash: string }>): Promise<boolean> => {
-      setBusyGate(gate.gate_key)
-      setActionError("")
-      try {
-        await apiRequest<unknown>(
-          `/api/v1/projects/${encodeURIComponent(projectId)}/gates/${gate.gate_key}/evidence`,
-          { method: "POST", body: { items }, retryAfterAuthRefresh: true },
-        )
-        await load()
-        return true
-      } catch (caught) {
-        setActionError(gateError(caught))
-        return false
-      } finally {
-        setBusyGate("")
-      }
-    },
-    [apiRequest, load, projectId],
-  )
+  const supportsWrites = view?.project_id === projectId && view.write_preconditions === "v1"
 
-  const decide = useCallback(
-    async (gate: GateDto, payload: Record<string, unknown>): Promise<boolean> => {
-      setBusyGate(gate.gate_key)
-      setActionError("")
-      try {
-        await apiRequest<unknown>(
-          `/api/v1/projects/${encodeURIComponent(projectId)}/gates/${gate.gate_key}/decision`,
-          { method: "POST", body: payload, retryAfterAuthRefresh: true },
-        )
+  async function write(confirmation: GateConfirmation): Promise<WriteOutcome> {
+    const { gate, kind, ...fields } = confirmation
+    if (writing.current || !canManage || !supportsWrites || error || needsReload) return "rejected"
+    if (!hasRevision(gate) || view?.gates.find((row) => row.gate_key === gate.gate_key)?.revision !== gate.revision) {
+      setActionError("证据或门禁状态已变，本次未提交。请核对最新清单后重新确认。")
+      return "recheck"
+    }
+    writing.current = true
+    setBusy(true)
+    setActionError("")
+    try {
+      await apiRequest<unknown>(
+        `/api/v1/projects/${encodeURIComponent(projectId)}/gates/${encodeURIComponent(gate.gate_key)}/${kind}`,
+        { method: "POST", body: { ...fields, expected_revision: gate.revision } },
+      )
+      await load()
+      return "saved"
+    } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === "gate_revision_conflict") {
+        setActionError("证据或门禁状态已变，本次未提交。请核对最新清单后重新确认。")
         await load()
-        return true
-      } catch (caught) {
-        setActionError(gateError(caught))
-        // B#28：revision 冲突＝另一端已推进门禁状态，本次拍板零变更。
-        // 刷新面板取新 revision（人可基于新状态重拍），不静默失败也不假装成功。
-        if (caught instanceof ApiClientError && caught.code === "gate_revision_conflict") {
-          await load()
-        }
-        return false
-      } finally {
-        setBusyGate("")
+        return "recheck"
       }
-    },
-    [apiRequest, load, projectId],
-  )
+      if (!(caught instanceof ApiClientError) || caught.status === undefined || caught.status >= 500) {
+        setActionError("未能确认门禁操作结果。请先刷新核对，不会自动重发。")
+        setNeedsReload(true)
+        return "recheck"
+      }
+      setActionError(gateError(caught))
+      return "rejected"
+    } finally {
+      writing.current = false
+      setBusy(false)
+    }
+  }
 
   const summary = useMemo(() => {
     if (!view) return null
@@ -285,8 +282,7 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
   }, [view])
 
   if (loading) return <Loading label="正在加载门禁…" />
-  if (error) return <p className="form-error banner" role="alert">{error}</p>
-  if (!view) return null
+  if (!view) return <div role="alert">{error} <button type="button" onClick={() => void load()}>刷新门禁</button></div>
 
   return (
     <div className="page-stack">
@@ -307,17 +303,19 @@ export function GateBoard({ projectId, canManage }: GateBoardProps) {
           </div>
         ) : null}
       </div>
+      {canManage && !supportsWrites ? <p className="supporting-copy">当前服务端不支持门禁确认保护，升级后方可提交或裁定。</p> : null}
       {actionError ? <p className="form-error banner" role="alert">{actionError}</p> : null}
+      {error ? <p className="form-error banner" role="alert">{error}</p> : null}
+      {needsReload || error ? <button type="button" disabled={busy} onClick={() => void load()}>刷新门禁</button> : null}
       <div className="gate-card-grid">
         {view.gates.map((gate) => (
           <GateCard
-            key={gate.gate_key}
+            key={`${projectId}:${gate.gate_key}`}
             gate={gate}
-            canManage={canManage}
-            busy={busyGate === gate.gate_key}
+            canManage={canManage && supportsWrites && hasRevision(gate)}
+            busy={busy || needsReload || Boolean(error)}
             options={options}
-            onSubmitEvidence={submitEvidence}
-            onDecide={decide}
+            onWrite={write}
           />
         ))}
       </div>
@@ -332,14 +330,16 @@ interface GateCardProps {
   busy: boolean
   /** J1：门禁状态标签/样式由服务端选项表下发（含本地兜底） */
   options: WorkbenchOptions
-  onSubmitEvidence: (
-    gate: GateDto,
-    items: Array<{ label: string; source_uri: string; content_hash: string }>,
-  ) => Promise<boolean>
-  onDecide: (gate: GateDto, payload: Record<string, unknown>) => Promise<boolean>
+  onWrite: (confirmation: GateConfirmation) => Promise<WriteOutcome>
 }
 
-function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }: GateCardProps) {
+function hasRevision(gate: GateDto): gate is GateDto & { revision: number } {
+  return typeof gate.revision === "number" && Number.isSafeInteger(gate.revision) && gate.revision > 0
+}
+
+function GateCard({ gate, canManage, busy, options, onWrite }: GateCardProps) {
+  const [confirmation, setConfirmation] = useState<GateConfirmation | null>(null)
+  const [reviewGate, setReviewGate] = useState<GateDto | null>(null)
   const [mode, setMode] = useState<"idle" | "submit" | "decide">("idle")
   const [uris, setUris] = useState<Record<string, string>>({})
   const [hashes, setHashes] = useState<Record<string, string>>({})
@@ -351,30 +351,51 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
   // T-W7：workflow 形键 = wf:run|node|uri|hash——同指纹两形并存时键域不撞）
   const [candidateLabels, setCandidateLabels] = useState<Record<string, string>>({})
 
-  const submittable = gate.status === "pending" || gate.status === "failed"
+  const submittable = ["pending", "failed", "evidence"].includes(gate.status)
   // 采纳允许到 evidence 态：部分采纳后再补其余清单项与「重新提交」同一条服务端闸
   const adoptable = canManage && gate.status !== "passed" && gate.status !== "conditional_pass"
   const candidates = gate.evidence_candidates ?? []
   const decidable = gate.status === "evidence"
   const isG8 = gate.gate_key === "G8"
   const isG9 = gate.gate_key === "G9"
-  const allFilled = gate.checklist.every(
-    (item) =>
-      (uris[item.label] ?? "").trim().length > 0 &&
-      /^[0-9a-fA-F]{64}$/.test((hashes[item.label] ?? "").trim()),
+  const manualItems = gate.checklist
+    .map((item) => ({
+      label: item.label,
+      source_uri: (uris[item.label] ?? "").trim(),
+      content_hash: (hashes[item.label] ?? "").trim().toLowerCase(),
+    }))
+    .filter((item) => item.source_uri || item.content_hash)
+  const manualItemsValid = manualItems.length > 0 && manualItems.every(
+    (item) => item.source_uri.length > 0 && /^[0-9a-f]{64}$/.test(item.content_hash),
   )
-  const acceptedCount = gate.checklist.filter((item) => accepted[item.label] === true).length
+  const editingBlocked = busy || confirmation !== null
+  const reviewItems = reviewGate?.checklist ?? []
+  const acceptedCount = reviewItems.filter((item) => item.claim_status === "accepted" || accepted[item.label] === true).length
 
   function openMode(next: "submit" | "decide"): void {
     setMode(next)
-    setUris({})
-    setHashes({})
-    // C2：打开核验面板默认全不勾——claimed ≠ accepted，接受是人工逐项
-    // 核验后的动作；预勾选会把「没核验」伪装成「已接受」。
-    setAccepted(Object.fromEntries(gate.checklist.map((item) => [item.label, false])))
-    setResult("pass")
-    setG8Decision("proceed")
-    setNote("")
+    setAccepted({})
+    setReviewGate(next === "decide" ? gate : null)
+  }
+
+  async function confirm(): Promise<void> {
+    if (!confirmation || busy || !canManage) return
+    const outcome = await onWrite(confirmation)
+    setConfirmation(null)
+    if (outcome === "recheck") {
+      setAccepted({})
+      setReviewGate(null)
+    } else if (outcome === "saved") {
+      setMode("idle")
+      setUris({})
+      setHashes({})
+      setAccepted({})
+      setReviewGate(null)
+      setNote("")
+      setResult("pass")
+      setG8Decision("proceed")
+      setCandidateLabels({})
+    }
   }
 
   return (
@@ -421,7 +442,7 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                 ? `wf:${candidate.workflow_run_id}:${candidate.workflow_node_key}|${candidate.source_uri}|${candidate.content_hash}`
                 : `${candidate.task_key}|${candidate.source_uri}|${candidate.content_hash}`
               const displayName = isWorkflow ? candidate.label : candidate.task_key
-              const chosen = candidateLabels[key] ?? gate.checklist[0]?.label ?? ""
+              const chosen = candidateLabels[key] ?? ""
               // 人工提交闸 uri 上限 500（与手填表单同限）：超限候选可见但不可采
               const uriOverCap = candidate.source_uri.length > 500
               return (
@@ -442,10 +463,12 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                       <select
                         aria-label={`候选 ${displayName} 的目标清单项`}
                         value={chosen}
+                        disabled={editingBlocked}
                         onChange={(event) =>
                           setCandidateLabels((current) => ({ ...current, [key]: event.target.value }))
                         }
                       >
+                        <option value="">请选择清单项</option>
                         {gate.checklist.map((item) => (
                           <option key={item.label} value={item.label}>{item.label}</option>
                         ))}
@@ -453,12 +476,12 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                       <button
                         className="secondary-button"
                         type="button"
-                        disabled={busy || !chosen || uriOverCap}
+                        disabled={editingBlocked || !chosen || uriOverCap}
                         title={uriOverCap ? "URI 超过人工提交闸 500 上限，无法采纳" : undefined}
                         onClick={() => {
-                          void onSubmitEvidence(gate, [
+                          setConfirmation({ kind: "evidence", gate, items: [
                             { label: chosen, source_uri: candidate.source_uri, content_hash: candidate.content_hash },
-                          ])
+                          ] })
                         }}
                       >
                         采纳到清单
@@ -491,7 +514,7 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
         mode === "submit" ? (
           <div className="gate-form">
             <p className="supporting-copy">
-              逐项填出处指针与 sha256（certutil -hashfile 文件 SHA256 可生成）：
+              为本次要提交的清单项填写出处指针与 SHA-256。留空的项不变。
             </p>
             {gate.checklist.map((item) => (
               <div key={item.label} className="gate-form-row">
@@ -501,12 +524,14 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                   onChange={(event) => setUris((current) => ({ ...current, [item.label]: event.target.value }))}
                   placeholder="fdeops://engagements/<代号>/.fde/…"
                   maxLength={500}
+                  disabled={editingBlocked}
                 />
                 <input
                   value={hashes[item.label] ?? ""}
                   onChange={(event) => setHashes((current) => ({ ...current, [item.label]: event.target.value }))}
                   placeholder="sha256（64 位）"
                   maxLength={64}
+                  disabled={editingBlocked}
                 />
               </div>
             ))}
@@ -514,54 +539,45 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
               <button
                 className="primary-button"
                 type="button"
-                disabled={busy || !allFilled}
-                onClick={() => {
-                  // 失败不收表单：已填的指针与 sha256 不丢（核验 400 时用户重敲一遍是灾难）
-                  void onSubmitEvidence(
-                    gate,
-                    gate.checklist.map((item) => ({
-                      label: item.label,
-                      source_uri: (uris[item.label] ?? "").trim(),
-                      content_hash: (hashes[item.label] ?? "").trim().toLowerCase(),
-                    })),
-                  ).then((ok) => {
-                    if (ok) setMode("idle")
-                  })
-                }}
+                disabled={editingBlocked || !manualItemsValid}
+                onClick={() => setConfirmation({ kind: "evidence", gate, items: manualItems })}
               >
-                {busy ? "提交中…" : "提交证据（标 claimed）"}
+                预览证据提交
               </button>
-              <button className="secondary-button" type="button" onClick={() => setMode("idle")}>取消</button>
+              <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => setMode("idle")}>取消</button>
             </div>
           </div>
         ) : (
-          <button className="secondary-button" type="button" disabled={busy} onClick={() => openMode("submit")}>
+          <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => openMode("submit")}>
             {gate.status === "failed" ? "重新提交证据" : "提交证据"}
           </button>
         )
       ) : null}
 
       {canManage && decidable ? (
-        mode === "decide" ? (
+        mode === "decide" && reviewGate ? (
           <div className="gate-form">
             <p className="gate-form-hint">人工核验：勾选 = 接受为 accepted；过门要求全部接受。</p>
-            {gate.checklist.map((item) => (
+            {reviewItems.map((item) => (
               <label key={item.label} className="gate-form-row checkbox">
                 <input
                   type="checkbox"
                   checked={accepted[item.label] === true}
+                  disabled={editingBlocked || item.claim_status !== "claimed"}
                   onChange={(event) => setAccepted((current) => ({ ...current, [item.label]: event.target.checked }))}
                 />
                 <span className="gate-check-label">{item.label}</span>
                 <span className={`badge ${item.claim_status === "accepted" ? "success" : "warning"}`}>
-                  {item.claim_status === "accepted" ? "accepted" : "claimed"}
+                  {item.claim_status ?? "未提交"}
                 </span>
+                <small>{item.source_uri ?? "—"} · {item.content_hash ?? "—"}</small>
+                {item.evidence_superseded ? <small>证据已换版</small> : null}
               </label>
             ))}
             <div className="gate-form-row">
               <label>
                 核验结论
-                <select value={result} onChange={(event) => setResult(event.target.value)}>
+                <select disabled={editingBlocked} value={result} onChange={(event) => setResult(event.target.value)}>
                   <option value="pass">pass 过门</option>
                   {isG9 ? <option value="conditional_pass">conditional_pass 有条件通过</option> : null}
                   <option value="fail">fail 未过门</option>
@@ -570,7 +586,7 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
               {isG8 && result === "pass" ? (
                 <label>
                   G8 三态拍板
-                  <select value={g8Decision} onChange={(event) => setG8Decision(event.target.value)}>
+                  <select disabled={editingBlocked} value={g8Decision} onChange={(event) => setG8Decision(event.target.value)}>
                     <option value="proceed">{DECISION_LABEL.proceed}</option>
                     <option value="pivot">{DECISION_LABEL.pivot}</option>
                     <option value="stop">{DECISION_LABEL.stop}</option>
@@ -583,6 +599,7 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
               onChange={(event) => setNote(event.target.value)}
               placeholder="拍板说明（可选，500 字内）"
               maxLength={500}
+              disabled={editingBlocked}
             />
             <div className="gate-form-actions">
               <button
@@ -590,40 +607,62 @@ function GateCard({ gate, canManage, busy, options, onSubmitEvidence, onDecide }
                 type="button"
                 disabled={
                   busy ||
-                  (result === "pass" && acceptedCount < gate.checklist.length) ||
-                  (result === "conditional_pass" && gate.checklist.some((item) => !item.claim_status))
+                  confirmation !== null ||
+                  (result === "pass" && acceptedCount < reviewItems.length) ||
+                  (result === "conditional_pass" && reviewItems.some((item) => !item.claim_status))
                 }
-                onClick={() => {
-                  const payload: Record<string, unknown> = {
-                    result,
-                    accepted_labels: gate.checklist
-                      .filter((item) => accepted[item.label] === true)
-                      .map((item) => item.label),
-                  }
-                  if (isG8 && result === "pass") payload.decision = g8Decision
-                  if (note.trim()) payload.note = note.trim()
-                  // B#28：把面板读到的当前 revision 带回，服务端做 CAS 版本复核——
-                  // 并发拍板先到者胜，后到者拿 409 且零变更（不静默覆盖）。
-                  // 旧服务端载荷无此键时不带（服务端按旧客户端兼容处理）。
-                  if (typeof gate.revision === "number") {
-                    payload.expected_revision = gate.revision
-                  }
-                  // 失败不收表单（拍板 400 时勾选与说明不丢）
-                  void onDecide(gate, payload).then((ok) => {
-                    if (ok) setMode("idle")
-                  })
-                }}
+                onClick={() => setConfirmation({
+                  kind: "decision",
+                  gate: reviewGate,
+                  result,
+                  accepted_labels: result === "pass"
+                    ? reviewItems.filter((item) => item.claim_status === "claimed" && accepted[item.label] === true)
+                      .map((item) => item.label)
+                    : [],
+                  ...(isG8 && result === "pass" ? { decision: g8Decision } : {}),
+                  ...(note.trim() ? { note: note.trim() } : {}),
+                })}
               >
-                {busy ? "提交中…" : `拍板（接受 ${acceptedCount}/${gate.checklist.length}）`}
+                {`预览拍板（接受 ${acceptedCount}/${reviewItems.length}）`}
               </button>
-              <button className="secondary-button" type="button" onClick={() => setMode("idle")}>取消</button>
+              <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => setMode("idle")}>取消</button>
             </div>
           </div>
         ) : (
-          <button className="primary-button" type="button" disabled={busy} onClick={() => openMode("decide")}>
+          <button className="primary-button" type="button" disabled={editingBlocked} onClick={() => openMode("decide")}>
             人工核验拍板
           </button>
         )
+      ) : null}
+      {canManage && confirmation ? (
+        <section className="gate-form" aria-label="门禁写入确认">
+          <h4>{confirmation.gate.gate_key} · {confirmation.kind === "evidence" ? "确认提交证据" : "确认人工拍板"}</h4>
+          {confirmation.kind === "evidence" ? (
+            <ul>
+              {confirmation.items.map((item) => {
+                const old = confirmation.gate.checklist.find((row) => row.label === item.label)
+                return (
+                  <li key={item.label}>
+                    <strong>{item.label}</strong>
+                    <p>原引用：{old?.source_uri ?? "未提交"} {old?.content_hash}</p>
+                    <p>新引用：{item.source_uri} {item.content_hash}</p>
+                    <p>{old?.source_uri ? "替换后待核验" : "提交后待核验"}</p>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <>
+              <p>裁定：{confirmation.result} {confirmation.decision}</p>
+              <p>本次接受：{confirmation.result === "pass" ? confirmation.accepted_labels.join("、") || "无" : "无"}</p>
+              {confirmation.note ? <p>说明：{confirmation.note}</p> : null}
+            </>
+          )}
+          <button className="primary-button" type="button" disabled={busy} onClick={() => void confirm()}>
+            {confirmation.kind === "evidence" ? "确认提交证据" : "确认人工拍板"}
+          </button>
+          <button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmation(null)}>取消确认</button>
+        </section>
       ) : null}
     </article>
   )
@@ -661,10 +700,7 @@ function gateError(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === "project_not_found") return "项目不存在或已被删除。"
     if (error.code === "forbidden") return "你没有该项目门禁的操作权限。"
-    // B#28：并发拍板冲突——本次未生效，面板已刷新，可基于新状态重拍。
-    if (error.code === "gate_revision_conflict") {
-      return "门禁状态已被其他操作推进，本次拍板未生效；面板已刷新，请核对最新状态后重试。"
-    }
+    if (error.code === "gate_revision_required") return "服务端要求门禁确认版本，请升级客户端后重新确认。"
     return `门禁操作失败：${error.message}`
   }
   return "门禁数据加载失败，请稍后重试。"

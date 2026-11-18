@@ -149,22 +149,34 @@ def main(app=None, settings=None) -> int:
             ) == 1,
         )
 
+        # 仅对本次冒烟新建的合成项目提交。以首次读和成功回执演进条件，禁止重试冲突。
+        gate_revisions = {gate["gate_key"]: gate["revision"] for gate in gates}
+
+        def post_gate(url, *, json, headers):
+            gate_key = url.split("/")[-2]
+            if gate_key in gate_revisions:
+                json = {**json, "expected_revision": gate_revisions[gate_key]}
+            response = client.post(url, json=json, headers=headers)
+            if response.status_code == 200:
+                gate_revisions[gate_key] = response.get_json()["data"]["revision"]
+            return response
+
         # ---- 2) 负例：非法 key / 无证据就核验 / 非法 hash / 未知清单项 ----
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/X1/decision", json={"result": "pass"}, headers=admin_headers
         )
         check("非法门禁键 400", r.status_code == 400, str(r.status_code))
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision", json={"result": "pass"}, headers=admin_headers
         )
         check("无证据核验 409", r.status_code == 409 and r.get_json()["error"]["code"] == "invalid_gate_state")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={"items": [{"label": "SOW-A 签署", "source_uri": "fdeops://x", "content_hash": "zz"}]},
             headers=lead_headers,
         )
         check("非法 hash 400", r.status_code == 400)
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={"items": [{"label": "不存在的项", "source_uri": "fdeops://x", "content_hash": sha256("x")}]},
             headers=lead_headers,
@@ -173,7 +185,7 @@ def main(app=None, settings=None) -> int:
 
         # ---- 3) G3 全生命周期：提交 → claimed 黄标 → 全接受过门 ----
         labels = [i["label"] for i in g3["checklist"]]
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={
                 "items": [
@@ -186,7 +198,7 @@ def main(app=None, settings=None) -> int:
         check("G3 提交 200 → evidence", r.status_code == 200 and r.get_json()["data"]["status"] == "evidence")
         check("清单全 claimed", all(i["claim_status"] == "claimed" for i in r.get_json()["data"]["checklist"]))
         # P0-5 门禁验收分离（goal-r1）：执行人（lead）拍自己的门 → 403
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision", json={"result": "pass"}, headers=lead_headers
         )
         check(
@@ -194,7 +206,7 @@ def main(app=None, settings=None) -> int:
             r.status_code == 403 and r.get_json()["error"]["code"] == "gate_decider_conflict",
             r.get_data(as_text=True),
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision", json={"result": "pass"}, headers=admin_headers
         )
         check(
@@ -203,7 +215,7 @@ def main(app=None, settings=None) -> int:
             and r.get_json()["data"]["status"] == "passed"
             and all(i["claim_status"] == "accepted" for i in r.get_json()["data"]["checklist"]),
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={"items": [{"label": labels[0], "source_uri": "fdeops://again", "content_hash": sha256("again")}]},
             headers=lead_headers,
@@ -213,12 +225,12 @@ def main(app=None, settings=None) -> int:
         # ---- 4) claimed≠accepted：G7 只交部分证据强过硬过门 → 400 ----
         g7 = next(g for g in gates if g["gate_key"] == "G7")
         partial = [i["label"] for i in g7["checklist"]][:2]
-        client.post(
+        post_gate(
             f"{gates_url}/G7/evidence",
             json={"items": [{"label": l, "source_uri": f"fdeops://p3/{l}", "content_hash": sha256(l)} for l in partial]},
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G7/decision", json={"result": "pass"}, headers=admin_headers
         )
         check(
@@ -229,72 +241,72 @@ def main(app=None, settings=None) -> int:
 
         # ---- 5) G8：pass 必带 decision；decision 只许 G8；三态可拍 ----
         g8 = next(g for g in gates if g["gate_key"] == "G8")
-        client.post(
+        post_gate(
             f"{gates_url}/G8/evidence",
             json={"items": [{"label": i["label"], "source_uri": f"fdeops://p3/{i['label']}", "content_hash": sha256(i["label"])} for i in g8["checklist"]]},
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/decision", json={"result": "pass"}, headers=admin_headers
         )
         check("G8 无 decision 400", r.status_code == 400 and r.get_json()["error"]["code"] == "gate_decision_required")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/decision", json={"result": "pass", "decision": "restart"}, headers=admin_headers
         )
         check("非法 decision 400", r.status_code == 400)
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/decision", json={"result": "conditional_pass"}, headers=admin_headers
         )
         check("G8 conditional_pass 400（A1 回归钉：仅 G9）", r.status_code == 400 and r.get_json()["error"]["code"] == "gate_result_not_allowed")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/decision", json={"result": "pass", "decision": "proceed"}, headers=admin_headers
         )
         check(
             "G8 proceed 过门",
             r.status_code == 200 and r.get_json()["data"]["status"] == "passed" and r.get_json()["data"]["decision"] == "proceed",
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G6/evidence",
             json={"items": [{"label": "问题陈述（SCQA）", "source_uri": "fdeops://p3/g6", "content_hash": sha256("g6")}]},
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G6/decision", json={"result": "pass", "decision": "stop"}, headers=admin_headers
         )
         check("非 G8 带 decision 400", r.status_code == 400 and r.get_json()["error"]["code"] == "gate_decision_not_allowed")
 
         # ---- 6) G9 conditional_pass 唯一性 ----
         g9 = next(g for g in gates if g["gate_key"] == "G9")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G9/decision", json={"result": "conditional_pass"}, headers=admin_headers
         )
         check("G9 无证据 conditional 409", r.status_code == 409)
-        client.post(
+        post_gate(
             f"{gates_url}/G9/evidence",
             json={"items": [{"label": i["label"], "source_uri": f"fdeops://p3/{i['label']}", "content_hash": sha256(i["label"])} for i in g9["checklist"]]},
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G6/decision", json={"result": "conditional_pass"}, headers=admin_headers
         )
         check("非 G9 conditional_pass 400", r.status_code == 400 and r.get_json()["error"]["code"] == "gate_result_not_allowed")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G9/decision", json={"result": "conditional_pass"}, headers=admin_headers
         )
         check("G9 conditional_pass 过门", r.status_code == 200 and r.get_json()["data"]["status"] == "conditional_pass")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision", json={"result": "pass"}, headers=admin_headers
         )
         check("已过门再核验 409", r.status_code == 409)
 
         # ---- 7) failed + 失败出口 + 重启 ----
         g4 = next(g for g in gates if g["gate_key"] == "G4")
-        client.post(
+        post_gate(
             f"{gates_url}/G4/evidence",
             json={"items": [{"label": i["label"], "source_uri": f"fdeops://p3/{i['label']}", "content_hash": sha256(i["label"])} for i in g4["checklist"]]},
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G4/decision", json={"result": "fail", "note": "客户暂缓"}, headers=admin_headers
         )
         data = r.get_json().get("data") or {}
@@ -303,7 +315,7 @@ def main(app=None, settings=None) -> int:
             r.status_code == 200 and data.get("status") == "failed" and "重启" in (data.get("fail_exit") or ""),
             str(data.get("fail_exit")),
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G4/evidence",
             json={"items": [{"label": g4["checklist"][0]["label"], "source_uri": "fdeops://p3/restart", "content_hash": sha256("restart")}]},
             headers=lead_headers,
@@ -313,7 +325,7 @@ def main(app=None, settings=None) -> int:
         # ---- 8) 权限：非成员 viewer ----
         r = client.get(gates_url, headers=viewer_headers)
         check("非成员 viewer GET 403", r.status_code == 403)
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G5/evidence",
             json={"items": [{"label": "x", "source_uri": "fdeops://x", "content_hash": sha256("x")}]},
             headers=viewer_headers,

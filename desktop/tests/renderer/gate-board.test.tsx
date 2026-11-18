@@ -23,11 +23,13 @@ function gateView(overrides: Partial<Record<string, unknown>> = {}): Record<stri
   return {
     project_id: "gate-project",
     sop_phase: "S3",
+    write_preconditions: "v1",
     events: [],
     gates: [
       {
         gate_key: "G3",
         status: "pending",
+        revision: 1,
         decision: null,
         submitted_at: null,
         decided_at: null,
@@ -96,6 +98,7 @@ it("renders gate status and claim badges for read-only viewers", async () => {
         {
           gate_key: "G6",
           status: "evidence",
+          revision: 1,
           decision: null,
           submitted_at: "2026-10-20T08:00:00+00:00",
           decided_at: null,
@@ -138,10 +141,13 @@ it("submits per-item evidence pointers and reloads the board", async () => {
   await user.type(uris[1], "fdeops://engagements/demo/.fde/painpoints.md")
   await user.type(hashes[1], "b".repeat(64))
 
-  await user.click(screen.getByRole("button", { name: "提交证据（标 claimed）" }))
+  await user.click(screen.getByRole("button", { name: "预览证据提交" }))
+  expect(evidenceRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认提交证据" }))
 
   await waitFor(() => expect(evidenceRequestBodies()).toHaveLength(1))
   expect(evidenceRequestBodies()[0]).toEqual({
+    expected_revision: 1,
     items: [
       {
         label: "深度诊断报告",
@@ -161,11 +167,11 @@ it("submits per-item evidence pointers and reloads the board", async () => {
   })
 })
 
-it("keeps the filled evidence form and shows the error when the server rejects", async () => {
+it("keeps the filled evidence form and requires readback after a timeout", async () => {
   const user = userEvent.setup()
   mocks.apiRequest.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (String(path).endsWith("/gates/G3/evidence")) {
-      throw new Error("证据校验失败：sha256 与文件不符")
+      throw new Error("timeout")
     }
     return gateView()
   })
@@ -179,10 +185,14 @@ it("keeps the filled evidence form and shows the error when the server rejects",
   await user.type(uris[1], "fdeops://engagements/demo/.fde/painpoints.md")
   await user.type(hashes[1], "b".repeat(64))
 
-  await user.click(screen.getByRole("button", { name: "提交证据（标 claimed）" }))
+  await user.click(screen.getByRole("button", { name: "预览证据提交" }))
+  expect(evidenceRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认提交证据" }))
 
   const alert = await screen.findByRole("alert")
-  expect(alert).toHaveTextContent("门禁数据加载失败，请稍后重试。")
+  expect(alert).toHaveTextContent("未能确认门禁操作结果")
+  expect(screen.getByRole("button", { name: "刷新门禁" })).toBeEnabled()
+  expect(screen.getByRole("button", { name: "预览证据提交" })).toBeDisabled()
   // 失败不收表单：已填的指针与 sha256 保留
   expect((screen.getAllByPlaceholderText("fdeops://engagements/<代号>/.fde/…")[0] as HTMLInputElement).value).toBe(
     "fdeops://engagements/demo/.fde/report.md",
@@ -197,6 +207,7 @@ it("C2: opening the verify panel defaults every checklist item to unchecked", as
         {
           gate_key: "G6",
           status: "evidence",
+          revision: 1,
           decision: null,
           submitted_at: "2026-10-20T08:00:00+00:00",
           decided_at: null,
@@ -277,15 +288,18 @@ it("T-G1: renders task evidence candidates and adopts via the existing submit ga
   expect(section).toBeVisible()
   expect(screen.getByText(/diagnosis_report · 产出诊断报告/)).toBeVisible()
 
-  // 默认选中第一个清单项；改选第二个再采纳——提交体走既有 evidence 闸
+  expect(screen.getByRole("button", { name: "采纳到清单" })).toBeDisabled()
   await user.selectOptions(
     screen.getByRole("combobox", { name: "候选 diagnosis_report 的目标清单项" }),
     "现状与痛点清单",
   )
   await user.click(screen.getByRole("button", { name: "采纳到清单" }))
+  expect(evidenceRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认提交证据" }))
 
   await waitFor(() => expect(evidenceRequestBodies()).toHaveLength(1))
   expect(evidenceRequestBodies()[0]).toEqual({
+    expected_revision: 1,
     items: [
       {
         label: "现状与痛点清单",
@@ -298,6 +312,24 @@ it("T-G1: renders task evidence candidates and adopts via the existing submit ga
   await waitFor(() => {
     expect(callCount(gatesPath(), "GET")).toBeGreaterThanOrEqual(2)
   })
+})
+
+it("previews the old and new evidence before replacing and cancellation writes nothing", async () => {
+  const user = userEvent.setup()
+  mocks.apiRequest.mockResolvedValue(gateView({ gates: [decidableGate({
+    gate_key: "G3", revision: 7, evidence_candidates: [candidateEntry],
+  })] }))
+  render(<GateBoard projectId="gate-project" canManage />)
+  const target = await screen.findByRole("combobox", { name: /候选.*目标清单项/ })
+  expect(target).toHaveValue("")
+  await user.selectOptions(target, "问题陈述（SCQA）")
+  await user.click(screen.getByRole("button", { name: "采纳到清单" }))
+  expect(screen.getByText(/原引用：fdeops:\/\/x\/y/)).toBeVisible()
+  expect(screen.getByText(`新引用：${candidateEntry.source_uri} ${candidateEntry.content_hash}`)).toBeVisible()
+  expect(screen.getByText("替换后待核验")).toBeVisible()
+  await user.click(screen.getByRole("button", { name: "取消确认" }))
+  expect(evidenceRequestBodies()).toHaveLength(0)
+  expect(target).toHaveValue("问题陈述（SCQA）")
 })
 
 it("T-G1: candidates stay read-only for viewers and legacy payloads without the key still render", async () => {
@@ -358,10 +390,13 @@ it("T-W7: renders workflow candidates with the source badge and adopts via the e
   expect(screen.getByText("影响分析产物")).toBeVisible()
   expect(screen.getByText(/run run-2026 · 节点 build_report/)).toBeVisible()
 
-  // 采纳走既有 evidence 闸（默认选第一个清单项），提交体与任务形同构
+  await user.selectOptions(screen.getByRole("combobox", { name: "候选 影响分析产物 的目标清单项" }), "深度诊断报告")
   await user.click(screen.getByRole("button", { name: "采纳到清单" }))
+  expect(evidenceRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认提交证据" }))
   await waitFor(() => expect(evidenceRequestBodies()).toHaveLength(1))
   expect(evidenceRequestBodies()[0]).toEqual({
+    expected_revision: 1,
     items: [
       {
         label: "深度诊断报告",
@@ -431,12 +466,6 @@ it("T-W7: workflow-tagged rows missing run/node keys fail validation like malfor
   expect(screen.queryByRole("region", { name: "产物候选" })).not.toBeInTheDocument()
 })
 
-// ── B#28 门禁 revision CAS 的桌面接线 ────────────────────────────────
-// 服务端 CAS 已在 #130 落地（decide_gate 收可选 expected_revision，不符即
-// 409 gate_revision_conflict 且零变更）；桌面此前不知道当前 revision，CAS
-// 实际从未被启用。本组用例钉住「面板读到的 revision 原样带回」＋「冲突如实
-// 呈现并刷新」，杜绝静默覆盖前写。
-
 function decidableGate(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const base = gateView().gates as Array<Record<string, unknown>>
   return {
@@ -457,27 +486,27 @@ it("B#28: 拍板请求带上服务端回传的 expected_revision", async () => {
 
   await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
   await user.click(screen.getByRole("checkbox"))
-  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
+  await user.click(screen.getByRole("button", { name: /预览拍板（接受 1\/1）/ }))
+  expect(decisionRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认人工拍板" }))
 
   await waitFor(() => {
     expect(decisionRequestBodies().length).toBe(1)
   })
   expect(decisionRequestBodies()[0].expected_revision).toBe(7)
+  const request = mocks.apiRequest.mock.calls.find((call) => String(call[0]).endsWith("/decision"))
+  expect(request?.[1].retryAfterAuthRefresh).not.toBe(true)
 })
 
-it("B#28: 旧服务端载荷无 revision 键时不带 expected_revision（旧客户端兼容）", async () => {
-  const user = userEvent.setup()
-  mocks.apiRequest.mockResolvedValue(gateView({ gates: [decidableGate()] }))
+it("没有服务端保护能力时已有 revision 也只读", async () => {
+  mocks.apiRequest.mockResolvedValue(gateView({
+    write_preconditions: undefined,
+    gates: [decidableGate({ revision: 7 })],
+  }))
   render(<GateBoard projectId="gate-project" canManage />)
-
-  await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
-  await user.click(screen.getByRole("checkbox"))
-  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
-
-  await waitFor(() => {
-    expect(decisionRequestBodies().length).toBe(1)
-  })
-  expect(decisionRequestBodies()[0]).not.toHaveProperty("expected_revision")
+  expect(await screen.findByText(/当前服务端不支持门禁确认保护/)).toBeVisible()
+  expect(screen.queryByRole("button", { name: "人工核验拍板" })).not.toBeInTheDocument()
+  expect(decisionRequestBodies()).toHaveLength(0)
 })
 
 it("B#28: 并发拍板冲突（409）如实呈现并刷新面板，不假装成功", async () => {
@@ -498,10 +527,15 @@ it("B#28: 并发拍板冲突（409）如实呈现并刷新面板，不假装成�
 
   await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
   await user.click(screen.getByRole("checkbox"))
-  await user.click(screen.getByRole("button", { name: /拍板（接受 1\/1）/ }))
+  await user.click(screen.getByRole("button", { name: /预览拍板（接受 1\/1）/ }))
+  expect(decisionRequestBodies()).toHaveLength(0)
+  await user.click(screen.getByRole("button", { name: "确认人工拍板" }))
 
   const alert = await screen.findByRole("alert")
-  expect(alert).toHaveTextContent("门禁状态已被其他操作推进")
+  expect(alert).toHaveTextContent("本次未提交")
+  await user.click(await screen.findByRole("button", { name: "人工核验拍板" }))
+  expect(screen.getByRole("checkbox")).not.toBeChecked()
+  expect(decisionRequestBodies()).toHaveLength(1)
   // 冲突后重新拉取门禁视图（拿新 revision，人可基于新状态重拍）
   await waitFor(() => {
     expect(callCount(gatesPath())).toBeGreaterThan(1)
@@ -515,6 +549,7 @@ it("B#30-A: 证据已换版项呈现警示 badge，未换版项与旧载荷（�
         {
           gate_key: "G2",
           status: "evidence",
+          revision: 1,
           decision: null,
           submitted_at: "2026-11-05T08:00:00+00:00",
           decided_at: null,

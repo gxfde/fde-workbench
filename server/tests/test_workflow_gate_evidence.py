@@ -394,6 +394,7 @@ def test_adoption_prunes_workflow_candidate(db_session, settings):
         project_id=project.id,
         gate_key="G6",
         payload={
+            "expected_revision": gate.version,
             "items": [
                 {"label": checklist_label, "source_uri": uri, "content_hash": digest}
             ]

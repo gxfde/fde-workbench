@@ -139,6 +139,7 @@ def test_candidates_never_materialize_evidence_until_human_claim(db_session, set
         project_id=project.id,
         gate_key="G6",
         payload={
+            "expected_revision": gate.version,
             "items": [
                 {"label": label, "source_uri": task_uri, "content_hash": task_hash}
             ]
@@ -168,7 +169,8 @@ def test_claimed_checklist_reconciles_with_evidence_row(db_session, settings):
         actor=leader,
         project_id=project.id,
         gate_key="G9",
-        payload={"items": [{"label": label, "source_uri": uri, "content_hash": digest}]},
+        payload={"expected_revision": gate.version,
+                 "items": [{"label": label, "source_uri": uri, "content_hash": digest}]},
     )
     db_session.expire_all()
 

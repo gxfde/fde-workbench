@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(min_length=32)
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+    # Only an approved, time-bounded migration may accept legacy requests without conditions.
+    ux_write_preconditions_required: bool = True
     # 红线① 产品名单一来源（服务端侧单点）：默认值=desktop/src/shared/brand.ts 的
     # PRODUCT_NAME；改动需双侧同步（桌面 brand.ts + 此处/env 覆写 FDE_PRODUCT_NAME）。
     # 界面文案（chat 系统提示词等）从此处取值，不再硬编码。

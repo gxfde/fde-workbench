@@ -233,6 +233,7 @@ def _submit_all_evidence(authorized: AuthorizedClient, gates_url: str, gate_key:
     response = authorized.post(
         f"{gates_url}/{gate_key}/evidence",
         json={
+            "expected_revision": gate["revision"],
             "items": [
                 {
                     "label": item["label"],
@@ -244,6 +245,7 @@ def _submit_all_evidence(authorized: AuthorizedClient, gates_url: str, gate_key:
         },
     )
     assert response.status_code == 200, response.get_data(as_text=True)
+    return response.json["data"]["revision"]
 
 
 def test_executor_cannot_decide_own_gate(separation_context, db_session):
@@ -251,9 +253,9 @@ def test_executor_cannot_decide_own_gate(separation_context, db_session):
     admin, leader, admin_client, leader_client, project_id, gates_url = (
         separation_context
     )
-    _submit_all_evidence(admin_client, gates_url, "G1")
+    revision = _submit_all_evidence(admin_client, gates_url, "G1")
 
-    conflict = admin_client.post(f"{gates_url}/G1/decision", json={"result": "pass"})
+    conflict = admin_client.post(f"{gates_url}/G1/decision", json={"expected_revision": revision, "result": "pass"})
     assert conflict.status_code == 403
     assert conflict.json["error"]["code"] == "gate_decider_conflict"
 
@@ -264,7 +266,7 @@ def test_executor_cannot_decide_own_gate(separation_context, db_session):
     assert gate_row.submitted_by_user_id == admin.id
     assert gate_row.is_delivery_party is False
 
-    decided = leader_client.post(f"{gates_url}/G1/decision", json={"result": "pass"})
+    decided = leader_client.post(f"{gates_url}/G1/decision", json={"expected_revision": revision, "result": "pass"})
     assert decided.status_code == 200, decided.get_data(as_text=True)
     assert decided.json["data"]["status"] == "passed"
     assert decided.json["data"]["decided_by_user_id"] == leader.id
@@ -282,7 +284,7 @@ def test_delivery_party_gate_g8_requires_platform_decider(
     admin, leader, admin_client, leader_client, project_id, gates_url = (
         separation_context
     )
-    _submit_all_evidence(admin_client, gates_url, "G8")
+    revision = _submit_all_evidence(admin_client, gates_url, "G8")
     delivery_member = _user("sep.delivery.member", role="fde_engineer")
     db_session.add(delivery_member)
     db_session.commit()
@@ -303,13 +305,13 @@ def test_delivery_party_gate_g8_requires_platform_decider(
     db_session.commit()
 
     denied = leader_client.post(
-        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "proceed"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass", "decision": "proceed"}
     )
     assert denied.status_code == 403
     assert denied.json["error"]["code"] == "gate_decider_role_required"
 
     approved = admin_client.post(
-        f"{gates_url}/G8/decision", json={"result": "pass", "decision": "proceed"}
+        f"{gates_url}/G8/decision", json={"expected_revision": revision, "result": "pass", "decision": "proceed"}
     )
     assert approved.status_code == 200, approved.get_data(as_text=True)
     assert approved.json["data"]["status"] == "passed"
@@ -322,14 +324,14 @@ def test_decide_gate_service_level_conflict_guard(separation_context):
     _admin, _leader, admin_client, _leader_client, _project_id, gates_url = (
         separation_context
     )
-    _submit_all_evidence(admin_client, gates_url, "G2")
+    revision = _submit_all_evidence(admin_client, gates_url, "G2")
 
     with pytest.raises(GateServiceError) as excinfo:
         decide_gate(
             actor=_admin,
             project_id=_project_id,
             gate_key="G2",
-            payload={"result": "pass"},
+            payload={"expected_revision": revision, "result": "pass"},
         )
     assert excinfo.value.code == "gate_decider_conflict"
     assert excinfo.value.status == 403

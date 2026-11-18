@@ -506,13 +506,25 @@ def main(app=None, settings=None) -> int:
         gates = client.get(gates_url, headers=admin_headers).get_json()["data"]["gates"]
         check("P4 项目懒实例化 9 门", len(gates) == 9)
 
+        # 仅对本次冒烟新建的合成项目提交。以首次读和成功回执演进条件，禁止重试冲突。
+        gate_revisions = {gate["gate_key"]: gate["revision"] for gate in gates}
+
+        def post_gate(url, *, json, headers):
+            gate_key = url.split("/")[-2]
+            if gate_key in gate_revisions:
+                json = {**json, "expected_revision": gate_revisions[gate_key]}
+            response = client.post(url, json=json, headers=headers)
+            if response.status_code == 200:
+                gate_revisions[gate_key] = response.get_json()["data"]["revision"]
+            return response
+
         # ---- 10a) accepted_labels 越集追认拒（审查修复 P0）----
         # 只提交 1 项证据就把全部清单项塞进 accepted_labels → 必须拒；
         # 只核验已提交项 → pass 因其余未 accepted 也要拒。
         g3gate = next(g for g in gates if g["gate_key"] == "G3")
         first_label = g3gate["checklist"][0]["label"]
         all_labels = [i["label"] for i in g3gate["checklist"]]
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={
                 "items": [
@@ -526,7 +538,7 @@ def main(app=None, settings=None) -> int:
             headers=lead_headers,
         )
         check("G3 部分提交（1 项）进 evidence", r.status_code == 200, str(r.status_code))
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision",
             json={"result": "pass", "accepted_labels": all_labels},
             headers=admin_headers,
@@ -537,7 +549,7 @@ def main(app=None, settings=None) -> int:
             and r.get_json()["error"]["code"] == "accepted_labels_not_claimed",
             str((r.status_code, r.get_json().get("error", {}).get("code"))),
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision",
             json={"result": "pass", "accepted_labels": [first_label]},
             headers=admin_headers,
@@ -548,7 +560,7 @@ def main(app=None, settings=None) -> int:
             and r.get_json()["error"]["code"] == "gate_evidence_incomplete",
             str((r.status_code, r.get_json().get("error", {}).get("code"))),
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/evidence",
             json={
                 "items": [
@@ -564,7 +576,7 @@ def main(app=None, settings=None) -> int:
             headers=lead_headers,
         )
         check("G3 补齐其余证据", r.status_code == 200, str(r.status_code))
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G3/decision",
             json={"result": "pass"},
             headers=admin_headers,
@@ -572,7 +584,7 @@ def main(app=None, settings=None) -> int:
         check("G3 全量提交后默认全核验过门", r.status_code == 200 and r.get_json()["data"]["status"] == "passed")
 
         g8gate = next(g for g in gates if g["gate_key"] == "G8")
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/evidence",
             json={
                 "items": [
@@ -586,7 +598,7 @@ def main(app=None, settings=None) -> int:
             },
             headers=lead_headers,
         )
-        r = client.post(
+        r = post_gate(
             f"{gates_url}/G8/decision",
             json={"result": "pass", "decision": "stop"},
             headers=admin_headers,

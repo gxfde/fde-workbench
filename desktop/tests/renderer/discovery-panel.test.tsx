@@ -8,7 +8,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import React from "react"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -96,10 +96,30 @@ function renderPanel(canManage = true) {
   return render(<DiscoveryPanel projectId="project-1" canManage={canManage} />)
 }
 
+it("切换审阅状态后忽略迟到的待审列表", async () => {
+  let resolvePending!: (value: { items: typeof factPending[] }) => void
+  const pending = new Promise<{ items: typeof factPending[] }>((resolve) => { resolvePending = resolve })
+  mocks.apiRequest.mockImplementation((url: string) => {
+    if (url.includes("review_status=pending")) return pending
+    if (url.includes("review_status=accepted")) return Promise.resolve({ items: [factEmptyAnchor] })
+    return Promise.resolve(mockGet(url))
+  })
+  renderPanel()
+  await screen.findByText("看板异常 · 静默错误")
+  const filter = screen.getByLabelText("审阅状态")
+  fireEvent.change(filter, { target: { value: "pending" } })
+  await waitFor(() => expect(mocks.apiRequest.mock.calls.some(([url]) => String(url).includes("review_status=pending"))).toBe(true))
+  fireEvent.change(filter, { target: { value: "accepted" } })
+  expect(await screen.findByText("看板异常 · 静默错误")).toBeVisible()
+  await act(async () => { resolvePending({ items: [factPending] }) })
+  expect(screen.queryByText("询盘处理 · 当前步骤")).not.toBeInTheDocument()
+  expect(screen.getByRole("button", { name: /预览批量接受/ })).toBeDisabled()
+})
+
 it("加载三列表并呈现抽取状态、复核条目与失败码", async () => {
   renderPanel()
   expect(await screen.findByRole("heading", { name: "访谈事实与需求（AI 抽取草稿 · 人工审阅定案）" })).toBeInTheDocument()
-  expect(screen.getByText("待审阅")).toBeInTheDocument()
+  expect(await screen.findByText("待审阅")).toBeInTheDocument()
   expect(screen.getByText("失败")).toBeInTheDocument()
   expect(screen.getByText("ai_output_invalid")).toBeInTheDocument()
   expect(screen.getByText(/脱敏复核 1 项/)).toBeInTheDocument()
@@ -170,7 +190,10 @@ it("批量接受只打 pending 行且逐条 PATCH", async () => {
     return Promise.resolve({ data: {}, error: null })
   })
   renderPanel()
-  fireEvent.click(await screen.findByRole("button", { name: "批量接受已加载待审" }))
+  fireEvent.click((await screen.findAllByRole("checkbox", { name: /^选择事实：/ }))[0])
+  fireEvent.click(screen.getByRole("button", { name: "预览批量接受（已选 1 条）" }))
+  expect(patchedUrls).toHaveLength(0)
+  fireEvent.click(screen.getByRole("button", { name: "确认接受" }))
   await waitFor(() => expect(patchedUrls).toHaveLength(1))
   expect(patchedUrls[0]).toBe("/api/v1/business-facts/fact-1/review")
   expect(await screen.findByText("已批量接受 1 条待审事实。")).toBeInTheDocument()
@@ -204,14 +227,49 @@ it("批量接受：PATCH 携带 retryAfterAuthRefresh 且按钮/提示显示进�
     return Promise.resolve({ data: {}, error: null })
   })
   renderPanel()
-  fireEvent.click(await screen.findByRole("button", { name: "批量接受已加载待审" }))
+  for (const checkbox of await screen.findAllByRole("checkbox", { name: /^选择事实：/ })) fireEvent.click(checkbox)
+  fireEvent.click(screen.getByRole("button", { name: "预览批量接受（已选 3 条）" }))
+  fireEvent.click(screen.getByRole("button", { name: "确认接受" }))
   // 第一条 PATCH 挂起期间：按钮显示进度、顶部提示逐条更新（r28 前的"没反应"表象根因之一）。
   expect(screen.getByRole("button", { name: "接受中 0/3…" })).toBeInTheDocument()
   expect(await screen.findByText("正在接受 1/3…")).toBeInTheDocument()
   releaseFirst()
   expect(await screen.findByText("已批量接受 3 条待审事实。")).toBeInTheDocument()
   expect(patchFlags).toHaveLength(3)
-  expect(patchFlags.every((flag) => flag === true)).toBe(true)
+  expect(patchFlags.every((flag) => flag !== true)).toBe(true)
+})
+
+it("只发送当前筛选中的勾选项，读回未知结果但不重发", async () => {
+  const failed = { ...factEmptyAnchor, review_status: "pending" }
+  const successful = { ...failed, id: "fact-5", subject: "排班异常" }
+  const patches: Array<{ url: string; body: unknown }> = []
+  let reads = 0
+  mocks.apiRequest.mockImplementation(async (url: string, init?: { method?: string; body?: unknown }) => {
+    if (init?.method === "PATCH") {
+      patches.push({ url, body: init.body })
+      if (url.includes("fact-4")) throw new Error("timeout")
+      return {}
+    }
+    if (url.includes("/business-facts?")) {
+      reads++
+      return { items: [factPending, { ...failed, review_status: reads > 1 ? "accepted" : "pending" }, successful] }
+    }
+    return mockGet(url)
+  })
+  renderPanel()
+  await screen.findByRole("checkbox", { name: /选择事实：询盘处理/ })
+  fireEvent.change(screen.getByLabelText("锚点核验"), { target: { value: "suspect" } })
+  await waitFor(() => expect(screen.getAllByRole("checkbox", { name: /^选择事实：/ })).toHaveLength(2))
+  for (const checkbox of screen.getAllByRole("checkbox", { name: /^选择事实：/ })) fireEvent.click(checkbox)
+  fireEvent.click(screen.getByRole("button", { name: "预览批量接受（已选 2 条）" }))
+  fireEvent.click(screen.getByRole("button", { name: "确认接受" }))
+  expect(await screen.findByText(/写入结果未知；回读状态：已接受/)).toBeVisible()
+  expect(await screen.findByText(/已接受 1\/2 条/)).toBeVisible()
+  expect(reads).toBe(2)
+  expect(patches).toEqual(["fact-4", "fact-5"].map((id) => ({
+    url: `/api/v1/business-facts/${id}/review`,
+    body: { review_status: "accepted", expected_review_status: "pending" },
+  })))
 })
 
 it("viewer 无写操作：发起/审阅/批量按钮全部隐藏", async () => {

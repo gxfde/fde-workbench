@@ -286,6 +286,11 @@ def review_fact(actor, fact_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         comment = payload.get("comment")
         if comment is not None and (not isinstance(comment, str) or len(comment) > MAX_COMMENT_CHARS):
             raise _error("invalid_comment", "审阅备注必须是 ≤500 字的文本。", 400)
+        if "expected_review_status" in payload:
+            if payload["expected_review_status"] != "pending" or target != "accepted":
+                raise _error("invalid_review_precondition", "批量接受只能确认待审事实。", 400)
+            if fact.review_status != "pending":
+                raise _error("fact_review_state_changed", "该事实已不再待审，未执行批量接受。", 409)
         if fact.review_status in {"accepted", "rejected"}:
             raise _error(
                 "fact_review_final",

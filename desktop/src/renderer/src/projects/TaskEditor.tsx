@@ -29,20 +29,58 @@ interface TaskDraft {
   description: string
 }
 
+type DraftField = keyof TaskDraft
+
+const DRAFT_GROUPS = [
+  { label: "状态、进度与阻塞原因", fields: ["status", "progress", "blockedReason"] },
+  { label: "计划开始、结束日期与工期", fields: ["plannedStartDate", "plannedEndDate", "durationDays"], manage: true },
+  { label: "负责人和协作人", fields: ["assigneeUserId", "collaboratorUserIds"], manage: true },
+  { label: "前置任务", fields: ["dependencyIds"], manage: true },
+  { label: "任务说明", fields: ["description"] },
+] satisfies Array<{ label: string; fields: DraftField[]; manage?: boolean }>
+
+type DraftGroup = (typeof DRAFT_GROUPS)[number]
+interface DraftConflict {
+  group: DraftGroup
+  opened: TaskDraft
+  latest: TaskDraft
+  local: TaskDraft
+}
+
+function sameGroup(a: TaskDraft, b: TaskDraft, group: DraftGroup): boolean {
+  return group.fields.every((field) => {
+    const x = a[field]
+    const y = b[field]
+    return Array.isArray(x) && Array.isArray(y)
+      ? x.length === y.length && x.every((id) => y.includes(id))
+      : x === y
+  })
+}
+
+function copyGroup(target: TaskDraft, source: TaskDraft, group: DraftGroup): TaskDraft {
+  return { ...target, ...Object.fromEntries(group.fields.map((field) => [field, source[field]])) }
+}
+
 export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved, onClose }: TaskEditorProps) {
   const { apiRequest } = useAuth()
   const [draft, setDraft] = useState<TaskDraft>(() => taskDraft(task))
-  const [version, setVersion] = useState(task.version)
+  const [baseline, setBaseline] = useState(() => ({ draft: taskDraft(task), version: task.version }))
+  const [conflicts, setConflicts] = useState<DraftConflict[]>([])
+  const version = baseline.version
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [stale, setStale] = useState(false)
   const generationRef = useRef(0)
+  const [denied, setDenied] = useState(false)
+  const managementLost = !canManage && DRAFT_GROUPS.some((group) => group.manage && !sameGroup(draft, baseline.draft, group))
 
   useEffect(() => {
     setDraft(taskDraft(task))
-    setVersion(task.version)
+    setBaseline({ draft: taskDraft(task), version: task.version })
+    setConflicts([])
+    setDenied(false)
     setError("")
     setNotice("")
     setStale(false)
@@ -51,23 +89,56 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    if (saving) return
+    if (saving || stale || refreshing || conflicts.length || managementLost || denied) return
+    const [execution, schedule, people, dependencies] = DRAFT_GROUPS
+    const changed = (group: DraftGroup) => !sameGroup(draft, baseline.draft, group)
+    const executionChanged = changed(execution)
+    const scheduleChanged = canManage && changed(schedule)
     const progress = Number(draft.progress)
-    if (!Number.isInteger(progress) || progress < 0 || progress > 100) {
+    if (executionChanged && (!Number.isInteger(progress) || progress < 0 || progress > 100)) {
       setError("进度必须是 0 到 100 的整数。")
       return
     }
     const duration = Number(draft.durationDays)
-    if (canManage && (!Number.isInteger(duration) || duration < 1)) {
+    if (scheduleChanged && (!Number.isInteger(duration) || duration < 1)) {
       setError("工期必须是大于 0 的整数。")
       return
     }
-    if (canManage && workdayDuration(draft.plannedStartDate, draft.plannedEndDate) !== duration) {
+    if (scheduleChanged && workdayDuration(draft.plannedStartDate, draft.plannedEndDate) !== duration) {
       setError("计划开始日期、结束日期与工期不一致，请调整后重试。")
       return
     }
-    if (draft.status === "blocked" && !draft.blockedReason.trim()) {
+    if (executionChanged && draft.status === "blocked" && !draft.blockedReason.trim()) {
       setError("阻塞状态必须填写阻塞原因。")
+      return
+    }
+    // 服务端四态分支会拒绝或强改进度；先在本地说明，避免提交后拿到无指向的失败。
+    if (executionChanged) {
+      const problem = progressConflict(draft.status, progress, Number(baseline.draft.progress))
+      if (problem) {
+        setError(problem)
+        return
+      }
+    }
+    const body: Record<string, unknown> = { version }
+    if (executionChanged) {
+      Object.assign(body, { status: draft.status, progress })
+      if (draft.status === "blocked") body.blocked_reason = draft.blockedReason.trim()
+    }
+    if (canManage && draft.description.trim() !== baseline.draft.description.trim()) body.description = draft.description.trim()
+    if (scheduleChanged) Object.assign(body, {
+      planned_start_date: draft.plannedStartDate,
+      planned_end_date: draft.plannedEndDate,
+      duration_days: duration,
+    })
+    if (canManage && changed(people)) Object.assign(body, {
+      assignee_user_id: draft.assigneeUserId || null,
+      collaborator_user_ids: draft.collaboratorUserIds,
+    })
+    if (canManage && changed(dependencies)) body.dependency_ids = draft.dependencyIds
+    if (Object.keys(body).length === 1) {
+      setError("")
+      setNotice("任务没有需要保存的修改。")
       return
     }
     const generation = ++generationRef.current
@@ -75,21 +146,6 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
     setError("")
     setNotice("")
     setStale(false)
-    const body: Record<string, unknown> = {
-      status: draft.status,
-      progress,
-      version,
-    }
-    if (draft.status === "blocked") body.blocked_reason = draft.blockedReason.trim()
-    if (draft.description.trim() !== task.description) body.description = draft.description.trim()
-    if (canManage) Object.assign(body, {
-      planned_start_date: draft.plannedStartDate,
-      planned_end_date: draft.plannedEndDate,
-      duration_days: duration,
-      assignee_user_id: draft.assigneeUserId || null,
-      collaborator_user_ids: draft.collaboratorUserIds,
-      dependency_ids: draft.dependencyIds,
-    })
     try {
       const saved = await apiRequest<ProjectTaskDto>(taskPath(projectId, task.id), { method: "PATCH", body })
       if (generation !== generationRef.current) return
@@ -100,6 +156,13 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
       if (caught instanceof ApiClientError && caught.code === "stale_version") {
         setStale(true)
         setError("内容已被其他人更新，请刷新后重试")
+      } else if (caught instanceof ApiClientError && caught.status === 404) {
+        // 任务已不存在或已不可见：继续提交只会重复失败，锁住本窗口。
+        setDenied(true)
+        setError("任务已不可编辑，未保存。")
+      } else if (caught instanceof ApiClientError && caught.status === 403) {
+        // 字段级越权不应连坐同窗口内合法的进度/阻塞原因编辑。
+        setError("本次修改包含你无权变更的内容，未保存。请只改状态、进度或阻塞原因后重试。")
       } else setError(taskError(caught))
     } finally {
       if (generation === generationRef.current) setSaving(false)
@@ -115,10 +178,22 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
       const current = await apiRequest<ProjectTaskDto>(taskPath(projectId, task.id), { method: "GET" })
       if (generation !== generationRef.current) return
       if (!isProjectTaskDto(current) || current.id !== task.id) throw new Error("invalid task")
-      setVersion(current.version)
+      const latest = taskDraft(current)
+      const nextConflicts: DraftConflict[] = []
+      let merged = latest
+      for (const group of DRAFT_GROUPS) {
+        if (sameGroup(draft, baseline.draft, group)) continue
+        if (!sameGroup(latest, baseline.draft, group) && !sameGroup(latest, draft, group)) {
+          nextConflicts.push({ group, opened: baseline.draft, latest, local: draft })
+        }
+        merged = copyGroup(merged, draft, group)
+      }
+      setBaseline({ draft: latest, version: current.version })
+      setDraft(merged)
+      setConflicts(nextConflicts)
       setStale(false)
       setError("")
-      setNotice("已刷新任务版本，未保存内容仍已保留。")
+      setNotice(nextConflicts.length ? "同组内容已变更，请选择保留哪一组值。" : "已合并最新任务与未保存的修改。")
     } catch (caught) {
       if (generation === generationRef.current) setError(taskError(caught))
     } finally {
@@ -131,7 +206,7 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
       <section className="dialog task-dialog" role="dialog" aria-modal="true" aria-labelledby="task-editor-title">
         <div className="panel-heading"><h2 id="task-editor-title">更新任务：{task.name}</h2><span>v{version}</span></div>
         <form onSubmit={submit}>
-          <div className="task-dialog-grid">
+          <div className="task-dialog-grid" inert={saving || refreshing || conflicts.length > 0 || denied}>
             <Field label="状态" id="task-edit-status">
               <select id="task-edit-status" value={draft.status} onChange={(event) => {
                 const status = event.target.value as ProjectTaskStatus
@@ -153,7 +228,8 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
               {draft.status !== "blocked" ? <small className="field-hint">非阻塞状态不会提交阻塞原因。</small> : null}
             </Field>
             <Field label="任务说明" id="task-edit-description" wide>
-              <textarea id="task-edit-description" rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+              <textarea id="task-edit-description" rows={2} value={draft.description} disabled={!canManage} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+              {!canManage ? <small className="field-hint">任务说明由项目负责人维护。</small> : null}
             </Field>
             {canManage ? <>
               <Field label="计划开始日期" id="task-edit-start"><input id="task-edit-start" type="date" value={draft.plannedStartDate} onChange={(event) => setDraft(updatePlannedDate(draft, "start", event.target.value))} /></Field>
@@ -169,17 +245,42 @@ export function TaskEditor({ projectId, task, tasks, members, canManage, onSaved
               <TaskDependencyPicker currentTaskId={task.id} tasks={tasks} value={draft.dependencyIds} disabled={saving} onChange={(dependencyIds) => setDraft({ ...draft, dependencyIds })} />
             </> : null}
           </div>
+          {conflicts.map(({ group, opened, latest, local }) => (
+            <fieldset key={group.label}>
+              <legend>{group.label}</legend>
+              <dl>
+                <dt>打开时</dt><dd>{groupText(opened, group)}</dd>
+                <dt>最新值</dt><dd>{groupText(latest, group)}</dd>
+                <dt>我的草稿</dt><dd>{groupText(local, group)}</dd>
+              </dl>
+              <button type="button" className="secondary-button" onClick={() => {
+                setDraft((previous) => copyGroup(previous, latest, group))
+                setConflicts((previous) => previous.filter((conflict) => conflict.group !== group))
+              }}>使用最新值</button>
+              <button type="button" className="secondary-button" onClick={() => {
+                setConflicts((previous) => previous.filter((conflict) => conflict.group !== group))
+              }}>保留我的草稿</button>
+            </fieldset>
+          ))}
+          {managementLost ? <p className="form-error" role="alert">管理权限已变更，无法保存此草稿。</p> : null}
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {notice ? <p className="notice" role="status">{notice}</p> : null}
           <div className="dialog-actions">
             {stale ? <button className="secondary-button" type="button" disabled={refreshing} onClick={() => void refreshVersion()}>{refreshing ? "刷新中…" : "刷新任务"}</button> : null}
             <button className="secondary-button" type="button" onClick={onClose}>取消</button>
-            <button className="primary-button" type="submit" disabled={saving}>{saving ? "保存中…" : "保存任务"}</button>
+            <button className="primary-button" type="submit" disabled={saving || refreshing || stale || conflicts.length > 0 || managementLost || denied}>{saving ? "保存中…" : "保存任务"}</button>
           </div>
         </form>
       </section>
     </div>
   )
+}
+
+function groupText(draft: TaskDraft, group: DraftGroup): string {
+  return group.fields.map((field) => {
+    const value = draft[field]
+    return (Array.isArray(value) ? value.join("、") : value) || "—"
+  }).join(" / ")
 }
 
 function Field({ label, id, wide = false, children }: { label: string; id: string; wide?: boolean; children: React.ReactNode }) {
@@ -203,6 +304,16 @@ function taskDraft(task: ProjectTaskDto): TaskDraft {
 
 function taskPath(projectId: string, taskId: string): string {
   return `/api/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`
+}
+
+function progressConflict(status: ProjectTaskStatus, progress: number, opened: number): string {
+  if (status === "not_started" && progress !== 0) return "未开始任务的进度必须是 0。"
+  if (status === "in_progress" && (progress < 1 || progress > 99)) {
+    return "进行中任务的进度必须在 1 到 99 之间；请改用其他状态。"
+  }
+  if (status === "blocked" && progress !== opened) return "阻塞状态不能同时改进度，请先解除阻塞再更新进度。"
+  if (status === "completed" && progress !== 100) return "已完成任务的进度将记为 100%。"
+  return ""
 }
 
 function progressForStatus(status: ProjectTaskStatus, current: string): string {
@@ -301,6 +412,8 @@ function taskError(error: unknown): string {
     if (error.code === "invalid_task_dependency") return "前置任务必须来自同一项目且有效。"
     if (error.code === "invalid_task_member") return "负责人和协作人必须是有效的项目成员。"
     if (error.code === "invalid_task_assignment") return "负责人不能同时作为协作人。"
+    if (error.code === "invalid_task_state") return "状态与进度的组合不被接受，请按提示调整后重试。"
+    if (error.code === "forbidden") return "本次修改包含你无权变更的内容，未保存。"
   }
   return "任务更新失败，请检查内容后重试。"
 }

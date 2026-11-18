@@ -203,14 +203,20 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
   const [notice, setNotice] = useState("")
   // 批量接受进度（按钮级呈现——面板顶部的 notice 可能随长表滚出视口）。
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
+  const [selectedFacts, setSelectedFacts] = useState<string[]>([])
+  const [batchPreview, setBatchPreview] = useState<FactDto[]>([])
+  const [batchReceipts, setBatchReceipts] = useState<Array<{ id: string; label: string; message: string }>>([])
+  const [needsFactReload, setNeedsFactReload] = useState<string[]>([])
   const [loaded, setLoaded] = useState(false)
   const minutesContentRef = useRef<Map<string, string>>(new Map())
   const factsRef = useRef<FactDto[]>([])
+  const loadGeneration = useRef(0)
 
-  const loadFacts = useCallback(async (offset: number, replace: boolean) => {
+  const loadFacts = useCallback(async (offset: number, replace: boolean, generation: number) => {
     const params = new URLSearchParams({ limit: String(FACT_PAGE_SIZE), offset: String(offset) })
     if (factFilter) params.set("review_status", factFilter)
     const factData = await apiRequest<FactListDto>(`/api/v1/projects/${projectId}/business-facts?${params.toString()}`, { method: "GET" })
+    if (generation !== loadGeneration.current) return
     const page = factData.items
     setFacts((prev) => {
       const next = replace ? page : [...prev, ...page.filter((item) => !prev.some((p) => p.id === item.id))]
@@ -221,6 +227,8 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
   }, [apiRequest, projectId, factFilter])
 
   const loadAll = useCallback(async () => {
+    const generation = ++loadGeneration.current
+    setLoaded(false)
     setError("")
     try {
       const [minutesData, extractionData, requirementData] = await Promise.all([
@@ -228,18 +236,22 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
         apiRequest<ExtractionListDto>(`/api/v1/projects/${projectId}/discovery/extractions?limit=20`, { method: "GET" }),
         apiRequest<RequirementListDto>(`/api/v1/projects/${projectId}/requirements?limit=100`, { method: "GET" }),
       ])
+      if (generation !== loadGeneration.current) return
       setMinutes(minutesData.items)
       setExtractions(extractionData.items)
       setRequirements(requirementData.items)
       setRequirementsExhausted(requirementData.items.length < 100)
-      await loadFacts(0, true)
-      setLoaded(true)
+      await loadFacts(0, true, generation)
+      if (generation === loadGeneration.current) setLoaded(true)
     } catch (caught) {
-      setError(errorMessage(caught))
+      if (generation === loadGeneration.current) setError(errorMessage(caught))
     }
   }, [apiRequest, projectId, loadFacts])
 
-  useEffect(() => { void loadAll() }, [loadAll])
+  useEffect(() => {
+    void loadAll()
+    return () => { loadGeneration.current += 1 }
+  }, [loadAll])
 
   // 锚点核验：需要正文的纪要按需拉取（缓存去重），缺失时该条不标级（不炸面板）。
   useEffect(() => {
@@ -345,38 +357,83 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
     }
   }
 
+  const eligibleFacts = loaded && (!factFilter || factFilter === "pending")
+    ? visibleFacts.filter((fact) => fact.review_status === "pending" && !needsFactReload.includes(fact.id))
+    : []
+  const selectedPending = eligibleFacts.filter((fact) => selectedFacts.includes(fact.id))
+
+  const readBatchResults = async (ids: string[]) => {
+    const found = new Map<string, FactDto>()
+    const wanted = new Set(ids)
+    // Omit the status filter: a settled fact may have left the active 待审 filter.
+    const limit = Math.max(FACT_PAGE_SIZE, facts.length)
+    for (let offset = 0; offset < limit && found.size < wanted.size; offset += FACT_PAGE_SIZE) {
+      const data = await apiRequest<FactListDto>(
+        `/api/v1/projects/${projectId}/business-facts?limit=${FACT_PAGE_SIZE}&offset=${offset}`, { method: "GET" },
+      )
+      for (const fact of data.items) if (wanted.has(fact.id)) found.set(fact.id, fact)
+      if (data.items.length < FACT_PAGE_SIZE) break
+    }
+    setFacts((prev) => prev.map((fact) => found.get(fact.id) ?? fact))
+    setNeedsFactReload((prev) => prev.filter((id) => !found.has(id)))
+    setBatchReceipts((prev) => prev.map((row) => {
+      const current = found.get(row.id)
+      if (current) return { ...row, message: `${row.message}；回读状态：${label(REVIEW_STATUS_LABEL, current.review_status)}` }
+      if (ids.includes(row.id)) return { ...row, message: "未在本次回读范围内找到，结果仍未确认。" }
+      return row
+    }))
+  }
+
   const acceptPendingFacts = async () => {
-    const pending = facts.filter((fact) => fact.review_status === "pending")
-    if (!pending.length) return
+    if (!canManage || busy || !batchPreview.length) return
+    const pending = batchPreview
+    setBatchPreview([])
+    setSelectedFacts([])
+    setBatchReceipts([])
     setBusy(true); setError("")
     const accepted: string[] = []
-    let failed = 0
+    const uncertain: string[] = []
+    let done = 0
     for (const fact of pending) {
-      // 进度反馈：240 条级别的批量会跑几十秒，按钮与提示逐条更新避免像"没反应"。
-      setBatchProgress({ done: accepted.length + failed, total: pending.length })
-      setNotice(`正在接受 ${accepted.length + failed + 1}/${pending.length}…`)
+      setBatchProgress({ done, total: pending.length })
+      setNotice(`正在接受 ${done + 1}/${pending.length}…`)
+      let message: string
       try {
         await apiRequest(`/api/v1/business-facts/${fact.id}/review`, {
           method: "PATCH",
-          // 幂等审阅写：token 刷新后允许自动重发。
-          retryAfterAuthRefresh: true,
-          body: { review_status: "accepted" },
+          body: { review_status: "accepted", expected_review_status: "pending" },
         })
         accepted.push(fact.id)
-      } catch {
-        failed += 1
+        message = "已接受"
+      } catch (caught) {
+        const status = caught instanceof ApiClientError ? caught.status : undefined
+        if (status === 409) {
+          message = "已不再待审，未写入"
+          uncertain.push(fact.id)
+        } else if (status && status >= 400 && status < 500 && status !== 408) {
+          message = "请求被拒绝，未写入"
+        } else {
+          message = "写入结果未知"
+          uncertain.push(fact.id)
+        }
       }
+      done += 1
+      setBatchReceipts((prev) => [...prev, { id: fact.id, label: `${fact.subject} · ${fact.predicate}`, message }])
     }
-    setFacts((prev) => prev.map((fact) => (accepted.includes(fact.id) ? { ...fact, review_status: "accepted" } : fact)))
+    setFacts((prev) => prev.map((fact) => accepted.includes(fact.id) ? { ...fact, review_status: "accepted" } : fact))
+    setNeedsFactReload((prev) => [...new Set([...prev, ...uncertain])])
+    if (uncertain.length) {
+      try { await readBatchResults(uncertain) } catch { setError("无法回读事实状态，未重试写入。") }
+    }
     setBatchProgress(null)
-    setNotice(failed ? `批量接受完成，${failed} 条失败（已终态或并发变动）。` : `已批量接受 ${accepted.length} 条待审事实。`)
+    setNotice(accepted.length === pending.length ? `已批量接受 ${accepted.length} 条待审事实。` : `已接受 ${accepted.length}/${pending.length} 条，请查看逐项回执。`)
     setBusy(false)
   }
 
   const loadMoreFacts = async () => {
     setBusy(true); setError("")
     try {
-      await loadFacts(facts.length, false)
+      await loadFacts(facts.length, false, loadGeneration.current)
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -463,7 +520,10 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
       <h4>业务事实（已加载 {facts.length}{factsExhausted ? "" : "+"}）</h4>
       <div className="discovery-filter-row">
         <label htmlFor="discovery-fact-filter">审阅状态</label>
-        <select id="discovery-fact-filter" value={factFilter} onChange={(event) => { setFactFilter(event.target.value) }}>
+        <select id="discovery-fact-filter" value={factFilter} disabled={busy} onChange={(event) => {
+          loadGeneration.current += 1
+          setSelectedFacts([]); setBatchPreview([]); setFacts([]); setLoaded(false); setFactFilter(event.target.value)
+        }}>
           <option value="">全部</option>
           <option value="pending">待审</option>
           <option value="needs_clarification">待澄清</option>
@@ -471,22 +531,36 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
           <option value="rejected">已拒绝</option>
         </select>
         <label htmlFor="discovery-anchor-filter">锚点核验</label>
-        <select id="discovery-anchor-filter" value={anchorFilter} onChange={(event) => { setAnchorFilter(event.target.value === "suspect" ? "suspect" : "all") }}>
+        <select id="discovery-anchor-filter" value={anchorFilter} disabled={busy} onChange={(event) => {
+          setSelectedFacts([]); setBatchPreview([])
+          setAnchorFilter(event.target.value === "suspect" ? "suspect" : "all")
+        }}>
           <option value="all">全部</option>
           <option value="suspect">仅看可疑（A/B 级）</option>
         </select>
         <span className="hint-text" title="锚点核验＝行号定位对纪要原文的程序化比对（A=高危/空行或全不命中，B=疑似相邻行滑移，C=命中）。分级仅提示，接受/拒绝仍由人工判断。">
           锚点核验：A {anchorSummary.a} · B {anchorSummary.b} · C {anchorSummary.c}
         </span>
-        {canManage && facts.some((fact) => fact.review_status === "pending")
-          ? <button type="button" disabled={busy} onClick={() => { void acceptPendingFacts() }}>
-              {batchProgress ? `接受中 ${batchProgress.done}/${batchProgress.total}…` : "批量接受已加载待审"}
-            </button>
-          : null}
+        {canManage ? <button type="button" disabled={busy || !selectedPending.length} onClick={() => setBatchPreview(selectedPending)}>
+          {batchProgress ? `接受中 ${batchProgress.done}/${batchProgress.total}…` : `预览批量接受（已选 ${selectedPending.length} 条）`}
+        </button> : null}
         {!factsExhausted
           ? <button type="button" disabled={busy} onClick={() => { void loadMoreFacts() }}>加载更多事实</button>
           : null}
       </div>
+      {canManage && batchPreview.length > 0 ? <fieldset>
+        <legend>确认批量接受</legend>
+        <p>当前筛选 · 已加载 · 已选 {batchPreview.length} 条</p>
+        <ul>{batchPreview.map((fact) => <li key={fact.id}>{fact.subject} · {fact.predicate}</li>)}</ul>
+        <button type="button" autoFocus onClick={() => setBatchPreview([])}>取消批量接受</button>
+        <button type="button" disabled={busy || batchPreview.some((fact) => !eligibleFacts.some((item) => item.id === fact.id))} onClick={() => void acceptPendingFacts()}>确认接受</button>
+      </fieldset> : null}
+      {batchReceipts.length > 0 ? <ul aria-label="批量审阅回执">{batchReceipts.map((row) => <li key={row.id}>{row.label}：{row.message}</li>)}</ul> : null}
+      {needsFactReload.length > 0 ? <button type="button" disabled={busy} onClick={async () => {
+        setBusy(true); setError("")
+        try { await readBatchResults(needsFactReload) } catch { setError("无法回读事实状态，未重试写入。") }
+        finally { setBusy(false) }
+      }}>回读事实状态</button> : null}
       {!loaded ? <p>正在加载…</p> : visibleFacts.length === 0 ? <p>暂无事实（发起抽取后生成草稿）。</p> : (
         <table className="data-table">
           <thead>
@@ -510,6 +584,16 @@ export function DiscoveryPanel({ projectId, canManage }: DiscoveryPanelProps) {
                   <td>{fact.confidence ?? "—"}</td>
                   <td>{label(REVIEW_STATUS_LABEL, fact.review_status)}</td>
                   <td>
+                    {canManage && fact.review_status === "pending" ? <input
+                      type="checkbox"
+                      aria-label={`选择事实：${fact.subject} · ${fact.predicate}`}
+                      checked={selectedFacts.includes(fact.id)}
+                      disabled={busy || batchPreview.length > 0 || needsFactReload.includes(fact.id)}
+                      onChange={(event) => {
+                        const checked = event.target.checked
+                        setSelectedFacts((prev) => checked ? [...prev, fact.id] : prev.filter((id) => id !== fact.id))
+                      }}
+                    /> : null}
                     {canManage && fact.review_status !== "accepted" && fact.review_status !== "rejected"
                       ? (
                         <span className="discovery-actions">
