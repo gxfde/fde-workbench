@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — L-C 改判写面轮：条款③后半四项拍板全落实施（W1 服务端＋W2 桌面，2026-11-18）
+
+承设计稿 `docs/architecture/L-C改判写面-设计稿-v1.md`（#516）与蔡工四项交互拍板（全落推荐项：**supersede＝查询口径收敛（零写面零迁移）／裁定留痕＝detail_json 追加（不加 operation_event）／实施时点＝现在就开 W1+W2**）。**+1 路由（523→524）零迁移零表**：口径 524 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`。
+
+- NEW #517 `53b46889`（**W1 服务端**）：①NEW `simulation/findings_scope.py::superseded_finding_ids`＝supersede **查询口径收敛**（发现派生自 human 行且 ≠ 该 run 最新 human 行 ⇒ superseded；非 human 层恒有效）——零写面零迁移，三消费点接线：`list_findings` 投影 `superseded` 字段／`create_proposal` superseded 闸（409 `finding_superseded`）／`draft_improvements` AI 调用前拦截（空集同码 409）；②NEW `POST /simulation/findings/<finding_id>/adjudicate`＝finding **人工裁定端点**（角色闸 admin/project_lead；action confirm|reject；note 必填；单向状态机 `open → confirmed|rejected`，重复裁定 409 `finding_already_adjudicated`；留痕＝`detail_json.adjudications[]` 追加，不加 operation_event）；③**confirmed 双轨解锁**——`create_proposal` 接受 `status=="confirmed"` **或** `confidence=="confirmed"` 任一（原仅前者）；④★修复**同人重复终裁 500**（`uq(run,layer,evaluator_id,rubric)` UniqueViolation——「可重复插行」只对不同评估人成立）：`record_human_evaluation` 同人轮次派生 `evaluator_id`（首评 `human:<uid>`，再终裁 `human:<uid>:r2…`，`func.count`＋like 前缀计 prior 轮数）⇒ 历史行永远保留、无覆盖。NEW `test_simulation_lc_adjudication.py` 7 例（supersede 三消费点钉／adjudicate 四态钉／双轨解锁正反例／同人三轮终裁链）；蒸馏器 AST import 白名单显式扩 `findings_scope`（只读元数据零答案面）。
+- NEW #518 `2ad37f96`（**W2 桌面**）：①FailureAnalysis 发现卡——superseded 置灰（复选框禁用＋取代提示）＋裁定状态徽标＋内联裁定表单（confirm/reject＋必填理由；仅 admin/project_lead 可见）；②EvaluationReport **终裁历史链序标**——human 行按时间升序编号「第 N 次终裁（现行/已被取代）」＋人工终裁通知补现行结论摘要（80 字）与「再提交即改判，历史行永远保留」提示；③api.ts `adjudicateFinding`＋types.ts `superseded` 字段。desktop typecheck 零错＋vitest 套件全绿（+4 例：裁定全交互 POST body 断言／engineer 无入口／superseded 置灰／历史链序标）。
+- 口径三件套同步：`v3-workbench-inventory.json` route_count 523→**524**＋route CSV 重生成＋archify 四处串（55 蓝图 / **524** 路由 / 160 表 / 89 rev）＋AGENTS 基线行。
+- 活体部署三验绿（#517 后即时：url_map **524**＋adjudicate 路由在场／alembic `b7f2d9e4c6a8 (head)`／三镜像逐位／ready 200）；便携版 **r57**（asar `e4547a4ed3275880e69f43a3156594ae312f2533fb0b29e7ad65fdfbbc97b649`，marker「人工裁定」正向 1／r56 反向 0）落主树 `release/蔡工FDE-0.3.0-便携版-r57`；RELEASE-COUNTER／package.json／web-bridge 三源同步。
+- 任务书条款③写面回写＝✅ 已实施；设计稿状态 PROPOSED→IMPLEMENTED（四项拍板留痕）。
+
 ## [未发布] — 学习闭环收尾轮：回归判定环收口＝回归通过＋首个改善向信号＋双缺陷修复＋三载体收尾（五 PR，2026-11-18）
 
 MiniMax 配额恢复（蔡工确认）＋夜轮四拍板（范围全开／按已登记判据裁决／L-C 只读视图／CI 四绿即合并部署）下，学习闭环挂账全清偿。NEW `docs/audit/学习闭环收尾轮-回归判定环收口报告-2026-11-18.md`（证据链全录）。**零迁移零路由零表**：口径不变（523 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。
