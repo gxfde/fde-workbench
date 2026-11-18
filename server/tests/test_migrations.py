@@ -121,7 +121,8 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 #          （零 DDL，down_revision=双头元组；M6-WP0 D11 先例）
 # AF2-WP1：data_profiles 画像产物表（c3d8e7a2f1b6；挂 b7f2d9e4c6a8）
 # AF2-WP1 第二批（D5）：connector source_kind + 快照锚四列（d5e6f7a8b9c0；挂 c3d8e7a2f1b6）
-HEAD_REVISION = "d5e6f7a8b9c0"
+# AF2-WP2：transform_plans 计划面表（e8f9a0b1c2d3；挂 d5e6f7a8b9c0）
+HEAD_REVISION = "e8f9a0b1c2d3"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1234,7 +1235,8 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     #   b7f2d9e4c6a8（零 DDL 双头元组）之后 = 89
     # + AF2-WP1（data_profiles c3d8e7a2f1b6）之后 = 90
     # + AF2-WP1 第二批（D5 connector 锚四列 d5e6f7a8b9c0）之后 = 91
-    assert len(known) == 91
+    # + AF2-WP2（transform_plans 计划面 e8f9a0b1c2d3）之后 = 92
+    assert len(known) == 92
     # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
     # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):

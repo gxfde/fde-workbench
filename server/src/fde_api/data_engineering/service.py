@@ -1,4 +1,5 @@
-"""data_engineering 域服务（AF2-WP1）：画像编排面——权限 + 落库 + 审计。
+"""data_engineering 域服务（AF2-WP1 画像 + AF2-WP2 TransformPlan 计划面）：
+权限 + 落库 + 审计编排面。
 
 权限口径（沿 AF1 域惯例，ingest_service S-01）：项目不存在 **或无访问权**
 一律 404（不泄露存在性）；画像/采样=项目授权内预览档（04 §4「资料导入、
@@ -7,6 +8,10 @@
 
 写操作审计（§15）：画像创建落 ``operation_events``（引用与统计，不含样本
 内容）。
+
+TransformPlan 计划面（AF2-WP2）：只落**已通过静态校验**的计划——校验失败
+⇒ 400 ``invalid_transform_plan`` 且零落库；无编译、无执行、无 I/O（编译
+面归 WP3 design-first 门）。
 """
 from __future__ import annotations
 
@@ -15,8 +20,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fde_api.data_engineering.models import DataProfile
+from fde_api.data_engineering.models import DataProfile, TransformPlan
 from fde_api.data_engineering.profiling import ProfileError, profile_bytes
+from fde_api.data_engineering.transform_plan import validate_plan
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
 
@@ -224,6 +230,82 @@ def get_profile(*, actor, project_id: str, profile_id: str) -> dict[str, Any]:
         row = session.get(DataProfile, profile_id)
         if row is None or row.project_id != project_id:
             raise _error("profile_not_found", "画像报告不存在。", 404)
+        return row.snapshot()
+    finally:
+        session.close()
+
+
+def create_transform_plan(*, actor, project_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """落一份已通过静态校验的转换计划（AF2-WP2 计划面）。
+
+    校验失败 ⇒ 400 ``invalid_transform_plan``（detail 携带校验报告）且
+    **零落库**；成功只落声明与校验报告（append-only，无生产态字段）。
+    """
+    session: Session = db.session()
+    try:
+        project = _require_project(session, actor, project_id)
+        report = validate_plan(plan)
+        if not report["valid"]:
+            raise _error(
+                "invalid_transform_plan",
+                "转换计划未通过静态校验。",
+                400,
+                detail={"validation": report},
+            )
+        source = plan.get("source") or {}
+        row = TransformPlan(
+            project_id=project.id,
+            plan_version=str(plan.get("plan_version") or ""),
+            status="validated",
+            source_profile_id=str(source.get("profile_id") or ""),
+            source_table=str(source.get("table") or ""),
+            plan_json=plan,
+            validation_json=report,
+            created_by_user_id=actor.id,
+        )
+        session.add(row)
+        session.flush()
+        record_event(
+            session,
+            actor,
+            "transform_plan_created",
+            project,
+            {
+                "plan_id": row.id,
+                "plan_version": row.plan_version,
+                "source_profile_id": row.source_profile_id,
+                "source_table": row.source_table,
+                "step_count": len(plan.get("steps") or []),
+                "error_count": 0,
+            },
+        )
+        session.commit()
+        return row.snapshot()
+    finally:
+        session.close()
+
+
+def list_transform_plans(*, actor, project_id: str) -> list[dict[str, Any]]:
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        rows = session.scalars(
+            select(TransformPlan)
+            .where(TransformPlan.project_id == project_id)
+            .order_by(TransformPlan.created_at.desc())
+        ).all()
+        return [row.snapshot() for row in rows]
+    finally:
+        session.close()
+
+
+def get_transform_plan(*, actor, project_id: str, plan_id: str) -> dict[str, Any]:
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        row = session.get(TransformPlan, plan_id)
+        if row is None or row.project_id != project_id:
+            raise _error("transform_plan_not_found", "转换计划不存在。", 404)
         return row.snapshot()
     finally:
         session.close()

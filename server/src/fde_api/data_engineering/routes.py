@@ -1,13 +1,17 @@
-"""data_engineering 蓝图（AF2-WP1）：资料/连接器画像路由（项目域，全部不进
-api_catalog 治理面——工程台/Agent 消费面沿 quality 先例）。
+"""data_engineering 蓝图（AF2-WP1 画像 + AF2-WP2 TransformPlan 计划面）：
+项目域路由，全部不进 api_catalog 治理面——工程台/Agent 消费面沿 quality 先例。
 
 POST  /projects/<id>/data-profiles                multipart 上传→画像（member 级）
-POST  /projects/<id>/ontology-data-profiles       连接器侧 DB 内省画像（第二批/D5，
+POST  /projects/<id>/ontology-data-profiles       连接器侧 DB 内省画像（WP1 第二批/D5，
       经 ontology_client api-spec 1.3.8-af2；本体未启用 fail-closed 503）
 GET   /projects/<id>/data-profiles                清单
 GET   /projects/<id>/data-profiles/<pid>          详情（快照哈希可复验）
+POST  /projects/<id>/transform-plans              类型化转换计划落库（WP2 计划面：
+      静态校验不过 ⇒ 400 零落库；无编译无执行）
+GET   /projects/<id>/transform-plans              计划清单
+GET   /projects/<id>/transform-plans/<plan_id>    计划详情（校验报告 + DAG）
 
-**无 PATCH/DELETE**：画像报告 append-only；关系候选无翻产通道（03 §77）。
+**无 PATCH/DELETE**：画像与计划均 append-only；关系候选无翻产通道（03 §77）。
 """
 from __future__ import annotations
 
@@ -80,5 +84,36 @@ def list_profiles(project_id):
 def get_profile(project_id, profile_id):
     payload = service.get_profile(
         actor=g.current_user, project_id=project_id, profile_id=profile_id
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.post("/projects/<project_id>/transform-plans")
+@require_auth
+def create_transform_plan(project_id):
+    """类型化转换计划落库（AF2-WP2 计划面）：JSON body ``{plan}`` → 结构静态
+    校验（九算子闭集/参数键集精确匹配/值域枚举/DAG 无环）→ 只落已通过校验
+    的计划；失败 ⇒ 400 ``invalid_transform_plan`` 且零落库。无编译无执行
+    （编译面归 WP3 design-first 门）。"""
+    payload = request.get_json(silent=True) or {}
+    plan = payload.get("plan")
+    if not isinstance(plan, dict):
+        return error_response("invalid_request", "缺少 plan 对象。", 400)
+    result = service.create_transform_plan(actor=g.current_user, project_id=project_id, plan=plan)
+    return jsonify({"data": result, "error": None}), 201
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-plans")
+@require_auth
+def list_transform_plans(project_id):
+    payload = service.list_transform_plans(actor=g.current_user, project_id=project_id)
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-plans/<plan_id>")
+@require_auth
+def get_transform_plan(project_id, plan_id):
+    payload = service.get_transform_plan(
+        actor=g.current_user, project_id=project_id, plan_id=plan_id
     )
     return jsonify({"data": payload, "error": None}), 200

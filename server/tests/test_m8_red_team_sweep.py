@@ -46,7 +46,7 @@ import pytest
 from fde_api.agents.models import AgentArtifact, AgentRegistry, AgentRun
 from fde_api.auth.tokens import issue_access_token
 from fde_api.control.chat import AIConversation
-from fde_api.data_engineering.models import DataProfile
+from fde_api.data_engineering.models import DataProfile, TransformPlan
 from fde_api.research.models import (
     ProjectResearchExport,
     ProjectResearchForm,
@@ -126,6 +126,8 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>/solutions"): lambda w: f"/api/v1/projects/{w['project_b'].id}/solutions",
     ("GET", "/api/v1/projects/<project_id>/tasks"): lambda w: f"/api/v1/projects/{w['project_b'].id}/tasks",
     ("GET", "/api/v1/projects/<project_id>/test-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/test-plans",
+    ("GET", "/api/v1/projects/<project_id>/transform-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans",
+    ("GET", "/api/v1/projects/<project_id>/transform-plans/<plan_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans/{w['plan_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/workflow-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflow-runs",
     ("GET", "/api/v1/projects/<project_id>/workflows"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflows",
 }
@@ -936,6 +938,24 @@ def m8_world(db_session):
     )
     db_session.add(profile_b)
 
+    # AF2-WP2：类型化转换计划行（B 项目资产——爬扫面新成员的阳性对照资源）
+    plan_b = TransformPlan(
+        project_id=project_b.id,
+        plan_version="af2-wp2-v1",
+        status="validated",
+        source_profile_id=str(uuid4()),
+        source_table="m8-plan-equipment",
+        plan_json={"plan_version": "af2-wp2-v1"},
+        validation_json={
+            "valid": True,
+            "errors": [],
+            "dependency_graph": {"nodes": [], "edges": [], "topological_order": []},
+            "output_columns": [],
+        },
+        created_by_user_id=user_b.id,
+    )
+    db_session.add(plan_b)
+
     action_id = uuid4().hex + uuid4().hex
     db_session.add(
         OperationEvent(
@@ -970,6 +990,7 @@ def m8_world(db_session):
         "artifact": artifact,
         "conversation": conversation,
         "profile_b": profile_b,
+        "plan_b": plan_b,
         "action_id": action_id,
     }
 
@@ -1070,7 +1091,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-    assert len(ROUTES) == 41, ("爬扫面条数基线被改动：", len(ROUTES))
+    assert len(ROUTES) == 43, ("爬扫面条数基线被改动：", len(ROUTES))
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
