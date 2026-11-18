@@ -79,6 +79,26 @@ def _build_probe_questions(customer_view: dict[str, Any]) -> list[dict[str, Any]
     return questions
 
 
+def _pending_probe_questions(
+    probe_questions: list[dict[str, Any]],
+    disclosed_fact_ids: set[str],
+) -> list[dict[str, Any]]:
+    """只保留**尚未披露**事实的定向问法（已披露方向再问＝白问一轮）。
+
+    实测依据（2026-11-18 真机 43 个 workbench run × 258 轮追问取证）：
+    候选方向列表原本**每轮不变**⇒ 模型反复追问已披露的方向——「命中的是
+    已披露事实」的白问轮占 **40.3%**（104/258）；轮次预算只有 6 轮（每场景
+    4 条隐藏事实），白问一轮就少一个可披露方向。已披露方向本轮撤下，
+    未披露方向顺位补位（通用泛问项恒保留）。
+    """
+    pending: list[dict[str, Any]] = []
+    for item in probe_questions:
+        if item.get("targeted") and str(item.get("fact_id") or "") in disclosed_fact_ids:
+            continue
+        pending.append(item)
+    return pending
+
+
 def _load_scenario_views(session, scenario_id: str, scenario_version: int) -> tuple[Any, dict, dict]:
     """装载场景的**被测方视图**与**客户视图**。
 
@@ -186,7 +206,14 @@ def run_simulation(run_id: str) -> dict[str, Any]:
             round_ctx = dataclasses.replace(
                 base_ctx,
                 disclosed=customer.disclosed_facts,
-                config={**base_ctx.config, "history": tuple(history)},
+                config={
+                    **base_ctx.config,
+                    "history": tuple(history),
+                    # 已披露事实的定向方向本轮撤下（白问轮＝浪费 6 轮预算之一）
+                    "probe_questions": _pending_probe_questions(
+                        probe_questions, set(customer.state.disclosed_fact_ids)
+                    ),
+                },
             )
             try:
                 question = adapter.probe(round_ctx, round_index=round_index)

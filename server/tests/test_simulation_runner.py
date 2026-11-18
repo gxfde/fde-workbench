@@ -295,6 +295,28 @@ def _run_once(operator, scenario: dict, **config) -> dict:
     return response.get_json()["data"]
 
 
+def test_pending_probe_questions_withdraw_disclosed_directions():
+    """已披露事实的定向方向本轮撤下（白问轮＝浪费轮次预算）。
+
+    真机证据（2026-11-18）：43 个 workbench run × 258 轮里 **40.3%** 是
+    「重复方向白问」——候选方向列表每轮不变，模型反复问已披露方向。
+    """
+    from fde_api.simulation.runner import _pending_probe_questions
+
+    questions = [
+        {"question": "关于记录、维修这块，现在实际是怎么做的？", "fact_id": "R-F1", "keywords": ["记录"], "targeted": True},
+        {"question": "关于型号、手册这块，现在实际是怎么做的？", "fact_id": "R-F2", "keywords": ["型号"], "targeted": True},
+        {"question": "这个方向能再多说一点吗？", "keywords": [], "targeted": False},
+    ]
+
+    pending = _pending_probe_questions(questions, {"R-F1"})
+
+    assert [item["fact_id"] for item in pending if item.get("targeted")] == ["R-F2"]
+    assert any(not item.get("targeted") for item in pending), "泛问项恒保留"
+    # 无已披露事实 ⇒ 原样返回
+    assert _pending_probe_questions(questions, set()) == questions
+
+
 def test_a_mock_run_completes_and_records_every_phase(operator, db_session):
     scenario = _create_scenario(operator)
 

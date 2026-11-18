@@ -87,6 +87,42 @@ _USAGE_INPUT_KEYS = ("input_tokens", "prompt_tokens")
 _USAGE_OUTPUT_KEYS = ("output_tokens", "completion_tokens")
 
 
+def _probe_keywords(targeted: list[dict[str, Any]]) -> list[str]:
+    """候选追问方向上的探针关键词（去重保序）。"""
+    keywords: list[str] = []
+    for item in targeted:
+        for kw in item.get("keywords") or []:
+            text = str(kw).strip()
+            if text and text not in keywords:
+                keywords.append(text)
+    return keywords
+
+
+def _probe_keyword_guard(question: str, targeted: list[dict[str, Any]]) -> str:
+    """提问关键词留存兜底：模型改写丢掉探针关键词 ⇒ 退回确定性候选问法。
+
+    背景（2026-11-18 真机取证，43 个 workbench run × 258 轮追问）：提问与任何
+    事实方向都无关的「零命中」轮占 **32.6%**（84/258）——真模型把候选追问方向
+    改写成语义相近、字面不含 ``probe_keywords`` 的问法；客户模拟器的解锁闸按
+    字面子串判定 ⇒ 事实永不披露 ⇒ analysis.requirements 空 ⇒ D1/D2 塌陷
+    （FA-01/02/03 与 FA-06 假设被证伪的共同上游机制）。
+
+    兜底口径：**问题与任何候选方向都无关时**，改用该方向的确定性候选问法
+    （含关键词）——方向是契约而非建议；模型改写若仍命中关键词则原样保留。
+    """
+    keywords = _probe_keywords(targeted)
+    if not keywords:
+        return question
+    lowered = question.lower()
+    if any(keyword.lower() in lowered for keyword in keywords):
+        return question
+    for item in targeted:
+        canonical = str(item.get("question") or "").strip()
+        if canonical:
+            return canonical
+    return question
+
+
 def _usage_token_count(call: dict[str, Any], keys: tuple[str, ...]) -> int:
     """从单次 DSH usage call 取 token 数（规范键优先，兼容旧别名）。"""
     for key in keys:
@@ -151,19 +187,40 @@ class WorkbenchAdapter:
                 f"答:{str(item.get('answer'))[:80]}" for item in history if isinstance(item, dict)
             )
             lines.append(f"【对话历史】{rendered[:2000]}")
-        candidates = [
-            str(item.get("question"))
+        targeted = [
+            item
             for item in (ctx.config.get("probe_questions") or [])
             if isinstance(item, dict) and item.get("targeted")
         ]
+        candidates = [str(item.get("question")) for item in targeted]
         if candidates:
             lines.append(f"【可参考的追问方向（关键词级，不含答案）】{'；'.join(candidates)[:800]}")
+        keywords = _probe_keywords(targeted)
+        if keywords:
+            lines.append(
+                "【提问约束】提问正文必须逐字包含你所选追问方向中的关键词"
+                "（不得改写、替换或省略）；参考关键词：" + "、".join(keywords)
+            )
         lines.append(
             f"这是第 {round_index} 轮访谈。请产出你要问客户的下一个问题：只输出问题本身一句话，"
             "不要编号、不要解释。"
         )
         text = self._call(ctx=ctx, prompt="\n".join(lines), max_tokens=PROBE_MAX_TOKENS)
-        return text.strip().splitlines()[0].strip()[:400] if text.strip() else "这个方向能再多说一点吗？"
+        question = text.strip().splitlines()[0].strip()[:400] if text.strip() else "这个方向能再多说一点吗？"
+        guarded = _probe_keyword_guard(question, targeted)
+        if guarded != question and ctx.trace is not None:
+            ctx.trace.record(
+                phase="interview",
+                event_type="probe_keyword_guard",
+                actor_role="fde_consultant",
+                payload={
+                    "round": round_index,
+                    "reason": "probe_keywords_missing",
+                    "model_question": question,
+                    "text": guarded,
+                },
+            )
+        return guarded
 
     # -- 分析 / 方案（真模型＋JSON 契约＋回落） ----------------------------
 

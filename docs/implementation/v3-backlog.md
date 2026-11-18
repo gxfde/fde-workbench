@@ -974,6 +974,13 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - **修复**：Dockerfile `--timeout` 120→660＋NEW `test_deploy_timeout_budget.py` 4 例（现测 pydantic `le` 上界的机械闸）；`workbench.py` NEW `_usage_token_count()`（规范键优先＋旧名兜底＋皆无⇒0，`cost_json` 键集零回归）＋CI seam 假执行器改规范形状＋2 钉；`improvement_draft.py` 用户提示词动态注入 purpose 闭集（系统提示词零动 ⇒ 指纹零影响）＋`purpose_allowed()` fail-closed 闸（409）＋AST 白名单扩 `ai.overlays`＋2 钉。
 - **验证**：定向 315 passed+1 skipped；变异四连（M-A 旧读法 3 红／M-D timeout 120 两红／M-B 摘闸 1 红／M-C 摘闭集注入 1 红）全红→还原复绿；ruff/mypy/行数预算闸清。零迁移零路由零表。
 
+#### ✅ T-L0 r2 真机制修复轮（B 面，2026-11-18，状态：**已实施**——追问方向契约化：已披露方向撤下＋关键词留存兜底）
+
+- **真机取证**（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）：43 个 completed workbench run × 258 轮追问——重复方向白问轮 **104（40.3%）**、零命中轮 **84（32.6%）**；每 run 披露事实均值 1.91 条 vs 每场景 4.21 条隐藏事实，轮次预算仅 6 轮。审计侧铁证：三份已发布覆层的 purpose（`discovery_extract`／`simulation_diagnostic_judge`／`plans_delivery_plan_draft`）与 workbench 三腿实际 purpose（`simulation_workbench`）**不咬合** ⇒ 从未被消费 ⇒ FA-06 三条「验收标准不明确」假设被证据反驳（两条 D6-02＝1.0），真实机制＝上游访谈零解锁 ⇒ `analysis.requirements` 空（蔡工已拍板三条一律 reject，根因归 FA-01 域）。
+- **修复**：`runner.py` NEW `_pending_probe_questions()`（已披露事实的定向方向本轮撤下，泛问项恒保留）；`adapters/workbench.py` `probe()` 提示词追加「【提问约束】提问正文必须逐字包含你所选追问方向中的关键词」＋NEW `_probe_keywords()`／`_probe_keyword_guard()`（模型改写后与任何方向零命中 ⇒ 退回确定性候选问法；含关键词 ⇒ 原样保留）＋兜底写 trace 事件 `probe_keyword_guard`。
+- **验证**：5 钉（适配器 3＋runner 1＋确定性端到端判别钉：旧码披露 1 条事实、新码 2 条）；定向 40 passed；变异三连全红→还原复绿（还原后 sha256 逐位一致）；ruff 清；mypy 277/277 零新增。零迁移零路由零表＝口径 524/55/160/89 不变。
+- **未做（授权边界）**：活体部署（须待在跑的 r2-mfg-25-replay 复跑跑完，避免中途重建污染读数）；A 面覆层 `simulation_workbench` 提案 PROP-577E85F8 的 decide/release（须蔡工密码过四闸）。
+
 ### T-M7 商机数据归属权与区域服务商（M7-1 轮）— **结构就绪·待授权**（2026-11-12）
 
 - **登记说明**：本行**不新增 B# 编号**（`AGENTS.md:45` B# 已 FREEZE 封顶 B#40）——用 `T-M7` 任务号，与既有 `T-L0` 同族编号法。

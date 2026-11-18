@@ -133,6 +133,20 @@ def _scenario_payload(case_code: str = "CASE-WB-001"):
     }
 
 
+def _scenario_payload_two_facts(case_code: str = "CASE-WB-002"):
+    """两条隐藏事实（方向轮换判别用）。"""
+    payload = _scenario_payload(case_code)
+    payload["content"]["hidden"]["facts"].append(
+        {
+            "fact_id": "W-F2",
+            "text": "设备型号命名混乱，手册对不上",
+            "disclosure_stage": "interview",
+            "probe_keywords": ["型号", "手册"],
+        }
+    )
+    return payload
+
+
 def _ctx(**config) -> AdapterContext:
     return AdapterContext(
         run_id="run-wb-test",
@@ -218,6 +232,43 @@ def test_probe_uses_purpose_and_version_and_accumulates_usage():
     assert call["use_tools"] is False
     summary = adapter.usage_summary()
     assert summary == {"model_calls": 1, "prompt_tokens": 100, "completion_tokens": 20, "tokens": 120}
+
+
+# ---------------------------------------------------------------------------
+# 提问关键词留存契约（2026-11-18 真机取证驱动的结构化修复）
+#
+# 真机证据（43 个 workbench run × 258 轮追问）：提问与任何事实方向都无关的
+# 「零命中」轮占 32.6%——真模型把候选追问方向改写成语义相近、字面不含
+# ``probe_keywords`` 的问法；客户模拟器按字面子串解锁 ⇒ 事实永不披露 ⇒
+# analysis.requirements 空 ⇒ D1/D2 塌陷（FA-01/02/03 与 FA-06 假设证伪的
+# 共同上游机制）。本组三钉把「方向是契约而非建议」钉死。
+# ---------------------------------------------------------------------------
+
+
+def test_probe_prompt_declares_keyword_retention_contract():
+    """提示词必须显式要求：提问正文逐字包含所选追问方向的关键词。"""
+    executor = _RecordingExecutor(["你们维修记录现在怎么管？"])
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    adapter.probe(_ctx(), round_index=1)
+    prompt = executor.calls[0]["prompt"]
+    assert "【提问约束】" in prompt
+    assert "维修" in prompt
+
+
+def test_probe_falls_back_to_canonical_question_when_keywords_dropped():
+    """模型改写丢掉探针关键词 ⇒ 退回确定性候选问法（可解锁）。"""
+    executor = _RecordingExecutor(["设备为什么老坏呢？"])
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    question = adapter.probe(_ctx(), round_index=1)
+    assert question == "关于维修、记录这块，现在实际是怎么做的？"
+
+
+def test_probe_keeps_model_question_when_keyword_retained():
+    """模型问法已含关键词 ⇒ 原样保留（不夺走模型的表达自由）。"""
+    executor = _RecordingExecutor(["维修记录现在怎么管？"])
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    question = adapter.probe(_ctx(), round_index=1)
+    assert question == "维修记录现在怎么管？"
 
 
 def test_analyze_contract_pass_and_structured_fallback():
@@ -375,6 +426,58 @@ def test_runner_workbench_end_to_end_with_usage_backfill(operator, app):
             assert purposes == {"simulation_workbench"}
     finally:
         app.extensions.pop("fde_api_simulation_workbench", None)
+
+
+def test_workbench_probe_direction_rotation_discloses_second_fact(operator, app):
+    """已披露方向撤下 ⇒ 同一轮次预算内披露更多事实（白问轮消除）。
+
+    假执行器恒回「维修记录现在怎么管？」（只含 W-F1 关键词）：
+
+    - **旧码**：候选方向列表每轮不变 ⇒ 第 2 轮仍命中已披露的 W-F1 方向 ⇒
+      只披露 1 条事实（40.3% 的白问轮正是此机制）；
+    - **新码**：W-F1 方向在披露后撤下 ⇒ 第 2 轮模型问法与 W-F2 方向零命中 ⇒
+      兜底改用 W-F2 候选问法 ⇒ 解锁 W-F2 ⇒ 2 条事实披露。
+    """
+    scenario = operator.post("/api/v1/simulation/scenarios", json=_scenario_payload_two_facts()).get_json()["data"]
+    run = operator.post(
+        "/api/v1/simulation/runs",
+        json={
+            "scenario_id": scenario["id"],
+            "adapter_mode": "workbench",
+            "execute": False,
+            "config": {"max_rounds": 3},
+            "seed": 11,
+        },
+    ).get_json()["data"]
+
+    script = ["维修记录现在怎么管？"] * 3 + [_analyze_json(), _design_json()]
+    _install_seam(app, script)
+    try:
+        from fde_api.simulation.runner import run_simulation
+
+        outcome = run_simulation(run["id"])
+        assert outcome["status"] == "completed"
+    finally:
+        app.extensions.pop("fde_api_simulation_workbench", None)
+
+    with db.session() as session:
+        traces = list(
+            session.scalars(
+                select(SimulationTrace)
+                .where(SimulationTrace.run_id == run["id"])
+                .order_by(SimulationTrace.seq)
+            )
+        )
+    disclosed: list[str] = []
+    for row in traces:
+        if row.event_type != "hidden_fact_disclosed":
+            continue
+        disclosed.extend((row.payload_json or {}).get("disclosed") or [])
+    assert set(disclosed) == {"W-F1", "W-F2"}, f"只披露了 {disclosed}"
+    # 兜底替换必须留痕（可审计：模型问法与最终问法并列）
+    guards = [row for row in traces if row.event_type == "probe_keyword_guard"]
+    assert guards, "关键词兜底未留痕"
+    assert guards[0].payload_json["reason"] == "probe_keywords_missing"
 
 
 def test_runner_probe_unavailable_fails_honestly(operator, app):
