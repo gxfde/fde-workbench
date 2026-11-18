@@ -668,6 +668,9 @@ def db_session(app) -> Session:
     cleanup_models = (
         __import__("fde_api.integrations.models", fromlist=["OntologyBindingUpgrade"]).OntologyBindingUpgrade,
         __import__("fde_api.integrations.models", fromlist=["ProjectOntologyBinding"]).ProjectOntologyBinding,
+        # AF2-WP1：资料画像报告行。project_id/created_by 均 **FK RESTRICT**
+        # ——必须先于 projects/users 清理（AF2 data_engineering 域）。
+        __import__("fde_api.data_engineering.models", fromlist=["DataProfile"]).DataProfile,
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
         # 获客诊断 T-15：渠道链接注册表。``created_by`` 指向 users（**FK
         # SET NULL**）；与线索行零外键（channel_ref 是字符串列）——先于

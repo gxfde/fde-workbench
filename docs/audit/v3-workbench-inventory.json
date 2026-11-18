@@ -1,10 +1,10 @@
 {
- "route_count": 524,
- "blueprint_count": 55,
- "table_count": 160,
- "revision_count": 89,
+ "route_count": 527,
+ "blueprint_count": 56,
+ "table_count": 161,
+ "revision_count": 90,
  "heads": [
-  "b7f2d9e4c6a8"
+  "c3d8e7a2f1b6"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -326,6 +326,14 @@
     "business_facts",
     "requirements",
     "requirement_sources"
+   ],
+   "add_column_tables": []
+  },
+  "c3d8e7a2f1b6": {
+   "file": "c3d8e7a2f1b6_data_profiles.py",
+   "down_revision": "b7f2d9e4c6a8",
+   "create_tables": [
+    "data_profiles"
    ],
    "add_column_tables": []
   },

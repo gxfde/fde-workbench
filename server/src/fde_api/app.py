@@ -62,6 +62,7 @@ _BLUEPRINT_SPECS: tuple[tuple[str, str], ...] = (
     ("fde_api.discovery.routes", "discovery_blueprint"),
     ("fde_api.plans.routes", "plans_blueprint"),
     ("fde_api.quality.routes", "quality_blueprint"),
+    ("fde_api.data_engineering.routes", "data_engineering_blueprint"),
     ("fde_api.metrics.routes", "metrics_blueprint"),
     ("fde_api.translator.routes", "translator_blueprint"),
     ("fde_api.mailing.routes", "mailing_blueprint"),
