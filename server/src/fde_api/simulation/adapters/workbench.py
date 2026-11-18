@@ -49,6 +49,23 @@ WORKBENCH_PROMPT_VERSION = version_of(
 
 # 每次 execute_ai_prompt 的 completion 上限（probe 一句话；analyze/design JSON 契约）
 PROBE_MAX_TOKENS = 512
+# probe 腿「截断」失败后的重试预算（2026-11-18 真机取证驱动的修复）：
+# 12/12 失败 run 全在 interview 腿，错误＝workbench_model_failed:ai_output_truncated；
+# 最近 500 条 workbench 审计里 35 条失败调用的 output_tokens **全为 0** ⇒ 推理模型
+# 把 512 预算整段烧在 reasoning 上、正文零产出 ⇒ 供应商 finish_reason=length ⇒
+# 抛 ai_output_truncated（ai_server_client 判据：finish_reason==length 或输出
+# token 触达预算且正文缺失）。同期成功调用 output_tokens 最大 15158（< MiniMax
+# 硬顶 16384）⇒ analyze/design 腿（PHASE_MAX_TOKENS）不是问题面（该腿零结构化
+# 回落，66 个 analysis trace 的 structured 回落计数为 0）。
+# 重试语义：**只在截断这条失败路径**同消息重试一次并抬预算（抬的是请求预算
+# max_tokens，不是同输入重放——DSH 层 retryable=False 指的是「同输入重放同败」，
+# 抬预算后思考空间变大，该结论不适用）；4096 远低于硬顶 16384，且远大于 probe
+# 正文（一句话）所需。**成功路径预算不变** ⇒ 成本与时延零影响。
+PROBE_RETRY_MAX_TOKENS = 4096
+# 截断退路的最后一级硬兜底问法（定向方向已全部用尽且上下文无通用候选时用）。
+# 文案与 runner 的 GENERIC_PROBE 同款语义（问内部看法，不指向具体方向）——
+# runner 侧常量在 fde_api.simulation.runner，此处不反向 import（避免包环）。
+_GENERIC_PROBE_FALLBACK = "这个问题你们内部一般是怎么看的？"
 # PHASE 预算与评估腿 EVALUATION_MAX_TOKENS 同尺（model_evaluation.py 先例：推理模型
 # 会把预算整段烧在思考上——8192 默认值实测 reasoning_tokens=8189 正文零产出）。
 # 4096 的旧标定在 2026-11-17 回归三连实弹翻车：analyze-final 尚可（3924 收尾），
@@ -121,6 +138,17 @@ def _probe_keyword_guard(question: str, targeted: list[dict[str, Any]]) -> str:
         if canonical:
             return canonical
     return question
+
+
+def _is_truncated_failure(error: BaseException) -> bool:
+    """截断类失败判定——**只有截断可降级**。
+
+    限流（``ai_rate_limited``）／认证（``ai_authentication_failed``）／服务不可用
+    （``ai_unavailable``）都是**环境面**故障：降级会把它们藏起来（run 显示
+    "完成"却没有任何模型调用过），违反「诚实失败」纪律 ⇒ 照旧冒泡。
+    """
+    reason = str(getattr(error, "reason", "") or "")
+    return "ai_output_truncated" in reason
 
 
 def _usage_token_count(call: dict[str, Any], keys: tuple[str, ...]) -> int:
@@ -205,7 +233,36 @@ class WorkbenchAdapter:
             f"这是第 {round_index} 轮访谈。请产出你要问客户的下一个问题：只输出问题本身一句话，"
             "不要编号、不要解释。"
         )
-        text = self._call(ctx=ctx, prompt="\n".join(lines), max_tokens=PROBE_MAX_TOKENS)
+        prompt = "\n".join(lines)
+        try:
+            text = self._call(ctx=ctx, prompt=prompt, max_tokens=PROBE_MAX_TOKENS)
+        except AdapterUnavailable as error:
+            if not _is_truncated_failure(error):
+                raise
+            # 截断 ⇒ 同消息重试一次并抬预算（仅这条失败路径抬；成功路径不变）
+            try:
+                text = self._call(ctx=ctx, prompt=prompt, max_tokens=PROBE_RETRY_MAX_TOKENS)
+            except AdapterUnavailable as retry_error:
+                if not _is_truncated_failure(retry_error):
+                    raise
+                # 重试仍截断 ⇒ 退回确定性候选问法（显式留痕，不静默）：方向是契约，
+                # 模型失败不该毁掉整场访谈（否则 12/12 真机失败 run 全灭在提问腿）。
+                fallback = self._probe_fallback_question(ctx=ctx, targeted=targeted)
+                if not fallback:
+                    raise
+                if ctx.trace is not None:
+                    ctx.trace.record(
+                        phase="interview",
+                        event_type="probe_model_failed_fallback",
+                        actor_role="fde_consultant",
+                        payload={
+                            "round": round_index,
+                            "reason": "ai_output_truncated",
+                            "model_error": str(getattr(retry_error, "reason", "") or ""),
+                            "text": fallback,
+                        },
+                    )
+                return fallback
         question = text.strip().splitlines()[0].strip()[:400] if text.strip() else "这个方向能再多说一点吗？"
         guarded = _probe_keyword_guard(question, targeted)
         if guarded != question and ctx.trace is not None:
@@ -221,6 +278,42 @@ class WorkbenchAdapter:
                 },
             )
         return guarded
+
+    # -- 追问兜底（截断重试仍败 ⇒ 确定性候选问法） -------------------------
+
+    def _probe_fallback_question(
+        self, *, ctx: AdapterContext, targeted: list[dict[str, Any]]
+    ) -> str:
+        """截断重试仍失败时的退路：确定性问法（**不毁整场访谈**）。
+
+        三级退路（逐级降级，每级都是确定性文案）：
+
+        1. **尚未披露**的事实方向（已披露方向问不出新事实 ⇒ 白问轮）；
+        2. 已披露方向的候选问法（访谈尚未用完轮次预算）；
+        3. **通用问法**（定向方向已全部用尽 ⇒ 访谈已无新事实可挖，此时因
+           模型截断而让整场访谈失败＝拿模型故障惩罚一场已完成的访谈）。
+
+        无任何候选（含通用项）⇒ 返回空串，调用方照旧诚实冒泡。
+        """
+        disclosed_ids = {
+            str(fact.get("fact_id"))
+            for fact in (ctx.disclosed or ())
+            if isinstance(fact, dict)
+        }
+        ordered = [
+            item for item in targeted if str(item.get("fact_id") or "") not in disclosed_ids
+        ] + [item for item in targeted if str(item.get("fact_id") or "") in disclosed_ids]
+        for item in ordered:
+            canonical = str(item.get("question") or "").strip()
+            if canonical:
+                return canonical
+        # 无定向候选 ⇒ 通用问法（runner 恒带一条 targeted=False 的通用项）
+        for item in ctx.config.get("probe_questions") or []:
+            if isinstance(item, dict) and not item.get("targeted"):
+                generic = str(item.get("question") or "").strip()
+                if generic:
+                    return generic
+        return _GENERIC_PROBE_FALLBACK
 
     # -- 分析 / 方案（真模型＋JSON 契约＋回落） ----------------------------
 

@@ -20,9 +20,16 @@
    2026-11-18 真机证据——25 个 run 的 cost_json tokens 全 0 而审计表实测
    45 万 token（键名不匹配 ⇒ 恒取空值）。CI seam 假执行器同步改用规范形状
    （此前假件沿用旧名，把缺陷遮住了）。
+8. **probe 腿截断降级**（2026-11-18 真机取证驱动）：12/12 失败 run 全灭在
+   interview 腿（``workbench_model_failed:ai_output_truncated``），审计实测
+   失败调用 output_tokens **全为 0** ⇒ 推理模型把 512 预算整段烧在 reasoning
+   上、正文零产出。修法＝截断时同消息重试一次并抬预算（仅失败路径抬）；
+   仍截断 ⇒ 退回确定性候选问法并留痕（**不毁整场访谈**）；限流/认证/服务不可用
+   照旧诚实冒泡（不降级）。
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass
 from uuid import uuid4
@@ -37,7 +44,11 @@ from fde_api.auth.tokens import issue_access_token
 from fde_api.extensions import db
 from fde_api.simulation.adapters import build_adapter
 from fde_api.simulation.adapters.base import AdapterContext, AdapterUnavailable
-from fde_api.simulation.adapters.workbench import WorkbenchAdapter
+from fde_api.simulation.adapters.workbench import (
+    PROBE_MAX_TOKENS,
+    PROBE_RETRY_MAX_TOKENS,
+    WorkbenchAdapter,
+)
 from fde_api.simulation.models import (
     ADAPTER_MODES,
     SimulationActor,
@@ -271,6 +282,159 @@ def test_probe_keeps_model_question_when_keyword_retained():
     assert question == "维修记录现在怎么管？"
 
 
+# ---------------------------------------------------------------------------
+# probe 腿截断降级（2026-11-18 真机取证驱动）
+#
+# 真机证据：12/12 失败 run 全灭在 interview 腿，错误＝
+# ``workbench_model_failed:ai_output_truncated``；最近 500 条 workbench 审计里
+# 35 条失败调用的 output_tokens **全为 0** ⇒ 推理模型把 512 预算整段烧在
+# reasoning 上、正文零产出 ⇒ 供应商 finish_reason=length ⇒ 抛截断。
+# 修法：截断 ⇒ 同消息重试一次并抬预算（仅失败路径抬）；仍截断 ⇒ 退回确定性
+# 候选问法并留痕（不毁整场访谈）；**非截断类失败照旧诚实冒泡**。
+# ---------------------------------------------------------------------------
+
+
+class _TruncatingExecutor:
+    """前 N 次调用抛截断错误，其后按脚本返回。"""
+
+    def __init__(self, truncate_times: int, script: list[str] | None = None) -> None:
+        self._truncate_times = truncate_times
+        self._script = list(script or [])
+        self.calls: list[dict] = []
+
+    def __call__(self, **kwargs) -> dict:
+        self.calls.append(kwargs)
+        if self._truncate_times > 0:
+            self._truncate_times -= 1
+            raise _truncated_error()
+        usage = {"complete": True, "calls": [{"model": "test", "input_tokens": 100, "output_tokens": 20}]}
+        text = self._script.pop(0) if self._script else "维修记录现在怎么管？"
+        return {"text": text, "model": {"provider": "deepseek", "name": "test"}, "provider_usage": usage}
+
+
+def _truncated_error():
+    """与生产同形的截断错误（DSH 层 code＝ai_output_truncated）。"""
+    from fde_api.control.dsh_runtime import DSHRuntimeError
+
+    return DSHRuntimeError("ai_output_truncated", "推理模型把输出预算用在了思考上。", retryable=False)
+
+
+class _TraceSpy:
+    """trace 写入器替身：只收 (event_type, payload)。"""
+
+    def __init__(self, sink: list[tuple[str, dict]]) -> None:
+        self._sink = sink
+
+    def record(self, *, phase: str, event_type: str, actor_role: str = "", payload: dict | None = None) -> None:
+        self._sink.append((event_type, dict(payload or {})))
+
+
+def test_probe_retries_truncation_with_raised_budget():
+    """截断 ⇒ 同消息重试一次并**抬预算**（抬的是 max_tokens，不是同输入重放）。"""
+    executor = _TruncatingExecutor(truncate_times=1)
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    question = adapter.probe(_ctx(), round_index=1)
+    assert len(executor.calls) == 2
+    assert executor.calls[0]["max_tokens"] == PROBE_MAX_TOKENS
+    assert executor.calls[1]["max_tokens"] == PROBE_RETRY_MAX_TOKENS
+    assert executor.calls[1]["max_tokens"] > PROBE_MAX_TOKENS
+    # 两次 prompt 同一条（只抬预算，不改输入）
+    assert executor.calls[0]["prompt"] == executor.calls[1]["prompt"]
+    assert "维修" in question
+
+
+def test_probe_success_path_budget_unchanged():
+    """成功路径**不抬预算**（只有失败路径才抬 ⇒ 成本与时延零影响）。"""
+    executor = _RecordingExecutor(["维修记录现在怎么管？"])
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    adapter.probe(_ctx(), round_index=1)
+    assert len(executor.calls) == 1
+    assert executor.calls[0]["max_tokens"] == PROBE_MAX_TOKENS
+
+
+def test_probe_falls_back_to_canonical_question_after_double_truncation():
+    """重试仍截断 ⇒ 退回确定性候选问法（显式留痕，不静默、不毁访谈）。"""
+    executor = _TruncatingExecutor(truncate_times=5)
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    events: list[tuple[str, dict]] = []
+    ctx = dataclasses.replace(_ctx(), trace=_TraceSpy(events))
+    question = adapter.probe(ctx, round_index=3)
+    assert len(executor.calls) == 2, "只允许重试一次"
+    assert question == "关于维修、记录这块，现在实际是怎么做的？"
+    assert "维修" in question
+    fallbacks = [e for e in events if e[0] == "probe_model_failed_fallback"]
+    assert len(fallbacks) == 1
+    assert fallbacks[0][1]["reason"] == "ai_output_truncated"
+    assert fallbacks[0][1]["round"] == 3
+
+
+def test_probe_fallback_prefers_undisclosed_direction():
+    """兜底优先挑**未披露**方向（已披露方向问不出新事实 ⇒ 白问轮）。"""
+    executor = _TruncatingExecutor(truncate_times=5)
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    ctx = dataclasses.replace(
+        _ctx(
+            probe_questions=[
+                {"question": "关于维修、记录这块，现在实际是怎么做的？", "fact_id": "W-F1", "keywords": ["维修"], "targeted": True},
+                {"question": "关于型号、手册这块，现在实际是怎么做的？", "fact_id": "W-F2", "keywords": ["型号"], "targeted": True},
+            ]
+        ),
+        disclosed=({"fact_id": "W-F1", "text": "维修记录是纸质的", "category": "knowledge"},),
+    )
+    question = adapter.probe(ctx, round_index=2)
+    assert "型号" in question
+    assert "维修" not in question
+
+
+def test_probe_fallback_uses_generic_question_when_no_targeted_direction():
+    """定向方向全部用尽 ⇒ 退到**通用问法**（不该因模型截断毁掉整场访谈）。
+
+    真机复现形态：第 3 轮时两条事实方向都已披露（runner 撤下已披露方向），
+    定向候选为空 ⇒ 旧退路返回空串 ⇒ AdapterUnavailable 逃逸 ⇒ 整场 run 失败。
+    """
+    executor = _TruncatingExecutor(truncate_times=5)
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    ctx = dataclasses.replace(
+        _ctx(
+            probe_questions=[
+                {
+                    "question": "这个问题你们内部一般是怎么看的？",
+                    "fact_id": None,
+                    "keywords": [],
+                    "targeted": False,
+                },
+            ]
+        ),
+        disclosed=(
+            {"fact_id": "W-F1", "text": "维修记录是纸质的", "category": "knowledge"},
+            {"fact_id": "W-F2", "text": "型号在手册里能查到", "category": "knowledge"},
+        ),
+    )
+    question = adapter.probe(ctx, round_index=3)
+    assert question.strip(), "无定向候选时必须给出确定性通用问法"
+    assert "内部" in question or "怎么" in question
+
+
+def test_probe_keeps_honest_failure_for_non_truncation_errors():
+    """限流/认证/服务不可用**不降级**（环境面故障照旧诚实冒泡）。"""
+    from fde_api.control.dsh_runtime import DSHRuntimeError
+
+    class _RateLimited:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def __call__(self, **kwargs) -> dict:
+            self.calls.append(kwargs)
+            raise DSHRuntimeError("ai_rate_limited", "请求过于频繁。", retryable=True)
+
+    executor = _RateLimited()
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    with pytest.raises(AdapterUnavailable) as excinfo:
+        adapter.probe(_ctx(), round_index=1)
+    assert "ai_rate_limited" in str(excinfo.value.reason)
+    assert len(executor.calls) == 1, "非截断失败不得重试"
+
+
 def test_analyze_contract_pass_and_structured_fallback():
     # 契约一次过
     executor = _RecordingExecutor([_analyze_json(), _design_json()])
@@ -478,6 +642,62 @@ def test_workbench_probe_direction_rotation_discloses_second_fact(operator, app)
     guards = [row for row in traces if row.event_type == "probe_keyword_guard"]
     assert guards, "关键词兜底未留痕"
     assert guards[0].payload_json["reason"] == "probe_keywords_missing"
+
+
+def test_workbench_probe_truncation_does_not_fail_run(operator, app):
+    """模型提问腿全灭（截断）⇒ run 仍完成、事实仍披露、降级留痕。
+
+    真机依据：2026-11-18 复跑 12/12 失败 run 全灭在 interview 腿（截断），
+    25 场景只剩 23 个跑完 ⇒ 训练场读数被模型侧故障污染。修法后：提问腿
+    降级到确定性候选问法（含关键词）⇒ 客户模拟器照常解锁事实 ⇒ run 完成。
+    """
+    scenario = operator.post("/api/v1/simulation/scenarios", json=_scenario_payload_two_facts()).get_json()["data"]
+    run = operator.post(
+        "/api/v1/simulation/runs",
+        json={
+            "scenario_id": scenario["id"],
+            "adapter_mode": "workbench",
+            "execute": False,
+            "config": {"max_rounds": 3},
+            "seed": 13,
+        },
+    ).get_json()["data"]
+
+    def _probe_always_truncated(**kwargs):
+        prompt = str(kwargs.get("prompt") or "")
+        if "请产出你要问客户的下一个问题" in prompt:
+            raise _truncated_error()
+        usage = {"complete": True, "calls": [{"model": "test", "input_tokens": 100, "output_tokens": 20}]}
+        if "root_causes" in prompt:
+            return {"text": _analyze_json(), "model": {}, "provider_usage": usage}
+        return {"text": _design_json(), "model": {}, "provider_usage": usage}
+
+    app.extensions["fde_api_simulation_workbench"] = _probe_always_truncated
+    try:
+        from fde_api.simulation.runner import run_simulation
+
+        outcome = run_simulation(run["id"])
+        assert outcome["status"] == "completed", json.dumps(outcome, ensure_ascii=False, default=str)
+    finally:
+        app.extensions.pop("fde_api_simulation_workbench", None)
+
+    with db.session() as session:
+        traces = list(
+            session.scalars(
+                select(SimulationTrace)
+                .where(SimulationTrace.run_id == run["id"])
+                .order_by(SimulationTrace.seq)
+            )
+        )
+    disclosed: list[str] = []
+    for row in traces:
+        if row.event_type != "hidden_fact_disclosed":
+            continue
+        disclosed.extend((row.payload_json or {}).get("disclosed") or [])
+    assert set(disclosed) == {"W-F1", "W-F2"}, f"降级后只披露了 {disclosed}"
+    fallbacks = [row for row in traces if row.event_type == "probe_model_failed_fallback"]
+    assert fallbacks, "降级未留痕（不许静默）"
+    assert fallbacks[0].payload_json["reason"] == "ai_output_truncated"
 
 
 def test_runner_probe_unavailable_fails_honestly(operator, app):

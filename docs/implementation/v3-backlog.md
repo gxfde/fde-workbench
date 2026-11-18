@@ -978,8 +978,15 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 
 - **真机取证**（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）：43 个 completed workbench run × 258 轮追问——重复方向白问轮 **104（40.3%）**、零命中轮 **84（32.6%）**；每 run 披露事实均值 1.91 条 vs 每场景 4.21 条隐藏事实，轮次预算仅 6 轮。审计侧铁证：三份已发布覆层的 purpose（`discovery_extract`／`simulation_diagnostic_judge`／`plans_delivery_plan_draft`）与 workbench 三腿实际 purpose（`simulation_workbench`）**不咬合** ⇒ 从未被消费 ⇒ FA-06 三条「验收标准不明确」假设被证据反驳（两条 D6-02＝1.0），真实机制＝上游访谈零解锁 ⇒ `analysis.requirements` 空（蔡工已拍板三条一律 reject，根因归 FA-01 域）。
 - **修复**：`runner.py` NEW `_pending_probe_questions()`（已披露事实的定向方向本轮撤下，泛问项恒保留）；`adapters/workbench.py` `probe()` 提示词追加「【提问约束】提问正文必须逐字包含你所选追问方向中的关键词」＋NEW `_probe_keywords()`／`_probe_keyword_guard()`（模型改写后与任何方向零命中 ⇒ 退回确定性候选问法；含关键词 ⇒ 原样保留）＋兜底写 trace 事件 `probe_keyword_guard`。
-- **验证**：5 钉（适配器 3＋runner 1＋确定性端到端判别钉：旧码披露 1 条事实、新码 2 条）；定向 40 passed；变异三连全红→还原复绿（还原后 sha256 逐位一致）；ruff 清；mypy 277/277 零新增。零迁移零路由零表＝口径 524/55/160/89 不变。
+- **验证**：5 钉（适配器 3＋runner 1＋确定性端到端判别钉：旧码披露 1 条事实、新码 2 条）；定向 40 passed；变异三连全红→还原复绿（还原后 sha256 逐位一致）；ruff 清；mypy 277/277 零新增。零迁移零路由零表＝口径不变（**当轮基线 524/55/160/89**；现行口径以 AGENTS「当前状态」速览段现测值为准）。
 - **未做（授权边界）**：活体部署（须待在跑的 r2-mfg-25-replay 复跑跑完，避免中途重建污染读数）；A 面覆层 `simulation_workbench` 提案 PROP-577E85F8 的 decide/release（须蔡工密码过四闸）。
+
+#### ✅ T-L0 r2 真机制修复轮（C 面，2026-11-18，状态：**已实施**——probe 腿截断降级：抬预算重试＋确定性问法退路）
+
+- **真机取证**（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）：12/12 失败 run 全在 `phase=interview`（`workbench_model_failed:ai_output_truncated`）；全量 workbench run 152 的失败面＝截断 23／认证 54／不可用 18／限流 15（长期高频，非复跑特有）；最近 500 条审计里 35 条失败调用 `output_tokens` 全为 0、成功调用中 `output_tokens==512` 者 11 条 ⇒ 推理模型把 `PROBE_MAX_TOKENS=512` 整段烧在 reasoning 上、正文零产出 ⇒ `finish_reason=length` ⇒ 抛 `ai_output_truncated`；66 个 analysis trace 结构化回落计数 0 ⇒ analyze/design 腿（`PHASE_MAX_TOKENS=32768`）非问题面。
+- **修复**：`adapters/workbench.py` NEW `PROBE_RETRY_MAX_TOKENS = 4096`（**仅截断失败路径**同消息重试并抬预算，成功路径不变）＋ NEW `_is_truncated_failure()`（只降级截断；限流／认证／不可用照旧诚实冒泡）＋ NEW `_probe_fallback_question()`（三级确定性退路：未披露方向 → 已披露方向 → **通用问法**；三级皆无才冒泡）；退路写 trace 事件 `probe_model_failed_fallback`。
+- **验证**：7 钉（重试抬预算／成功路径预算不变／双截断退候选问法并留痕／退路优先未披露方向／定向用尽退通用问法／非截断不重试不降级／端到端「probe 全截断仍 completed 且两条事实都披露」）；定向 68 passed；变异四连全红→还原复绿（还原后 sha256 逐位一致）；ruff 清；mypy 277/277 零新增。零迁移零路由零表＝口径 531/56/162/92 不变（单头 `e8f9a0b1c2d3`，2026-11-18 现测）。
+- **未做（授权边界）**：活体部署（与覆层发布后的第三批复跑协调）；A 面覆层 `simulation_workbench` 提案 PROP-577E85F8 的 decide/release（须蔡工密码过四闸）；第三批（处置后新 seed 复跑）度量处置效果。
 
 ### T-M7 商机数据归属权与区域服务商（M7-1 轮）— **结构就绪·待授权**（2026-11-12）
 

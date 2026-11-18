@@ -2,9 +2,21 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 训练场 r2 真机制修复轮（C 面）：probe 腿截断降级——同消息抬预算重试＋确定性问法退路（2026-11-18）
+
+承 B 面（#527）之后的真机取证：复跑批次的 12 个失败 run **全部**倒在访谈提问腿。本轮把「模型截断」从「整场访谈失败」降级为「这一轮退回确定性问法」。零迁移零路由零表＝口径 531/56/162/92 不变（单头 `e8f9a0b1c2d3`，2026-11-18 现测）。
+
+- **真机取证（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）**：①**12/12 失败 run 全在 `phase=interview`**（错误 `workbench_model_failed:ai_output_truncated`，10 例）＋1 例 `ai_unavailable`，失败集中在第 2–5 轮追问 ⇒ analyze/design 腿**不是**问题面；②**全量 workbench run 152**（基线段 40 completed）失败面＝截断 23／认证 54／不可用 18／限流 15，复跑段 35 run 截断 11 ⇒ 截断是**长期高频缺陷**而非复跑特有；③最近 500 条 workbench 审计里 35 条失败调用的 `output_tokens` **全为 0**（正文零产出），同期成功调用中 `output_tokens==512` 者 11 条 ⇒ **推理模型把 512 预算整段烧在 reasoning 上**，供应商 `finish_reason=length` ⇒ 抛 `ai_output_truncated`（`ai_server_client` 判据：finish_reason==length 或输出触达预算且正文缺失）；④66 个 analysis trace 的结构化回落计数为 **0** ⇒ analyze/design 腿零回落；⑤`output_tokens_max`=15158（< MiniMax 硬顶 16384）⇒ 未触顶。
+- **改动①截断重试并抬预算**（`server/src/fde_api/simulation/adapters/workbench.py`）：NEW `PROBE_RETRY_MAX_TOKENS = 4096`——**只在截断这条失败路径**同消息重试一次并抬请求预算（抬的是 max_tokens，不是同输入重放：DSH 层 `retryable=False` 指的是「同输入重放同败」）；**成功路径预算不变** ⇒ 成本与时延零影响。
+- **改动②退确定性问法（三级降级，绝不毁整场访谈）**：NEW `_probe_fallback_question()`——①优先**尚未披露**的事实方向（已披露方向问不出新事实 ⇒ 白问轮）；②已披露方向的候选问法；③**通用问法**（定向方向已全部用尽 ⇒ 访谈已无新事实可挖，此时因模型截断而让整场访谈失败＝拿模型故障惩罚一场已完成的访谈）。三级皆无 ⇒ 照旧诚实冒泡。
+- **改动③只降级截断，其余照旧诚实失败**：NEW `_is_truncated_failure()`——限流（`ai_rate_limited`）／认证（`ai_authentication_failed`）／服务不可用（`ai_unavailable`）都是**环境面**故障，降级会把它们藏起来（run 显示「完成」却没有任何模型调用过）⇒ 照旧冒泡。
+- **留痕**：退路发生时写 trace 事件 `probe_model_failed_fallback`（reason=`ai_output_truncated`，含轮次／模型错误原文／最终问法），可审计可复核。
+- **测试（7 钉）**：重试抬预算（2 次调用、第 2 次 max_tokens>512、两次 prompt 相同）／成功路径预算不变（只 1 次且 max_tokens==512）／重试仍截断⇒退回候选问法并留痕／退路优先未披露方向／**定向用尽⇒通用问法**（真机复现形态：第 3 轮两条方向都已披露）／**非截断失败不重试不降级**（限流只 1 次调用）／**端到端判别钉**（probe 全截断⇒run 仍 completed＋两条事实都披露＋留痕在案）。定向 **68 passed**（适配器 26＋runner＋评估腿＋台账钉＋行数预算）；变异四连全数红→还原复绿（还原后 sha256 逐位一致）：M-C1 截断判定恒 False（2 红）／M-C2 重试不抬预算（1 红）／M-C3 通用退路缺失（2 红）／M-C4 非截断也降级（1 红）；ruff F401/F841 清；mypy 基线 **277/277** 零新增；改面文件不在行数预算名单内。
+- **边界**：本轮**不改**成功路径预算、不改 analyze/design 腿预算（32768 不动）、不改客户模拟器解锁闸、不把环境面故障藏起来；模型侧 reasoning 烧穿仍可能发生，但**不再毁掉整场访谈**（run 以留痕形式记录退路次数）。
+
 ## [未发布] — 训练场 r2 真机制修复轮（B 面）：追问方向契约化——已披露方向撤下＋关键词留存兜底（2026-11-18）
 
-承 r2 制造行业 25 场景批跑与三缺陷修复轮（#523）的**追根**结论：批跑的 80 条失败发现（FA-01/02/03/04/06）不是措辞问题，而是**访谈解锁机制的系统性缺口**——本轮把「候选追问方向」从「给模型的参考建议」改回「契约」。零迁移零路由零表＝口径 524/55/160/89 不变。
+承 r2 制造行业 25 场景批跑与三缺陷修复轮（#523）的**追根**结论：批跑的 80 条失败发现（FA-01/02/03/04/06）不是措辞问题，而是**访谈解锁机制的系统性缺口**——本轮把「候选追问方向」从「给模型的参考建议」改回「契约」。零迁移零路由零表＝口径不变（**当轮基线 524/55/160/89**；现行口径以 AGENTS「当前状态」速览段现测值为准）。
 
 - **真机取证（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）**：43 个 completed workbench run × 258 轮追问——**重复方向白问轮 104（40.3%）**（模型反复追问已披露事实的方向）与**零命中轮 84（32.6%）**（提问与任何事实方向无关）；每 run 披露事实均值 1.91 条／每场景 4.21 条隐藏事实，轮次预算仅 6 轮。另有审计侧铁证：`ai_call_audits` 全量 1085 条里 `simulation_diagnostic_judge`／`plans_delivery_plan_draft` 调用数 **0**、`discovery_extract` 的 44 条全在发布前 ⇒ **#523 轮已发布的三份覆层从未被 workbench 腿消费**（workbench 三腿 purpose 恒为 `simulation_workbench`）⇒ FA-06 三条「验收标准不明确」假设被证据反驳（两条验收标准 100% 可度量），真实机制是上游访谈零解锁 ⇒ `analysis.requirements` 空 ⇒ D6-01 无从配对（已由蔡工拍板三条一律 reject，根因归属 FA-01 域）。
 - **改动①已披露方向本轮撤下**（`server/src/fde_api/simulation/runner.py`）：NEW `_pending_probe_questions()`——访谈循环内按 `customer.state.disclosed_fact_ids` 撤下已披露事实的定向问法（通用泛问项恒保留），未披露方向顺位补位；根除「候选方向列表每轮不变」导致的白问轮浪费。
@@ -66,7 +78,7 @@
 - **在途面保留不动**：主树检出分支（并发线施工中）、`docs/optimization/` 未跟踪工作文档（并发线在写）、AF2 现役树（PR #13 open）与 AF1/V33 家族分支（保护项邻近不触碰）。
 ## [未发布] — 训练场 r2 制造行业批跑三缺陷修复轮：评估腿超时预算＋usage 取值键 DSH 规范化＋蒸馏面 purpose 闭集闸（2026-11-18）
 
-制造行业 25 场景真机批跑（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，25/25 completed、80 条失败发现）实弹撞出三条缺陷，本轮逐条修复＋钉死；零迁移零路由零表＝口径 524/55/160/89 不变。
+制造行业 25 场景真机批跑（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，25/25 completed、80 条失败发现）实弹撞出三条缺陷，本轮逐条修复＋钉死；零迁移零路由零表＝口径不变（**当轮基线 524/55/160/89**；现行口径以 AGENTS「当前状态」速览段现测值为准）。
 
 - **缺陷①评估腿 500（部署面）**：`POST /simulation/runs/<id>/evaluate?model_mode=server` 在活体必 500——api 容器日志 `[CRITICAL] WORKER TIMEOUT` → worker SIGKILL；根因＝`server/Dockerfile` gunicorn `--timeout 120`，而真模型评估层单次调用上界 `deepseek_timeout_seconds`（配置面 ≤300s）且瞬时失败同消息重试一次 ⇒ 最坏 600s。修＝`--timeout` **120→660**（2×上界＋60s 余量）；NEW `tests/test_deploy_timeout_budget.py` 4 例机械闸（现测 pydantic `le` 上界，timeout 必须 > 2×上界＋留余量；Dockerfile 必须留预算说明防无据漂移）——配置面上界抬高时 CI 即红。
 - **缺陷②usage 取值键不匹配（成本轴失真）**：25 个 run 的 `cost_json` prompt/completion tokens **全 0**，而 `ai_call_audits` 实测 45 万 token。根因＝生产产出方 `ai_server_client._provider_usage_from_response` 写 DSH 规范键 `input_tokens`/`output_tokens`，适配器 `_record_usage` 读旧名 `prompt_tokens`/`completion_tokens` ⇒ 恒取空值（回归判定 `cost_delta.tokens` 恒 0）。修＝`workbench.py` NEW `_usage_token_count()`（规范键优先＋旧别名兜底＋皆无⇒0 不发明数字）；`usage_summary()`/`cost_json` 键集逐字节不变（零回归）；CI seam 假执行器同步改用规范形状（此前假件沿用旧名把缺陷遮住）；NEW 2 钉（helper 七断言＋整链 usage_summary 非 0）。
