@@ -47,6 +47,7 @@ from fde_api.projects.gate_ontology import (
 )
 from fde_api.projects.gate_receipt import freeze_gate_receipt
 from fde_api.projects.permissions import project_access
+from fde_api.ux_write_gate import PAUSED_CODE, PAUSED_MESSAGE, writes_paused
 from fde_api.workbench.models import Gate, OperationEvent, Project, ProjectMember, SopNode
 
 GATE_STATUSES = ("pending", "evidence", "passed", "conditional_pass", "failed")
@@ -275,6 +276,7 @@ def submit_gate_evidence(
     try:
         with session.begin():
             project = _load_project_for_gates(session, actor, project_id, manage=True)
+            _reject_when_paused()
             _ensure_gates_logged(session, actor, project)
             gate = _load_gate(session, project.id, gate_key)
             skipped = _require_gate_revision(gate, payload)
@@ -457,6 +459,7 @@ def decide_gate(
                 )
             except GateOntologyError as error:
                 raise GateServiceError(error.code, error.message, error.status) from error
+            _reject_when_paused()
             skipped = _require_gate_revision(gate, payload)
             if gate.status != "evidence":
                 raise GateServiceError(
@@ -686,6 +689,12 @@ def _load_gate(session: Session, project_id: str, gate_key: str) -> Gate:
     if gate is None:
         raise GateServiceError("gate_not_found", "该门禁不存在。", 404)
     return gate
+
+
+def _reject_when_paused() -> None:
+    """发布回退窗口：授权已通过后拒绝写入，不落任何业务成功事件。"""
+    if writes_paused():
+        raise GateServiceError(PAUSED_CODE, PAUSED_MESSAGE, 503)
 
 
 def _require_gate_revision(gate: Gate, payload: Mapping[str, Any]) -> bool:

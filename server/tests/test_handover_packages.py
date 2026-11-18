@@ -277,6 +277,29 @@ def test_strict_mode_records_no_skipped_precondition(delivery_case, db_session) 
     assert db_session.query(OperationEvent).filter_by(event_type="handover_precondition_skipped").count() == 0
 
 
+def test_delivery_is_paused_and_writes_no_terminal_state(
+    delivery_case, d4_app, db_session, monkeypatch
+) -> None:
+    """发布回退窗口：登记被拒，包仍封存、无成功事件、无放行留痕。"""
+    leader, admin, path = delivery_case
+    sealed = leader.post(f"{path}/seal").get_json()["data"]
+    monkeypatch.setattr(d4_app.config["SETTINGS"], "ux_write_paused", True)
+    response = admin.post(f"{path}/deliver", json=_delivery_conditions(sealed))
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "write_preconditions_paused"
+    assert admin.get(path).get_json()["data"]["status"] == "sealed"
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_package_delivered").count() == 0
+    assert db_session.query(OperationEvent).filter_by(event_type="handover_precondition_skipped").count() == 0
+
+
+def test_paused_delivery_keeps_non_admin_at_403(delivery_case, d4_app, monkeypatch) -> None:
+    """暂停不得改变授权口径：非管理员仍是 403，不会因暂停得到 503。"""
+    leader, _admin, path = delivery_case
+    leader.post(f"{path}/seal")
+    monkeypatch.setattr(d4_app.config["SETTINGS"], "ux_write_paused", True)
+    assert leader.post(f"{path}/deliver").status_code == 403
+
+
 @pytest.mark.parametrize(("first_action", "second_action", "error_code"), [
     ("seal", "edit", "package_not_draft"),
     ("unseal", "deliver", "package_not_sealed"),

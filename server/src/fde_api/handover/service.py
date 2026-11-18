@@ -22,6 +22,7 @@ from fde_api.extensions import db
 from fde_api.projects.events import record_event
 from fde_api.projects.permissions import project_access, visible_project_ids
 from fde_api.handover.models import ITEM_TYPES, HandoverPackage, HandoverPackageItem
+from fde_api.ux_write_gate import PAUSED_CODE, PAUSED_MESSAGE, writes_paused
 from fde_api.workbench.models import Project, User
 
 MAX_LABEL_CHARS = 200
@@ -599,6 +600,9 @@ def deliver_package(*, actor: User, package_id: str, payload: Any, preconditions
         _, project = _load_package_for(session, actor, package_id, manage=True)
         _require_admin(actor)
         package = _lock_package(session, package_id)
+        if writes_paused():
+            # 授权已通过才判暂停：未授权请求仍是原 403/404，不因暂停改变口径。
+            raise _error(PAUSED_CODE, PAUSED_MESSAGE, 503)
         if package.status == "delivered":
             raise _error("already_delivered", "该包已登记交付（终态不可逆）。", 409)
         if package.status != "sealed":

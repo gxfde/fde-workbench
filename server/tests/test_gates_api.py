@@ -541,6 +541,68 @@ def test_gate_strict_mode_records_no_skipped_precondition(
     ) == 0
 
 
+def test_gate_writes_are_paused_for_every_entrypoint(
+    admin_client, gate_project, settings, monkeypatch, db_session
+):
+    """发布回退窗口：三条写入在同一开关下被拒，且不落业务成功事件。
+
+    桌面直连、脚本、网页代理都打同一个 API，因此这里断言的是「服务端单点收口」。
+    """
+    monkeypatch.setattr(settings, "ux_write_paused", True)
+    _project, gates_url, leader_client = gate_project
+    gate = _gate_snapshot(admin_client, gates_url, "G6")
+    items = [{"label": item["label"], "source_uri": "fdeops://paused", "content_hash": "c" * 64}
+             for item in gate["checklist"]]
+
+    evidence = admin_client.post(
+        f"{gates_url}/G6/evidence",
+        json={"items": items, "expected_revision": gate["revision"]},
+    )
+    assert evidence.status_code == 503
+    assert evidence.json["error"]["code"] == "write_preconditions_paused"
+    decision = leader_client.post(
+        f"{gates_url}/G6/decision",
+        json={"result": "pass", "expected_revision": gate["revision"]},
+    )
+    assert decision.status_code == 503
+    assert decision.json["error"]["code"] == "write_preconditions_paused"
+
+    # 暂停不等于成功：证据未登记、门禁版本未变、无成功事件。
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(OperationEvent)
+        .where(OperationEvent.event_type.in_(["gate_evidence_submitted", "gate_decided"]))
+    ) == 0
+    assert _gate_snapshot(admin_client, gates_url, "G6")["revision"] == gate["revision"]
+
+
+def test_paused_gate_write_keeps_unauthorized_requests_at_their_original_status(
+    admin_client, client, gate_project, settings, monkeypatch, db_session
+):
+    """暂停不得改变未授权口径：无项目关系者仍得 403，不因暂停看到资源存在。"""
+    monkeypatch.setattr(settings, "ux_write_paused", True)
+    _project, gates_url, _leader_client = gate_project
+    outsider = User(
+        username=f"gate.outsider.{uuid4().hex[:8]}",
+        display_name="Gate Outsider",
+        role="fde_engineer",
+        password_hash=hash_password(INITIAL_PASSWORD),
+        must_change_password=False,
+        is_active=True,
+    )
+    db_session.add(outsider)
+    db_session.commit()
+    outsider_client = AuthorizedClient(
+        client, outsider, {"Authorization": f"Bearer {issue_access_token(outsider, settings)}"}
+    )
+    response = outsider_client.post(
+        f"{gates_url}/G6/evidence",
+        json={"items": [{"label": "x", "source_uri": "fdeops://x", "content_hash": "d" * 64}],
+              "expected_revision": 1},
+    )
+    assert response.status_code == 403
+
+
 def test_gate_decision_rejects_non_integer_expected_revision(admin_client, gate_project):
     """B#28 形状闸：expected_revision 非正整数（bool/字符串/0）→ 400。"""
     _project, gates_url, leader_client = gate_project
