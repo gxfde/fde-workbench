@@ -21,6 +21,7 @@ desktop/node_modules/
 desktop/out/
 desktop/web-dist/
 release/
+release-r*/
 test-results/
 .artifacts/
 artifacts/

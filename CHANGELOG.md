@@ -11,6 +11,7 @@
 - 口径三件套同步：`v3-workbench-inventory.json` route_count 523→**524**＋route CSV 重生成＋archify 四处串（55 蓝图 / **524** 路由 / 160 表 / 89 rev）＋AGENTS 基线行。
 - 活体部署三验绿（#517 后即时：url_map **524**＋adjudicate 路由在场／alembic `b7f2d9e4c6a8 (head)`／三镜像逐位／ready 200）；便携版 **r57**（asar `e4547a4ed3275880e69f43a3156594ae312f2533fb0b29e7ad65fdfbbc97b649`，marker「人工裁定」正向 1／r56 反向 0）落主树 `release/蔡工FDE-0.3.0-便携版-r57`；RELEASE-COUNTER／package.json／web-bridge 三源同步。
 - 任务书条款③写面回写＝✅ 已实施；设计稿状态 PROPOSED→IMPLEMENTED（四项拍板留痕）。
+- 挂账双清偿：NEW `docs/L-C改判操作指引.md`（三步改判流＋superseded 连锁＋裁定表单＋边界钉，操作体会面零开发）；`.gitignore` 增 `release-r*/`（r51/r52 句柄锁残留已实证与归档逐字节一致，PowerShell 复试仍 IOException＝系统级句柄，登记消脏显示留自然释放）。
 
 ## [未发布] — 学习闭环收尾轮：回归判定环收口＝回归通过＋首个改善向信号＋双缺陷修复＋三载体收尾（五 PR，2026-11-18）
 
