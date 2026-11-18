@@ -117,7 +117,12 @@ def test_builtin_seed_list_static_contract():
 
 def _expected_seed_manifest(key: str, capabilities: list[str]) -> dict[str, Any]:
     """独立复算种子 manifest 构造规则（与 seed_public_skills 同式）——src 侧漂移即红。"""
-    version = "1.2.0" if key in _SOLUTION_SKILLS else "1.1.4" if key in _LCSC_V1 else "1.0.0"
+    version = (
+        "1.2.0" if key in _SOLUTION_SKILLS
+        else "1.1.4" if key in _LCSC_V1
+        else "1.1.0" if key == "ontology-candidate-engineering"  # AF2-WP0 v1.1
+        else "1.0.0"
+    )
     return {"version": version, "source": "fde-workbench", "read_only": "workbench.write" not in capabilities}
 
 
@@ -127,9 +132,10 @@ def test_builtin_seed_manifest_rule_pinned():
         manifest = _expected_seed_manifest(key, capabilities)
         assert set(manifest) <= allowed, f"{key}: 种子 manifest 键漂移出契约键空间"
         assert manifest["read_only"] == ("workbench.write" not in capabilities), f"{key}: read_only 推导违例"
-    # 版本分档口径钉：三类互不混淆（solution 腿 / lcsc 腿 / 其余基线）
+    # 版本分档口径钉：四类互不混淆（solution 腿 / lcsc 腿 / ontology v1.1 / 其余基线）
     assert _expected_seed_manifest("delivery-scope-documents", ["project.read"])["version"] == "1.2.0"
     assert _expected_seed_manifest("lcsc-browser-baseline", [])["version"] == "1.1.4"
+    assert _expected_seed_manifest("ontology-candidate-engineering", ["ontology.read"])["version"] == "1.1.0"
     assert _expected_seed_manifest("workbench-help", [])["version"] == "1.0.0"
 
 

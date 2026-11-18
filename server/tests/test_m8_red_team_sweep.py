@@ -22,7 +22,7 @@ leader 任务书 :106-107 与 ADR-M3 §6 :44 定的最终兜底：用企业 A �
   ``sweep_required``／``b_owner_status``／``measured``（三套 token 实测码）。
 - **降级即红（反逃逸闸，本轮新增）**：并集恒等对「把爬扫面降级成排除登记」
   是不变量，故另配四道闸：
-  ① 条数基线 ``len(ROUTES) == 39``／``len(_EXCLUSION_RECORDS) == 74``；
+  ① 条数基线 ``len(ROUTES) == 41``／``len(_EXCLUSION_RECORDS) == 74``；
   ② **实测派生 must_sweep 必须为空**——凡「B 属主实测 200 且 A/同角色 A
      均被拒」的路由若停留在排除登记里即转红；
   ③ 排除登记的 ``measured`` 与**现测重测**逐条一致（登记不可伪造、不可陈旧）；
@@ -46,6 +46,7 @@ import pytest
 from fde_api.agents.models import AgentArtifact, AgentRegistry, AgentRun
 from fde_api.auth.tokens import issue_access_token
 from fde_api.control.chat import AIConversation
+from fde_api.data_engineering.models import DataProfile, TransformPlan
 from fde_api.research.models import (
     ProjectResearchExport,
     ProjectResearchForm,
@@ -97,6 +98,8 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/business-facts"): lambda w: f"/api/v1/projects/{w['project_b'].id}/business-facts",
     ("GET", "/api/v1/projects/<project_id>/contracts"): lambda w: f"/api/v1/projects/{w['project_b'].id}/contracts",
+    ("GET", "/api/v1/projects/<project_id>/data-profiles"): lambda w: f"/api/v1/projects/{w['project_b'].id}/data-profiles",
+    ("GET", "/api/v1/projects/<project_id>/data-profiles/<profile_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/data-profiles/{w['profile_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/delivery-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/delivery-plans",
     ("GET", "/api/v1/projects/<project_id>/discovery/extractions"): lambda w: f"/api/v1/projects/{w['project_b'].id}/discovery/extractions",
     ("GET", "/api/v1/projects/<project_id>/documents"): lambda w: f"/api/v1/projects/{w['project_b'].id}/documents",
@@ -123,6 +126,8 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>/solutions"): lambda w: f"/api/v1/projects/{w['project_b'].id}/solutions",
     ("GET", "/api/v1/projects/<project_id>/tasks"): lambda w: f"/api/v1/projects/{w['project_b'].id}/tasks",
     ("GET", "/api/v1/projects/<project_id>/test-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/test-plans",
+    ("GET", "/api/v1/projects/<project_id>/transform-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans",
+    ("GET", "/api/v1/projects/<project_id>/transform-plans/<plan_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans/{w['plan_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/workflow-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflow-runs",
     ("GET", "/api/v1/projects/<project_id>/workflows"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflows",
 }
@@ -919,6 +924,38 @@ def m8_world(db_session):
     )
     db_session.add(conversation)
 
+    # AF2-WP1：画像报告行（B 项目资产——爬扫面新成员的阳性对照资源）
+    profile_b = DataProfile(
+        project_id=project_b.id,
+        source_name="m8-profile.csv",
+        input_sha256="c" * 64,
+        truncated=False,
+        table_count=1,
+        tables_json=[],
+        relation_candidates_json=[],
+        samples_json={},
+        created_by_user_id=user_b.id,
+    )
+    db_session.add(profile_b)
+
+    # AF2-WP2：类型化转换计划行（B 项目资产——爬扫面新成员的阳性对照资源）
+    plan_b = TransformPlan(
+        project_id=project_b.id,
+        plan_version="af2-wp2-v1",
+        status="validated",
+        source_profile_id=str(uuid4()),
+        source_table="m8-plan-equipment",
+        plan_json={"plan_version": "af2-wp2-v1"},
+        validation_json={
+            "valid": True,
+            "errors": [],
+            "dependency_graph": {"nodes": [], "edges": [], "topological_order": []},
+            "output_columns": [],
+        },
+        created_by_user_id=user_b.id,
+    )
+    db_session.add(plan_b)
+
     action_id = uuid4().hex + uuid4().hex
     db_session.add(
         OperationEvent(
@@ -952,6 +989,8 @@ def m8_world(db_session):
         "run": run,
         "artifact": artifact,
         "conversation": conversation,
+        "profile_b": profile_b,
+        "plan_b": plan_b,
         "action_id": action_id,
     }
 
@@ -1052,7 +1091,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-    assert len(ROUTES) == 39, ("爬扫面条数基线被改动：", len(ROUTES))
+    assert len(ROUTES) == 43, ("爬扫面条数基线被改动：", len(ROUTES))
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),

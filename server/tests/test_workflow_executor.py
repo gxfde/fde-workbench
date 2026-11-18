@@ -49,7 +49,7 @@ from fde_api.jobs.models import BackgroundJob
 from fde_api.jobs.outbox import dispatch_pending, utcnow
 from fde_api.jobs.reconcile import RECOVERABLE_JOB_TYPES, reconcile_jobs
 from fde_api.jobs.worker import run_job
-from fde_api.workbench.models import OperationEvent
+from fde_api.workbench.models import OperationEvent, ProjectMember
 from fde_api.workflows.definition_service import (
     create_definition,
     dag_sha256,
@@ -1348,6 +1348,10 @@ def test_human_approval_wait_approve_then_resume(db_session, settings, monkeypat
     calls: list = []
     _install_fake_api(monkeypatch, calls)
     definition = _approval_definition(db_session, leader, project)
+    # S04 四眼闸：复核者=异人（项目 member，AI 档 project_manager ≥ project_operator）
+    reviewer = make_user(db_session, "project_lead")
+    db_session.add(ProjectMember(project_id=project.id, user_id=reviewer.id, role="member"))
+    db_session.commit()
     run, _ = _start(db_session, leader, project, definition)
 
     run_workflow_run(run.id)
@@ -1374,9 +1378,9 @@ def test_human_approval_wait_approve_then_resume(db_session, settings, monkeypat
     )
     assert count == 1
 
-    # 拍板批准（与任务中心同一入口 decide_automation_approval）：节点 succeeded
+    # 拍板批准（与任务中心同一入口 decide_automation_approval；S04 四眼闸=异人复核）：节点 succeeded
     decide_automation_approval(
-        user=leader,
+        user=reviewer,
         approval_id=approval.id,
         decision_value="approve",
         password=INITIAL_PASSWORD,
@@ -1415,13 +1419,16 @@ def test_human_approval_rejected_fails_chain(db_session, settings, monkeypatch):
     calls: list = []
     _install_fake_api(monkeypatch, calls)
     definition = _approval_definition(db_session, leader, project)
+    reviewer = make_user(db_session, "project_lead")
+    db_session.add(ProjectMember(project_id=project.id, user_id=reviewer.id, role="member"))
+    db_session.commit()
     run, _ = _start(db_session, leader, project, definition)
     run_workflow_run(run.id)
     db_session.expire_all()
     node, approval = _waiting_approval(db_session, run.id)
 
     decide_automation_approval(
-        user=leader,
+        user=reviewer,
         approval_id=approval.id,
         decision_value="reject",
         password="",
@@ -1483,6 +1490,10 @@ def test_cancel_waiting_run_late_decision_is_neutralized(db_session, settings, m
     calls: list = []
     _install_fake_api(monkeypatch, calls)
     definition = _approval_definition(db_session, leader, project)
+    # S04 四眼闸：迟到拍板者=异人复核者
+    reviewer = make_user(db_session, "project_lead")
+    db_session.add(ProjectMember(project_id=project.id, user_id=reviewer.id, role="member"))
+    db_session.commit()
     run, _ = _start(db_session, leader, project, definition)
     run_workflow_run(run.id)
     db_session.expire_all()
@@ -1494,7 +1505,7 @@ def test_cancel_waiting_run_late_decision_is_neutralized(db_session, settings, m
     assert node.status == "cancelled" and run.status == "cancelled"
 
     decide_automation_approval(
-        user=leader,
+        user=reviewer,
         approval_id=approval.id,
         decision_value="approve",
         password=INITIAL_PASSWORD,
@@ -1646,6 +1657,10 @@ def test_human_approval_rejected_resume_creates_fresh_pending(
     calls: list = []
     _install_fake_api(monkeypatch, calls)
     definition = _approval_definition(db_session, leader, project)
+    # S04 四眼闸：两轮拍板者=异人复核者
+    reviewer = make_user(db_session, "project_lead")
+    db_session.add(ProjectMember(project_id=project.id, user_id=reviewer.id, role="member"))
+    db_session.commit()
     run, _ = _start(db_session, leader, project, definition)
     run_workflow_run(run.id)
     db_session.expire_all()
@@ -1654,7 +1669,7 @@ def test_human_approval_rejected_resume_creates_fresh_pending(
     assert key_before == approval.id
 
     decide_automation_approval(
-        user=leader,
+        user=reviewer,
         approval_id=approval.id,
         decision_value="reject",
         password="",
@@ -1679,7 +1694,7 @@ def test_human_approval_rejected_resume_creates_fresh_pending(
     assert new_node.status == "waiting" and new_node.idempotency_key == new_approval.id
 
     decide_automation_approval(
-        user=leader,
+        user=reviewer,
         approval_id=new_approval.id,
         decision_value="approve",
         password=INITIAL_PASSWORD,

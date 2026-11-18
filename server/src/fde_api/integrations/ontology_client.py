@@ -369,6 +369,30 @@ class OntologyClient:
             idem=uuid.uuid4().hex,
         )
 
+    def introspect_data_source(
+        self,
+        *,
+        actor_id: str,
+        org_id: str,
+        project_id: str,
+        ontology_id: str,
+        version_id: str,
+        data_source_key: str,
+    ) -> dict[str, Any]:
+        """AF2 D5：连接器侧 DB 只读内省画像（api-spec 1.3.8-af2）——catalog 结构
+        （表/列/类型/可空/主键/外键=关系候选硬证据）+ 绑定表受控掩码样本；
+        版本快照钉版本（snapshot_sha256 锚随响应）。掩码在 runtime 连接器沙箱
+        侧完成（单一真身），本侧只透传不二次脱敏。"""
+        return self._request(
+            "POST",
+            f"/api/v1/ontologies/{ontology_id}/versions/{version_id}"
+            f"/data-sources/{data_source_key}/introspect",
+            actor_id=actor_id,
+            org_id=org_id,
+            project_id=project_id,
+            idem=uuid.uuid4().hex,
+        )
+
     def get_lineage(
         self,
         *,
