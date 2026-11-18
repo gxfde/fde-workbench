@@ -11,6 +11,18 @@
 - **改动②关键词留存兜底**（`server/src/fde_api/simulation/adapters/workbench.py`）：`probe()` 提示词追加「【提问约束】提问正文必须逐字包含你所选追问方向中的关键词（不得改写、替换或省略）」；NEW `_probe_keywords()`／`_probe_keyword_guard()`——模型改写后与**任何**候选方向关键词都无关时，退回该方向的确定性候选问法（可解锁），模型问法已含关键词则原样保留（不夺表达自由）；兜底发生时写 trace 事件 `probe_keyword_guard`（reason=`probe_keywords_missing`，模型问法与最终问法并列，可审计）。
 - **测试（5 钉）**：适配器三钉（提示词含关键词留存约束行／模型丢关键词⇒退回候选问法／模型含关键词⇒原样保留）＋runner 单钉（`_pending_probe_questions` 撤下与泛问项保留）＋**确定性端到端判别钉**（workbench 档＋假执行器恒回只含首条事实关键词的问法：旧码只披露 1 条事实，新码 2 轮内披露 2 条）。定向 **40 passed**；变异三连全数红→还原复绿（M1 守卫失效 2 红／M2 方向撤下失效 1 红／M3 提示词约束行缺失 1 红，还原后 sha256 逐位一致）；ruff F401/F841 清；mypy 基线 **277/277** 零新增；两个改面文件均不在行数预算名单内。
 - **边界**：mock／real 适配器行为不变（mock 本就取候选问法原文）；客户模拟器解锁闸（字面子串）未改——本轮只保证「问题一定带着关键词去问」；已发布覆层与本轮改动互不干扰（覆层热生效于 system 提示词，本轮约束在 user 提示词面）。
+## [未发布] — P0 写入安全 G4 第二轮补证：活体只读体检＋新旧端组合矩阵＋真机走查（2026-11-18）
+
+补 G4 的证据面：把「严格口径是否真的生效」从一次性手测变成**可复跑的仓内取证器**，并把新旧端组合、旧端受影响面与界面走查逐项钉成可查证据。活体本轮**只做只读体检**（未部署、未改配置、无写入）。
+
+- **活体栈只读体检**：活体 api 容器已含 #522 的条件写保护（`ux_write_preconditions_required` 默认 True、`_require_gate_revision`、`expected_manifest_sha256`），容器 env 无任何 `FDE_UX_*` 覆盖 ⇒ **严格口径事实上已在生效**；api／worker／scheduler 三容器一致，不存在宽松实例混跑；`url_map` 525 条、容器内 `alembic current`＝`b7f2d9e4c6a8 (head)`。**活体缺 #525 的 `server/src/fde_api/ux_write_gate.py`** ⇒ 回退暂停开关尚未部署（发布前必补）。
+- **仓内调用方盘点**：桌面新端三写全带条件（门禁 `expected_revision`、交付 `expected_manifest_sha256`＋`expected_unsealed_count`＋能力标识 `write_preconditions === "v1"`、批量批审 `expected_review_status`）；仓内脚本 `verify_order_to_delivery_e2e.py`、`gate-engine-smoke.py`、`commercial-smoke.py` 均带条件。
+- **旧端受影响面（已交付便携版 asar 字节级测绘）**：`expected_revision` 自 #151 起即在客户端，故 r56／r57 的**门禁裁定不受严格期影响**；但 r56／r57 的**门禁证据提交与交付登记不带条件**，严格期必被拒（428）——这两条即旧端受影响面，须给升级指引；事实批审服务端仅在字段存在时校验，旧端仍可写。
+- **新旧端组合矩阵**（隔离 PostgreSQL＋Redis，严格口径）：新端三写全 200；旧端门禁证据 428、门禁裁定 200、交付登记 428、事实批审 200；无条件旁路 428；陈旧版本 409；无权 403；旧端读能力三读全 200；拒绝腿零新增业务成功事件，被拒批次封包仍 `sealed`。
+- **真机走查**（Chromium 走正式 Web 入口，renderer 与 Electron 同构）：门禁证据 UI 提交带 `expected_revision=1` → 200；人工核验拍板带 `expected_revision=2` → 200（执行人／裁定人分离，由第二账号办理）；事实批审 `PATCH` → 200。
+- NEW `scripts/verify/verify_ux_write_matrix.py`：`--mode strict-probe` 只发**必须被拒**的请求（缺条件 428、陈旧 409、缺摘要 428、无效令牌 401 ＋ 读能力 200），可给 `--database-url` 核对成功事件零新增，**对活体安全**；`--mode full` 跑新端形态真实写入（需授权，且需第二账号裁定）。两模式在隔离严格服务端均 `all_ok: true`、退出 0。
+- 本轮**仍未做**（需单独授权）：受控迁移与运维授权下的活体严格切换实探、#525 暂停开关部署、生产审批、实际安装与仓外调用方盘点、活体上的门禁裁定与事实批审走查。
+
 ## [未发布] — 便携版 r58 打包与 P0 写入安全收尾（2026-11-18）
 
 从合并后的 main（`e24fb441`＝#522 条件写保护＋#525 回退暂停单点）打 Windows x64 便携版 r58。
