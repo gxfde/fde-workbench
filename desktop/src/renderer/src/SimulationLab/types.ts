@@ -318,6 +318,8 @@ export interface FindingDto {
   evidence_refs: Array<Record<string, unknown>>
   root_causes: Array<{ code: string; confidence: string; analysis: string }>
   status: string
+  /** 再终裁收敛口径：旧 human 行派生发现被更新终裁取代（不进蒸馏面与提案）。 */
+  superseded?: boolean
 }
 
 export interface ProposalRollbackDto {

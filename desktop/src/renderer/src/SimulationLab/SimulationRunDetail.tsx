@@ -590,6 +590,9 @@ export function SimulationRunDetail(): ReactElement {
               onAnalyze={async () => {
                 await handleAnalyze()
               }}
+              onRefresh={async () => {
+                if (selectedId) await loadRunDetail(selectedId)
+              }}
             />
           </>
         ) : (

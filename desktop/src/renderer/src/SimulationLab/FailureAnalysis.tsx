@@ -12,7 +12,7 @@ import { useState, type ReactElement } from "react"
 import { ApiClientError } from "../api/client"
 import { useAuth } from "../auth/AuthProvider"
 import { AsyncButton, UiButton } from "../components/ui"
-import { createProposal, draftImprovementsAi } from "./api"
+import { adjudicateFinding, createProposal, draftImprovementsAi } from "./api"
 import type { DraftAiGroupDto, FindingDto, ProposalDto } from "./types"
 
 const SEVERITY_LABEL: Record<FindingDto["severity"], string> = {
@@ -25,6 +25,12 @@ const CONFIDENCE_LABEL: Record<string, string> = {
   confirmed: "已确认",
   likely: "较可能（L-B 建议）",
   hypothesis: "待人工确认",
+}
+
+// 人工裁定状态徽标（条款③写面）：status 优先于归因 confidence 推断。
+const ADJUDICATION_LABEL: Record<string, string> = {
+  confirmed: "人工已确认",
+  rejected: "人工已驳回",
 }
 
 type CarrierChoice = "lesson_entry" | "skill_version_draft" | "prompt_overlay_fragment"
@@ -51,14 +57,18 @@ export function FailureAnalysis({
   findings,
   onAnalyze,
   onProposalCreated,
+  onRefresh,
   busy,
 }: {
   findings: FindingDto[]
   onAnalyze?(): Promise<void>
   onProposalCreated?(proposal: ProposalDto): void
+  /** 裁定落库后刷新发现清单（re-fetch 含 superseded 投影）。 */
+  onRefresh?: () => Promise<void>
   busy?: boolean
 }): ReactElement {
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
+  const canAdjudicate = user?.role === "admin" || user?.role === "project_lead"
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [draftGroups, setDraftGroups] = useState<DraftAiGroupDto[]>([])
   const [activeGroupIdx, setActiveGroupIdx] = useState(0)
@@ -73,6 +83,11 @@ export function FailureAnalysis({
   const [skillRef, setSkillRef] = useState("")
   const [skillSummary, setSkillSummary] = useState("")
   const [skillDelta, setSkillDelta] = useState("")
+  const [adjudicatingId, setAdjudicatingId] = useState<string | null>(null)
+  const [adjudicationAction, setAdjudicationAction] = useState<"confirm" | "reject">("confirm")
+  const [adjudicationNote, setAdjudicationNote] = useState("")
+  const [adjudicationBusy, setAdjudicationBusy] = useState(false)
+  const [adjudicationError, setAdjudicationError] = useState("")
   const [overlayPurpose, setOverlayPurpose] = useState("simulation_workbench")
   const [overlayFragment, setOverlayFragment] = useState("")
   const [overlayRationale, setOverlayRationale] = useState("")
@@ -112,6 +127,24 @@ export function FailureAnalysis({
 
   function toggleFinding(id: string): void {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+  }
+
+  async function submitAdjudication(finding: FindingDto): Promise<void> {
+    setAdjudicationBusy(true)
+    setAdjudicationError("")
+    try {
+      await adjudicateFinding(apiRequest, finding.id, {
+        action: adjudicationAction,
+        note: adjudicationNote.trim(),
+      })
+      setAdjudicatingId(null)
+      setAdjudicationNote("")
+      if (onRefresh) await onRefresh()
+    } catch (caught) {
+      setAdjudicationError(errorText(caught))
+    } finally {
+      setAdjudicationBusy(false)
+    }
   }
 
   async function handleDraftAi(): Promise<void> {
@@ -436,21 +469,97 @@ export function FailureAnalysis({
               finding.root_causes.some((cause) => cause.confidence === "likely")
             const checked = selectedIds.includes(finding.id)
             return (
-              <li key={finding.id} className={`simulation-finding simulation-severity-${finding.severity}`}>
+              <li
+                key={finding.id}
+                className={`simulation-finding simulation-severity-${finding.severity}${
+                  finding.superseded ? " simulation-finding-superseded" : ""
+                }`}
+              >
                 <header>
                   <label className="simulation-finding-check">
                     <input
                       type="checkbox"
                       aria-label={`选择发现 ${finding.code}`}
                       checked={checked}
+                      disabled={finding.superseded === true}
                       onChange={() => toggleFinding(finding.id)}
                     />
                     <code>{finding.code}</code>
                   </label>
                   <strong>{finding.title}</strong>
                   <span className="simulation-severity">{SEVERITY_LABEL[finding.severity]}</span>
+                  {finding.status === "confirmed" || finding.status === "rejected" ? (
+                    <span className="simulation-badge">{ADJUDICATION_LABEL[finding.status]}</span>
+                  ) : null}
                 </header>
                 <p>{finding.description}</p>
+                {finding.superseded ? (
+                  <p className="simulation-warning" role="status">
+                    已被更新的 L-C 终裁取代（superseded）——不进蒸馏面与提案；如需重启请基于现行终裁重跑失败分析。
+                  </p>
+                ) : null}
+                {canAdjudicate && finding.status === "open" && !finding.superseded ? (
+                  adjudicatingId === finding.id ? (
+                    <div
+                      className="simulation-adjudicate-form"
+                      role="group"
+                      aria-label={`裁定发现 ${finding.code}`}
+                    >
+                      <select
+                        value={adjudicationAction}
+                        aria-label="裁定动作"
+                        onChange={(event) =>
+                          setAdjudicationAction(event.target.value as "confirm" | "reject")
+                        }
+                      >
+                        <option value="confirm">确认根因</option>
+                        <option value="reject">驳回发现</option>
+                      </select>
+                      <textarea
+                        rows={2}
+                        value={adjudicationNote}
+                        aria-label="裁定理由（必填）"
+                        placeholder="裁定理由（必填，随发现行留痕）"
+                        onChange={(event) => setAdjudicationNote(event.target.value)}
+                      />
+                      {adjudicationError ? (
+                        <p className="simulation-error" role="alert">
+                          {adjudicationError}
+                        </p>
+                      ) : null}
+                      <div>
+                        <UiButton
+                          disabled={adjudicationBusy || !adjudicationNote.trim()}
+                          onClick={() => void submitAdjudication(finding)}
+                        >
+                          提交裁定
+                        </UiButton>
+                        <UiButton
+                          disabled={adjudicationBusy}
+                          onClick={() => {
+                            setAdjudicatingId(null)
+                            setAdjudicationError("")
+                          }}
+                        >
+                          取消
+                        </UiButton>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <UiButton
+                        onClick={() => {
+                          setAdjudicatingId(finding.id)
+                          setAdjudicationAction("confirm")
+                          setAdjudicationNote("")
+                          setAdjudicationError("")
+                        }}
+                      >
+                        人工裁定
+                      </UiButton>
+                    </div>
+                  )
+                ) : null}
                 <ul className="simulation-root-causes">
                   {finding.root_causes.map((cause) => (
                     <li key={cause.code}>

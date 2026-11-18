@@ -257,6 +257,25 @@ export async function listFindings(
   return data as { items: import("./types").FindingDto[]; total: number }
 }
 
+export interface FindingAdjudicationPayload {
+  action: "confirm" | "reject"
+  note: string
+}
+
+/** 失败发现人工裁定（条款③写面）：单向 open→confirmed|rejected＋note 必填留痕。 */
+export async function adjudicateFinding(
+  apiRequest: SimulationApiRequest,
+  findingId: string,
+  payload: FindingAdjudicationPayload,
+): Promise<import("./types").FindingDto> {
+  const data = await apiRequest(
+    `${BASE}/findings/${encodeURIComponent(findingId)}/adjudicate`,
+    { method: "POST", body: payload },
+  )
+  if (!data || typeof data !== "object") throw new Error("裁定回执数据格式异常")
+  return data as import("./types").FindingDto
+}
+
 export async function analyzeRun(
   apiRequest: SimulationApiRequest,
   runId: string,

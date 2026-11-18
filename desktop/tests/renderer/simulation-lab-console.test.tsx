@@ -154,6 +154,9 @@ function routeApi(overrides: Record<string, unknown> = {}) {
     if (path.includes("/runs/run-1/evaluation")) {
       return Promise.resolve(report)
     }
+    if (path.includes("/findings") && path.includes("/adjudicate")) {
+      return Promise.resolve({ id: "f-1", status: "confirmed" })
+    }
     if (path.includes("/findings")) {
       return Promise.resolve({
         items: [
@@ -312,6 +315,118 @@ it("失败分析发现卡提供「原文核对」只读展开：证据条原文�
   expect(
     screen.getByText("初访未索取知识采集清单——第二访补齐后仍缺失"),
   ).toBeInTheDocument()
+})
+
+it("失败分析发现卡人工裁定：admin 打开表单、note 必填禁用提交、POST adjudicate 留痕", async () => {
+  mocks.user.role = "admin"
+  routeApi()
+  const user = userEvent.setup()
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText("未发现客户真实需求")).toBeInTheDocument()
+  })
+  await user.click(screen.getByRole("button", { name: "人工裁定" }))
+  expect(screen.getByLabelText("裁定动作")).toBeInTheDocument()
+  const submit = screen.getByRole("button", { name: "提交裁定" })
+  expect(submit).toBeDisabled()
+  await user.type(screen.getByLabelText("裁定理由（必填）"), "人工核对原文属实，单点确认。")
+  expect(submit).toBeEnabled()
+  await user.click(submit)
+  await waitFor(() => {
+    expect(mocks.apiRequest).toHaveBeenCalledWith(
+      expect.stringContaining("/findings/f-1/adjudicate"),
+      expect.objectContaining({
+        method: "POST",
+        body: { action: "confirm", note: "人工核对原文属实，单点确认。" },
+      }),
+    )
+  })
+})
+
+it("fde_engineer 不见发现裁定入口（与 L-C 终裁同尺）", async () => {
+  routeApi()
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText("未发现客户真实需求")).toBeInTheDocument()
+  })
+  expect(screen.queryByRole("button", { name: "人工裁定" })).toBeNull()
+})
+
+it("被取代发现置灰呈现：取代提示＋复选框禁用＋无裁定按钮", async () => {
+  routeApi()
+  const base = mocks.apiRequest.getMockImplementation()
+  if (!base) throw new Error("routeApi 基础 mock 未就位")
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path.includes("/findings") && !path.includes("/adjudicate")) {
+      return Promise.resolve({
+        items: [
+          {
+            id: "f-1",
+            run_id: "run-1",
+            code: "FA-01",
+            title: "未发现客户真实需求",
+            severity: "high",
+            dimension: "D1",
+            description: "判据 D1-01 未达标",
+            evidence_refs: [],
+            root_causes: [
+              { code: "访谈追问不足", confidence: "confirmed", analysis: "直接命中" },
+            ],
+            status: "open",
+            superseded: true,
+          },
+        ],
+        total: 1,
+      })
+    }
+    return base(path, options)
+  })
+  mocks.user.role = "admin"
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText(/已被更新的 L-C 终裁取代/)).toBeInTheDocument()
+  })
+  expect(screen.getByLabelText("选择发现 FA-01")).toBeDisabled()
+  expect(screen.queryByRole("button", { name: "人工裁定" })).toBeNull()
+})
+
+it("评估报告 L-C 终裁历史链：多轮终裁行带序标，最新行标现行，通知含现行结论摘要", async () => {
+  routeApi()
+  const base = mocks.apiRequest.getMockImplementation()
+  if (!base) throw new Error("routeApi 基础 mock 未就位")
+  const secondHuman = {
+    ...humanLayer,
+    id: "ev-human-2",
+    evaluator_id: "human:fde-1:r2",
+    created_at: "2026-11-09T10:00:00",
+    note: "第二轮终裁（改判）：根因指向追问方式而非次数",
+  }
+  const twoRoundReport = {
+    ...reportWithHumanVerdict,
+    layers: [...reportWithHumanVerdict.layers, secondHuman],
+    human: [humanLayer, secondHuman],
+    final: secondHuman,
+  }
+  mocks.apiRequest.mockImplementation((path: string, options?: { method?: string }) => {
+    if (path.includes("/runs/run-1/evaluation")) {
+      return Promise.resolve(twoRoundReport)
+    }
+    return base(path, options)
+  })
+
+  render(<SimulationRunDetail />)
+
+  await waitFor(() => {
+    expect(screen.getByText(/第 1 次终裁（已被取代）/)).toBeInTheDocument()
+  })
+  expect(screen.getByText(/第 2 次终裁（现行）/)).toBeInTheDocument()
+  expect(screen.getByText(/现行结论：第二轮终裁（改判）/)).toBeInTheDocument()
 })
 
 it("改进提案页呈现「审批 ≠ 发布」并在缺密码时提示", async () => {

@@ -26,7 +26,16 @@ function ScoreBar({ value }: { value: number }): ReactElement {
   )
 }
 
-function LayerCard({ layer }: { layer: EvaluationLayerDto }): ReactElement {
+function LayerCard({
+  layer,
+  adjudicationOrdinal,
+  isCurrentAdjudication,
+}: {
+  layer: EvaluationLayerDto
+  /** L-C 终裁历史链序标（仅 human 层行传入）。 */
+  adjudicationOrdinal?: number
+  isCurrentAdjudication?: boolean
+}): ReactElement {
   const dimensions = layer.scores?.dimensions ?? []
   const criteria = layer.scores?.criteria ?? []
   return (
@@ -35,6 +44,11 @@ function LayerCard({ layer }: { layer: EvaluationLayerDto }): ReactElement {
         <h4>
           {LAYER_LABEL[layer.layer]}（{layer.evaluator_id}）
         </h4>
+        {layer.layer === "human" && adjudicationOrdinal ? (
+          <span className="simulation-hint">
+            第 {adjudicationOrdinal} 次终裁{isCurrentAdjudication ? "（现行）" : "（已被取代）"}
+          </span>
+        ) : null}
         <span className={`simulation-verdict simulation-verdict-${layer.verdict}`}>
           {VERDICT_LABEL[layer.verdict]}
         </span>
@@ -89,6 +103,14 @@ export function EvaluationReport({
   onRecordHuman?(payload: { verdict: string; total_score: number; note: string }): Promise<void>
 }): ReactElement {
   const layers = report.layers ?? []
+  // L-C 终裁历史链序标（条款③ P2）：human 行按 created_at 升序编号；
+  // 最新一行＝现行终裁（LayerCard 徽标）。
+  const humanOrdinals = new Map<string, number>()
+  const humanRowsSorted = layers
+    .filter((layer) => layer.layer === "human")
+    .slice()
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))
+  humanRowsSorted.forEach((row, index) => humanOrdinals.set(row.id, index + 1))
   return (
     <section className="simulation-evaluation" aria-label="评估报告">
       <header className="simulation-section-header">
@@ -111,7 +133,9 @@ export function EvaluationReport({
         <p className="simulation-notice" role="status">
           人工终裁已记录：
           {VERDICT_LABEL[report.final.verdict] ?? report.final.verdict} ·{" "}
-          {Math.round(report.final.total_score * 100)}%（机器原行保留并列，未改写。）
+          {Math.round(report.final.total_score * 100)}%
+          {report.final.note ? `｜现行结论：${report.final.note.slice(0, 80)}` : ""}
+          （机器原行保留并列，未改写；再提交即改判，历史行永远保留。）
         </p>
       ) : null}
 
@@ -121,7 +145,11 @@ export function EvaluationReport({
         <div className="simulation-layer-stack">
           {layers.map((layer) => (
             <Fragment key={layer.id}>
-              <LayerCard layer={layer} />
+              <LayerCard
+                layer={layer}
+                adjudicationOrdinal={humanOrdinals.get(layer.id)}
+                isCurrentAdjudication={report.final?.layer === "human" && report.final.id === layer.id}
+              />
             </Fragment>
           ))}
         </div>
