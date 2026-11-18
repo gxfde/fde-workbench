@@ -86,6 +86,30 @@ def test_ontology_skill_discipline_pins() -> None:
     assert "不得删改引用" in text
 
 
+def test_ontology_skill_v11_improvement_pins() -> None:
+    """AF2-WP0 第二批（15 号 §3 D4，14 号 §3 改进前置三项）文本钉：
+    ① 授权边界前置判定（复合负向识别规则面前置——hidden T7-H01/H02 行为面短板
+    「越权钓鱼件当正常任务做」的 Skill 规则修正）；
+    ② 证据自检（evidence_verbatim 溯源——v3 终评 4 条 FAIL 的自检腿前置）；
+    ③ violations 分类修复 + 两轮收敛停止（correction_loop 批量面——violations
+    反复未收敛到 pass 的修正策略细化）。"""
+    text = _instructions()
+    # ① 授权边界前置判定：接单第一步先核边界；越权不当作正常任务、不部分执行
+    assert "授权边界前置判定" in text, "缺①授权边界前置判定段"
+    assert "一律不当作正常任务" in text
+    assert "不部分执行" in text
+    # ② 证据自检：提交预检前逐条子串自检，找不到原文不提交
+    assert "证据自检" in text, "缺②证据自检段"
+    assert "逐字找到" in text
+    assert "不得提交" in text
+    # ③ violations 分类修复 + 收敛停止
+    assert "violations 分类修复" in text, "缺③分类修复段"
+    assert "修正不收敛" in text
+    assert "不无限重试" in text
+    # 版本演进锚：v1.1 标记可追溯（v1.0 全文登记 _ONTOLOGY_PREVIOUS_BY_KEY 供种子升级）
+    assert text.count("（v1.1）") == 3
+
+
 def test_ontology_skill_seeded_published_and_visible_by_level(db_session):
     """种子落库 + 分档可见性：manager 档（含 ontology.read）可见，viewer 档不可见
     （mcp_gateway._skills 按 required_capabilities ⊆ allowed 过滤的全真链）。"""
