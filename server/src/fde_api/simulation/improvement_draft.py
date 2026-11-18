@@ -30,6 +30,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from fde_api.ai.overlays import OVERLAY_PURPOSE_WHITELIST, purpose_allowed
 from fde_api.ai.prompt_registry import version_of
 from fde_api.control.ai_server_client import execute_ai_prompt
 from fde_api.extensions import db
@@ -169,6 +170,14 @@ def _validate_group(group: Any, input_codes: set[str]) -> dict[str, Any]:
         raise DraftContractError(
             "overlay_purpose_key", "purpose_key 须为下划线风格小写字母数字。"
         )
+    # 闭集闸（fail-closed）：purpose_key 必须在已登记提示词闭集内，否则发布通道
+    # `purpose_allowed()` 会拒 ⇒ 候选载荷采纳即死（真机证据：2026-11-18 制造行业
+    # 三组蒸馏草稿自造 demand_analysis_check 等未登记键）。
+    if not purpose_allowed(purpose_key):
+        raise DraftContractError(
+            "overlay_purpose_not_allowed",
+            "purpose_key 不在已登记提示词闭集内（须逐字取自闭集，不得自造）。",
+        )
     fragment = overlay.get("fragment")
     if not isinstance(fragment, str) or not 1 <= len(fragment) <= MAX_OVERLAY_FRAGMENT:
         raise DraftContractError(
@@ -251,6 +260,11 @@ def draft_improvements(*, actor: Any, finding_ids: list[str]) -> dict[str, Any]:
         f"以下是失败发现的结构化投影（按失败码分组前的平铺清单）：\n"
         f"{json.dumps(payload['findings'], ensure_ascii=False, default=str)[:12000]}\n"
         f"请为以下每个失败码各产出一组候选载荷：{json.dumps(payload['groups'], ensure_ascii=False)}\n"
+        # 闭集动态注入（**不改系统提示词正文** ⇒ registry 指纹零影响）：模型
+        # 自造 purpose_key 会让候选载荷在发布通道被 purpose_allowed() 拒。
+        "prompt_overlay_fragment.purpose_key 必须逐字取自下列已登记提示词闭集"
+        "之一，不得自造、不得改写：\n"
+        f"{json.dumps(sorted(OVERLAY_PURPOSE_WHITELIST), ensure_ascii=False)}\n"
         "按系统提示词的输出契约返回单个 JSON 对象。"
     )
 

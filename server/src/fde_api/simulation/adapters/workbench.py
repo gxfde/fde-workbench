@@ -77,6 +77,30 @@ _DESIGN_CONTRACT = (
 _ANALYZE_KEYS = {"root_causes", "requirements", "open_questions", "facts_known"}
 _DESIGN_KEYS = {"solution_sections", "tasks", "acceptance_criteria", "workflow_nodes"}
 
+# usage 取值键（DSH 规范形状 ＝ ai_server_client._provider_usage_from_response 的
+# 产出）：``input_tokens`` / ``output_tokens``。旧别名 ``prompt_tokens`` /
+# ``completion_tokens`` 仅作兼容兜底（部分 CI seam 假执行器沿用旧名）——两套键名
+# 都取不到 ⇒ 0（**不发明数字**）。真机证据：2026-11-18 制造行业 25 场景批跑，
+# cost_json 的 prompt/completion tokens 全 0，而 ai_call_audits 实测 45 万 token
+# ⇒ 旧读法恒取空值（DSH 键名不匹配）。
+_USAGE_INPUT_KEYS = ("input_tokens", "prompt_tokens")
+_USAGE_OUTPUT_KEYS = ("output_tokens", "completion_tokens")
+
+
+def _usage_token_count(call: dict[str, Any], keys: tuple[str, ...]) -> int:
+    """从单次 DSH usage call 取 token 数（规范键优先，兼容旧别名）。"""
+    for key in keys:
+        value = call.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count >= 0:
+            return count
+    return 0
+
 
 class WorkbenchAdapter:
     """API 内真模型执行面（probe/analyze/design 真模型；implement/validate 确定性）。"""
@@ -279,8 +303,8 @@ class WorkbenchAdapter:
                 continue
             self._usage_calls.append(
                 {
-                    "prompt_tokens": int(call.get("prompt_tokens") or 0),
-                    "completion_tokens": int(call.get("completion_tokens") or 0),
+                    "prompt_tokens": _usage_token_count(call, _USAGE_INPUT_KEYS),
+                    "completion_tokens": _usage_token_count(call, _USAGE_OUTPUT_KEYS),
                 }
             )
 

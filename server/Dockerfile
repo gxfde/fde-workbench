@@ -40,4 +40,10 @@ USER fde
 
 EXPOSE 8010
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8010", "--workers", "2", "--timeout", "120", "fde_api.wsgi:app"]
+# --timeout＝gunicorn worker 静默上限（arbiter 超时即 SIGKILL worker ⇒ 请求落 500）。
+# 真模型评估腿（POST /simulation/runs/<id>/evaluate?model_mode=server）单次模型调用
+# 上界＝deepseek_timeout_seconds（配置面 ≤300s），瞬时失败同消息重试一次 ⇒ 最坏
+# 2×300=600s；原 120s 恒被击穿（真机实测 41–160s ⇒ 必 500，2026-11-18 实弹）。
+# 取 660＝2×上界 +60s 余量（连接/解析/审计/落库开销）；静态钉见
+# tests/test_deploy_timeout_budget.py（timeout 必须 > 2×AI 超时上界，防再漂移）。
+CMD ["gunicorn", "--bind", "0.0.0.0:8010", "--workers", "2", "--timeout", "660", "fde_api.wsgi:app"]

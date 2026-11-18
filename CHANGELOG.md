@@ -2,6 +2,16 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 训练场 r2 制造行业批跑三缺陷修复轮：评估腿超时预算＋usage 取值键 DSH 规范化＋蒸馏面 purpose 闭集闸（2026-11-18）
+
+制造行业 25 场景真机批跑（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，25/25 completed、80 条失败发现）实弹撞出三条缺陷，本轮逐条修复＋钉死；零迁移零路由零表＝口径 524/55/160/89 不变。
+
+- **缺陷①评估腿 500（部署面）**：`POST /simulation/runs/<id>/evaluate?model_mode=server` 在活体必 500——api 容器日志 `[CRITICAL] WORKER TIMEOUT` → worker SIGKILL；根因＝`server/Dockerfile` gunicorn `--timeout 120`，而真模型评估层单次调用上界 `deepseek_timeout_seconds`（配置面 ≤300s）且瞬时失败同消息重试一次 ⇒ 最坏 600s。修＝`--timeout` **120→660**（2×上界＋60s 余量）；NEW `tests/test_deploy_timeout_budget.py` 4 例机械闸（现测 pydantic `le` 上界，timeout 必须 > 2×上界＋留余量；Dockerfile 必须留预算说明防无据漂移）——配置面上界抬高时 CI 即红。
+- **缺陷②usage 取值键不匹配（成本轴失真）**：25 个 run 的 `cost_json` prompt/completion tokens **全 0**，而 `ai_call_audits` 实测 45 万 token。根因＝生产产出方 `ai_server_client._provider_usage_from_response` 写 DSH 规范键 `input_tokens`/`output_tokens`，适配器 `_record_usage` 读旧名 `prompt_tokens`/`completion_tokens` ⇒ 恒取空值（回归判定 `cost_delta.tokens` 恒 0）。修＝`workbench.py` NEW `_usage_token_count()`（规范键优先＋旧别名兜底＋皆无⇒0 不发明数字）；`usage_summary()`/`cost_json` 键集逐字节不变（零回归）；CI seam 假执行器同步改用规范形状（此前假件沿用旧名把缺陷遮住）；NEW 2 钉（helper 七断言＋整链 usage_summary 非 0）。
+- **缺陷③蒸馏面 purpose_key 无闭集闸（候选载荷采纳即死）**：三组真机蒸馏草稿自造 `demand_analysis_check` 等未登记键——形态合法（`^[a-z0-9_]+$`）但不在 `OVERLAY_PURPOSE_WHITELIST` 注册闭集 ⇒ 发布通道 `purpose_allowed()` 拒 ⇒ 采纳即死。修＝①用户提示词**动态注入闭集**（`json.dumps(sorted(OVERLAY_PURPOSE_WHITELIST))`，系统提示词正文一字未动 ⇒ registry 指纹零影响）②`_validate_group` 增 `purpose_allowed()` fail-closed 校验（违 ⇒ 409 `ai_draft_contract_failed`）；蒸馏器 AST import 白名单显式扩 `fde_api.ai.overlays`；NEW 2 钉（提示词含闭集整串＋未登记键 409）。
+- 测试：定向 `-k "simulation or overlay or deploy"` **315 passed + 1 skipped**；变异四连全数红→还原复绿（M-A 旧读法 3 红／M-D timeout 120 两红／M-B 摘闸 1 红／M-C 摘闭集注入 1 红）；ruff F401/F841 清；mypy 改面零新增；行数预算闸绿。
+- 撞出背景：MiniMax 令牌计划滚动配额窗（77 连绿后 15 连 429）——批跑侧对策（退避＋换 seed＋45s 间隔）留真相层驱动脚本，不进仓。
+
 ## [未发布] — 桌面写入安全 P0：任务语义合并／事实批审范围／门禁条件写／交付登记绑定封存批次（2026-11-18）
 
 承 `docs/design/ux-p0/`（#521 归档的设计、体验方案、两轮评审与实施任务书）。本轮把「用户确认过的内容」变成服务端可校验的写入前置条件：**零迁移零新路由零新表**，口径不变（524 路由／55 蓝图／160 表／89 迁移单头 `b7f2d9e4c6a8`）。活体部署、严格切换与正式打包均未执行。

@@ -246,6 +246,7 @@ def test_distiller_imports_within_whitelist():
         "hashlib",
         "re",
         "sqlalchemy",
+        "fde_api.ai.overlays",
         "fde_api.ai.prompt_registry",
         "fde_api.control.ai_server_client",
         "fde_api.extensions",
@@ -335,6 +336,48 @@ def test_draft_contract_retry_then_success(operator, script_ai):
     assert data["payload_sha256"]
     group = data["draft"]["groups"][0]
     assert group["prompt_overlay_fragment"]["fragment"]
+
+
+# ---------------------------------------------------------------------------
+# purpose_key 闭集闸（真机证据：模型自造未登记键 ⇒ 候选载荷采纳即死）
+# ---------------------------------------------------------------------------
+
+
+def test_draft_prompt_injects_overlay_purpose_closure(operator, script_ai):
+    """提示词动态注入已登记 purpose 闭集（模型不再自造未登记键）。
+
+    真机证据（2026-11-18 制造行业三组蒸馏）：模型自造了
+    demand_analysis_check / root_cause_coverage_inspection /
+    schema_alignment_check——形态合法但不在注册闭集内 ⇒ 发布通道
+    ``purpose_allowed()`` 拒 ⇒ 候选载荷采纳即死。修法＝**用户提示词动态注入
+    闭集**（系统提示词正文一字未动 ⇒ registry 指纹零影响）。
+    """
+    from fde_api.ai.overlays import OVERLAY_PURPOSE_WHITELIST
+
+    finding_ids = _make_findings(operator)
+    ai = script_ai([json.dumps(_good_draft("FA-C1"), ensure_ascii=False)])
+    response = operator.post(
+        "/api/v1/simulation/findings/draft-ai", json={"finding_ids": finding_ids}
+    )
+    assert response.status_code == 200, response.get_json()
+    prompt = ai.prompts[0]
+    for key in OVERLAY_PURPOSE_WHITELIST:
+        assert key in prompt, key
+    # 闭集来自单一真身，不在提示词里硬编码第二份
+    assert json.dumps(sorted(OVERLAY_PURPOSE_WHITELIST), ensure_ascii=False) in prompt
+
+
+def test_draft_rejects_unregistered_overlay_purpose_key(operator, script_ai):
+    """契约闸：purpose_key 不在注册闭集 ⇒ 409（fail-closed，不放行死载荷）。"""
+    finding_ids = _make_findings(operator)
+    bad = _good_draft("FA-C1")
+    bad["groups"][0]["prompt_overlay_fragment"]["purpose_key"] = "demand_analysis_check"
+    script_ai([json.dumps(bad, ensure_ascii=False), json.dumps(bad, ensure_ascii=False)])
+    response = operator.post(
+        "/api/v1/simulation/findings/draft-ai", json={"finding_ids": finding_ids}
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "ai_draft_contract_failed"
 
 
 def test_draft_zero_business_writes(operator, script_ai):

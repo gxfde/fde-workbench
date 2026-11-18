@@ -16,6 +16,10 @@
    cost_json（tokens 不再恒 0）。
 6. **异步化**：workbench 单跑经 outbox 入 ``simulation.run`` 后台作业；
    mock 小跑保持同步；handler 幂等（终态运行不重复执行）。
+7. **usage 取值键＝DSH 规范形状**（``input_tokens`` / ``output_tokens``）：
+   2026-11-18 真机证据——25 个 run 的 cost_json tokens 全 0 而审计表实测
+   45 万 token（键名不匹配 ⇒ 恒取空值）。CI seam 假执行器同步改用规范形状
+   （此前假件沿用旧名，把缺陷遮住了）。
 """
 from __future__ import annotations
 
@@ -157,7 +161,9 @@ class _RecordingExecutor:
 
     def __call__(self, **kwargs) -> dict:
         self.calls.append(kwargs)
-        usage = {"complete": True, "calls": [{"prompt_tokens": 100, "completion_tokens": 20}]}
+        # DSH 规范形状（与生产 ai_server_client._provider_usage_from_response 一致：
+        # input_tokens/output_tokens）——旧名 prompt/completion 只作兼容兜底。
+        usage = {"complete": True, "calls": [{"model": "test", "input_tokens": 100, "output_tokens": 20}]}
         text = self._script.pop(0) if self._script else "（空）"
         return {"text": text, "model": {"provider": "deepseek", "name": "test"}, "provider_usage": usage}
 
@@ -407,7 +413,7 @@ def test_history_and_disclosed_flow_round_by_round(operator, app):
 
     def _capture_probe(**kwargs):
         captured.append(kwargs)
-        usage = {"complete": True, "calls": [{"prompt_tokens": 10, "completion_tokens": 5}]}
+        usage = {"complete": True, "calls": [{"model": "test", "input_tokens": 10, "output_tokens": 5}]}
         return {"text": "维修记录现在怎么管的？", "model": {}, "provider_usage": usage}
 
     app.extensions["fde_api_simulation_workbench"] = _capture_probe
@@ -512,3 +518,39 @@ def test_phase_budget_calibrated_to_evaluation_leg():
     from fde_api.simulation.model_evaluation import EVALUATION_MAX_TOKENS
 
     assert PHASE_MAX_TOKENS >= EVALUATION_MAX_TOKENS
+
+
+def test_usage_reads_dsh_canonical_token_keys():
+    """usage 取值键＝DSH 规范形状（真机证据：旧读法恒取 0 ⇒ cost 轴失真）。
+
+    2026-11-18 制造行业 25 场景批跑：25 个 run 的 cost_json
+    prompt/completion tokens **全 0**，而 ai_call_audits 实测 45 万 token。
+    根因＝键名不匹配——生产产出方 ``ai_server_client._provider_usage_from_response``
+    写的是 ``input_tokens`` / ``output_tokens``，而适配器读的是
+    ``prompt_tokens`` / ``completion_tokens`` ⇒ 恒取空值（回归判定的
+    cost_delta.tokens 恒 0 ⇒ 成本轴不可判）。
+    """
+    from fde_api.simulation.adapters.workbench import _usage_token_count
+
+    # 规范键（生产形状）⇒ 取到真值
+    assert _usage_token_count({"input_tokens": 182, "output_tokens": 37}, ("input_tokens", "prompt_tokens")) == 182
+    assert _usage_token_count({"input_tokens": 182, "output_tokens": 37}, ("output_tokens", "completion_tokens")) == 37
+    # 旧别名兼容兜底
+    assert _usage_token_count({"prompt_tokens": 5, "completion_tokens": 9}, ("input_tokens", "prompt_tokens")) == 5
+    assert _usage_token_count({"prompt_tokens": 5, "completion_tokens": 9}, ("output_tokens", "completion_tokens")) == 9
+    # 两套键名皆无 ⇒ 0（不发明数字）；非法值不炸
+    assert _usage_token_count({}, ("input_tokens", "prompt_tokens")) == 0
+    assert _usage_token_count({"input_tokens": "abc"}, ("input_tokens",)) == 0
+    assert _usage_token_count({"input_tokens": True}, ("input_tokens",)) == 0
+
+
+def test_workbench_usage_summary_records_dsh_shape_tokens():
+    """适配器整链：DSH 规范键 ⇒ cost_json 里的 tokens 非 0（零回归键集不变）。"""
+    executor = _RecordingExecutor(["你们维修记录现在怎么管？"])
+    adapter = WorkbenchAdapter(actor_user_id="user-1", executor=executor)
+    adapter.probe(_ctx(history=()), round_index=1)
+    summary = adapter.usage_summary()
+    assert summary["prompt_tokens"] == 100
+    assert summary["completion_tokens"] == 20
+    assert summary["tokens"] == 120
+    assert summary["model_calls"] == 1

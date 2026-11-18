@@ -968,6 +968,12 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - **L4（执行面/归因面/蒸馏面）**：NEW `simulation/adapters/workbench.py` 第三执行档（走 `execute_ai_prompt` 单一入口＋异步 `simulation.run`＋直连四元组）＋`analyze_run` 三源化（L-A confirmed／L-B `model:server` likely／L-C 最新人工行 confirmed＋答案句黑名单洗刷）＋NEW `simulation/improvement_draft.py` 返件式蒸馏（5 字段允许名单投影＋输出答案键禁入＋`candidate_payload_json` 加列＋指纹 `payload_sha256`）＋`lessons.py` 键名错配修复＋桌面「失败→AI 起草→建案」与场景选择器。
 - **L5（三载体热生效＋回归真化＋噪声带四钉）**：迁移 `a9f3e5c7b1d2` 新建 `agent_lessons` 与 `prompt_overlays` 表、`ai_call_audits` 加 `context_payload_json`；动态 Lessons（seeds∪published 零缓存＋跨层防撞＋宿主事件快照留痕）、Prompt Overlay（NEW `ai/overlays.py` 两点共用在指纹后追加＋五件套注入闸＋审批并排终文预览＋沙箱同尺）、Skill 双闸链（禁 personal scope＋`release_channel` 记账 `skill_ref`）；`release_proposal` 拦截 `overfit_risk=True`（409）＋两表写面静态钉；回归参数化 `adapter_mode/model_mode`＋`DEFAULT_NOISE_BAND=0.1049` 与 L2 底册双锚＋独立 `model_verdict`＋轴比对 409 `noise_band_axis_mismatch`＋202 异步作业 `simulation.regression`；`AGENTS.md` §6-5 红线升格＋§6-6 平台级登记；桌面并排预览/真载荷回执/异步轮询接线。
 
+#### ✅ T-L0 r2 制造行业批跑三缺陷修复轮（2026-11-18，状态：**已实施**——真机批跑 25/25 completed 实弹撞出，逐条修复＋钉死）
+
+- **真机证据**（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）：25/25 场景 completed、80 条失败发现（FA-01/02/03 confirmed ×74）、约 84 万 token；三缺陷＝①评估腿 `model_mode=server` 必 500（gunicorn `--timeout 120` vs 最坏 2×300s）②usage 取值键不匹配（cost_json tokens 全 0 而审计 45 万 token——DSH 规范键 `input_tokens/output_tokens` vs 旧名）③蒸馏草稿自造未登记 `purpose_key`（形态合法但不在 `OVERLAY_PURPOSE_WHITELIST` ⇒ 采纳即死）。
+- **修复**：Dockerfile `--timeout` 120→660＋NEW `test_deploy_timeout_budget.py` 4 例（现测 pydantic `le` 上界的机械闸）；`workbench.py` NEW `_usage_token_count()`（规范键优先＋旧名兜底＋皆无⇒0，`cost_json` 键集零回归）＋CI seam 假执行器改规范形状＋2 钉；`improvement_draft.py` 用户提示词动态注入 purpose 闭集（系统提示词零动 ⇒ 指纹零影响）＋`purpose_allowed()` fail-closed 闸（409）＋AST 白名单扩 `ai.overlays`＋2 钉。
+- **验证**：定向 315 passed+1 skipped；变异四连（M-A 旧读法 3 红／M-D timeout 120 两红／M-B 摘闸 1 红／M-C 摘闭集注入 1 红）全红→还原复绿；ruff/mypy/行数预算闸清。零迁移零路由零表。
+
 ### T-M7 商机数据归属权与区域服务商（M7-1 轮）— **结构就绪·待授权**（2026-11-12）
 
 - **登记说明**：本行**不新增 B# 编号**（`AGENTS.md:45` B# 已 FREEZE 封顶 B#40）——用 `T-M7` 任务号，与既有 `T-L0` 同族编号法。
