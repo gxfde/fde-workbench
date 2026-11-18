@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -90,7 +91,7 @@ def _finding_fingerprint(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
-def _serialize_finding(row: SimulationFinding) -> dict[str, Any]:
+def _serialize_finding(row: SimulationFinding, *, superseded: bool = False) -> dict[str, Any]:
     return {
         "id": row.id,
         "run_id": row.run_id,
@@ -103,6 +104,7 @@ def _serialize_finding(row: SimulationFinding) -> dict[str, Any]:
         "evidence_refs": list(row.evidence_refs_json or []),
         "root_causes": list(row.root_causes_json or []),
         "status": row.status,
+        "superseded": superseded,
         "detail": dict(row.detail_json or {}),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
@@ -135,15 +137,80 @@ def _serialize_proposal(row: ImprovementProposal) -> dict[str, Any]:
     }
 
 
+def superseded_finding_ids(session, findings: list[SimulationFinding]) -> set[str]:
+    """再终裁收敛口径单一真身——实身在 ``findings_scope``（本函数仅 re-export，
+    保持既有调用点形状；消费点见 findings_scope 模块 docstring）。"""
+    from fde_api.simulation.findings_scope import superseded_finding_ids as _impl
+
+    return _impl(session, findings)
+
+
 def list_findings(*, actor: User, run_id: str | None = None) -> dict[str, Any]:
-    """失败发现清单。"""
+    """失败发现清单（投影含 superseded——再终裁收敛口径的桌面消费面）。"""
     _require_level(actor)
     with db.session() as session:
         stmt = select(SimulationFinding)
         if run_id:
             stmt = stmt.where(SimulationFinding.run_id == run_id)
         rows = list(session.scalars(stmt.order_by(SimulationFinding.created_at, SimulationFinding.id)))
-        return {"items": [_serialize_finding(row) for row in rows], "total": len(rows)}
+        superseded = superseded_finding_ids(session, rows)
+        return {
+            "items": [
+                _serialize_finding(row, superseded=str(row.id) in superseded)
+                for row in rows
+            ],
+            "total": len(rows),
+        }
+
+
+def adjudicate_finding(*, actor: User, finding_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """失败发现人工裁定（条款③写面，设计稿 §2.2）：confirm/reject 单向＋留痕。
+
+    - 角色闸＝终裁同尺（admin/project_lead）；note 必填（人工动作必须留理由）；
+    - 单向状态机 ``open → confirmed | rejected``（不可回迁——再终裁走评估层
+      收敛口径，不靠状态回翻）；非 open 态重复裁定 ⇒ 409
+      ``finding_already_adjudicated``；
+    - 留痕＝``detail_json.adjudications[]`` 追加（行内自由 JSON 域，不破行结构）；
+      不落 operation_event（行即留痕，拍板③）。
+    """
+    _require_level(actor)
+    if actor.role not in ("admin", "project_lead"):
+        raise ScenarioServiceError("forbidden", "失败发现裁定需项目负责人或管理员。", 403)
+    action = payload.get("action")
+    if action not in ("confirm", "reject"):
+        raise ScenarioServiceError("invalid_request", "action 取值非法（confirm|reject）。")
+    note = payload.get("note")
+    if not isinstance(note, str) or not note.strip():
+        raise ScenarioServiceError("invalid_request", "note 必填（人工裁定必须留理由）。")
+
+    with db.session() as session:
+        row = session.get(SimulationFinding, finding_id)
+        if row is None:
+            raise ScenarioServiceError("not_found", "失败发现不存在。", 404)
+        if row.status != "open":
+            raise ScenarioServiceError(
+                "finding_already_adjudicated",
+                "该发现已被人工裁定（单向状态机，不可回迁）；如需改判请走再终裁收敛口径。",
+                409,
+                {"status": row.status},
+            )
+        target_status = "confirmed" if action == "confirm" else "rejected"
+        detail = dict(row.detail_json or {})
+        adjudications = list(detail.get("adjudications") or [])
+        adjudications.append(
+            {
+                "action": action,
+                "by_user_id": actor.id,
+                "at": datetime.now(UTC).isoformat(),
+                "note": note.strip(),
+            }
+        )
+        detail["adjudications"] = adjudications
+        row.status = target_status
+        row.detail_json = detail
+        session.flush()
+        session.commit()
+        return _serialize_finding(row)
 
 
 def analyze_run(*, actor: User, run_id: str) -> dict[str, Any]:
@@ -340,6 +407,16 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
         )
         if len(rows) != len(set(finding_ids)):
             raise ScenarioServiceError("not_found", "部分失败发现不存在。", 404)
+        # 再终裁收敛口径（条款③写面）：被更新终裁取代的发现不得建提案——
+        # 旧裁决不得借尸还魂（设计稿 §2.1 消费点②）。
+        superseded = superseded_finding_ids(session, rows)
+        if superseded:
+            raise ScenarioServiceError(
+                "finding_superseded",
+                "引用的失败发现已被更新的 L-C 终裁取代——请改用现行终裁派生的发现。",
+                409,
+                {"finding_ids": sorted(superseded)},
+            )
         # 数据集纪律（G6）：改进只能基于**训练集**的失败——用回归/盲测集的失败
         # 去提改进等于在评测集上调参，会让回归与盲测失去意义。
         non_train = [
@@ -356,10 +433,14 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
                 409,
                 {"finding_codes": non_train},
             )
+        # confirmed 双轨（条款③写面）：归因快照 confidence=confirmed（L-A/L-C
+        # 派生）**或**人工裁定 status=confirmed（adjudicate——L-B likely 发现的
+        # 单点人工确认正道，设计稿 §2.2）。
         confirmed = [
             row
             for row in rows
-            if any(
+            if row.status == "confirmed"
+            or any(
                 str(cause.get("confidence")) == "confirmed"
                 for cause in (row.root_causes_json or [])
                 if isinstance(cause, dict)
@@ -368,7 +449,8 @@ def create_proposal(*, actor: User, payload: dict[str, Any]) -> dict[str, Any]:
         if not confirmed:
             raise ScenarioServiceError(
                 "conflict",
-                "只有 confirmed 根因可生成改进提案；疑似根因请先人工复核。",
+                "只有 confirmed 根因可生成改进提案（归因 confirmed 或人工裁定确认）；"
+                "疑似根因请先人工复核。",
                 409,
                 {"finding_codes": [row.code for row in rows]},
             )

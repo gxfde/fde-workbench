@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fde_api.auth.models import User
 from fde_api.extensions import db
@@ -382,10 +382,30 @@ def record_human_evaluation(
         run = session.get(SimulationRun, run_id)
         if run is None:
             raise EvaluationError("not_found", "模拟运行不存在。", 404)
+        # 条款③写面（再终裁）：同一评估人可重复终裁——同 (run, evaluator, rubric)
+        # 已有行时评估器实例标识按轮次派生（human:<uid>:r2…），**追加新行不改写
+        # 旧行**（评估行不可变纪律；此前同人二次终裁直接撞唯一约束 500）。
+        # 轮次＝该评估人在本 run 的既有 human 行数（含历史轮），即终裁序标。
+        prior_rounds = (
+            session.scalar(
+                select(func.count())
+                .select_from(SimulationEvaluation)
+                .where(
+                    SimulationEvaluation.run_id == run.id,
+                    SimulationEvaluation.layer == "human",
+                    SimulationEvaluation.rubric_version == RUBRIC_VERSION,
+                    SimulationEvaluation.evaluator_id.like(f"human:{actor.id}%"),
+                )
+            )
+            or 0
+        )
+        evaluator_id = (
+            f"human:{actor.id}" if prior_rounds == 0 else f"human:{actor.id}:r{prior_rounds + 1}"
+        )
         row = SimulationEvaluation(
             run_id=run.id,
             layer="human",
-            evaluator_id=f"human:{actor.id}",
+            evaluator_id=evaluator_id,
             mode="manual",
             rubric_version=RUBRIC_VERSION,
             scores_json={"criteria": list(payload.get("criteria") or [])},

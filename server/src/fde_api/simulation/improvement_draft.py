@@ -209,6 +209,20 @@ def draft_improvements(*, actor: Any, finding_ids: list[str]) -> dict[str, Any]:
         )
         if len(rows) != len(set(finding_ids)):
             raise ScenarioServiceError("not_found", "部分失败发现不存在。", 404)
+        # 再终裁收敛口径（条款③写面，设计稿 §2.1 消费点①）：被更新终裁取代的
+        # 发现不进蒸馏面——投影过滤；全部被取代 ⇒ 409（无有效发现可蒸馏）。
+        from fde_api.simulation.findings_scope import superseded_finding_ids
+
+        superseded = superseded_finding_ids(session, rows)
+        if superseded:
+            rows = [row for row in rows if str(row.id) not in superseded]
+        if not rows:
+            raise ScenarioServiceError(
+                "finding_superseded",
+                "引用的失败发现已被更新的 L-C 终裁取代——蒸馏面无有效发现。",
+                409,
+                {"finding_ids": sorted(superseded)},
+            )
         # 数据集纪律：与 create_proposal 同尺——改进只许用训练集失败
         non_train = []
         for row in rows:

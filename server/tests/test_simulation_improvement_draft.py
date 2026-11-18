@@ -254,6 +254,9 @@ def test_distiller_imports_within_whitelist():
         "fde_api.simulation.models",
         "fde_api.simulation.schemas",
         "fde_api.simulation.service",
+        # 条款③写面（再终裁收敛口径）：findings_scope 只读评估/发现元数据
+        # （id/layer/run_id），零答案材料——蒸馏面过滤 superseded 发现的合法依赖。
+        "fde_api.simulation.findings_scope",
     )
     violations = sorted(target for target in targets if not target.startswith(allowed_prefixes))
     assert violations == [], f"蒸馏器出现白名单外 import：{violations}"

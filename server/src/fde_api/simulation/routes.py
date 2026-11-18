@@ -296,6 +296,20 @@ def list_findings():
     return _data(data)
 
 
+@simulation_blueprint.post("/findings/<finding_id>/adjudicate")
+@require_auth
+def adjudicate_finding(finding_id):
+    """失败发现人工裁定（条款③写面）：confirm/reject 单向＋detail_json 留痕；
+    再终裁收敛口径由 effective 投影承接——治理面动作，不进 api_catalog。"""
+    try:
+        data = improvement_service.adjudicate_finding(
+            actor=g.current_user, finding_id=finding_id, payload=_payload()
+        )
+    except service.ScenarioServiceError as error:
+        return error_response(error.code, error.message, error.status, error.detail or None)
+    return _data(data)
+
+
 @simulation_blueprint.post("/runs/<run_id>/analyze")
 @require_auth
 def analyze_run(run_id):
