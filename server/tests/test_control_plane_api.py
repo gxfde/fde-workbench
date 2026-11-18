@@ -650,6 +650,7 @@ def test_high_risk_dsh_operation_requires_project_permission_and_current_passwor
     leader = authorized_client_factory("project_lead")
     viewer = authorized_client_factory("viewer")
     engineer = authorized_client_factory("fde_engineer")
+    admin = authorized_client_factory("admin")
     project, project_task = create_project_with_task(db_session, leader.user)
     db_session.add_all(
         [
@@ -722,14 +723,15 @@ def test_high_risk_dsh_operation_requires_project_permission_and_current_passwor
     assert premature_execution.status_code == 409
     assert premature_execution.json["error"]["code"] == "approval_not_approved"
 
-    wrong_password = leader.post(
+    wrong_password = admin.post(
         f"/api/v1/task-center/approvals/{approval_id}/decision",
         json={"decision": "approve", "password": "wrong-password", "reason": ""},
     )
     assert wrong_password.status_code == 400
     assert wrong_password.json["error"]["code"] == "invalid_password"
 
-    approved = leader.post(
+    # S04 四眼闸：发起人 leader 不可自批，复核者=admin（异人）
+    approved = admin.post(
         f"/api/v1/task-center/approvals/{approval_id}/decision",
         json={"decision": "approve", "password": PASSWORD, "reason": "已核对任务范围"},
     )
@@ -737,7 +739,7 @@ def test_high_risk_dsh_operation_requires_project_permission_and_current_passwor
     assert approved.json["data"]["status"] == "approved"
     db_session.rollback()
     approval = db_session.get(AutomationApproval, approval_id)
-    assert approval.reviewed_by_user_id == leader.user.id
+    assert approval.reviewed_by_user_id == admin.user.id
     assert approval.decision_reason == "已核对任务范围"
     assert db_session.get(AutomationTaskRun, run_id).status == "running"
 
@@ -812,6 +814,86 @@ def test_dsh_approval_rejects_secrets_in_tool_arguments(
     )
     assert response.status_code == 400
     assert db_session.query(AutomationApproval).count() == 0
+
+
+def test_approval_decision_four_eyes_requester_cannot_review(
+    authorized_client_factory, db_session, app
+):
+    """S04 四眼闸（AF2-WP0 · 15 号 D3 窄解禁）：审批人 ≠ 请求人硬校验。
+
+    自提自批 / 自提自拒一律 409 self_review_forbidden；异人复核正常放行。
+    闸位=能力授权之后、终态翻转之前（过期持久化在闸前，不受影响）；
+    approve/reject 两腿同拦（15 号 D3 批准文本的无条件形态）。
+    """
+    leader = authorized_client_factory("project_lead")
+    admin = authorized_client_factory("admin")
+    project, _ = create_project_with_task(db_session, leader.user)
+    created = leader.post(
+        "/api/v1/task-center/automations",
+        json={
+            "title": "四眼闸测试",
+            "project_id": project.id,
+            "source": "desktop",
+            "schedule_kind": "once",
+            "schedule_expression": "2026-09-05T09:00:00+08:00",
+            "timezone": "Asia/Shanghai",
+            "prompt": "测试审批四眼闸。",
+            "requested_capabilities": ["project.read", "task.batch_assign"],
+        },
+    )
+    queued = leader.client.post(
+        f"/api/v1/task-center/automations/{created.json['data']['id']}/runs",
+        headers={**leader.headers, "Idempotency-Key": "four-eyes-run"},
+    )
+    run_id = queued.json["data"]["id"]
+    db_session.rollback()
+    db_session.get(AutomationTaskRun, run_id).status = "running"
+    db_session.commit()
+
+    class ApprovalRuntime:
+        def verify_service_token(self, candidate):
+            return candidate == "runtime-approval-secret"
+
+    app.extensions["fde_api_dsh_runtime"] = ApprovalRuntime()
+    proposed = leader.client.post(
+        f"/api/v1/internal/dsh/executions/{run_id}/approvals",
+        headers={"Authorization": "Bearer runtime-approval-secret"},
+        json={
+            "request_id": "four-eyes-tool-call",
+            "capability": "task.batch_assign",
+            "tool_name": "project_tasks.batch_assign",
+            "arguments": {"task_ids": ["task-1"], "assignee_user_id": leader.user.id},
+            "risk_level": 3,
+        },
+    )
+    assert proposed.status_code == 202, proposed.get_data(as_text=True)
+    approval_id = proposed.json["data"]["id"]
+
+    # ① 自提自批 → 409 self_review_forbidden（闸在密码验证之前）
+    self_approve = leader.post(
+        f"/api/v1/task-center/approvals/{approval_id}/decision",
+        json={"decision": "approve", "password": PASSWORD, "reason": "自提自批"},
+    )
+    assert self_approve.status_code == 409
+    assert self_approve.json["error"]["code"] == "self_review_forbidden"
+
+    # ② 自提自拒 → 409（同闸；拒绝腿语义=审批完整性，非撤单通道）
+    self_reject = leader.post(
+        f"/api/v1/task-center/approvals/{approval_id}/decision",
+        json={"decision": "reject", "password": "", "reason": "自提自拒"},
+    )
+    assert self_reject.status_code == 409
+    assert self_reject.json["error"]["code"] == "self_review_forbidden"
+
+    # ③ 异人复核放行 → 200 approved
+    db_session.expire_all()
+    assert db_session.get(AutomationApproval, approval_id).status == "pending"
+    approved = admin.post(
+        f"/api/v1/task-center/approvals/{approval_id}/decision",
+        json={"decision": "approve", "password": PASSWORD, "reason": "已复核任务范围"},
+    )
+    assert approved.status_code == 200, approved.get_data(as_text=True)
+    assert approved.json["data"]["status"] == "approved"
 
 
 def test_expired_approval_is_persisted_when_reviewer_arrives_too_late(

@@ -764,6 +764,14 @@ def decide_automation_approval(
                 )
                 if not access.allowed:
                     raise ControlServiceError("forbidden", "当前账户无权处理该审批。", 403)
+                # S04 四眼闸（AF2-WP0 · docs/ai-fde/15 §2 D3）：审批人 ≠ 请求人。
+                # 能力授权只证明「有资格处理」，不证明「可复核自己的请求」；
+                # approve/reject 两腿同拦（自提自拒不构成撤单通道），过期持久化
+                # 在闸前不受影响。
+                if approval.requested_by_user_id == user.id:
+                    raise ControlServiceError(
+                        "self_review_forbidden", "审批须由非发起人复核（四眼闸）。", 409
+                    )
                 if decision_value == "approve":
                     if not isinstance(password, str):
                         raise ControlServiceError("password_required", "批准高风险操作需要验证当前密码。", 400)

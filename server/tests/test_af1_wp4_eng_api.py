@@ -270,8 +270,10 @@ def test_write_proxy_decision_full_semantics_with_real_approval(
     from fde_api.control.models import AutomationApproval
 
     lead, project = eng_project
+    # S04 四眼闸：审批发起人=异人（lead 仅为复核者，工程台会话真身）
+    requester = make_user(db_session, "project_lead")
     approval = AutomationApproval(
-        run_id=None, project_id=project.id, requested_by_user_id=lead.id,
+        run_id=None, project_id=project.id, requested_by_user_id=requester.id,
         request_key=f"wp4-{uuid.uuid4().hex[:8]}",
         capability="ontology.write", tool_name="ontology_action_execute",
         arguments_json={"proposed_json": []},
