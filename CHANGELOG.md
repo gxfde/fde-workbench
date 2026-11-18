@@ -2,6 +2,14 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 洁癖清理轮：已合并分支与遗留 worktree 清扫＋AGENTS 陈旧挂载源句修正（2026-11-18）
+
+纯事务清理：**零代码零迁移零路由零桌面**＝口径 524/55/160/89 不变（main tip 现测路由装饰器 524、迁移文件 89；#521/#522 均零新增路由零迁移）。
+
+- **分支清理 6 条**（squash 家族纪律：全部内容级验证已合并后才删）——`feat/lcw-w1-server`（#517）、`feat/llclose-r1-regjudge`（收尾轮五 PR 窗口，PHASE 32768＋excluded_runs 已在 main）、`feat/e2e-order-delivery-20261117`（#504/#508）、`goal-sprint-r3-receipt`（回执内容已在 main）、`docs/goal-ux-p0`（#521）、`feat/loop2-l6`（#476 squash `55ff1187` 为 main 祖先，且活体挂载源已回归主树）。
+- **worktree 清理 3 棵**——`fde-wt-uilib`（「勿删树」前提＝曾为活体 migrations 挂载源，已消失）、`fde-wt-ux-p0-docs`（#521 合并后遗留，树净无未跟踪）、`C:/Users/P1/.zcode/worktrees/a6c5` detached 树（其 3 份未跟踪草稿与 main 逐字节一致＝纯冗余；git 注册已摘除，目录本体被活进程占用留自然释放，仓外零影响）。
+- **AGENTS.md 陈旧句修正**：L5/L6 节「活体 `/app/migrations` 挂载源现指 `fde-wt-uilib` feat/loop2-l6 本地分支（勿删树）」→「挂载源已回归主树；树与分支已于 2026-11-18 洁癖清理删除」——防未来会话按陈旧图纸误判活体拓扑。
+- **在途面保留不动**：主树检出分支（并发线施工中）、`docs/optimization/` 未跟踪工作文档（并发线在写）、AF2 现役树（PR #13 open）与 AF1/V33 家族分支（保护项邻近不触碰）。
 ## [未发布] — 训练场 r2 制造行业批跑三缺陷修复轮：评估腿超时预算＋usage 取值键 DSH 规范化＋蒸馏面 purpose 闭集闸（2026-11-18）
 
 制造行业 25 场景真机批跑（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，25/25 completed、80 条失败发现）实弹撞出三条缺陷，本轮逐条修复＋钉死；零迁移零路由零表＝口径 524/55/160/89 不变。
