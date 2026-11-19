@@ -130,6 +130,10 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>/transform-plans/<plan_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans/{w['plan_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/transform-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs",
     ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>/preview"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}/preview",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>/diff"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}/diff",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>/lineage"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}/lineage",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>/quality-feedback"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}/quality-feedback",
     ("GET", "/api/v1/projects/<project_id>/workflow-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflow-runs",
     ("GET", "/api/v1/projects/<project_id>/workflows"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflows",
 }
@@ -1116,7 +1120,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-    assert len(ROUTES) == 45, ("爬扫面条数基线被改动：", len(ROUTES))
+    assert len(ROUTES) == 49, ("爬扫面条数基线被改动：", len(ROUTES))
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),

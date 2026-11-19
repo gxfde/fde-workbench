@@ -10,7 +10,7 @@
    "url": "https://github.com/gxfde/fde-workbench.git",
    "provider": "github",
    "link_mode": "local-only",
-   "revision": "5a4634057111c66cbbfc162b86eb99b4f98532a9"
+   "revision": "f7dd5c6a9cafe201d4236ba5e745ea0fbac5f8c5"
   },
   "views": [
    {
@@ -173,7 +173,7 @@
    "id": "api",
    "type": "backend",
    "label": "Flask API (fde_api)",
-   "sublabel": "127.0.0.1:8010 · 56 蓝图 · 534 路由",
+   "sublabel": "127.0.0.1:8010 · 56 蓝图 · 538 路由",
    "tag": "v0.3.0",
    "sources": [
     {

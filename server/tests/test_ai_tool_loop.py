@@ -7,7 +7,9 @@ weakening the capability gate. No provider is contacted in these tests.
 from __future__ import annotations
 
 import json
+from datetime import date
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 
@@ -20,6 +22,8 @@ from fde_api.control.ai_tool_loop import (
     tool_definitions,
 )
 from fde_api.control.dsh_runtime import DSHRuntimeError
+from fde_api.data_engineering.models import TransformPlan, TransformRun
+from fde_api.workbench.models import Project, ProjectMember
 
 
 class FakeResponse:
@@ -95,6 +99,407 @@ def ai_user(app, db_session):
     db_session.add(user)
     db_session.commit()
     return user
+
+
+@pytest.fixture
+def quality_run(db_session, ai_user):
+    project = Project(
+        project_code=f"QUALITY-{uuid4().hex[:12]}", name="Quality project",
+        enterprise_code="Test·Example·City", planned_start_date=date(2026, 11, 1),
+        leader_user_id=ai_user.id, status="active", template_snapshot={},
+    )
+    db_session.add(project)
+    db_session.flush()
+    plan = TransformPlan(
+        project_id=project.id, plan_version="1.0.0", source_profile_id=str(uuid4()),
+        source_table="orders", created_by_user_id=ai_user.id,
+        validation_json={"dependency_graph": {
+            "topological_order": ["user-step-reject-sentinel", "user-step-z-sentinel", "user-step-a-sentinel"],
+        }},
+    )
+    db_session.add(plan)
+    db_session.flush()
+    run = TransformRun(
+        project_id=project.id, plan_id=plan.id, plan_version=plan.plan_version,
+        idempotency_key=uuid4().hex, status="succeeded", created_by_user_id=ai_user.id,
+        output_rows_json=[{"private-column-sentinel": "raw-cell-sentinel"}], output_row_count=1,
+        conservation_json={"input_rows": 3, "input_integrity": {"parse_error_rows": 0, "truncated": False}},
+        quality_report_json={
+            "user-step-z-sentinel": {"kind": "not_null", "column": "private-column-sentinel", "violations": 2},
+            "user-step-a-sentinel": {"kind": "unique", "column": "private-column-sentinel", "violations": 0},
+        },
+        lineage_json=[
+            {"step_id": "user-step-reject-sentinel", "op": "cast", "input_rows": 3, "rejected_rows": 1},
+            {"step_id": "user-step-z-sentinel", "op": "assert_quality", "input_rows": 2},
+            {"step_id": "user-step-a-sentinel", "op": "assert_quality", "input_rows": 0},
+        ],
+    )
+    db_session.add(run)
+    db_session.commit()
+    return run
+
+
+@pytest.fixture
+def quality_model(app, monkeypatch):
+    settings = app.config["SETTINGS"]
+    monkeypatch.setattr(settings, "ai_selfhosted_base_url", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(settings, "ai_selfhosted_model", "qwen3:14b")
+
+
+def _run_quality_chat(ai_user, quality_run):
+    from fde_api.control.chat import create_turn, execute_chat_turn
+
+    turn = create_turn(user=ai_user, payload={
+        "message": "检查转换质量", "message_id": str(uuid4()), "project_id": quality_run.project_id,
+    }, enqueue=False)
+    return execute_chat_turn(turn["id"])
+
+
+def _assert_quality_feedback(text, run_id, *, complete=True):
+    for internal_text in ("raw-cell-sentinel", "private-column-sentinel", "user-step-z-sentinel", "user-step-a-sentinel"):
+        assert internal_text not in text
+    assert json.loads(text) == {
+        "run_id": run_id,
+        "status": "succeeded" if complete else "failed",
+        "complete": complete,
+        "input_row_count": 3,
+        "overall": {"assertions_run": 2, "assertions_failed": 1 if complete else None, "total_violations": 2},
+        "assertions": [
+            {"assertion_index": 1, "kind": "not_null", "evaluated_rows": 2, "violations": 2,
+             "rejected_before": 1, "verdict": "fail" if complete else "incomplete"},
+            {"assertion_index": 2, "kind": "unique", "evaluated_rows": 0, "violations": 0,
+             "rejected_before": 1, "verdict": "not_evaluated" if complete else "incomplete"},
+        ],
+    }
+
+
+def test_project_agent_receives_quality_failures_as_statistics(app, ai_user, quality_run, quality_model, monkeypatch):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    provider = FakeSession([
+        tool_call_response("data_quality_feedback", {"run_id": quality_run.id}),
+        final_response("金额字段有两条质量违规。"),
+    ])
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.requests.Session", lambda: provider)
+    with app.app_context():
+        monkeypatch.setattr(dsh_runtime.current.primary, "enabled", False)
+        answer = _run_quality_chat(ai_user, quality_run)
+
+    assert answer == "金额字段有两条质量违规。"
+    tools = {item["function"]["name"]: item["function"]["parameters"] for item in provider.calls[0][1]["json"]["tools"]}
+    schema = tools["data_quality_feedback"]
+    assert list(schema["properties"]) == ["run_id"]
+    assert schema["required"] == ["run_id"]
+    assert schema["additionalProperties"] is False
+    tool_message = next(m for m in provider.calls[1][1]["json"]["messages"] if m["role"] == "tool")
+    _assert_quality_feedback(tool_message["content"], quality_run.id)
+
+
+@pytest.mark.parametrize("status_code", [302, 307, 308])
+@pytest.mark.parametrize("force_final", [False, True], ids=["tool-round", "forced-final"])
+def test_quality_model_rejects_redirect_response(app, ai_user, quality_run, status_code, force_final):
+    redirect = Mock(status_code=status_code)
+    responses = [tool_call_response("data_quality_feedback", {"run_id": quality_run.id})]
+    if force_final:
+        responses.append(tool_call_response("project_list", {}))
+    provider = FakeSession([*responses, redirect])
+
+    with app.app_context(), pytest.raises(DSHRuntimeError) as raised:
+        direct_tool_completion(
+            model=provider_model(base_url="http://127.0.0.1:11434/v1"), prompt="检查转换质量", user=ai_user,
+            project_id=quality_run.project_id, execution_id=str(uuid4()), session=provider,
+            grant_quality_feedback=True, max_tool_rounds=1,
+        )
+
+    assert raised.value.code == "ai_redirect_rejected"
+    assert not raised.value.retryable
+    assert redirect.json.call_count == 0
+    assert len(provider.calls) == len(responses) + 1
+    for url, request in provider.calls[1:]:
+        assert url == "http://127.0.0.1:11434/v1/chat/completions"
+        assert request["allow_redirects"] is False
+        assert any(item.get("role") == "tool" and item.get("name") == "data_quality_feedback"
+                   for item in request["json"]["messages"])
+    assert ("tools" in provider.calls[-1][1]["json"]) is not force_final
+
+
+def test_project_agent_dsh_failure_preserves_private_quality_tool(app, ai_user, quality_run, quality_model, monkeypatch):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    runtime_request = Mock(side_effect=DSHRuntimeError("dsh_timeout", "DSH 请求超时", retryable=True))
+    provider = FakeSession([
+        tool_call_response("data_quality_feedback", {"run_id": quality_run.id}), final_response("质量检查完成。"),
+    ])
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.requests.Session", lambda: provider)
+    with app.app_context():
+        runtime = dsh_runtime.current.primary
+        monkeypatch.setattr(runtime, "enabled", True)
+        monkeypatch.setattr(runtime, "_request", runtime_request)
+        assert _run_quality_chat(ai_user, quality_run) == "质量检查完成。"
+
+    runtime_request.assert_called_once()
+    assert "data_quality_feedback" in {item["function"]["name"] for item in provider.calls[0][1]["json"]["tools"]}
+    tool_message = next(m for m in provider.calls[1][1]["json"]["messages"] if m["role"] == "tool")
+    _assert_quality_feedback(tool_message["content"], quality_run.id)
+    assert provider.calls[1][1]["allow_redirects"] is False
+
+
+@pytest.mark.parametrize("private_via_dsh", [False, True], ids=["private-direct", "private-dsh"])
+def test_quality_chat_history_is_only_replayed_to_private_model(
+    app, ai_user, quality_run, quality_model, monkeypatch, private_via_dsh,
+):
+    from fde_api.control.chat import create_turn, execute_chat_turn
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    secret_reply = "private-quality-history-sentinel"
+    provider = FakeSession([
+        final_response("普通历史答复"),
+        *([] if private_via_dsh else [
+            tool_call_response("data_quality_feedback", {"run_id": quality_run.id}), final_response(secret_reply),
+        ]),
+        final_response("private-followup-sentinel"), final_response("继续普通对话"),
+    ])
+    dispatch = Mock(return_value=FakeResponse(payload={"status": "succeeded", "output": {"text": secret_reply}}))
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.requests.Session", lambda: provider)
+    settings = app.config["SETTINGS"]
+    private_url = settings.ai_selfhosted_base_url
+    with app.app_context():
+        runtime = dsh_runtime.current.primary
+        monkeypatch.setattr(runtime, "enabled", False)
+        monkeypatch.setattr(runtime, "_request", dispatch)
+        monkeypatch.setattr(settings, "ai_selfhosted_base_url", "")
+        monkeypatch.setattr(settings, "deepseek_api_key", "test-key")
+
+        def send(text, **scope):
+            turn = create_turn(user=ai_user, payload={"message": text, "message_id": str(uuid4()), **scope}, enqueue=False)
+            return turn["conversation_id"], execute_chat_turn(turn["id"])
+
+        conversation, _ = send("普通历史问题", project_id=quality_run.project_id)
+        monkeypatch.setattr(settings, "ai_selfhosted_base_url", private_url)
+        monkeypatch.setattr(runtime, "enabled", private_via_dsh)
+        assert send("私有质量问题", conversation_id=conversation)[1] == secret_reply
+        monkeypatch.setattr(runtime, "enabled", False)
+        send("私有后续问题", conversation_id=conversation)
+        monkeypatch.setattr(settings, "ai_selfhosted_base_url", "")
+        assert send("当前公众模型问题", conversation_id=conversation)[1] == "继续普通对话"
+
+    private_request = provider.calls[-2][1]
+    assert secret_reply in private_request["json"]["messages"][-1]["content"]
+    assert private_request["allow_redirects"] is False
+    public_request = provider.calls[-1][1]
+    public_prompt = public_request["json"]["messages"][-1]["content"]
+    assert "普通历史答复" in public_prompt
+    assert "当前公众模型问题" in public_prompt
+    for protected_text in (secret_reply, "private-followup-sentinel", "私有质量问题", "私有后续问题"):
+        assert protected_text not in public_prompt
+    assert public_request.get("allow_redirects", True) is True
+    if private_via_dsh:
+        assert dispatch.call_args.kwargs["allow_redirects"] is False
+
+
+def _quality_mcp(client, token, method="tools/list", arguments=None):
+    body = {"jsonrpc": "2.0", "id": "quality-test", "method": method}
+    if method == "tools/call":
+        body["params"] = {"name": "data_quality_feedback", "arguments": arguments}
+    response = client.post("/api/v1/internal/ai/mcp", json=body, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    return response.json["result"]
+
+
+def test_large_quality_summary_stays_valid_json_in_direct_loop(app, ai_user, quality_run, quality_model, monkeypatch):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    example = {"kind": "not_null", "violations": 1, "evaluated_rows": 2, "rejected_before": 1, "verdict": "fail"}
+    monkeypatch.setattr("fde_api.data_engineering.service.quality_feedback_transform_run", lambda **_: {
+        "run_id": quality_run.id, "status": "succeeded", "complete": True, "input_row_count": 3,
+        "overall": {"assertions_run": 300, "assertions_failed": 300, "total_violations": 300},
+        "assertions": [example] * 300,
+    })
+    provider = FakeSession([tool_call_response("data_quality_feedback", {"run_id": quality_run.id}), final_response()])
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.requests.Session", lambda: provider)
+    with app.app_context():
+        monkeypatch.setattr(dsh_runtime.current.primary, "enabled", False)
+        _run_quality_chat(ai_user, quality_run)
+
+    message = next(m for m in provider.calls[1][1]["json"]["messages"] if m["role"] == "tool")
+    summary = json.loads(message["content"])
+    assert summary["overall"] == {"assertions_run": 300, "assertions_failed": 300, "total_violations": 300}
+    assert len(summary["assertions"]) == 100
+    assert summary["assertions"][-1]["assertion_index"] == 100
+    assert summary["assertions_omitted"] == 200
+
+
+def test_project_agent_dsh_signs_current_project_for_feedback(app, client, quality_run, ai_user, quality_model, monkeypatch):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    class Runtime:
+        enabled = True
+
+        def _request(self, method, path, *, json, **kwargs):
+            token = json["mcp"]["token"]
+            tools = {item["name"]: item for item in _quality_mcp(client, token)["tools"]}
+            tool = tools["data_quality_feedback"]
+            assert tool["annotations"] == {"readOnlyHint": True, "destructiveHint": False}
+            assert list(tool["inputSchema"]["properties"]) == ["run_id"]
+            assert tool["inputSchema"]["required"] == ["run_id"]
+            assert tool["inputSchema"]["additionalProperties"] is False
+            result = _quality_mcp(client, token, "tools/call", {"run_id": quality_run.id})
+            assert result["isError"] is False
+            return FakeResponse(payload={"status": "succeeded", "output": {"text": result["content"][0]["text"]}})
+
+        @staticmethod
+        def _json_object(response):
+            return response.json()
+
+    with app.app_context():
+        monkeypatch.setattr(dsh_runtime.current, "primary", Runtime())
+        answer = _run_quality_chat(ai_user, quality_run)
+
+    _assert_quality_feedback(answer, quality_run.id)
+
+
+def test_project_agent_quality_feedback_keeps_incomplete_status(app, client, db_session, ai_user, quality_run):
+    from fde_api.control.mcp_gateway import issue_mcp_token
+
+    quality_run.status = "failed"
+    db_session.commit()
+    token = issue_mcp_token(ai_user, project_id=quality_run.project_id, grant_quality_feedback=True)
+    result = _quality_mcp(client, token, "tools/call", {"run_id": quality_run.id})
+    assert result["isError"] is False
+    _assert_quality_feedback(result["content"][0]["text"], quality_run.id, complete=False)
+
+
+@pytest.mark.parametrize("runtime_enabled", [False, True], ids=["direct", "dsh"])
+@pytest.mark.parametrize("public_selfhosted", [False, True], ids=["public-fallback", "public-selfhosted-slot"])
+def test_public_model_cannot_receive_project_quality_statistics(
+    app, client, ai_user, quality_run, monkeypatch, runtime_enabled, public_selfhosted,
+):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    class Runtime:
+        enabled = runtime_enabled
+
+        def _request(self, method, path, *, json, **kwargs):
+            token = json["mcp"]["token"]
+            tools = {item["name"] for item in _quality_mcp(client, token)["tools"]}
+            result = _quality_mcp(client, token, "tools/call", {"run_id": quality_run.id})
+            assert "project_read" in tools
+            assert ("data_quality_feedback" in tools, result["isError"]) == (False, True)
+            return FakeResponse(payload={"status": "succeeded", "output": {"text": "完成。"}})
+
+        @staticmethod
+        def _json_object(response):
+            return response.json()
+
+    provider = FakeSession([
+        tool_call_response("data_quality_feedback", {"run_id": quality_run.id}),
+        final_response("完成。"),
+    ])
+    monkeypatch.setattr("fde_api.control.ai_tool_loop.requests.Session", lambda: provider)
+    settings = app.config["SETTINGS"]
+    if public_selfhosted:
+        monkeypatch.setattr(settings, "ai_selfhosted_allow_public", True)
+        monkeypatch.setattr(settings, "ai_selfhosted_base_url", "https://public-model.example.com/v1")
+        monkeypatch.setattr(settings, "ai_selfhosted_model", "public-test-model")
+    else:
+        monkeypatch.setattr(settings, "deepseek_api_key", "test-key")
+
+    with app.app_context():
+        monkeypatch.setattr(dsh_runtime.current, "primary", Runtime())
+        assert _run_quality_chat(ai_user, quality_run) == "完成。"
+
+    if not runtime_enabled:
+        tools = {item["function"]["name"] for item in provider.calls[0][1]["json"]["tools"]}
+        assert "project_read" in tools
+        assert "data_quality_feedback" not in tools
+        tool_message = next(m for m in provider.calls[1][1]["json"]["messages"] if m["role"] == "tool")
+        assert json.loads(tool_message["content"])["error"] == "forbidden"
+
+
+def test_dsh_automation_project_read_does_not_grant_quality_feedback(app, client, ai_user, quality_run, quality_model, monkeypatch):
+    from fde_api.control.dsh_runtime import dsh_runtime
+
+    class Runtime:
+        enabled = True
+        runtime_version = "test"
+
+        def _request(self, method, path, *, json, **kwargs):
+            token = json["mcp"]["token"]
+            tools = {item["name"] for item in _quality_mcp(client, token)["tools"]}
+            assert "project_read" in tools
+            result = _quality_mcp(client, token, "tools/call", {"run_id": quality_run.id})
+            assert ("data_quality_feedback" in tools, result["isError"]) == (False, True)
+            return FakeResponse(payload={"status": "succeeded", "output": {"text": "完成。"}})
+
+        @staticmethod
+        def _json_object(response):
+            return response.json()
+
+    with app.app_context():
+        monkeypatch.setattr(dsh_runtime.current, "primary", Runtime())
+        result = dsh_runtime.current.execute(
+            execution_id=str(uuid4()), actor_user_id=ai_user.id, project_id=quality_run.project_id,
+            prompt="自动化任务", allowed_tools=["project.read"],
+        )
+    assert result.status == "succeeded"
+
+
+def test_direct_project_read_does_not_grant_quality_feedback(app, ai_user, quality_run):
+    provider = FakeSession([
+        tool_call_response("data_quality_feedback", {"run_id": quality_run.id}),
+        final_response(),
+    ])
+    with app.app_context():
+        _, _, trace = direct_tool_completion(
+            model=provider_model(), prompt="通用只读任务", user=ai_user,
+            project_id=quality_run.project_id, execution_id=str(uuid4()),
+            capabilities=["project.read"], session=provider,
+        )
+    tools = {item["function"]["name"] for item in provider.calls[0][1]["json"]["tools"]}
+    assert "project_read" in tools
+    assert ("data_quality_feedback" in tools, trace[0]["decision"]) == (False, "denied")
+
+
+def test_quality_tool_cannot_read_outside_current_authorized_project(app, client, db_session, ai_user, quality_run):
+    from fde_api.control.mcp_gateway import issue_mcp_token
+
+    member = User(
+        username="quality-member", display_name="Member", role="viewer",
+        password_hash="unused", must_change_password=False,
+    )
+    outsider = User(
+        username="quality-outsider", display_name="Outsider", role="viewer",
+        password_hash="unused", must_change_password=False,
+    )
+    other = Project(
+        project_code="QUALITY-OTHER", name="Other visible project", enterprise_code="Test·Example·City",
+        planned_start_date=date(2026, 11, 1), leader_user_id=ai_user.id, status="active", template_snapshot={},
+    )
+    db_session.add_all([member, outsider, other])
+    db_session.flush()
+    db_session.add_all([
+        ProjectMember(project_id=quality_run.project_id, user_id=member.id, role="viewer"),
+        ProjectMember(project_id=other.id, user_id=member.id, role="viewer"),
+    ])
+    db_session.commit()
+    with app.app_context():
+        own = issue_mcp_token(member, project_id=quality_run.project_id, grant_quality_feedback=True)
+        cross = issue_mcp_token(member, project_id=other.id, all_projects=True, grant_quality_feedback=True)
+        nonmember = issue_mcp_token(outsider, project_id=quality_run.project_id, grant_quality_feedback=True)
+        unbound = issue_mcp_token(member, grant_quality_feedback=True)
+        no_capability = issue_mcp_token(member, project_id=quality_run.project_id, capabilities=[], grant_quality_feedback=True)
+
+    args = {"run_id": quality_run.id}
+    assert _quality_mcp(client, own, "tools/call", args)["isError"] is False
+    unknown = _quality_mcp(client, own, "tools/call", {"run_id": str(uuid4())})
+    assert unknown == {"isError": True, "content": [{"type": "text", "text": "执行记录不存在。"}]}
+    for token in (cross, nonmember):
+        assert _quality_mcp(client, token, "tools/call", args) == unknown
+    for token in (unbound, no_capability):
+        assert "data_quality_feedback" not in {item["name"] for item in _quality_mcp(client, token)["tools"]}
+        assert _quality_mcp(client, token, "tools/call", args)["isError"] is True
+    for key in ("project_id", "sql", "script"):
+        assert _quality_mcp(client, own, "tools/call", {**args, key: str(uuid4())})["isError"] is True
 
 
 # --- tool_definitions ------------------------------------------------------

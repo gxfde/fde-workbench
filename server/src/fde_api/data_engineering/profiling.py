@@ -99,14 +99,16 @@ def profile_bytes(*, filename: str, data: bytes) -> dict[str, Any]:
 # ---- 解析（内存只读） ---------------------------------------------------------
 
 
-def _parse_csv(data: bytes, name: str) -> list[dict[str, Any]]:
-    text = data.decode("utf-8-sig", errors="replace")
-    reader = csv.reader(io.StringIO(text))
+def _parse_csv(data: bytes, name: str, *, strict: bool = False) -> list[dict[str, Any]]:
+    text = data.decode("utf-8-sig", errors="strict" if strict else "replace")
+    reader = csv.reader(io.StringIO(text, newline=""), strict=strict)
     try:
         header = next(reader)
     except StopIteration as error:
         raise ProfileError("empty_file", "空文件无可画像内容") from error
     header = [column.strip() or f"col_{index}" for index, column in enumerate(header)]
+    if strict and len(set(header)) != len(header):
+        raise ProfileError("duplicate_header", "执行输入的列名重复。")
 
     rows: list[dict[str, str]] = []
     error_rows = 0

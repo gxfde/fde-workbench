@@ -15,12 +15,14 @@ TransformPlan 计划面（AF2-WP2）：只落**已通过静态校验**的计划�
 """
 from __future__ import annotations
 
+import csv
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fde_api.data_engineering.models import DataProfile, TransformPlan, TransformRun
+from fde_api.data_engineering.masking import mask_transform_output
+from fde_api.data_engineering.models import MASKED_OUTPUT_KEY, DataProfile, TransformPlan, TransformRun
 from fde_api.data_engineering.profiling import ProfileError, profile_bytes
 from fde_api.data_engineering.transform_executor import execute_plan
 from fde_api.data_engineering.transform_plan import validate_plan
@@ -372,25 +374,48 @@ def submit_transform_run(
                 "输入快照与计划来源画像不同源（指纹不一致或通道不符），拒绝执行。",
                 400,
             )
-        tables, truncated = _read_tables_from_version(session, version)
-
-        result = execute_plan(plan_row.plan_json, tables)
-        if truncated and result["status"] == "succeeded":
-            # 解析在画像上限处截断＝执行输入不完整——诚实超限，不静默执行
-            result = {
-                **result,
-                "status": "budget_exhausted",
-                "failure_reason": "max_input_rows",
-                "output_rows": [],
-                "output_row_count": 0,
+        try:
+            tables, truncated, parse_error_rows, source_row_count = _read_tables_from_version(
+                session, version, plan_row.source_table,
+            )
+        except (ProfileError, UnicodeError, csv.Error):
+            tables, truncated, parse_error_rows, source_row_count = {}, False, None, None
+        if truncated or parse_error_rows != 0:
+            # 不在部分输入上执行算子或出具质量结论。
+            result: dict[str, Any] = {
+                "status": "budget_exhausted" if truncated else "failed",
+                "failure_reason": "max_input_rows" if truncated else "input_parse_errors",
+                "conservation": {
+                    "input_rows": None if truncated else source_row_count,
+                    "output_rows": 0,
+                    "rejected_rows": 0,
+                    "overflow_count": 0,
+                    "ok": None,
+                },
             }
+        else:
+            result = execute_plan(plan_row.plan_json, tables)
+        result["conservation"]["input_integrity"] = {
+            "parse_error_rows": parse_error_rows,
+            "truncated": truncated,
+        }
+        if result["status"] in ("failed", "budget_exhausted"):
+            result["conservation"]["ok"] = None
+
+        # 产物元数据与掩码层使用同一份声明投影。
+        output_columns = plan_row.plan_json["output"]["columns"] if result["status"] == "succeeded" else []
 
         anchor = {
             "kind": "file_version",
             "file_version_id": version.id,
             "file_sha256": version.sha256 or "",
             "storage_key": version.storage_key,
+            MASKED_OUTPUT_KEY: True,
         }
+        output_rows = mask_transform_output(
+            plan_row.plan_json, tables, result.get("output_rows") or [],
+            report["dependency_graph"]["topological_order"],
+        )
         run = TransformRun(
             project_id=project.id,
             plan_id=plan_row.id,
@@ -399,9 +424,9 @@ def submit_transform_run(
             status=str(result["status"]),
             failure_reason=result.get("failure_reason"),
             input_anchor_json=anchor,
-            output_rows_json=result.get("output_rows") or [],
+            output_rows_json=output_rows,
             output_row_count=int(result.get("output_row_count") or 0),
-            output_columns_json=result.get("output_columns") or [],
+            output_columns_json=output_columns,
             reject_ledger_json=result.get("reject_ledger") or [],
             rejected_row_count=int(result.get("rejected_row_count") or 0),
             overflow_count=int(result.get("overflow_count") or 0),
@@ -445,7 +470,9 @@ def _load_available_file_version(session: Session, project_id: str, version_id: 
     return version
 
 
-def _read_tables_from_version(session: Session, version) -> tuple[dict[str, list[dict[str, Any]]], bool]:
+def _read_tables_from_version(
+    session: Session, version, source_table: str,
+) -> tuple[dict[str, list[dict[str, Any]]], bool, int | None, int | None]:
     """storage 读字节 → 解析为表行集（worker 域内直读，零行值出域）。
 
     解析复用画像底座（``_parse_csv``/``_parse_xlsx``）；任一表 ``truncated``
@@ -463,14 +490,19 @@ def _read_tables_from_version(session: Session, version) -> tuple[dict[str, list
         data = stream.read()
     suffix = str(version.original_filename or "").lower().rsplit(".", 1)[-1]
     if suffix == "csv":
-        parsed = _parse_csv(data, str(version.project_file.display_name or "table").rsplit(".", 1)[0])
+        parsed = _parse_csv(data, str(version.project_file.display_name or "table").rsplit(".", 1)[0], strict=True)
     elif suffix in ("xlsx", "xlsm"):
         parsed = _parse_xlsx(data)
     else:
         raise _error("unsupported_input_type", "输入文件类型不支持执行（仅 csv/xlsx）。", 400)
     tables = {table["name"]: list(table["rows"]) for table in parsed}
-    truncated = any(table.get("truncated") for table in parsed)
-    return tables, truncated
+    truncated = any(table["truncated"] for table in parsed)
+    parse_error_rows = sum(int(table["error_rows"]) for table in parsed)
+    source_row_count = next(
+        (int(table["row_count"]) + int(table["error_rows"]) for table in parsed if table["name"] == source_table),
+        0,
+    )
+    return tables, truncated, parse_error_rows, source_row_count
 
 
 def list_transform_runs(*, actor, project_id: str) -> list[dict[str, Any]]:
@@ -495,5 +527,207 @@ def get_transform_run(*, actor, project_id: str, run_id: str) -> dict[str, Any]:
         if row is None or row.project_id != project_id:
             raise _error("transform_run_not_found", "执行记录不存在。", 404)
         return row.snapshot()
+    finally:
+        session.close()
+
+
+# ---- AF2-WP4 呈现面：四读面（run 落库件的只读派生视图，零落库零状态变更） ----
+
+_PREVIEW_NOTE = (
+    "样本预览用于早期检查（04 §3.2）；完整数据断言必须基于全量统计件"
+    "（守恒/拒绝账本/质量报告），不能只用样本预览代替。"
+)
+
+_DIFF_NOTE = (
+    "按弱守恒口径对照输入、产出和拒绝计数。join many_to_one 可合法展开产出行（17 号 §3.4）。"
+    "按拒绝原因汇总已登记细目，超限拒绝仅计入 overflow；质量计数来自执行报告。"
+)
+
+
+def _load_run_or_404(session: Session, project_id: str, run_id: str) -> TransformRun:
+    row = session.get(TransformRun, run_id)
+    if row is None or row.project_id != project_id:
+        raise _error("transform_run_not_found", "执行记录不存在。", 404)
+    return row
+
+
+def preview_transform_run(*, actor, project_id: str, run_id: str, limit: int) -> dict[str, Any]:
+    """产物行集受控样本窗口（WP4 预览面）：limit 封顶由路由层执行；
+    ``truncated``＝样本窗口小于落库产物行集。预览＝早期检查，样本性质随
+    ``note`` 显式声明。"""
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        run = _load_run_or_404(session, project_id, run_id)
+        sample_available = run.status == "succeeded" and run.input_anchor_json.get(MASKED_OUTPUT_KEY) is True
+        rows = (run.output_rows_json or []) if sample_available else []
+        sample = rows[:limit]
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "output_columns": run.output_columns_json or [],
+            "total_row_count": run.output_row_count,
+            "sample_available": sample_available,
+            "sample_row_count": len(sample),
+            "truncated": len(sample) < len(rows),
+            "rows": sample,
+            "note": _PREVIEW_NOTE,
+        }
+    finally:
+        session.close()
+
+
+def _conservation_verdict(run: TransformRun) -> bool | None:
+    if run.status == "internal_inconsistency":
+        return False
+    if run.status != "succeeded" or not run.input_verified:
+        return None
+    verdict = (run.conservation_json or {}).get("ok")
+    return verdict if isinstance(verdict, bool) else None
+
+
+def diff_transform_run(*, actor, project_id: str, run_id: str) -> dict[str, Any]:
+    """行数去向对照（WP4 差异面）：弱守恒口径下产出/拒绝/溢出三类去向，
+    拒绝按 reason 分组；质量条目（``quality_*``＝保留行违规记录，非拒绝）
+    单列 ``quality_flags`` 不与拒绝混淆（17 号 §3.3 两类账本条目的呈现区分）。"""
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        run = _load_run_or_404(session, project_id, run_id)
+        conservation = run.conservation_json or {}
+        rejected_by_reason: dict[str, int] = {}
+        quality_flags: dict[str, int] = {}
+        ledger = run.reject_ledger_json or []
+        for entry in ledger:
+            reason = str(entry.get("reason"))
+            if not reason.startswith("quality_"):
+                rejected_by_reason[reason] = rejected_by_reason.get(reason, 0) + 1
+        for assertion in (run.quality_report_json or {}).values():
+            violations = int(assertion.get("violations") or 0)
+            if violations:
+                reason = f"quality_{assertion['kind']}"
+                quality_flags[reason] = quality_flags.get(reason, 0) + violations
+        sample = ledger[:20]
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "input_rows": conservation.get("input_rows"),
+            "input_integrity": conservation.get("input_integrity"),
+            "failure_reason": run.failure_reason,
+            "output_rows": run.output_row_count,
+            "rejected_rows": run.rejected_row_count,
+            "overflow_count": run.overflow_count,
+            "destinations": {
+                "output": run.output_row_count,
+                "rejected_by_reason": rejected_by_reason,
+                "quality_flags": quality_flags,
+                "overflow": run.overflow_count,
+            },
+            "conservation_ok": _conservation_verdict(run),
+            "ledger_sample": sample,
+            "ledger_sample_truncated": len(sample) < len(ledger),
+            "note": _DIFF_NOTE,
+        }
+    finally:
+        session.close()
+
+
+def lineage_transform_run(*, actor, project_id: str, run_id: str) -> dict[str, Any]:
+    """两级血缘拼装（WP4 血缘呈现，17 号 §3.5）：计划静态 DAG
+    （``validation_json.dependency_graph``）+ 执行级 per-step 统计
+    （``lineage_json``）；执行步序与拓扑序不一致＝``steps_alignment`` false
+    如实呈现（不静默）。"""
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        run = _load_run_or_404(session, project_id, run_id)
+        plan_row = session.get(TransformPlan, run.plan_id)
+        if plan_row is None or plan_row.project_id != project_id:
+            raise _error("transform_run_not_found", "执行记录不存在。", 404)
+        graph = (plan_row.validation_json or {}).get("dependency_graph") or {}
+        topological_order = [str(node) for node in graph.get("topological_order") or []]
+        executed_steps = [str(node.get("step_id")) for node in run.lineage_json or []]
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "plan_id": run.plan_id,
+            "plan_version": run.plan_version,
+            "plan_dag": {
+                "nodes": [str(node) for node in graph.get("nodes") or []],
+                "edges": graph.get("edges") or [],
+                "topological_order": topological_order,
+            },
+            "execution_steps": run.lineage_json or [],
+            "steps_alignment": executed_steps == topological_order,
+            "final": {
+                "output_row_count": run.output_row_count,
+                "rejected_row_count": run.rejected_row_count,
+                "overflow_count": run.overflow_count,
+                "conservation_ok": _conservation_verdict(run),
+            },
+        }
+    finally:
+        session.close()
+
+
+def quality_feedback_transform_run(*, actor, project_id: str, run_id: str) -> dict[str, Any]:
+    """质量断言结构化反馈（WP4 反馈面，Agent/工程台可消费）：逐断言
+    verdict + 违反计数；**零行值原文**——只含统计与定位类别（04 §3.2/
+    17 号 §3.3），反馈面不给修正建议（防「丢坏行让通过率好看」的捷径诱导）。"""
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        run = _load_run_or_404(session, project_id, run_id)
+        plan = session.get(TransformPlan, run.plan_id)
+        if plan is None or plan.project_id != project_id:
+            raise _error("transform_run_not_found", "执行记录不存在。", 404)
+        graph = (plan.validation_json or {}).get("dependency_graph") or {}
+        execution_steps = run.lineage_json or []
+        complete = (
+            run.status == "succeeded" and run.input_verified
+            and [step["step_id"] for step in execution_steps] == graph.get("topological_order")
+        )
+        report = run.quality_report_json or {}
+        assertions = []
+        rejected_before = 0
+        for step in execution_steps:
+            step_id = step["step_id"]
+            if step["op"] != "assert_quality" or step_id not in report:
+                rejected_before += step.get("rejected_rows") or 0
+                continue
+            item = report[step_id]
+            violations = int(item.get("violations") or 0)
+            evaluated_rows = step.get("input_rows")
+            if not complete:
+                verdict = "incomplete"
+            elif not evaluated_rows:
+                verdict = "not_evaluated"
+            elif violations:
+                verdict = "fail"
+            else:
+                verdict = "incomplete" if rejected_before else "pass"
+            assertions.append({
+                "step_id": step_id,
+                "kind": str(item.get("kind")),
+                "column": str(item.get("column")),
+                "evaluated_rows": evaluated_rows,
+                "rejected_before": rejected_before,
+                "violations": violations,
+                "verdict": verdict,
+            })
+        failed = sum(1 for assertion in assertions if assertion["verdict"] == "fail") if complete else None
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "complete": complete,
+            "input_row_count": (run.conservation_json or {}).get("input_rows") if run.input_verified else None,
+            "overall": {
+                "assertions_run": len(assertions),
+                "assertions_failed": failed,
+                "total_violations": sum(assertion["violations"] for assertion in assertions),
+            },
+            "assertions": assertions,
+            "row_value_discipline": "反馈件零行值原文：仅断言统计与定位类别（04 §3.2 / 17 号 §3.3）。",
+        }
     finally:
         session.close()
