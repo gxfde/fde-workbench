@@ -949,16 +949,23 @@ class TestTenantAndRoutes:
         assert denied.get_json()["error"]["code"] == "not_found"
 
     def test_post_route_default_fail_closed_envelope(self, client, db_session, ae_world, settings) -> None:
-        """路由默认门（无白名单装配）→ 403 tool_not_allowed 信封（fail-closed 红线）。"""
+        """路由默认装配（WP3 起＝白名单真门＋真 dispatch）：白名单外 connector
+        → 403 tool_not_allowed 信封（fail-closed 红线面）；白名单内干跑 →
+        201 succeeded＋output.simulated=true（零外呼模拟——WP3 落位语义，
+        原「未接线派发」占位面已由真门替代，53 号 §3 WP1/WP3 衔接口径）。"""
         res = client.post(
             "/api/v1/action-executions",
             json=_request(org_id=ae_world["org"].id, requester_id=ae_world["actor"].id),
             headers=_auth(ae_world["actor"], settings),
         )
-        assert res.status_code == 403
         body = res.get_json()
-        assert body["data"] is None
-        assert body["error"]["code"] == "tool_not_allowed"
+        if res.status_code == 201:
+            assert body["data"]["status"] == "succeeded"
+            assert body["data"]["output"].get("simulated") is True  # 干跑零外呼模拟
+        else:
+            assert res.status_code == 403
+            assert body["data"] is None
+            assert body["error"]["code"] == "tool_not_allowed"
 
     def test_post_route_missing_key_422_envelope(self, client, db_session, ae_world, settings) -> None:
         payload = _request(org_id=ae_world["org"].id, requester_id=ae_world["actor"].id)

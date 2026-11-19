@@ -833,6 +833,16 @@ def dsh_approval_status(*, approval_id: str) -> dict[str, Any]:
         session.close()
 
 
+# ---- G-AE-1：批准后可执行工具的可扩展 allow-list（53 号 §3 WP3）----
+# 原为硬编码单工具判定（白名单 constraints.fail_closed 先例），本轮注册表化：
+# (capability, tool_name) → 执行器函数名；既有 task.batch_assign 行为不变；
+# 新增工具须审核后在此登记（白名单范式：运行时不得动态注册未审核工具）。
+# decide_automation_approval 本体（上方函数）零改动（禁改清单第 1 项）。
+APPROVABLE_DSH_TOOLS: dict[tuple[str, str], Any] = {
+    ("task.batch_assign", "project_tasks.batch_assign"): "_execute_batch_assign",
+}
+
+
 def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
     """Execute one allow-listed project mutation exactly once after approval."""
     session = db.session()
@@ -878,20 +888,10 @@ def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
             if not access.allowed:
                 raise ControlServiceError("permission_revoked", "任务发起人已不具备该操作权限。", 403)
 
-            if approval.capability != "task.batch_assign" or approval.tool_name != "project_tasks.batch_assign":
+            executor_name = APPROVABLE_DSH_TOOLS.get((approval.capability, approval.tool_name))
+            if executor_name is None:
                 raise ControlServiceError("tool_not_allowed", "该 DSH 工具未在工作台启用。", 403)
-            arguments = _batch_assign_arguments(approval.arguments_json)
-            try:
-                result = batch_assign_project_tasks_in_session(
-                    session=session,
-                    actor=approval.requested_by,
-                    project_id=approval.project_id,
-                    member_user_id=arguments["member_user_id"],
-                    mode=arguments["mode"],
-                    assignments=arguments["assignments"],
-                )
-            except ProjectServiceError as error:
-                raise ControlServiceError(error.code, error.message, error.status) from error
+            result = _execute_batch_assign(session=session, approval=approval)
 
             approval.status = "executed"
             approval.executed_at = datetime.now(UTC)
@@ -901,6 +901,25 @@ def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
             return _serialize_approval(approval, can_review=False, include_arguments=False)
     finally:
         session.close()
+
+
+def _execute_batch_assign(*, session: Any, approval: Any) -> dict[str, Any]:
+    """``project_tasks.batch_assign`` 执行器（G-AE-1 注册表条目；行为不变重构）。
+
+    原内联于 ``execute_approved_dsh_tool`` 的白名单执行段——参数解析＋派工＋
+    项目错误映射，本轮原样抽取为注册表条目指到的执行器。"""
+    arguments = _batch_assign_arguments(approval.arguments_json)
+    try:
+        return batch_assign_project_tasks_in_session(
+            session=session,
+            actor=approval.requested_by,
+            project_id=approval.project_id,
+            member_user_id=arguments["member_user_id"],
+            mode=arguments["mode"],
+            assignments=arguments["assignments"],
+        )
+    except ProjectServiceError as error:
+        raise ControlServiceError(error.code, error.message, error.status) from error
 
 
 def _batch_assign_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
