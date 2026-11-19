@@ -315,7 +315,9 @@ def _check_step_params(errors: list[dict[str, str]], step: dict[str, Any], path:
             _err(errors, "invalid_parameter_value", f"{p_path}.keys", "keys 须为非空字符串数组。")
     elif op == "join":
         # 04 §3.2：Join 基数必须显式定义（cardinality 缺失即拒）
-        _reject_extra({"left_key", "right_table", "right_key", "cardinality", "basis"})
+        # AF2-WP3 additive：right_columns＝右列投影显式声明（可选键；最小暴露——
+        # 不声明则不带右列产出；17 号 §3.2 编码期细化）
+        _reject_extra({"left_key", "right_table", "right_key", "cardinality", "basis", "right_columns"})
         if not _require("left_key", "right_table", "right_key", "cardinality", "basis"):
             return
         if params["cardinality"] not in _JOIN_CARDINALITIES:
@@ -332,6 +334,15 @@ def _check_step_params(errors: list[dict[str, str]], step: dict[str, Any], path:
                 f"{p_path}.basis",
                 f"basis {params['basis']!r} 不在闭集 {_JOIN_BASES} 内。",
             )
+        if "right_columns" in params:
+            raw = params["right_columns"]
+            if not isinstance(raw, list) or not raw or not all(_is_str(c) for c in raw):
+                _err(
+                    errors,
+                    "invalid_parameter_value",
+                    f"{p_path}.right_columns",
+                    "right_columns 须为非空字符串数组（右列投影显式声明）。",
+                )
     elif op == "assert_quality":
         _reject_extra({"kind", "column"})
         if not _require("kind", "column"):
@@ -426,7 +437,12 @@ def _check_step_schema(
         col = _column(params.get("column"))
         if col is not None and schema[col] not in ("integer", "number", "decimal"):
             _err(errors, "type_incompatible", p_path, f"单位换算要求数值列，得 {schema[col]}。")
-        return dict(schema)
+            return dict(schema)
+        # AF2-WP3 additive（17 号 §3.1）：换算产出精确 Decimal——类型进位 decimal
+        evolved = dict(schema)
+        if col is not None:
+            evolved[col] = "decimal"
+        return evolved
     if op == "map_enum":
         col = _column(params.get("column"))
         if col is not None and schema[col] not in ("string", "enum"):
@@ -454,8 +470,13 @@ def _check_step_schema(
                 p_path,
                 "basis=fk_catalog 但关系段查无此键对（不得凭空宣称硬证据）。",
             )
-        # Join 不改左 schema：右侧列投影属编译面（WP3）职责，计划面只钉键对
-        return dict(schema)
+        # Join 演进（AF2-WP3 additive）：right_columns 声明列并入产出集（类型保守
+        # string——计划面无右表列类型元数据；不声明则左 schema 不变）
+        evolved = dict(schema)
+        for col in params.get("right_columns") or []:
+            if isinstance(col, str):
+                evolved[col] = "string"
+        return evolved
     if op == "assert_quality":
         _column(params.get("column"))
         return dict(schema)

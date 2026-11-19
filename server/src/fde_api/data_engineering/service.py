@@ -20,8 +20,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fde_api.data_engineering.models import DataProfile, TransformPlan
+from fde_api.data_engineering.models import DataProfile, TransformPlan, TransformRun
 from fde_api.data_engineering.profiling import ProfileError, profile_bytes
+from fde_api.data_engineering.transform_executor import execute_plan
 from fde_api.data_engineering.transform_plan import validate_plan
 from fde_api.extensions import db
 from fde_api.projects.events import record_event
@@ -306,6 +307,193 @@ def get_transform_plan(*, actor, project_id: str, plan_id: str) -> dict[str, Any
         row = session.get(TransformPlan, plan_id)
         if row is None or row.project_id != project_id:
             raise _error("transform_plan_not_found", "转换计划不存在。", 404)
+        return row.snapshot()
+    finally:
+        session.close()
+
+
+def submit_transform_run(
+    *,
+    actor,
+    project_id: str,
+    plan_id: str,
+    input_ref: dict[str, Any],
+    idempotency_key: str,
+) -> dict[str, Any]:
+    """提交一次隔离执行（AF2-WP3，17 号 v1.0；甲案=worker 固定算子）。
+
+    幂等重放：同 ``idempotency_key`` 返回既有 run（不重复执行）。执行闸链
+    （17 号 §4.1）：S-01 项目权限 → 计划归属 → **纵深再校验 validate_plan**
+    （计划=不可信候选）→ 输入快照锚（files 版本 available）→ **同源校验**
+（§2.2：画像与快照指纹一致，不一致＝``snapshot_mismatch`` 拒绝）→ 解析（truncated
+    ＝输入超上限，诚实 budget_exhausted 不静默截断）→ ``execute_plan`` 纯函数
+    → 落库+审计。产物 append-only；账本零行值原文。
+    """
+    session: Session = db.session()
+    try:
+        project = _require_project(session, actor, project_id)
+
+        replay = session.scalars(
+            select(TransformRun).where(TransformRun.idempotency_key == idempotency_key)
+        ).first()
+        if replay is not None:
+            if replay.project_id != project_id:
+                raise _error("transform_run_not_found", "执行记录不存在。", 404)
+            return replay.snapshot()
+
+        plan_row = session.get(TransformPlan, plan_id)
+        if plan_row is None or plan_row.project_id != project_id:
+            raise _error("transform_plan_not_found", "转换计划不存在。", 404)
+
+        # 纵深闸（§4.1）：落库计划执行前强制再过静态校验
+        report = validate_plan(plan_row.plan_json)
+        if not report["valid"]:
+            raise _error(
+                "invalid_transform_plan",
+                "转换计划未通过静态校验。",
+                400,
+                detail={"validation": report},
+            )
+
+        kind = str((input_ref or {}).get("kind") or "")
+        ref_id = str((input_ref or {}).get("file_version_id") or "").strip()
+        if kind != "file_version" or not ref_id:
+            raise _error("invalid_request", "input 须为 {kind: file_version, file_version_id}。", 400)
+        version = _load_available_file_version(session, project_id, ref_id)
+        # 同源校验（17 号 §2.2）：计划来源画像须与执行输入快照一致——画像缺失
+        # ＝404 存在性隐藏（沿项目域惯例）；source_kind 二态不符或逐字节指纹
+        # 不一致＝snapshot_mismatch 拒绝执行（快照漂移防线，零执行零落库）
+        profile_row = session.get(DataProfile, plan_row.source_profile_id)
+        if profile_row is None or profile_row.project_id != project.id:
+            raise _error("transform_profile_not_found", "计划来源画像不存在。", 404)
+        if profile_row.source_kind != "file" or (version.sha256 or "") != profile_row.input_sha256:
+            raise _error(
+                "snapshot_mismatch",
+                "输入快照与计划来源画像不同源（指纹不一致或通道不符），拒绝执行。",
+                400,
+            )
+        tables, truncated = _read_tables_from_version(session, version)
+
+        result = execute_plan(plan_row.plan_json, tables)
+        if truncated and result["status"] == "succeeded":
+            # 解析在画像上限处截断＝执行输入不完整——诚实超限，不静默执行
+            result = {
+                **result,
+                "status": "budget_exhausted",
+                "failure_reason": "max_input_rows",
+                "output_rows": [],
+                "output_row_count": 0,
+            }
+
+        anchor = {
+            "kind": "file_version",
+            "file_version_id": version.id,
+            "file_sha256": version.sha256 or "",
+            "storage_key": version.storage_key,
+        }
+        run = TransformRun(
+            project_id=project.id,
+            plan_id=plan_row.id,
+            plan_version=plan_row.plan_version,
+            idempotency_key=idempotency_key,
+            status=str(result["status"]),
+            failure_reason=result.get("failure_reason"),
+            input_anchor_json=anchor,
+            output_rows_json=result.get("output_rows") or [],
+            output_row_count=int(result.get("output_row_count") or 0),
+            output_columns_json=result.get("output_columns") or [],
+            reject_ledger_json=result.get("reject_ledger") or [],
+            rejected_row_count=int(result.get("rejected_row_count") or 0),
+            overflow_count=int(result.get("overflow_count") or 0),
+            quality_report_json=result.get("quality_report") or {},
+            lineage_json=result.get("lineage") or [],
+            conservation_json=result.get("conservation") or {},
+            created_by_user_id=actor.id,
+        )
+        session.add(run)
+        session.flush()
+        record_event(
+            session,
+            actor,
+            "transform_run_submitted",
+            project,
+            {
+                "run_id": run.id,
+                "plan_id": plan_row.id,
+                "status": run.status,
+                "input_rows": (run.conservation_json or {}).get("input_rows"),
+                "output_row_count": run.output_row_count,
+                "rejected_row_count": run.rejected_row_count,
+                "file_version_id": version.id,
+            },
+        )
+        session.commit()
+        return run.snapshot()
+    finally:
+        session.close()
+
+
+def _load_available_file_version(session: Session, project_id: str, version_id: str):
+    """files 版本锚加载：不存在=404；非 available（quarantined/deprecated 等）=400。"""
+    from fde_api.files.models import ProjectFileVersion
+
+    version = session.get(ProjectFileVersion, version_id)
+    if version is None or version.project_file.project_id != project_id:
+        raise _error("file_version_not_found", "输入文件版本不存在。", 404)
+    if version.status != "available":
+        raise _error("file_version_unavailable", "输入文件版本不可用（未通过可用状态闸）。", 400)
+    return version
+
+
+def _read_tables_from_version(session: Session, version) -> tuple[dict[str, list[dict[str, Any]]], bool]:
+    """storage 读字节 → 解析为表行集（worker 域内直读，零行值出域）。
+
+    解析复用画像底座（``_parse_csv``/``_parse_xlsx``）；任一表 ``truncated``
+    ＝输入超画像解析上限 → 上层诚实 ``budget_exhausted``（17 号 §2.4 非静默
+    截断）。
+    """
+    from fde_api.data_engineering.profiling import _parse_csv, _parse_xlsx
+    from fde_api.extensions import object_storage
+    from fde_api.storage.layout import current_layout, open_read_stream
+
+    # M4 batch4 存储闸合规：读路径经布局翻译助手（回落序 legacy/dual_write/read_new/retired）
+    with open_read_stream(
+        object_storage.current, session, version.storage_key, layout=current_layout()
+    ) as stream:
+        data = stream.read()
+    suffix = str(version.original_filename or "").lower().rsplit(".", 1)[-1]
+    if suffix == "csv":
+        parsed = _parse_csv(data, str(version.project_file.display_name or "table").rsplit(".", 1)[0])
+    elif suffix in ("xlsx", "xlsm"):
+        parsed = _parse_xlsx(data)
+    else:
+        raise _error("unsupported_input_type", "输入文件类型不支持执行（仅 csv/xlsx）。", 400)
+    tables = {table["name"]: list(table["rows"]) for table in parsed}
+    truncated = any(table.get("truncated") for table in parsed)
+    return tables, truncated
+
+
+def list_transform_runs(*, actor, project_id: str) -> list[dict[str, Any]]:
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        rows = session.scalars(
+            select(TransformRun)
+            .where(TransformRun.project_id == project_id)
+            .order_by(TransformRun.created_at.desc())
+        ).all()
+        return [row.snapshot() for row in rows]
+    finally:
+        session.close()
+
+
+def get_transform_run(*, actor, project_id: str, run_id: str) -> dict[str, Any]:
+    session: Session = db.session()
+    try:
+        _require_project(session, actor, project_id)
+        row = session.get(TransformRun, run_id)
+        if row is None or row.project_id != project_id:
+            raise _error("transform_run_not_found", "执行记录不存在。", 404)
         return row.snapshot()
     finally:
         session.close()

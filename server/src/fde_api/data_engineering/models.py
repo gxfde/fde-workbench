@@ -118,3 +118,69 @@ class TransformPlan(Base, TimestampMixin):
             "created_at": str(self.created_at),
             "updated_at": str(self.updated_at),
         }
+
+
+class TransformRun(Base, TimestampMixin):
+    """一次隔离执行（AF2-WP3，17 号 v1.0 已批规格）。
+
+    纪律：append-only（无 PATCH/DELETE，重跑=新 run）；``idempotency_key``
+    唯一＝幂等重放真身；``status`` 闭集 ``succeeded|failed|budget_exhausted|
+    internal_inconsistency``（诚实终态，非静默截断）；**账本零行值原文**
+    （条目={row_index, reason, column}，04 §3.2）；产物行集封顶落
+    ``output_rows_json``；行数守恒机检钉落 ``conservation_json``。
+    """
+
+    __tablename__ = "transform_runs"
+    __table_args__ = (
+        Index("ix_transform_runs_project", "project_id"),
+        Index("ix_transform_runs_plan", "plan_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    plan_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("transform_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    plan_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    failure_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    input_anchor_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    output_rows_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    output_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_columns_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    reject_ledger_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    overflow_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quality_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    lineage_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    conservation_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "plan_id": self.plan_id,
+            "plan_version": self.plan_version,
+            "idempotency_key": self.idempotency_key,
+            "status": self.status,
+            "failure_reason": self.failure_reason,
+            "input_anchor": self.input_anchor_json,
+            "output_rows": self.output_rows_json,
+            "output_row_count": self.output_row_count,
+            "output_columns": self.output_columns_json,
+            "reject_ledger": self.reject_ledger_json,
+            "rejected_row_count": self.rejected_row_count,
+            "overflow_count": self.overflow_count,
+            "quality_report": self.quality_report_json,
+            "lineage": self.lineage_json,
+            "conservation": self.conservation_json,
+            "created_by_user_id": self.created_by_user_id,
+            "created_at": str(self.created_at),
+            "updated_at": str(self.updated_at),
+        }
