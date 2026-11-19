@@ -392,6 +392,36 @@ def test_join_intermediate_output_budget_preserves_completed_step_stats() -> Non
     assert report["conservation"] == {"input_rows": 4, "output_rows": 0, "rejected_rows": 2, "overflow_count": 1, "ok": True}
 
 
+def test_join_declared_key_absent_in_right_table_fails_fast() -> None:
+    """右表缺声明的键列＝契约违反（fail-fast）：否则右表全部键为空，
+    幸存左行被误判为「无匹配」，静默产出全 null 右列（17 号 §3.2 声明即契约）。"""
+    plan = _join_plan("many_to_one")
+    tables = {**JOIN_TABLES, "equipment": [{"defect_pct": "0.1"}]}  # 右表无 eq_id 列
+
+    report = execute_plan(plan, tables)
+
+    assert report["status"] == "failed"
+    assert report["failure_reason"] == "unknown_right_column"
+    assert report["output_rows"] == []
+
+
+def test_join_null_keys_never_match() -> None:
+    """空键（None/空串＝null，17 号 §3.1）不参与连接：null 不等于 null——
+    否则空键左行会命中空键右行，产出虚假匹配行。"""
+    plan = _join_plan("many_to_one")
+    tables = {
+        "work_order": [{"wo_id": "WO-1", "eq_id": ""}, {"wo_id": "WO-2"}],
+        "equipment": [{"eq_id": "", "defect_pct": "0.9"}],
+    }
+
+    report = execute_plan(plan, tables)
+
+    assert report["status"] == "succeeded"
+    assert report["output_row_count"] == 2
+    assert [row["wo_id"] for row in report["output_rows"]] == ["WO-1", "WO-2"]
+    assert all(row["defect_pct"] is None for row in report["output_rows"])
+
+
 def test_join_one_to_one_violation_fails() -> None:
     report = execute_plan(_join_plan("one_to_one"), JOIN_TABLES)
 

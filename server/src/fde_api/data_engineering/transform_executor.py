@@ -297,14 +297,22 @@ def _apply_join(
             raise _ContractViolation("unknown_right_column")
         if column in schema:
             raise _ContractViolation("duplicate_column")  # 声明即契约：冲突不静默改名
+    if right_rows and right_key not in right_rows[0]:
+        # 右表缺声明的键列＝契约违反（fail-fast）：否则右表全部键为空，
+        # 幸存左行被静默判为「无匹配」，产出全 null 右列（17 号 §3.2 声明即契约）。
+        raise _ContractViolation("unknown_right_column")
 
     index: dict[Any, list[dict[str, Any]]] = {}
     for right_row in right_rows:
-        index.setdefault(right_row.get(right_key), []).append(right_row)
+        key = right_row.get(right_key)
+        if _is_null(key):
+            continue  # 空键不参与连接：null 不等于 null（17 号 §3.1 空值口径）
+        index.setdefault(key, []).append(right_row)
 
     out: list[tuple[int, dict[str, Any]]] = []
     for row_index, row in rows:
-        matches = index.get(row.get(left_key), [])
+        left_value = row.get(left_key)
+        matches = [] if _is_null(left_value) else index.get(left_value, [])
         if len(matches) > 1 and cardinality == "one_to_one":
             raise _ContractViolation("cardinality_violation")
         if len(out) + max(1, len(matches)) > max_output_rows:
