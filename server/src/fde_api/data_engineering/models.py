@@ -120,6 +120,10 @@ class TransformPlan(Base, TimestampMixin):
         }
 
 
+# Internal marker in the run anchor. Unmarked WP3 output predates masking.
+MASKED_OUTPUT_KEY = "output_rows_masked_v1"
+
+
 class TransformRun(Base, TimestampMixin):
     """一次隔离执行（AF2-WP3，17 号 v1.0 已批规格）。
 
@@ -161,7 +165,15 @@ class TransformRun(Base, TimestampMixin):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
+    @property
+    def input_verified(self) -> bool:
+        integrity = (self.conservation_json or {}).get("input_integrity") or {}
+        return integrity.get("parse_error_rows") == 0 and integrity.get("truncated") is False
+
     def snapshot(self) -> dict[str, Any]:
+        conservation = dict(self.conservation_json or {})
+        if not self.input_verified and conservation.get("ok") is True:
+            conservation["ok"] = None
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -170,8 +182,8 @@ class TransformRun(Base, TimestampMixin):
             "idempotency_key": self.idempotency_key,
             "status": self.status,
             "failure_reason": self.failure_reason,
-            "input_anchor": self.input_anchor_json,
-            "output_rows": self.output_rows_json,
+            "input_anchor": {key: value for key, value in self.input_anchor_json.items() if key != MASKED_OUTPUT_KEY},
+            "output_rows": [],  # Kept for response compatibility. Values are served by the bounded preview.
             "output_row_count": self.output_row_count,
             "output_columns": self.output_columns_json,
             "reject_ledger": self.reject_ledger_json,
@@ -179,7 +191,7 @@ class TransformRun(Base, TimestampMixin):
             "overflow_count": self.overflow_count,
             "quality_report": self.quality_report_json,
             "lineage": self.lineage_json,
-            "conservation": self.conservation_json,
+            "conservation": conservation,
             "created_by_user_id": self.created_by_user_id,
             "created_at": str(self.created_at),
             "updated_at": str(self.updated_at),

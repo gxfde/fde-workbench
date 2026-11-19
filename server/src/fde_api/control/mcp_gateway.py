@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Collection, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zipfile import ZipFile
@@ -35,6 +36,9 @@ from fde_api.workbench.models import Project
 
 
 mcp_blueprint = Blueprint("ai_mcp", __name__, url_prefix="/api/v1/internal/ai")
+DATA_QUALITY_FEEDBACK_TOOL = "data_quality_feedback"
+# Keep the projected details below the direct loop's generic text cap.
+MAX_QUALITY_ASSERTION_DETAILS = 100
 # T-R2（agent-policy P1-R2）：五元 = (description, capability, properties, effect, risk)——
 # effect: read | write_db | external；risk: 0–4（与 automation_approvals.risk_level 同尺度，
 # ≥3 = 密码确认/审批类）；tools/list annotations 由此派生（readOnlyHint=effect==read，
@@ -52,6 +56,10 @@ TOOLS: dict[str, tuple[str, str | None, dict[str, Any], str, int]] = {
     "ontology_dry_validate": ("在项目绑定的已固定本体版本上对候选变更集做纯预检：零状态变更只读校验，返回 verdict(pass|violations|conflict)、violations 明细（item_index/check/message）与冲突实体，供「先读真实校验错误、再修正候选」的循环使用。不物化候选、不进入锁定工作集；本体与固定版本由服务端从项目绑定解析，调用方不可指定。proposed_json 是候选条目数组，每条形如 {\"op\": \"create\"|\"update\"|\"deprecate\", \"entity_type\": \"object_types\"|\"property_definitions\"|\"relation_types\"|\"data_sources\", \"entity_key\": 小写字母或数字开头、仅含小写字母/数字/短横线/下划线的标识, \"payload\": {…}}；property_definitions 的 payload 必含 display_name、object_type_id、data_type，data_type 仅允许 string/number/boolean/date/datetime/enum/ref；条目不得携带 captured_from（服务身份专用）。", "ontology.read", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "proposed_json": {"type": "array", "items": {"type": "object"}}}, "read", 0),
     "project_list": ("列出当前账号有权查看的项目，可按名称搜索。", "project.read", {"query": {"type": "string"}}, "read", 0),
     "project_read": ("读取授权项目的背景、模块、任务和调研资料；项目成员可读各成员的个人备忘。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
+    DATA_QUALITY_FEEDBACK_TOOL: (
+        "按转换执行记录 ID 读取当前项目的质量断言结果和违规计数。仅返回统计与断言定位，不返回行值。",
+        "project.read", {"run_id": {"type": "string", "minLength": 1, "maxLength": 36}}, "read", 0,
+    ),
     "quote_list": ("读取授权项目的报价卡：档位、状态、输入系数、实算工时与成本、公式价与锚点区间、每个数字字段的回校状态。报价按《报价计算卡》程序化计算，不要自行编造价格。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
     "gates_read": ("读取授权项目的门禁 G1–G9 只读摘要：每门状态（待证据/待核验/已过门/有条件通过/未过门）、拍板结论、清单项核验进度与最近事件，用于回答「门禁到哪一步/还缺什么证据」。只读视图：提交证据与人工核验拍板只能在桌面端由人执行，AI 不代执行。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
     "file_search": ("搜索项目文件库，返回稳定文件ID、可用版本与文件摘要，不含下载凭据。", "file.search", {"project_id": {"type": "string"}, "query": {"type": "string"}}, "read", 0),
@@ -65,16 +73,31 @@ TOOLS: dict[str, tuple[str, str | None, dict[str, Any], str, int]] = {
 }
 
 
-def issue_mcp_token(user: User, *, project_id: str | None = None, capabilities: list[str] | None = None, execution_id: str | None = None) -> str:
+def issue_mcp_token(user: User, *, project_id: str | None = None, capabilities: list[str] | None = None,
+                    execution_id: str | None = None, all_projects: bool = False,
+                    grant_quality_feedback: bool = False) -> str:
     level, _ = effective_ai_access(user)
     allowed = capabilities_for_level(level)
     if capabilities is not None:
         allowed = [item for item in allowed if item in capabilities]
     now = datetime.now(UTC)
-    return jwt.encode({"sub": user.id, "ver": user.auth_version, "project_id": project_id, "execution_id": execution_id,
-                       "capabilities": allowed, "iat": now, "exp": now + timedelta(minutes=15),
-                       "iss": "fde-ai-tools", "aud": "fde-mcp"},
-                      current_app.config["SETTINGS"].jwt_secret, algorithm="HS256")
+    claims = {"sub": user.id, "ver": user.auth_version, "project_id": None if all_projects else project_id,
+              "execution_id": execution_id, "capabilities": allowed, "iat": now,
+              "exp": now + timedelta(minutes=15), "iss": "fde-ai-tools", "aud": "fde-mcp"}
+    if grant_quality_feedback and project_id:
+        # 质量反馈的显式授权绑定当前项目，与普通工具的项目搜索范围独立。
+        claims["quality_feedback_project_id"] = project_id
+    return jwt.encode(claims, current_app.config["SETTINGS"].jwt_secret, algorithm="HS256")
+
+
+def tool_is_granted(name: str, allowed: Collection[str], claims: Mapping[str, Any]) -> bool:
+    capability = TOOLS[name][1]
+    if capability is not None and capability not in allowed:
+        return False
+    if name == DATA_QUALITY_FEEDBACK_TOOL:
+        project_id = claims.get("quality_feedback_project_id")
+        return isinstance(project_id, str) and bool(project_id)
+    return True
 
 
 def _identity(session):
@@ -112,12 +135,64 @@ def _skills(session, user, allowed):
     return [(skill, version) for skill, version in rows if set(version.required_capabilities).issubset(allowed)]
 
 
+def _quality_feedback_for_model(feedback: dict[str, Any]) -> dict[str, Any]:
+    def count(value: Any) -> int | None:
+        return value if type(value) is int and value >= 0 else None
+
+    def category(value: Any, choices: tuple[str, ...]) -> str:
+        return value if isinstance(value, str) and value in choices else "unknown"
+
+    overall = feedback["overall"]
+    assertions = feedback["assertions"]
+    result = {
+        "run_id": feedback["run_id"],  # 受控引用来自已鉴权的执行记录主键。
+        "status": category(feedback.get("status"), ("succeeded", "failed", "budget_exhausted", "internal_inconsistency")),
+        "complete": feedback.get("complete") is True,
+        "input_row_count": count(feedback.get("input_row_count")),
+        "overall": {key: count(overall.get(key)) for key in ("assertions_run", "assertions_failed", "total_violations")},
+        "assertions": [
+            {
+                "assertion_index": index,
+                "kind": category(item.get("kind"), ("not_null", "unique")),
+                "evaluated_rows": count(item.get("evaluated_rows")),
+                "violations": count(item.get("violations")),
+                "rejected_before": count(item.get("rejected_before")),
+                "verdict": category(item.get("verdict"), ("pass", "fail", "incomplete", "not_evaluated")),
+            }
+            for index, item in enumerate(islice(assertions, MAX_QUALITY_ASSERTION_DETAILS), start=1)
+        ],
+    }
+    if len(assertions) > MAX_QUALITY_ASSERTION_DETAILS:
+        result["assertions_omitted"] = len(assertions) - MAX_QUALITY_ASSERTION_DETAILS
+    return result
+
+
 def call_tool(session, *, user, claims, allowed, name, arguments):
     if not isinstance(name, str) or name not in TOOLS or not isinstance(arguments, dict):
         raise ControlServiceError("invalid_tool", "工具或参数无效。", 400)
     _, capability, properties, _, _ = TOOLS[name]
-    if set(arguments) - set(properties) or (capability and capability not in allowed):
+    if set(arguments) - set(properties) or not tool_is_granted(name, allowed, claims):
         raise ControlServiceError("forbidden", "本次执行没有此工具的权限。", 403)
+    if name == DATA_QUALITY_FEEDBACK_TOOL:
+        from fde_api.data_engineering.service import DataEngineeringError, quality_feedback_transform_run
+
+        run_id = arguments.get("run_id")
+        if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > 36:
+            raise ControlServiceError("invalid_request", "请提供有效的转换执行记录 ID。", 400)
+        project_id = claims["quality_feedback_project_id"]
+        # 直连循环传入轮次开始时的用户，重新加载以使用当前账号与组织状态。
+        actor = session.get(User, user.id)
+        if actor is None or not actor.is_active or actor.must_change_password or actor.auth_version != claims.get("ver"):
+            raise ControlServiceError("unauthorized", "账号授权已失效。", 401)
+        if capability not in capabilities_for_level(effective_ai_access(actor)[0]):
+            raise ControlServiceError("forbidden", "本次执行没有此工具的权限。", 403)
+        try:
+            feedback = quality_feedback_transform_run(actor=actor, project_id=project_id, run_id=run_id)
+        except DataEngineeringError as error:
+            if error.status == 404:
+                raise ControlServiceError("transform_run_not_found", "执行记录不存在。", 404) from error
+            raise ControlServiceError("tool_failed", "无法读取质量反馈。", error.status) from error
+        return _quality_feedback_for_model(feedback)
     if name == "ontology_read":
         from fde_api.control.ontology import ONTOLOGY
         return ONTOLOGY
@@ -332,7 +407,7 @@ def mcp_endpoint():
                     "required": [key for key in info[2] if key.endswith("_id")]},
                     # T-R2：annotations 由结构化 effect/risk 派生（原为工具名硬编码集合）
                     "annotations": {"readOnlyHint": info[3] == "read", "destructiveHint": info[4] >= 3}}
-                    for name, info in TOOLS.items() if info[1] is None or info[1] in allowed]}
+                    for name, info in TOOLS.items() if tool_is_granted(name, allowed, claims)]}
             elif method == "tools/call":
                 params = body.get("params", {})
                 if not isinstance(params, dict):

@@ -178,16 +178,28 @@ def execute_chat_turn(turn_id):
             return error.message
         history = session.scalars(select(AIChatTurn).where(AIChatTurn.conversation_id == conversation.id,
             AIChatTurn.status == "completed").order_by(AIChatTurn.created_at.desc()).limit(12)).all()
-        context = "\n\n".join(f"用户：{t.prompt}\n助手：{t.response}" for t in reversed(history))[-60000:]
-        prompt = ("以下是当前会话历史：\n" + context + "\n\n当前用户消息：\n" if context else "") + turn.prompt
-        # G-08：人工接受信号回流——项目内被人工接受的产物（仅元数据与指纹
-        # 指针）作为 user 角色上下文进入本轮问答；取不到信号不阻塞问答。
+        # G-08：人工接受信号回流——仅元数据与指纹指针。
         from fde_api.agents.review_signals import project_review_signal_block
 
-        signal_block = project_review_signal_block(session, conversation.project_id)
-        if signal_block:
-            prompt = f"{signal_block}\n\n{prompt}"
-        actor_id, project_id, preference_id = user.id, conversation.project_id, turn.model_preference_id
+        project_id = conversation.project_id
+        signal_block = project_review_signal_block(session, project_id)
+
+        def prompt_with_history(turns: list[AIChatTurn]) -> str:
+            context = "\n\n".join(f"用户：{t.prompt}\n助手：{t.response}" for t in reversed(turns))[-60000:]
+            prompt = ("以下是当前会话历史：\n" + context + "\n\n当前用户消息：\n" if context else "") + turn.prompt
+            return f"{signal_block}\n\n{prompt}" if signal_block else prompt
+
+        private_history_prompt = None
+        public_history = history
+        if project_id:
+            # 旧项目轮次没有数据来源标记，按受保护历史处理。
+            public_history = [t for t in history if (t.metrics_json or {}).get("quality_private_context") is False]
+            if len(public_history) != len(history):
+                project = session.get(Project, project_id)
+                if project is not None and project_access(user, project).can_view:
+                    private_history_prompt = prompt_with_history(history)
+        prompt = prompt_with_history(public_history)
+        actor_id, preference_id = user.id, turn.model_preference_id
         depth = turn.deep_thinking
         turn.status = "running"
     try:
@@ -195,9 +207,12 @@ def execute_chat_turn(turn_id):
                                    project_id=project_id, preference_id=preference_id, deep_thinking=depth,
                                    system_prompt=_workbench_system_prompt(),
                                    all_projects=True, return_metadata=True,
-                                   purpose="chat_assistant")
+                                   purpose="chat_assistant", grant_quality_feedback=bool(project_id),
+                                   private_history_prompt=private_history_prompt)
         answer = output["text"] if isinstance(output, dict) else output
         metrics = {"model": output.get("model", {}), "provider_usage": output.get("provider_usage", {})} if isinstance(output, dict) else {}
+        if project_id and isinstance(output, dict) and "quality_private_context" in output:
+            metrics["quality_private_context"] = output["quality_private_context"]
         if isinstance(output, dict) and output.get("degraded"):
             # 没有 DSH 运行时时的降级回答：本地工具循环仍可查项目/文件。
             metrics["degraded"] = True

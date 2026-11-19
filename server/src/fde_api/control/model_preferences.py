@@ -206,6 +206,21 @@ def resolve_model_preference(session: Session, user_id: str, preference_id: str 
             "api_key": plaintext, "supports_tools": True}
 
 
+def is_private_selfhosted_model(model: dict[str, Any]) -> bool:
+    """Recognize the server-configured self-hosted slot within its private boundary."""
+    settings = current_app.config["SETTINGS"]
+    base_url = settings.ai_selfhosted_base_url.strip()
+    if not base_url or model.get("id") != "system-selfhosted" or model.get("base_url") != base_url:
+        return False
+    try:
+        # Reuse the deployed self-hosted URL validator. Its public-endpoint
+        # override configures routing; it is not customer data egress consent.
+        settings.model_copy(update={"ai_selfhosted_allow_public": False}).validate_selfhosted_provider()
+    except ValueError:
+        return False
+    return True
+
+
 def _provider_for_base_url(base_url: str) -> str:
     """Name the real provider behind the configured endpoint.
 

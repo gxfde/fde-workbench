@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, ROUND_HALF_UP
+from math import isfinite
 from zoneinfo import ZoneInfo
 from datetime import datetime, date
 from typing import Any
@@ -126,25 +127,33 @@ def _ledger_add(
 def _cast_value(value: str, to_type: str, params: dict[str, Any]) -> str | float:
     """cast 固定转换（17 号 §3.1）：失败抛 ``_RowReject``。"""
     if to_type == "decimal":
+        scale = params["scale"]
+        if scale is None:  # 计划校验目前接受显式 null
+            raise _RowReject("cast_failed")
         try:
             number = Decimal(value)
+            if not number.is_finite():
+                raise _RowReject("cast_failed")
+            quantum = Decimal(1).scaleb(-scale)
+            return str(number.quantize(quantum, rounding=_ROUNDING_MAP[params["rounding"]]))
         except (InvalidOperation, ValueError) as error:
             raise _RowReject("cast_failed") from error
-        scale = int(params["scale"])
-        return str(number.quantize(Decimal(1).scaleb(-scale), rounding=_ROUNDING_MAP[params["rounding"]]))
     if to_type == "integer":
         try:
             number = Decimal(value)
         except (InvalidOperation, ValueError) as error:
             raise _RowReject("cast_failed") from error
-        if number != number.to_integral_value():
+        if not number.is_finite() or number != number.to_integral_value():
             raise _RowReject("cast_failed")  # 小数字面量不静默截断
         return str(number.to_integral_value())
     if to_type == "number":
         try:
-            return float(Decimal(value))
+            number_float = float(Decimal(value))
         except (InvalidOperation, ValueError, OverflowError) as error:
             raise _RowReject("cast_failed") from error
+        if not isfinite(number_float):
+            raise _RowReject("cast_failed")
+        return number_float
     if to_type == "boolean":
         if value == "1":
             return "true"
@@ -236,11 +245,17 @@ def _apply_row_step(
         if _is_null(value):
             new_row[column] = None
         else:
+            text = str(value)
+            from_unit, to_unit = params["from_unit"], params["to_unit"]
             try:
-                converted = Decimal(str(value)) * _UNIT_FACTORS[(params["from_unit"], params["to_unit"])]
+                number = Decimal(text)
+                if from_unit == to_unit:
+                    new_row[column] = text  # 恒等换算保留原精度，不做乘法或展开指数
+                else:
+                    converted = number * _UNIT_FACTORS[(from_unit, to_unit)]
+                    new_row[column] = format(converted.normalize(), "f")
             except (InvalidOperation, ValueError, KeyError) as error:
                 raise _RowReject("cast_failed") from error
-            new_row[column] = format(converted.normalize(), "f")  # 去尾零且不落科学计数
         new_schema[column] = "decimal"
     elif op == "map_enum":
         column = params["column"]
@@ -263,8 +278,10 @@ def _apply_join(
     rows: list[tuple[int, dict[str, Any]]],
     schema: dict[str, str],
     tables: dict[str, list[dict[str, Any]]],
-) -> tuple[list[tuple[int, dict[str, Any]]], dict[str, str]]:
-    """受限 Join 固定实现（17 号 §3.2 编码期细化：产出=左行+right_columns 声明列）。"""
+    *,
+    max_output_rows: int,
+) -> tuple[list[tuple[int, dict[str, Any]]], dict[str, str]] | None:
+    """产出左行与 right_columns 声明列。超预算时返回 None，不交付部分行集。"""
     params = step["params"]
     right_table = params["right_table"]
     right_key = params["right_key"]
@@ -280,16 +297,26 @@ def _apply_join(
             raise _ContractViolation("unknown_right_column")
         if column in schema:
             raise _ContractViolation("duplicate_column")  # 声明即契约：冲突不静默改名
+    if right_rows and right_key not in right_rows[0]:
+        # 右表缺声明的键列＝契约违反（fail-fast）：否则右表全部键为空，
+        # 幸存左行被静默判为「无匹配」，产出全 null 右列（17 号 §3.2 声明即契约）。
+        raise _ContractViolation("unknown_right_column")
 
     index: dict[Any, list[dict[str, Any]]] = {}
     for right_row in right_rows:
-        index.setdefault(right_row.get(right_key), []).append(right_row)
+        key = right_row.get(right_key)
+        if _is_null(key):
+            continue  # 空键不参与连接：null 不等于 null（17 号 §3.1 空值口径）
+        index.setdefault(key, []).append(right_row)
 
     out: list[tuple[int, dict[str, Any]]] = []
     for row_index, row in rows:
-        matches = index.get(row.get(left_key), [])
+        left_value = row.get(left_key)
+        matches = [] if _is_null(left_value) else index.get(left_value, [])
         if len(matches) > 1 and cardinality == "one_to_one":
             raise _ContractViolation("cardinality_violation")
+        if len(out) + max(1, len(matches)) > max_output_rows:
+            return None
         if not matches:
             out.append((row_index, {**row, **{c: None for c in right_columns}}))
             continue
@@ -377,7 +404,10 @@ def execute_plan(
         if len(rejected) <= max_reject_rows:
             ledger.append({"row_index": row_index, "reason": reason, "column": column})
 
-    for step in plan.get("steps") or []:
+    output_budget_exhausted = False
+    steps_by_id = {step["id"]: step for step in plan["steps"]}
+    for step_id in report["dependency_graph"]["topological_order"]:
+        step = steps_by_id[step_id]
         op = str(step.get("op"))
         step_in = len(current)
         rejected_before = len(rejected)
@@ -420,7 +450,11 @@ def execute_plan(
                         _reject(row_index, "duplicate_key", "、".join(keys))
                 current = kept
             elif op == "join":
-                current, schema = _apply_join(step, current, schema, tables)
+                joined = _apply_join(step, current, schema, tables, max_output_rows=max_output_rows)
+                if joined is None:
+                    output_budget_exhausted = True
+                    break
+                current, schema = joined
             elif op == "assert_quality":
                 params = step["params"]
                 kind, column = str(params["kind"]), str(params["column"])
@@ -469,7 +503,7 @@ def execute_plan(
             }
         )
 
-    if len(current) > max_output_rows:
+    if output_budget_exhausted or len(current) > max_output_rows:
         return {
             "status": "budget_exhausted",
             "failure_reason": "max_output_rows",

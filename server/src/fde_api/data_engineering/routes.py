@@ -14,6 +14,14 @@ POST  /projects/<id>/transform-plans/<plan_id>/runs   提交隔离执行（WP3�
       files 版本锚输入；账本零行值原文；append-only）
 GET   /projects/<id>/transform-runs               执行记录清单
 GET   /projects/<id>/transform-runs/<run_id>      执行详情（守恒/账本/血缘/质量报告）
+GET   /projects/<id>/transform-runs/<run_id>/preview          样本预览受控窗口（WP4：
+      limit 封顶；样本性质 note 显式声明——预览≠完整断言，04 §3.2）
+GET   /projects/<id>/transform-runs/<run_id>/diff             行数去向对照（WP4：产出/
+      拒绝 reason 分组/溢出；质量条目单列 quality_flags；弱守恒口径）
+GET   /projects/<id>/transform-runs/<run_id>/lineage          两级血缘拼装（WP4：计划
+      DAG + 执行 per-step 统计；步序不一致如实标 steps_alignment=false）
+GET   /projects/<id>/transform-runs/<run_id>/quality-feedback 质量断言结构化反馈
+      （WP4：Agent/工程台可消费；零行值原文）
 
 **无 PATCH/DELETE**：画像/计划/执行记录均 append-only；关系候选无翻产通道（03 §77）。
 """
@@ -28,6 +36,9 @@ from fde_api.errors import error_response
 data_engineering_blueprint = Blueprint("data_engineering", __name__, url_prefix="/api/v1")
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 与 profiling.MAX_PROFILE_BYTES 对齐
+
+PREVIEW_DEFAULT_LIMIT = 20
+PREVIEW_MAX_LIMIT = 100
 
 
 @data_engineering_blueprint.errorhandler(service.DataEngineeringError)
@@ -158,6 +169,66 @@ def list_transform_runs(project_id):
 @require_auth
 def get_transform_run(project_id, run_id):
     payload = service.get_transform_run(
+        actor=g.current_user, project_id=project_id, run_id=run_id
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+def _preview_limit() -> int | None:
+    """解析 preview ``limit`` 查询参数：缺省=默认窗口；非整数或 <1 ⇒ None
+    （由调用方回 400）；超上限封顶 ``PREVIEW_MAX_LIMIT``。"""
+    raw = request.args.get("limit")
+    if raw is None or raw == "":
+        return PREVIEW_DEFAULT_LIMIT
+    try:
+        limit = int(raw)
+    except ValueError:
+        return None
+    if limit < 1:
+        return None
+    return min(limit, PREVIEW_MAX_LIMIT)
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs/<run_id>/preview")
+@require_auth
+def preview_transform_run(project_id, run_id):
+    """样本预览受控窗口（AF2-WP4 预览面）：产物行集 ``limit`` 封顶读法，
+    样本性质随 ``note`` 显式声明（预览＝早期检查，完整断言走全量统计件）。"""
+    limit = _preview_limit()
+    if limit is None:
+        return error_response("invalid_request", "limit 须为 ≥1 的整数。", 400)
+    payload = service.preview_transform_run(
+        actor=g.current_user, project_id=project_id, run_id=run_id, limit=limit
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs/<run_id>/diff")
+@require_auth
+def diff_transform_run(project_id, run_id):
+    """行数去向对照（AF2-WP4 差异面）：弱守恒口径呈现产出/拒绝/溢出去向，
+    质量条目单列 quality_flags。"""
+    payload = service.diff_transform_run(
+        actor=g.current_user, project_id=project_id, run_id=run_id
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs/<run_id>/lineage")
+@require_auth
+def lineage_transform_run(project_id, run_id):
+    """两级血缘拼装（AF2-WP4 血缘呈现）：计划 DAG + 执行 per-step 统计。"""
+    payload = service.lineage_transform_run(
+        actor=g.current_user, project_id=project_id, run_id=run_id
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs/<run_id>/quality-feedback")
+@require_auth
+def quality_feedback_transform_run(project_id, run_id):
+    """质量断言结构化反馈（AF2-WP4 反馈面）：Agent/工程台可消费；零行值原文。"""
+    payload = service.quality_feedback_transform_run(
         actor=g.current_user, project_id=project_id, run_id=run_id
     )
     return jsonify({"data": payload, "error": None}), 200

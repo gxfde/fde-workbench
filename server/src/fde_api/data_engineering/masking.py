@@ -88,3 +88,47 @@ def mask_sample_rows(
             masked[name] = mask_value(value, kind) if kind is not None else value
         masked_rows.append(masked)
     return masked_rows
+
+
+def mask_transform_output(
+    plan: dict[str, Any],
+    tables: dict[str, list[dict[str, Any]]],
+    rows: list[dict[str, Any]],
+    step_order: list[str],
+) -> list[dict[str, Any]]:
+    """Reuse WP1 classification and carry sensitive columns through select, rename and join."""
+    if not rows:
+        return []
+
+    def sensitive_columns(columns: set[str], source: list[dict[str, Any]]) -> set[str]:
+        return {
+            name for name in columns
+            if classify_column(name, [str(row.get(name, "")) for row in source]) is not None
+        }
+
+    source = tables[plan["source"]["table"]]
+    columns = {name for row in source for name in row}
+    sensitive = sensitive_columns(columns, source)
+    steps_by_id = {step["id"]: step for step in plan["steps"]}
+    for step_id in step_order:
+        step = steps_by_id[step_id]
+        params = step["params"]
+        if step["op"] == "select":
+            sensitive.intersection_update(params["columns"])
+        elif step["op"] == "rename":
+            mapping = params["mapping"]
+            sensitive = {mapping.get(name, name) for name in sensitive}
+            sensitive.update(sensitive_columns(set(mapping.values()), []))
+        elif step["op"] == "join":
+            sensitive.update(sensitive_columns(set(params.get("right_columns") or []), tables[params["right_table"]]))
+
+    output_columns = [column["name"] for column in plan["output"]["columns"]]
+    sensitive.update(sensitive_columns(set(output_columns), rows))
+    masked_rows = []
+    for row in rows:
+        masked = {}
+        for name in output_columns:
+            value = row.get(name)
+            masked[name] = "***" if name in sensitive and value is not None and value != "" else value
+        masked_rows.append(masked)
+    return masked_rows

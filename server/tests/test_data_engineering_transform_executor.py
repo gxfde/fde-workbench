@@ -126,6 +126,36 @@ def test_cast_decimal_rounding_modes() -> None:
         assert report["output_rows"][0]["defect_pct"] == expected, rounding
 
 
+def test_cast_decimal_rejects_nonfinite_and_out_of_precision_values() -> None:
+    plan = _plan(
+        steps=[{"id": "s1", "op": "cast", "params": {"column": "defect_pct", "to_type": "decimal", "scale": 2, "rounding": "half_up"}}],
+        output={"columns": [{"name": "defect_pct", "type": "decimal"}]},
+    )
+    report = execute_plan(plan, _rows([{**BASE_ROW, "defect_pct": value} for value in ("NaN", "Infinity", "1e30", "2.5")]))
+
+    assert report["status"] == "succeeded"
+    assert [row["defect_pct"] for row in report["output_rows"]] == ["2.50"]
+    assert report["reject_ledger"] == [
+        {"row_index": index, "reason": "cast_failed", "column": "defect_pct"} for index in range(3)
+    ]
+
+
+def test_cast_decimal_with_null_scale_records_cast_failed() -> None:
+    plan = _plan(
+        input={"columns": [{"name": "defect_pct", "type": "number"}]},
+        steps=[{"id": "s1", "op": "cast", "params": {"column": "defect_pct", "to_type": "decimal", "scale": None, "rounding": "half_up"}}],
+        output={"columns": [{"name": "defect_pct", "type": "decimal"}]},
+    )
+    assert validate_plan(plan)["valid"] is True
+
+    report = execute_plan(plan, _rows([{"defect_pct": "2.5"}]))
+
+    assert report["status"] == "succeeded"
+    assert report["output_rows"] == []
+    assert report["rejected_row_count"] == 1
+    assert report["reject_ledger"] == [{"row_index": 0, "reason": "cast_failed", "column": "defect_pct"}]
+
+
 def test_cast_integer_parses_and_rejects_non_integer() -> None:
     plan = _plan(
         steps=[{"id": "s1", "op": "cast", "params": {"column": "defect_pct", "to_type": "integer"}}],
@@ -142,6 +172,22 @@ def test_cast_integer_parses_and_rejects_non_integer() -> None:
     assert "cast_failed" in _reasons(bad)
     assert bad["output_rows"] == []
     assert bad["conservation"]["ok"] is True
+
+
+def test_cast_integer_and_number_reject_nonfinite_values() -> None:
+    for target in ("integer", "number"):
+        plan = _plan(
+            steps=[{"id": "s1", "op": "cast", "params": {"column": "defect_pct", "to_type": target}}],
+            output={"columns": [{"name": "defect_pct", "type": target}]},
+        )
+        values = ["Infinity", "NaN", "42"]
+        if target == "number":
+            values.insert(2, "1e500")
+        report = execute_plan(plan, _rows([{**BASE_ROW, "defect_pct": value} for value in values]))
+        assert report["status"] == "succeeded"
+        assert report["rejected_row_count"] == len(values) - 1
+        assert [row["defect_pct"] for row in report["output_rows"]] == ["42" if target == "integer" else 42.0]
+        assert set(_reasons(report)) == {"cast_failed"}
 
 
 def test_cast_boolean_from_integer() -> None:
@@ -194,6 +240,20 @@ def test_convert_unit_mm_to_m_exact_decimal() -> None:
 
     assert report["output_rows"] == [{"eq_id": "EQ-1", "length_mm": "1.5"}]  # 1500mm→1.5m，Decimal 精确
     assert report["output_columns"][1]["type"] == "decimal"
+
+
+def test_convert_unit_same_unit_is_identity() -> None:
+    plan = _plan(
+        input={"columns": [{"name": "length_mm", "type": "number"}]},
+        steps=[{"id": "s1", "op": "convert_unit", "params": {"column": "length_mm", "from_unit": "mm", "to_unit": "mm"}}],
+        output={"columns": [{"name": "length_mm", "type": "decimal"}]},
+    )
+    report = execute_plan(plan, _rows([{"length_mm": "1500.12345678901234567890123456780"}, {"length_mm": "bad"}]))
+
+    assert report["status"] == "succeeded"
+    assert report["output_rows"] == [{"length_mm": "1500.12345678901234567890123456780"}]
+    assert report["output_columns"] == [{"name": "length_mm", "type": "decimal"}]
+    assert report["reject_ledger"] == [{"row_index": 1, "reason": "cast_failed", "column": "length_mm"}]
 
 
 def test_map_enum_hit_unmapped_error_and_keep() -> None:
@@ -292,13 +352,74 @@ JOIN_TABLES = {
 
 def test_join_many_to_one_expands_and_left_join_null() -> None:
     plan = _join_plan("many_to_one")
-    report = execute_plan(plan, JOIN_TABLES)
+    report = execute_plan(plan, JOIN_TABLES, max_output_rows=3)
 
     assert report["status"] == "succeeded", report
     rows = report["output_rows"]
     assert [row["wo_id"] for row in rows] == ["WO-1", "WO-1", "WO-2"]
     assert rows[1]["defect_pct"] == "0.2"
     assert rows[2]["defect_pct"] is None  # 左 join：右列 null
+
+
+def test_join_intermediate_output_budget_preserves_completed_step_stats() -> None:
+    plan = _join_plan("many_to_one")
+    join = plan["steps"][0]
+    plan["steps"] = [
+        {"id": "quality", "op": "assert_quality", "params": {"kind": "not_null", "column": "eq_id"}},
+        {"id": "select", "op": "select", "params": {"columns": ["wo_id", "eq_id"]}, "depends_on": ["quality"]},
+        {**join, "depends_on": ["select"]},
+        {"id": "dedup", "op": "dedup", "params": {"keys": ["wo_id"]}, "depends_on": [join["id"]]},
+    ]
+    tables = {
+        **JOIN_TABLES,
+        "work_order": [*JOIN_TABLES["work_order"], {"wo_id": "WO-3", "eq_id": ""}, {"wo_id": "WO-4", "eq_id": ""}],
+    }
+
+    report = execute_plan(plan, tables, max_output_rows=2, max_reject_rows=1)
+
+    assert (report["status"], report["failure_reason"]) == ("budget_exhausted", "max_output_rows")
+    assert report["output_rows"] == []
+    assert report["output_row_count"] == 0
+    assert report["quality_report"] == {"quality": {"kind": "not_null", "column": "eq_id", "violations": 2}}
+    assert report["reject_ledger"] == [
+        {"row_index": 2, "reason": "quality_not_null", "column": "eq_id"},
+        {"row_index": 3, "reason": "quality_not_null", "column": "eq_id"},
+        {"row_index": 2, "reason": "null_policy", "column": "eq_id"},
+    ]
+    assert report["rejected_row_count"] == 2
+    assert report["overflow_count"] == 1
+    assert [node["step_id"] for node in report["lineage"]] == ["quality", "select"]
+    assert report["conservation"] == {"input_rows": 4, "output_rows": 0, "rejected_rows": 2, "overflow_count": 1, "ok": True}
+
+
+def test_join_declared_key_absent_in_right_table_fails_fast() -> None:
+    """右表缺声明的键列＝契约违反（fail-fast）：否则右表全部键为空，
+    幸存左行被误判为「无匹配」，静默产出全 null 右列（17 号 §3.2 声明即契约）。"""
+    plan = _join_plan("many_to_one")
+    tables = {**JOIN_TABLES, "equipment": [{"defect_pct": "0.1"}]}  # 右表无 eq_id 列
+
+    report = execute_plan(plan, tables)
+
+    assert report["status"] == "failed"
+    assert report["failure_reason"] == "unknown_right_column"
+    assert report["output_rows"] == []
+
+
+def test_join_null_keys_never_match() -> None:
+    """空键（None/空串＝null，17 号 §3.1）不参与连接：null 不等于 null——
+    否则空键左行会命中空键右行，产出虚假匹配行。"""
+    plan = _join_plan("many_to_one")
+    tables = {
+        "work_order": [{"wo_id": "WO-1", "eq_id": ""}, {"wo_id": "WO-2"}],
+        "equipment": [{"eq_id": "", "defect_pct": "0.9"}],
+    }
+
+    report = execute_plan(plan, tables)
+
+    assert report["status"] == "succeeded"
+    assert report["output_row_count"] == 2
+    assert [row["wo_id"] for row in report["output_rows"]] == ["WO-1", "WO-2"]
+    assert all(row["defect_pct"] is None for row in report["output_rows"])
 
 
 def test_join_one_to_one_violation_fails() -> None:
@@ -611,7 +732,7 @@ def test_submit_run_persists_and_responds(client, db_session, settings) -> None:
     assert payload["conservation"]["ok"] is True
     assert payload["input_anchor"]["file_version_id"] == version.id
     assert [node["step_id"] for node in payload["lineage"]] == ["s1"]
-    assert payload["output_rows"][0]["eq_id"] == "EQ-1"
+    assert payload["output_rows"] == []  # Row values are only available through the bounded preview.
 
     run_row = db_session.get(TransformRun, payload["id"])
     assert run_row is not None

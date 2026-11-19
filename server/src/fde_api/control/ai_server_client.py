@@ -17,8 +17,8 @@ from sqlalchemy import select
 
 from fde_api.auth.models import User
 from fde_api.control.dsh_runtime import DSHRuntimeError, dsh_runtime
-from fde_api.control.mcp_gateway import issue_mcp_token
-from fde_api.control.model_preferences import resolve_model_preference
+from fde_api.control.mcp_gateway import DATA_QUALITY_FEEDBACK_TOOL, issue_mcp_token
+from fde_api.control.model_preferences import is_private_selfhosted_model, resolve_model_preference
 from fde_api.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -196,6 +196,11 @@ def _audit_execution(*, request_id: str, actor_id: str | None, purpose: str,
         logger.warning("AI execution audit dispatch failed request_id=%s", request_id, exc_info=True)
 
 
+def _reject_private_redirect(response: requests.Response) -> None:
+    if 300 <= response.status_code < 400:
+        raise DSHRuntimeError("ai_redirect_rejected", "私有 AI 请求不允许重定向。", retryable=False)
+
+
 def direct_provider_completion(
     *,
     model: dict[str, Any],
@@ -204,6 +209,7 @@ def direct_provider_completion(
     max_tokens: int = 16384,
     timeout_seconds: int = 300,
     session: Any | None = None,
+    private_context: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Call an OpenAI-compatible provider directly, without the DSH runtime.
 
@@ -241,12 +247,15 @@ def direct_provider_completion(
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": model_name, "messages": messages, "max_tokens": max_tokens},
             timeout=timeout_seconds,
+            allow_redirects=not private_context,
         )
     except requests.Timeout as error:
         raise DSHRuntimeError("ai_timeout", "AI 请求超时，请稍后重试。", retryable=True) from error
     except requests.RequestException as error:
         raise DSHRuntimeError("ai_unavailable", "暂时无法连接 AI 服务。", retryable=True) from error
 
+    if private_context:
+        _reject_private_redirect(response)
     if response.status_code == 429:
         raise DSHRuntimeError("ai_rate_limited", "AI 服务额度或频率受限，请稍后重试。", retryable=True)
     if response.status_code in (401, 403):
@@ -324,7 +333,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                       max_tokens: int = 16384, model_override: dict | None = None,
                       capabilities: list[str] | None = None, deep_thinking: bool | None = None, all_projects: bool = False,
                       return_metadata: bool = False, purpose: str,
-                      prompt_version: str | None = None) -> str | dict:
+                      prompt_version: str | None = None, grant_quality_feedback: bool = False,
+                      private_history_prompt: str | None = None) -> str | dict:
     identifier = execution_id or str(uuid4())
     # N2 仪表化（G-09）：指纹＝指令源文本 sha256（system_prompt 优先，否则
     # prompt 本身）；提示词正文绝不落库。模板身份 → 输出可按模板归因。
@@ -361,6 +371,11 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             from fde_api.control.service import ControlServiceError
             raise ControlServiceError("thinking_unsupported", "当前模型暂不支持手动深度思考，请关闭开关或选择 DeepSeek 模型。", 400)
         use_tools = bool(use_tools and model.get("supports_tools", True))
+        private_model = (grant_quality_feedback or private_history_prompt is not None) and is_private_selfhosted_model(model)
+        private_context = private_model and private_history_prompt is not None
+        if private_model and private_history_prompt is not None:
+            prompt = private_history_prompt
+        grant_quality_feedback = bool(grant_quality_feedback and project_id and use_tools and private_model)
         # CR-006 统一预算门：``ai_monthly_token_budget`` 超限即拒，且不发起
         # 任何 DSH/供应商请求。与 deepseek 直连腿同语义（预算 0=不限额；设施
         # 故障 fail-open）。此门带显式 user_id——后台任务（workflow skill
@@ -378,7 +393,12 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
         except Exception:  # noqa: BLE001 - 预算设施故障不阻塞业务（fail-open）
             logger.warning("AI budget gate failed open execution_id=%s", identifier, exc_info=True)
         # 工具只能经由 DSH 转发；没有可用运行时时不签发 MCP token。
-        token = None if budget_blocked else (issue_mcp_token(user, project_id=None if all_projects else project_id, capabilities=capabilities, execution_id=identifier) if (use_tools and dsh_usable) else None)
+        token = None
+        if not budget_blocked and use_tools and dsh_usable:
+            token = issue_mcp_token(
+                user, project_id=project_id, capabilities=capabilities, execution_id=identifier,
+                all_projects=all_projects, grant_quality_feedback=grant_quality_feedback,
+            )
     if budget_blocked:
         from fde_api.ai.auditing import audit_budget_blocked
 
@@ -396,8 +416,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             user_id=user_id, project_id=project_id, execution_id=identifier,
             use_tools=use_tools, purpose=purpose,
             prompt_version=prompt_version, prompt_fingerprint=fingerprint,
-            capabilities=capabilities,
-            context_payload_json=overlay_payload)
+            capabilities=capabilities, grant_quality_feedback=grant_quality_feedback,
+            private_context=private_context, context_payload_json=overlay_payload)
     body = {"schema_version": "fde-dsh-v1", "execution_id": identifier,
             "actor": {"user_id": user_id}, "scope": {"project_id": project_id},
             "agent_profile": "fde-assistant" if use_tools else "fde-structured",
@@ -409,9 +429,12 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
     if system_prompt:
         body["system_prompt"] = system_prompt
     elapsed_ms = int((time.monotonic() - started) * 1000)
+    protected_dispatch = private_context or grant_quality_feedback
     try:
         response = runtime._request("POST", "/v1/executions", json=body, timeout=settings.dsh_timeout_seconds,
-                                    headers={"Idempotency-Key": identifier})
+                                    headers={"Idempotency-Key": identifier}, allow_redirects=not protected_dispatch)
+        if protected_dispatch:
+            _reject_private_redirect(response)
     except DSHRuntimeError as error:
         if error.code not in DEGRADABLE_DSH_CODES:
             _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
@@ -429,8 +452,8 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
             user_id=user_id, project_id=project_id, execution_id=identifier,
             use_tools=use_tools, purpose=purpose,
             prompt_version=prompt_version, prompt_fingerprint=fingerprint,
-            capabilities=capabilities,
-            context_payload_json=overlay_payload)
+            capabilities=capabilities, grant_quality_feedback=grant_quality_feedback,
+            private_context=private_context, context_payload_json=overlay_payload)
     if response.status_code >= 400:
         service_error = runtime._service_error(response.status_code)
         _audit_execution(request_id=identifier, actor_id=user_id, purpose=purpose,
@@ -462,7 +485,7 @@ def execute_ai_prompt(*, user_id: str, prompt: str, execution_id: str | None = N
                      context_payload_json=overlay_payload)
     if return_metadata:
         return {"text": text, "model": {"provider": model.get("provider", ""), "name": model.get("model", "")},
-                "provider_usage": provider_usage}
+                "provider_usage": provider_usage, "quality_private_context": protected_dispatch}
     return text
 
 
@@ -474,6 +497,8 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                             prompt_version: str | None = None,
                             prompt_fingerprint: str | None = None,
                             capabilities: list[str] | None = None,
+                            grant_quality_feedback: bool = False,
+                            private_context: bool = False,
                             context_payload_json: dict[str, Any] | None = None) -> str | dict:
     """Run the direct provider call and shape it like a normal AI Server result.
 
@@ -488,6 +513,10 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
     tool_trace: list[dict[str, Any]] = []
     if use_tools and user_id:
         from fde_api.control.ai_tool_loop import READ_ONLY_TOOLS, direct_tool_completion
+
+        allowed_tools = READ_ONLY_TOOLS
+        if grant_quality_feedback:
+            allowed_tools = allowed_tools | {DATA_QUALITY_FEEDBACK_TOOL}
         with db.session() as session:
             user = session.get(User, user_id)
             if user is not None:
@@ -499,9 +528,9 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                         system_prompt=system_prompt, max_tokens=max_tokens,
                         timeout_seconds=timeout_seconds,
                         capabilities=capabilities,
-                        # 聊天降级腿保持只读面（AF1 提议档仅工程循环显式启用，
-                        # 见 11 号 WP1 第二批——默认白名单扩张不静默作用于本路径）
-                        allowed_tools=sorted(READ_ONLY_TOOLS))
+                        # 兼容聊天只读档，AF1 提议档由工程循环单独启用。
+                        allowed_tools=allowed_tools, grant_quality_feedback=grant_quality_feedback,
+                        private_context=private_context)
                 except DSHRuntimeError as error:
                     _audit_execution(request_id=request_identifier, actor_id=user_id,
                                      purpose=purpose, model=model_name, used_fallback=True,
@@ -527,13 +556,15 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
                     "degraded": True,
                     "degraded_reason": reason,
                     "tools_available": True,
+                    "quality_private_context": private_context or grant_quality_feedback,
                     "tool_trace": tool_trace,
                 }
     started = time.monotonic()
     try:
         text, usage = direct_provider_completion(
             model=model, prompt=prompt, system_prompt=system_prompt,
-            max_tokens=max_tokens, timeout_seconds=timeout_seconds)
+            max_tokens=max_tokens, timeout_seconds=timeout_seconds,
+            private_context=private_context)
     except DSHRuntimeError as error:
         _audit_execution(request_id=request_identifier, actor_id=user_id,
                          purpose=purpose, model=model_name, used_fallback=True,
@@ -559,6 +590,7 @@ def _degraded_direct_result(*, model: dict[str, Any], prompt: str, system_prompt
         "degraded": True,
         "degraded_reason": reason,
         "tools_available": False,
+        "quality_private_context": private_context,
         "tool_trace": tool_trace,
     }
 

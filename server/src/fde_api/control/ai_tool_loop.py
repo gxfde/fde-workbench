@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.auth.models import User
 from fde_api.control.access import capabilities_for_level, effective_ai_access
-from fde_api.control.mcp_gateway import TOOLS, call_tool
+from fde_api.control.mcp_gateway import DATA_QUALITY_FEEDBACK_TOOL, TOOLS, call_tool, tool_is_granted
 from fde_api.control.payload_audit import MAX_AUDIT_PAYLOAD_BYTES, audit_payload
 from fde_api.control.service import ControlServiceError
 from fde_api.extensions import db
@@ -81,13 +81,13 @@ READ_ONLY_TOOLS = frozenset({
     "lcsc_runs_read",
 })
 
-# 提议档：草稿/校验类（见模块 docstring AF1 提议档注）；与只读面并集为循环白名单。
+# 提议档：草稿/校验类（见模块 docstring AF1 提议档注）。
 PROPOSE_TIER_TOOLS = frozenset({
     "ontology_logic_run",
     "ontology_dry_validate",
     "ontology_action_propose",
 })
-LOOP_TOOL_WHITELIST = READ_ONLY_TOOLS | PROPOSE_TIER_TOOLS
+LOOP_TOOL_WHITELIST = READ_ONLY_TOOLS | PROPOSE_TIER_TOOLS | {DATA_QUALITY_FEEDBACK_TOOL}
 
 
 def _permitted_loop_tools(
@@ -103,19 +103,21 @@ def tool_definitions(
     allowed: list[str] | set[str],
     *,
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
+    quality_feedback_project_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build the OpenAI-compatible `tools` array for the loop whitelist (read face + propose tier)."""
     permitted_tools = _permitted_loop_tools(allowed_tools)
+    claims = {"quality_feedback_project_id": quality_feedback_project_id}
     definitions: list[dict[str, Any]] = []
     for name, entry in TOOLS.items():
-        description, capability, properties, _, _ = entry
-        if name not in permitted_tools:
-            continue
-        if capability and capability not in allowed:
+        description, _, properties, _, _ = entry
+        if name not in permitted_tools or not tool_is_granted(name, allowed, claims):
             continue
         schema: dict[str, Any] = {"type": "object", "properties": properties or {}}
         required = [key for key, value in (properties or {}).items() if isinstance(value, dict) and value.get("required")]
-        if required:
+        if name == DATA_QUALITY_FEEDBACK_TOOL:
+            schema.update(required=["run_id"], additionalProperties=False)
+        elif required:
             schema["required"] = required
         definitions.append({
             "type": "function",
@@ -203,7 +205,7 @@ def _run_tools(*, user: User, claims: dict[str, Any], allowed: list[str],
 
 def _force_final_answer(*, http, headers: dict[str, str], base_url: str, model_name: str,
                         messages: list[dict[str, Any]], max_tokens: int,
-                        timeout_seconds: int) -> tuple[str, dict[str, Any] | None]:
+                        timeout_seconds: int, private_context: bool) -> tuple[str, dict[str, Any] | None]:
     """Ask the model for a final answer with the tools withdrawn.
 
     Used when the tool-round budget is spent: the model is mid-thought and
@@ -216,13 +218,17 @@ def _force_final_answer(*, http, headers: dict[str, str], base_url: str, model_n
         "role": "user",
         "content": "不要再调用工具。请根据上面的查询结果，直接给出最终答案。",
     })
+    from fde_api.control.ai_server_client import _reject_private_redirect
+
     try:
         response = http.post(f"{base_url}/chat/completions", headers=headers,
                              json={"model": model_name, "messages": conversation,
                                    "max_tokens": max_tokens},
-                             timeout=timeout_seconds)
+                             timeout=timeout_seconds, allow_redirects=not private_context)
     except (requests.Timeout, requests.RequestException):
         return "", None
+    if private_context:
+        _reject_private_redirect(response)
     if response.status_code >= 400:
         return "", None
     try:
@@ -259,6 +265,8 @@ def direct_tool_completion(
     session: Any | None = None,
     capabilities: list[str] | tuple[str, ...] | None = None,
     allowed_tools: list[str] | tuple[str, ...] | set[str] | frozenset[str] | None = None,
+    grant_quality_feedback: bool = False,
+    private_context: bool = False,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
     """Call the provider with tools and run the tool loop locally.
 
@@ -270,7 +278,7 @@ def direct_tool_completion(
     实测推理模型的思考长度随授予预算增长，加码只会更慢更易触顶（见
     ``ai_server_client`` 文件头注释）。
     """
-    from fde_api.control.ai_server_client import effective_max_tokens, _reasoning_extra_pattern
+    from fde_api.control.ai_server_client import _reasoning_extra_pattern, _reject_private_redirect, effective_max_tokens
     from fde_api.control.dsh_runtime import DSHRuntimeError
 
     base_url = str(model.get("base_url") or "").rstrip("/")
@@ -286,8 +294,17 @@ def direct_tool_completion(
     if capabilities is not None:
         requested = {str(item) for item in capabilities}
         allowed = [item for item in allowed if item in requested]
-    definitions = tool_definitions(allowed, allowed_tools=allowed_tools)
+    quality_feedback_project_id = project_id if grant_quality_feedback else None
+    definitions = tool_definitions(
+        allowed, allowed_tools=allowed_tools, quality_feedback_project_id=quality_feedback_project_id,
+    )
+    # Every later request replays this turn, including any quality tool result.
+    private_context = private_context or any(
+        item["function"]["name"] == DATA_QUALITY_FEEDBACK_TOOL for item in definitions
+    )
     claims = _claims_for(user, project_id=project_id, execution_id=execution_id, allowed=allowed)
+    if quality_feedback_project_id:
+        claims["quality_feedback_project_id"] = quality_feedback_project_id
 
     messages: list[dict[str, Any]] = []
     if system_prompt:
@@ -319,12 +336,15 @@ def direct_tool_completion(
                 body["tool_choice"] = "auto"
             try:
                 response = http.post(f"{base_url}/chat/completions", headers=headers,
-                                     json=body, timeout=timeout_seconds)
+                                     json=body, timeout=timeout_seconds,
+                                     allow_redirects=not private_context)
             except requests.Timeout as error:
                 raise DSHRuntimeError("ai_timeout", "AI 请求超时，请稍后重试。", retryable=True) from error
             except requests.RequestException as error:
                 raise DSHRuntimeError("ai_unavailable", "暂时无法连接 AI 服务。", retryable=True) from error
 
+            if private_context:
+                _reject_private_redirect(response)
             if response.status_code == 429:
                 raise DSHRuntimeError("ai_rate_limited", "AI 服务额度或频率受限，请稍后重试。", retryable=True)
             if response.status_code in (401, 403):
@@ -364,7 +384,8 @@ def direct_tool_completion(
                 # commit to an answer instead of announcing the next lookup.
                 final_text, final_usage = _force_final_answer(
                     http=http, headers=headers, base_url=base_url, model_name=model_name,
-                    messages=messages, max_tokens=max_tokens, timeout_seconds=timeout_seconds)
+                    messages=messages, max_tokens=max_tokens, timeout_seconds=timeout_seconds,
+                    private_context=private_context)
                 if final_usage:
                     usage_calls.append(final_usage)
                 # If the forced call failed or came back empty, keep the
