@@ -150,6 +150,23 @@ def _create_scenario(operator, case_code: str = "CASE-RUNNER-001") -> dict:
     return response.get_json()["data"]
 
 
+def _scenario_payload_with_facts(case_code: str, facts: list[dict]) -> dict:
+    """同 ``_scenario_payload``，但替换隐藏事实集（白问轮取证用的 4 事实场景）。"""
+    payload = _scenario_payload(case_code)
+    payload["content"]["hidden"]["facts"] = facts
+    return payload
+
+
+def _fact(fact_id: str, keywords: list[str], stage: str = "interview") -> dict:
+    return {
+        "fact_id": fact_id,
+        "text": f"{fact_id} 的事实正文",
+        "category": "knowledge",
+        "disclosure_stage": stage,
+        "probe_keywords": keywords,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 1. 工具白名单
 # ---------------------------------------------------------------------------
@@ -317,6 +334,131 @@ def test_pending_probe_questions_withdraw_disclosed_directions():
     assert _pending_probe_questions(questions, set()) == questions
 
 
+# ---------------------------------------------------------------------------
+# 3b. 白问轮收口：访谈轮数按可披露事实数动态收口（2026-11-19 蔡工拍板）
+# ---------------------------------------------------------------------------
+
+
+def test_interview_disclosable_fact_count_excludes_stage_blocked_and_keywordless():
+    """可披露事实数＝「阶段可披露」且「带探针关键词」的事实数。
+
+    真机取证（2026-11-19 制造行业 25 场景 × 150 轮）：白问 75 轮（50%）
+    ＝事实池挖尽 65 ＋ 阶段闸拦 10，**零真缺陷面**；事实提取率 82/82＝100%。
+    """
+    from fde_api.simulation.runner import _interview_disclosable_fact_count
+
+    view = {
+        "hidden": {
+            "facts": [
+                _fact("R-F1", ["记录", "维修"]),
+                _fact("R-F2", ["型号"]),
+                _fact("R-F3", ["预算"], stage="implementation"),  # 阶段闸拦
+                {"fact_id": "R-F4", "text": "无关键词事实", "category": "knowledge"},
+            ]
+        }
+    }
+
+    assert _interview_disclosable_fact_count(view) == 2
+
+
+def test_effective_interview_rounds_caps_by_disclosable_facts():
+    """有效轮数＝min(配置预算, 可披露事实数 + 1)，且恒 ≥ 1。"""
+    from fde_api.simulation.runner import _effective_interview_rounds
+
+    # 3 条可披露事实 + 配置 6 轮 ⇒ 4 轮
+    assert (
+        _effective_interview_rounds(configured_rounds=6, disclosable_facts=3) == 4
+    )
+    # 配置预算更小 ⇒ 以配置为准（配置仍是上限）
+    assert (
+        _effective_interview_rounds(configured_rounds=2, disclosable_facts=3) == 2
+    )
+    # 事实池大于预算 ⇒ 以配置为准（不放大）
+    assert (
+        _effective_interview_rounds(configured_rounds=6, disclosable_facts=12) == 6
+    )
+    # 零可披露事实 ⇒ 仍留 1 轮泛问（不搞零轮访谈）
+    assert (
+        _effective_interview_rounds(configured_rounds=6, disclosable_facts=0) == 1
+    )
+    # 升级披露路径再留 escalate_after 轮
+    assert (
+        _effective_interview_rounds(
+            configured_rounds=6, disclosable_facts=3, escalate_after=2
+        )
+        == 6
+    )
+
+
+def test_probe_questions_drop_stage_blocked_directions():
+    """阶段闸拦的事实方向不进候选问法（问了也白问：访谈是唯一交互位置）。
+
+    真机取证：白问 75 轮里 **10 轮**＝``stage_blocked``（问了阶段闸拦的事实）。
+    """
+    from fde_api.simulation.runner import _build_probe_questions
+
+    view = {
+        "hidden": {
+            "facts": [
+                _fact("R-F1", ["记录"]),
+                _fact("R-F3", ["预算"], stage="implementation"),
+            ]
+        }
+    }
+
+    questions = _build_probe_questions(view)
+
+    assert [item["fact_id"] for item in questions if item.get("targeted")] == ["R-F1"]
+    assert any(not item.get("targeted") for item in questions), "泛问项恒保留"
+
+
+def test_mock_run_uses_dynamic_round_budget(operator, db_session):
+    """端到端：4 事实场景（3 可披露 ＋ 1 阶段闸拦）⇒ 只问 4 轮，闸拦方向从不问。
+
+    真机取证口径：可披露 3 条 ⇒ 有效轮数＝min(6, 3+1)=4（原为固定 6 轮）。
+    """
+    payload = _scenario_payload_with_facts(
+        "CASE-RUNNER-BUDGET",
+        [
+            _fact("R-F1", ["记录", "维修"]),
+            _fact("R-F2", ["型号", "手册"]),
+            _fact("R-F3", ["台账"]),
+            _fact("R-F4", ["预算"], stage="implementation"),
+        ],
+    )
+    created = operator.post("/api/v1/simulation/scenarios", json=payload)
+    assert created.status_code == 201, created.get_json()
+    scenario = created.get_json()["data"]
+
+    run = _run_once(operator, scenario, seed=13)
+
+    assert run["status"] == "completed"
+    assert run["cost"]["rounds"] == 4, run["cost"]
+    db_session.rollback()
+    traces = list(
+        db_session.scalars(
+            select(SimulationTrace)
+            .where(SimulationTrace.run_id == run["id"])
+            .order_by(SimulationTrace.seq)
+        )
+    )
+    budget = [
+        item for item in traces if item.event_type == "interview_round_budget"
+    ]
+    assert len(budget) == 1
+    assert budget[0].payload_json["configured_max_rounds"] == 6
+    assert budget[0].payload_json["disclosable_facts"] == 3
+    assert budget[0].payload_json["effective_max_rounds"] == 4
+    asked = [
+        str(item.payload_json.get("text") or "")
+        for item in traces
+        if item.event_type == "actor_turn"
+        and (item.payload_json or {}).get("role") == "fde_consultant"
+    ]
+    assert asked, "访谈轮次未落痕"
+    assert not any("预算" in text for text in asked), "阶段闸拦的方向不该被问"
+
+
 def test_a_mock_run_completes_and_records_every_phase(operator, db_session):
     scenario = _create_scenario(operator)
 
@@ -337,13 +479,29 @@ def test_a_mock_run_completes_and_records_every_phase(operator, db_session):
 
 
 def test_deeper_interview_discloses_more_and_produces_more(operator, db_session):
-    scenario = _create_scenario(operator)
+    """「问得深 ↔ 知道得多 ↔ 产出更全」链路（mock 模式的刻意设计）。
+
+    ★口径（2026-11-19 蔡工拍板后）：``max_rounds`` 由「固定轮数」改为
+    **轮数上限**——有效轮数＝min(配置, 可披露事实数 + 1)。本例 3 条可披露
+    事实 ⇒ 有效轮数 4（配置 4 与 6 都被收口到 4）。
+    """
+    payload = _scenario_payload_with_facts(
+        "CASE-RUNNER-DEPTH",
+        [
+            _fact("R-F1", ["记录", "维修"]),
+            _fact("R-F2", ["型号", "手册"]),
+            _fact("R-F3", ["台账"]),
+        ],
+    )
+    created = operator.post("/api/v1/simulation/scenarios", json=payload)
+    assert created.status_code == 201, created.get_json()
+    scenario = created.get_json()["data"]
 
     shallow = _run_once(operator, scenario, max_rounds=4, probe_quality=0.0, seed=7)
     deep = _run_once(operator, scenario, max_rounds=6, probe_quality=1.0, seed=7)
 
     assert shallow["cost"]["rounds"] == 4
-    assert deep["cost"]["rounds"] == 6
+    assert deep["cost"]["rounds"] == 4
     db_session.rollback()
     deep_facts = len(
         list(
@@ -365,6 +523,7 @@ def test_deeper_interview_discloses_more_and_produces_more(operator, db_session)
             )
         )
     )
+    assert shallow_facts == 0, "泛问不该披露任何事实"
     assert deep_facts > shallow_facts
 
 

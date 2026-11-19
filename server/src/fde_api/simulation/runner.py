@@ -52,13 +52,27 @@ class SimulationRunnerError(Exception):
 
 
 def _build_probe_questions(customer_view: dict[str, Any]) -> list[dict[str, Any]]:
-    """由客户视图生成候选问法（**只用关键词**，不泄漏事实正文）。"""
+    """由客户视图生成候选问法（**只用关键词**，不泄漏事实正文）。
+
+    **只收「访谈阶段可披露」的事实方向**（``disclosure_stage`` ∈
+    ``INTERVIEW_STAGES``）：阶段闸拦下的事实方向问了也白问——客户在访谈阶段
+    不能披露它，而访谈是全流程**唯一**与客户交互的位置（``customer.respond``
+    只有一处调用点）⇒ 该事实在本 run 内**永远不会被披露** ⇒ 撤下方向是
+    **无损**的。
+
+    真机证据（2026-11-19 制造行业 25 场景 × 150 轮追问归因）：白问 75 轮
+    （50%）里 **10 轮**属于「问了阶段闸拦的事实」（``stage_blocked``）⇒
+    纯浪费轮次预算；另有 65 轮属于「事实池已挖尽」（``exhausted``）。
+    """
     hidden = customer_view.get("hidden")
     facts = hidden.get("facts") if isinstance(hidden, dict) else None
     questions: list[dict[str, Any]] = []
     if isinstance(facts, list):
         for fact in facts:
             if not isinstance(fact, dict):
+                continue
+            stage = str(fact.get("disclosure_stage") or "interview")
+            if stage not in INTERVIEW_STAGES:
                 continue
             keywords = [
                 str(kw).strip()
@@ -73,10 +87,57 @@ def _build_probe_questions(customer_view: dict[str, Any]) -> list[dict[str, Any]
                     "fact_id": str(fact.get("fact_id") or ""),
                     "keywords": keywords,
                     "targeted": True,
+                    "disclosure_stage": stage,
                 }
             )
     questions.append({"question": GENERIC_PROBE, "fact_id": None, "keywords": [], "targeted": False})
     return questions
+
+
+def _interview_disclosable_fact_count(customer_view: dict[str, Any]) -> int:
+    """访谈阶段「阶段可披露且带探针关键词」的事实数（白问轮的结构性上限）。
+
+    真机证据（2026-11-19 制造行业 25 场景 × 150 轮追问归因）：追问轮 150／
+    命中 75／白问 75（50.0%），白问归因＝**事实池已挖尽 65 ＋ 阶段闸拦 10**，
+    **零 miss、零 repeat_hit**；**事实提取率 82/82＝100%**（每个可披露事实在
+    每个 run 都被挖出）。⇒ 剩余白问轮**不携带任何信息**，只烧 token 与时延；
+    结构性白问下限＝配置轮数 − 可披露事实数。
+    """
+    hidden = customer_view.get("hidden")
+    facts = hidden.get("facts") if isinstance(hidden, dict) else None
+    if not isinstance(facts, list):
+        return 0
+    count = 0
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+        stage = str(fact.get("disclosure_stage") or "interview")
+        if stage not in INTERVIEW_STAGES:
+            continue
+        keywords = [str(kw).strip() for kw in (fact.get("probe_keywords") or []) if str(kw).strip()]
+        if not keywords:
+            continue
+        count += 1
+    return count
+
+
+def _effective_interview_rounds(
+    *, configured_rounds: int, disclosable_facts: int, escalate_after: int = 0
+) -> int:
+    """访谈轮数上限＝min(配置预算, 可披露事实数 + 1)。
+
+    - 「+1」＝留一轮余量（同一问可命中多个方向，也给泛问留位置）；
+    - 升级披露路径（``escalate_after``>0）最多再吃 ``escalate_after`` 轮；
+    - 可披露事实为 0 时仍留 1 轮（泛问一次）——**不搞零轮访谈**。
+
+    口径变更（2026-11-19 蔡工拍板）：``max_rounds`` 由「固定轮数」改为
+    **轮数上限**——白问轮是纯浪费（见 ``_interview_disclosable_fact_count``
+    的取证），访谈轮数应随事实池收缩。
+    """
+    budget = disclosable_facts + 1
+    if escalate_after > 0:
+        budget += escalate_after
+    return max(1, min(configured_rounds, budget))
 
 
 def _pending_probe_questions(
@@ -201,6 +262,24 @@ def run_simulation(run_id: str) -> dict[str, Any]:
         # base_ctx ⇒ disclosed 恒空的失真修正）＋history 累积对话；mock 忽略
         # 新键 ⇒ 零回归。
         max_rounds = int(config.get("max_rounds") or 6)
+        disclosable_facts = _interview_disclosable_fact_count(customer_view)
+        effective_rounds = _effective_interview_rounds(
+            configured_rounds=max_rounds,
+            disclosable_facts=disclosable_facts,
+            escalate_after=escalate_after,
+        )
+        trace.record(
+            phase="interview",
+            event_type="interview_round_budget",
+            actor_role="fde_consultant",
+            payload={
+                "configured_max_rounds": max_rounds,
+                "disclosable_facts": disclosable_facts,
+                "effective_max_rounds": effective_rounds,
+                "escalate_after": escalate_after,
+            },
+        )
+        max_rounds = effective_rounds
         history: list[dict[str, Any]] = []
         for round_index in range(1, max_rounds + 1):
             round_ctx = dataclasses.replace(
