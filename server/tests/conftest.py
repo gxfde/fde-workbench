@@ -671,6 +671,9 @@ def db_session(app) -> Session:
         # AF2-WP1：资料画像报告行。project_id/created_by 均 **FK RESTRICT**
         # ——必须先于 projects/users 清理（AF2 data_engineering 域）。
         __import__("fde_api.data_engineering.models", fromlist=["DataProfile"]).DataProfile,
+        # AF2-WP3：隔离执行记录行。plan_id→transform_plans（**FK RESTRICT**）
+        # ——必须先于 TransformPlan/projects/users 清理（AF2 data_engineering 域）。
+        __import__("fde_api.data_engineering.models", fromlist=["TransformRun"]).TransformRun,
         # AF2-WP2：类型化转换计划行。同上 **FK RESTRICT** 双外键——先于
         # projects/users 清理（AF2 data_engineering 域）。
         __import__("fde_api.data_engineering.models", fromlist=["TransformPlan"]).TransformPlan,

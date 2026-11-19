@@ -46,7 +46,7 @@ import pytest
 from fde_api.agents.models import AgentArtifact, AgentRegistry, AgentRun
 from fde_api.auth.tokens import issue_access_token
 from fde_api.control.chat import AIConversation
-from fde_api.data_engineering.models import DataProfile, TransformPlan
+from fde_api.data_engineering.models import DataProfile, TransformPlan, TransformRun
 from fde_api.research.models import (
     ProjectResearchExport,
     ProjectResearchForm,
@@ -128,6 +128,8 @@ ROUTES = {
     ("GET", "/api/v1/projects/<project_id>/test-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/test-plans",
     ("GET", "/api/v1/projects/<project_id>/transform-plans"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans",
     ("GET", "/api/v1/projects/<project_id>/transform-plans/<plan_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-plans/{w['plan_b'].id}",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs",
+    ("GET", "/api/v1/projects/<project_id>/transform-runs/<run_id>"): lambda w: f"/api/v1/projects/{w['project_b'].id}/transform-runs/{w['run_b'].id}",
     ("GET", "/api/v1/projects/<project_id>/workflow-runs"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflow-runs",
     ("GET", "/api/v1/projects/<project_id>/workflows"): lambda w: f"/api/v1/projects/{w['project_b'].id}/workflows",
 }
@@ -955,6 +957,28 @@ def m8_world(db_session):
         created_by_user_id=user_b.id,
     )
     db_session.add(plan_b)
+    db_session.flush()  # plan_b.id 落定（run_b.plan_id FK 引用需真实 id）
+
+    # AF2-WP3：隔离执行记录行（B 项目资产——爬扫面新成员的阳性对照资源）
+    run_b = TransformRun(
+        project_id=project_b.id,
+        plan_id=plan_b.id,
+        plan_version="af2-wp2-v1",
+        idempotency_key=f"m8-run-{uuid4().hex}",
+        status="succeeded",
+        input_anchor_json={"kind": "file_version", "file_version_id": str(uuid4())},
+        output_rows_json=[{"eq_id": "EQ-1"}],
+        output_row_count=1,
+        output_columns_json=[{"name": "eq_id", "type": "string"}],
+        reject_ledger_json=[],
+        rejected_row_count=0,
+        overflow_count=0,
+        quality_report_json={},
+        lineage_json=[{"step_id": "s1", "op": "select", "input_rows": 1, "output_rows": 1, "rejected_rows": 0}],
+        conservation_json={"input_rows": 1, "output_rows": 1, "rejected_rows": 0, "overflow_count": 0, "ok": True},
+        created_by_user_id=user_b.id,
+    )
+    db_session.add(run_b)
 
     action_id = uuid4().hex + uuid4().hex
     db_session.add(
@@ -991,6 +1015,7 @@ def m8_world(db_session):
         "conversation": conversation,
         "profile_b": profile_b,
         "plan_b": plan_b,
+        "run_b": run_b,
         "action_id": action_id,
     }
 
@@ -1091,7 +1116,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-    assert len(ROUTES) == 43, ("爬扫面条数基线被改动：", len(ROUTES))
+    assert len(ROUTES) == 45, ("爬扫面条数基线被改动：", len(ROUTES))
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),

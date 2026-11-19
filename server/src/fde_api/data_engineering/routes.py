@@ -10,8 +10,12 @@ POST  /projects/<id>/transform-plans              类型化转换计划落库（
       静态校验不过 ⇒ 400 零落库；无编译无执行）
 GET   /projects/<id>/transform-plans              计划清单
 GET   /projects/<id>/transform-plans/<plan_id>    计划详情（校验报告 + DAG）
+POST  /projects/<id>/transform-plans/<plan_id>/runs   提交隔离执行（WP3：幂等键必填；
+      files 版本锚输入；账本零行值原文；append-only）
+GET   /projects/<id>/transform-runs               执行记录清单
+GET   /projects/<id>/transform-runs/<run_id>      执行详情（守恒/账本/血缘/质量报告）
 
-**无 PATCH/DELETE**：画像与计划均 append-only；关系候选无翻产通道（03 §77）。
+**无 PATCH/DELETE**：画像/计划/执行记录均 append-only；关系候选无翻产通道（03 §77）。
 """
 from __future__ import annotations
 
@@ -115,5 +119,45 @@ def list_transform_plans(project_id):
 def get_transform_plan(project_id, plan_id):
     payload = service.get_transform_plan(
         actor=g.current_user, project_id=project_id, plan_id=plan_id
+    )
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.post("/projects/<project_id>/transform-plans/<plan_id>/runs")
+@require_auth
+def submit_transform_run(project_id, plan_id):
+    """提交隔离执行（AF2-WP3，17 号 v1.0）：``Idempotency-Key`` 必填（幂等重放
+    返回既有 run）；body ``{input: {kind: file_version, file_version_id}}``。
+    执行闸链沿 17 号 §4.1：S-01 → 计划归属 → 纵深再校验 → 快照锚 → 纯函数
+    执行 → 落库+审计。产物 append-only；账本零行值原文。"""
+    idem = str(request.headers.get("Idempotency-Key") or "").strip()
+    if not idem or len(idem) > 80:
+        return error_response("invalid_request", "缺少或非法 Idempotency-Key（≤80 字符）。", 400)
+    payload = request.get_json(silent=True) or {}
+    input_ref = payload.get("input")
+    if not isinstance(input_ref, dict):
+        return error_response("invalid_request", "缺少 input 对象。", 400)
+    result = service.submit_transform_run(
+        actor=g.current_user,
+        project_id=project_id,
+        plan_id=plan_id,
+        input_ref=input_ref,
+        idempotency_key=idem,
+    )
+    return jsonify({"data": result, "error": None}), 201
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs")
+@require_auth
+def list_transform_runs(project_id):
+    payload = service.list_transform_runs(actor=g.current_user, project_id=project_id)
+    return jsonify({"data": payload, "error": None}), 200
+
+
+@data_engineering_blueprint.get("/projects/<project_id>/transform-runs/<run_id>")
+@require_auth
+def get_transform_run(project_id, run_id):
+    payload = service.get_transform_run(
+        actor=g.current_user, project_id=project_id, run_id=run_id
     )
     return jsonify({"data": payload, "error": None}), 200
