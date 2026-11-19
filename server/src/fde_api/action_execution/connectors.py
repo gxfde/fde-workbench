@@ -230,8 +230,10 @@ def map_upstream_failure(*, status: int | None, body: str, reason: str) -> Actio
 def normalize_output(*, connector_id: str, method: str, payload_json: Any, org_id: str) -> dict[str, Any]:
     """KD-01 归一化（53 号 Q14 终判）：``workbench.ontology`` read 的
     ``{data:{items:[…]}}`` 信封 → ``{ontologies:[{ontology_id,name,org_id}…],
-    count}``；mock.*/workbench.workflow 透传上游最小业务结果（成功态信封
-    外壳不回显）。"""
+    count}``；``mock.erp`` query_inventory 的 ``{items:[…]}`` → items[0] 展开
+    为 ``{sku,quantity,available}``（T4-002/005 冻结断言可判定，KD-01 同构；
+    available 取桩侧事实源零派生）；其余 mock.*/workbench.workflow 透传上游
+    最小业务结果（成功态信封外壳不回显）。"""
     if connector_id == "workbench.ontology" and method == "read":
         items = ((payload_json or {}).get("data") or {}).get("items") or []
         ontologies = [
@@ -240,6 +242,12 @@ def normalize_output(*, connector_id: str, method: str, payload_json: Any, org_i
             if isinstance(item, dict)
         ]
         return {"ontologies": ontologies, "count": len(ontologies)}
+    if connector_id == "mock.erp" and method == "query_inventory":
+        items = (payload_json or {}).get("items") or []
+        if not items:
+            return {}
+        row = items[0] if isinstance(items[0], dict) else {}
+        return {"sku": row.get("sku"), "quantity": row.get("quantity"), "available": row.get("available")}
     if isinstance(payload_json, dict) and isinstance(payload_json.get("data"), dict):
         return payload_json["data"]  # 最小业务结果（剥信封外壳）
     return payload_json if isinstance(payload_json, dict) else {}

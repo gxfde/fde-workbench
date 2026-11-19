@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
@@ -45,33 +47,50 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+@contextmanager
+def _ae_session() -> Iterator[Any]:
+    """``db.session()`` 用后即还连接（WP5-B 登记）。
+
+    ``extensions.Database`` 每次调用返回**全新 Session**（非 scoped），连接在
+    ``close`` 前不归还池——本面全部位点经此上下文包裹，评测 runner 高频连续
+    提交（单测试 27 次）曾把池（size 5 + overflow 10）抽干成 30s 假等待。
+    事务口径不变：commit/rollback 由调用方负责，此处只负责归还连接；
+    ``expire_on_commit=False``（extensions.py:24）——close 后已加载属性可读。
+    """
+    session = db.session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 class _DbIdempotencyGate:
     """L2 门：``action_executions`` 表上的幂等裁决。"""
 
     def lookup(self, idempotency_key: str, org_id: str, fingerprint: str) -> dict | None:
-        session = db.session()
-        row = session.scalar(
-            select(ActionExecution).where(
-                ActionExecution.idempotency_key == idempotency_key,
-                ActionExecution.org_id == org_id,
+        with _ae_session() as session:
+            row = session.scalar(
+                select(ActionExecution).where(
+                    ActionExecution.idempotency_key == idempotency_key,
+                    ActionExecution.org_id == org_id,
+                )
             )
-        )
-        if row is None:
-            return None
-        if row.request_fingerprint != fingerprint:
-            raise ActionExecutionError("idempotency_mismatch", "同键请求体不一致（幂等指纹不符）。")
-        if row.status == "awaiting_approval":
-            raise ActionExecutionError("idempotency_in_flight", "同键执行在途，请退避后重试。")
-        if row.status == "succeeded":
-            return replay_payload_from_row(row)
-        # failed/cancelled 终态行：复放原失败态（WP1 执行段不产此类行；腿留 WP2+）
-        return {
-            "execution_id": row.id,
-            "output": row.output_json or {},
-            "audit": row.audit_json,
-            "cost": row.cost_json,
-            "rollback": row.rollback_json,
-        }
+            if row is None:
+                return None
+            if row.request_fingerprint != fingerprint:
+                raise ActionExecutionError("idempotency_mismatch", "同键请求体不一致（幂等指纹不符）。")
+            if row.status == "awaiting_approval":
+                raise ActionExecutionError("idempotency_in_flight", "同键执行在途，请退避后重试。")
+            if row.status == "succeeded":
+                return replay_payload_from_row(row)
+            # failed/cancelled 终态行：复放原失败态（WP1 执行段不产此类行；腿留 WP2+）
+            return {
+                "execution_id": row.id,
+                "output": row.output_json or {},
+                "audit": row.audit_json,
+                "cost": row.cost_json,
+                "rollback": row.rollback_json,
+            }
 
 
 class _FailClosedWhitelist:
@@ -104,35 +123,35 @@ class _DbApprovalGate:
         approval_id = request.get("approval_id")
         if not isinstance(approval_id, str) or not approval_id.strip():
             raise ActionExecutionError("approval_required", "写型高风险动作缺 approval_id。")
-        session = db.session()
-        approval = session.scalar(
-            select(AutomationApproval)
-            .options(joinedload(AutomationApproval.project))
-            .where(AutomationApproval.id == approval_id)
-        )
-        if approval is None:
-            raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
-        # 归属面：审批单租户链（project.org_id）与请求 org 不符 → 404 不泄露；
-        # 审批单请求人与执行 requester 不符 → 404 同口径（跨主体不泄露）。
-        project = approval.project
-        if project is None or project.org_id != request["org_id"]:
-            raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
-        if approval.requested_by_user_id != request["requester_id"]:
-            raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
-        now = datetime.now(UTC)
-        if approval.status == "expired" or (approval.status == "pending" and approval.expires_at <= now):
-            raise ActionExecutionError("approval_expired", "操作审批已过期。")
-        if approval.status != "approved":
-            raise ActionExecutionError("approval_not_approved", "该操作尚未获批。")
-        # 指纹复算（U1 x-approval.integrity；沿 control/service.py:864-871 先例）：
-        # 请求 params 的 canonical sha256 须与审批登记面一致。
-        if sha256(_canonical(request["params"]).encode("utf-8")).hexdigest() != approval.arguments_sha256:
-            raise ActionExecutionError("approval_integrity_failed", "审批参数完整性校验失败。")
-        # 执行前权限重验（U1 x-approval.revocation）
-        decision = authorize_ai_capability(user=self._actor, capability=AE_CAPABILITY, project=project)
-        if not decision.allowed:
-            raise ActionExecutionError("permission_revoked", "任务发起人已不具备该操作权限。")
-        return {"approval_id": approval.id}
+        with _ae_session() as session:
+            approval = session.scalar(
+                select(AutomationApproval)
+                .options(joinedload(AutomationApproval.project))
+                .where(AutomationApproval.id == approval_id)
+            )
+            if approval is None:
+                raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
+            # 归属面：审批单租户链（project.org_id）与请求 org 不符 → 404 不泄露；
+            # 审批单请求人与执行 requester 不符 → 404 同口径（跨主体不泄露）。
+            project = approval.project
+            if project is None or project.org_id != request["org_id"]:
+                raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
+            if approval.requested_by_user_id != request["requester_id"]:
+                raise ActionExecutionError("approval_not_found", "审批请求不存在。", status=404)
+            now = datetime.now(UTC)
+            if approval.status == "expired" or (approval.status == "pending" and approval.expires_at <= now):
+                raise ActionExecutionError("approval_expired", "操作审批已过期。")
+            if approval.status != "approved":
+                raise ActionExecutionError("approval_not_approved", "该操作尚未获批。")
+            # 指纹复算（U1 x-approval.integrity；沿 control/service.py:864-871 先例）：
+            # 请求 params 的 canonical sha256 须与审批登记面一致。
+            if sha256(_canonical(request["params"]).encode("utf-8")).hexdigest() != approval.arguments_sha256:
+                raise ActionExecutionError("approval_integrity_failed", "审批参数完整性校验失败。")
+            # 执行前权限重验（U1 x-approval.revocation）
+            decision = authorize_ai_capability(user=self._actor, capability=AE_CAPABILITY, project=project)
+            if not decision.allowed:
+                raise ActionExecutionError("permission_revoked", "任务发起人已不具备该操作权限。")
+            return {"approval_id": approval.id}
 
 
 FAIL_CLOSED_WHITELIST = _FailClosedWhitelist()
@@ -193,13 +212,13 @@ def _in_flight_row(payload: dict) -> ActionExecution | None:
     org = payload.get("org_id")
     if not isinstance(key, str) or not isinstance(org, str):
         return None
-    session = db.session()
-    return session.scalar(
-        select(ActionExecution).where(
-            ActionExecution.idempotency_key == key,
-            ActionExecution.org_id == org,
+    with _ae_session() as session:
+        return session.scalar(
+            select(ActionExecution).where(
+                ActionExecution.idempotency_key == key,
+                ActionExecution.org_id == org,
+            )
         )
-    )
 
 
 def _make_in_flight_lock(payload: dict):
@@ -215,36 +234,36 @@ def _make_in_flight_lock(payload: dict):
     def lock(execution_id: str) -> None:
         # SQLAlchemy 2.0 autobegin：同 session 上幂等门已查询过（事务已隐式开启），
         # 不得再 ``with session.begin()``——直接 add + commit，异常 rollback（项目先例口径）。
-        session = db.session()
-        try:
-            session.add(
-                ActionExecution(
-                    id=execution_id,
-                    idempotency_key=payload["idempotency_key"],
-                    org_id=payload["org_id"],
-                    requester_id=payload["requester_id"],
-                    action_id=payload["action_id"],
-                    action_type=payload.get("action_type"),
-                    connector_id=payload["connector_id"],
-                    method=payload["method"],
-                    params_sha256=sha256(_canonical(payload["params"]).encode("utf-8")).hexdigest(),
-                    request_fingerprint=fingerprint,
-                    dry_run=bool(payload["dry_run"]),
-                    risk_level=int(payload["risk_level"]),
-                    approval_id=payload.get("approval_id"),
-                    status="awaiting_approval",  # 在途锁位（契约语义：尚未执行；零外部副作用）
-                    audit_json={},
-                    cost_json={},
-                    rollback_json={"supported": False, "execution_id": execution_id},
+        with _ae_session() as session:
+            try:
+                session.add(
+                    ActionExecution(
+                        id=execution_id,
+                        idempotency_key=payload["idempotency_key"],
+                        org_id=payload["org_id"],
+                        requester_id=payload["requester_id"],
+                        action_id=payload["action_id"],
+                        action_type=payload.get("action_type"),
+                        connector_id=payload["connector_id"],
+                        method=payload["method"],
+                        params_sha256=sha256(_canonical(payload["params"]).encode("utf-8")).hexdigest(),
+                        request_fingerprint=fingerprint,
+                        dry_run=bool(payload["dry_run"]),
+                        risk_level=int(payload["risk_level"]),
+                        approval_id=payload.get("approval_id"),
+                        status="awaiting_approval",  # 在途锁位（契约语义：尚未执行；零外部副作用）
+                        audit_json={},
+                        cost_json={},
+                        rollback_json={"supported": False, "execution_id": execution_id},
+                    )
                 )
-            )
-            session.commit()
-        except IntegrityError:
-            session.rollback()
-            row = _in_flight_row(payload)
-            if row is not None and row.request_fingerprint != fingerprint:
-                raise ActionExecutionError("idempotency_mismatch", "同键请求体不一致（幂等指纹不符）。") from None
-            raise ActionExecutionError("idempotency_in_flight", "同键执行在途，请退避后重试。") from None
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                row = _in_flight_row(payload)
+                if row is not None and row.request_fingerprint != fingerprint:
+                    raise ActionExecutionError("idempotency_mismatch", "同键请求体不一致（幂等指纹不符）。") from None
+                raise ActionExecutionError("idempotency_in_flight", "同键执行在途，请退避后重试。") from None
 
     return lock
 
@@ -323,44 +342,44 @@ def _finalize_in_flight(
     ``db.session()`` 每次调用返回**全新 Session**（extensions.Database 非
     scoped）——查询与属性赋值必须用**同一 session 变量**（跨 session 的
     ORM 对象赋值不被 track，commit 无事发生＝静默丢写）。"""
-    session = db.session()
-    # 缺键防御：422 路径（validation_failed 先于锁）无键可查——finalize 无行
-    # 可翻，零落库跳过（与 WP1「拒绝路径不落库」口径一致）。
-    key = payload.get("idempotency_key")
-    org = payload.get("org_id")
-    if not isinstance(key, str) or not isinstance(org, str):
-        return
-    row = session.scalar(
-        select(ActionExecution).where(
-            ActionExecution.idempotency_key == key,
-            ActionExecution.org_id == org,
+    with _ae_session() as session:
+        # 缺键防御：422 路径（validation_failed 先于锁）无键可查——finalize 无行
+        # 可翻，零落库跳过（与 WP1「拒绝路径不落库」口径一致）。
+        key = payload.get("idempotency_key")
+        org = payload.get("org_id")
+        if not isinstance(key, str) or not isinstance(org, str):
+            return
+        row = session.scalar(
+            select(ActionExecution).where(
+                ActionExecution.idempotency_key == key,
+                ActionExecution.org_id == org,
+            )
         )
-    )
-    if row is None:
-        return
-    # autobegin 口径同 lock：属性赋值 + commit，异常 rollback（不得 with session.begin()）
-    try:
-        if result is not None:
-            row.status = result["status"]
-            row.output_json = result["output"]
-            row.error_code = (result["error"] or {}).get("code", "")
-            row.error_json = result["error"]
-            row.replayed_from_execution_id = result["replayed_from_execution_id"]
-            row.approval_id = result["audit"]["approval_id"]
-            row.audit_json = result["audit"]
-            row.cost_json = result["cost"]
-            row.rollback_json = result["rollback"]
-            # WP4 审计落行（与终态同事务——审计与执行记录原子一致）
-            _write_audit_log(session, row.id, result)
-        else:
-            assert error is not None
-            row.status = "failed"
-            row.error_code = error.code
-            row.error_json = build_error(error.code, error.message, retryable=False, details=error.details)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
+        if row is None:
+            return
+        # autobegin 口径同 lock：属性赋值 + commit，异常 rollback（不得 with session.begin()）
+        try:
+            if result is not None:
+                row.status = result["status"]
+                row.output_json = result["output"]
+                row.error_code = (result["error"] or {}).get("code", "")
+                row.error_json = result["error"]
+                row.replayed_from_execution_id = result["replayed_from_execution_id"]
+                row.approval_id = result["audit"]["approval_id"]
+                row.audit_json = result["audit"]
+                row.cost_json = result["cost"]
+                row.rollback_json = result["rollback"]
+                # WP4 审计落行（与终态同事务——审计与执行记录原子一致）
+                _write_audit_log(session, row.id, result)
+            else:
+                assert error is not None
+                row.status = "failed"
+                row.error_code = error.code
+                row.error_json = build_error(error.code, error.message, retryable=False, details=error.details)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
 
 def rollback_action(
@@ -387,27 +406,27 @@ def rollback_action(
     """
     if compensator is None:
         compensator = NO_COMPENSATOR
-    session = db.session()
-    row = session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
-    if row is None or row.org_id != actor.org_id:
-        raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
+    with _ae_session() as session:
+        row = session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
+        if row is None or row.org_id != actor.org_id:
+            raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
 
-    batch = session.scalar(select(ActionCompensation).where(ActionCompensation.execution_id == execution_id))
-    if batch is not None:
-        # 幂等短路：既有批次复用（A3——条目数与各条 status 不变，零新补偿副作用）
-        return {
-            "execution_id": execution_id,
-            "status": batch.status,
-            "compensations": batch.compensations_json,
-            "output": None,
-            "error": batch.error_json,
-        }
+        batch = session.scalar(select(ActionCompensation).where(ActionCompensation.execution_id == execution_id))
+        if batch is not None:
+            # 幂等短路：既有批次复用（A3——条目数与各条 status 不变，零新补偿副作用）
+            return {
+                "execution_id": execution_id,
+                "status": batch.status,
+                "compensations": batch.compensations_json,
+                "output": None,
+                "error": batch.error_json,
+            }
 
-    result = _compute_rollback(row, compensator)
-    _persist_compensation_batch(
-        row, result, actor=actor, reason=reason, idempotency_key=idempotency_key
-    )
-    return result
+        result = _compute_rollback(row, compensator)
+        _persist_compensation_batch(
+            row, result, actor=actor, reason=reason, idempotency_key=idempotency_key
+        )
+        return result
 
 
 def _compute_rollback(row: ActionExecution, compensator: Any) -> dict[str, Any]:
@@ -474,47 +493,48 @@ def _compute_rollback(row: ActionExecution, compensator: Any) -> dict[str, Any]:
 def _persist_compensation_batch(
     row: ActionExecution, result: dict[str, Any], *, actor: User, reason: str | None, idempotency_key: str | None
 ) -> None:
-    session = db.session()
-    try:
-        # autobegin 口径同 lock：rollback_action 已在此 session 上查询过，不得
-        # ``with session.begin()``——add + commit，IntegrityError rollback 复用既有批次。
-        session.add(
-            ActionCompensation(
-                id=new_uuid(),
-                execution_id=row.id,
-                org_id=row.org_id,
-                requester_id=actor.id,
-                rollback_key=idempotency_key,
-                status=result["status"],
-                compensations_json=result["compensations"],
-                error_json=result["error"],
-                reason=reason,
+    with _ae_session() as session:
+        try:
+            # autobegin 口径同 lock：rollback_action 已在此 session 上查询过，不得
+            # ``with session.begin()``——add + commit，IntegrityError rollback 复用既有批次。
+            session.add(
+                ActionCompensation(
+                    id=new_uuid(),
+                    execution_id=row.id,
+                    org_id=row.org_id,
+                    requester_id=actor.id,
+                    rollback_key=idempotency_key,
+                    status=result["status"],
+                    compensations_json=result["compensations"],
+                    error_json=result["error"],
+                    reason=reason,
+                )
             )
-        )
-        session.commit()
-    except IntegrityError:
-        # 并发双回滚：批次已被并发方登记 → 复用既有批次（幂等，A3 同源）
-        session.rollback()
+            session.commit()
+        except IntegrityError:
+            # 并发双回滚：批次已被并发方登记 → 复用既有批次（幂等，A3 同源）
+            session.rollback()
 
 
 def get_rollback_batch(execution_id: str) -> dict[str, Any] | None:
     """回滚批次检视（内部辅助/测试）：按 execution_id 取批次快照。"""
-    session = db.session()
-    batch = session.scalar(select(ActionCompensation).where(ActionCompensation.execution_id == execution_id))
-    if batch is None:
-        return None
-    return batch.snapshot()
+    with _ae_session() as session:
+        batch = session.scalar(select(ActionCompensation).where(ActionCompensation.execution_id == execution_id))
+        if batch is None:
+            return None
+        return batch.snapshot()
 
 
 def get_execution(*, actor, execution_id: str) -> dict[str, Any]:
     """执行详情（本人/同租户；跨租户 404 复用关闭面文案不泄露存在性）。"""
-    session = db.session()
-    row = session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
-    if row is None or row.org_id != actor.org_id:
-        raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
-    return row.snapshot()
+    with _ae_session() as session:
+        row = session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
+        if row is None or row.org_id != actor.org_id:
+            raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
+        return row.snapshot()
 
 
 def get_execution_row(execution_id: str) -> ActionExecution | None:
     """内部辅助（测试/运维检视）：按 id 取原始行，无租户过滤。"""
-    return db.session().scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
+    with _ae_session() as session:
+        return session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))

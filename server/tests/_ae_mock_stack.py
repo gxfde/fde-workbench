@@ -34,12 +34,19 @@ class PortOccupiedError(RuntimeError):
 
 
 class MockStack:
-    """mock.erp + mock.email 桩栈（线程化 make_server；计数器/收件箱可检视可重置）。"""
+    """mock.erp + mock.email 桩栈（线程化 make_server；计数器/收件箱可检视可重置）。
 
-    def __init__(self) -> None:
+    端口：默认 5001/5002（白名单冻结 base_url 口径，WP3 钉原样）；传 0 即
+    ephemeral——评测 runner 跨 worker 与固定端口桩文件共存的装置面，实际端口
+    在 ``start()`` 后读 ``erp_port``/``email_port``（由调用方注入快照，装置级
+    快照构造语义同 ``WorkbenchService`` 端口回退先例）。"""
+
+    def __init__(self, *, erp_port: int = 5001, email_port: int = 5002) -> None:
         self.erp_requests = 0
         self.email_requests = 0
         self.inbox: list[dict[str, Any]] = []
+        self.erp_port = erp_port
+        self.email_port = email_port
         self._servers: list[Any] = []
         self._threads: list[threading.Thread] = []
 
@@ -54,8 +61,12 @@ class MockStack:
             stack.erp_requests += 1
             sku = request.args.get("sku")
             warehouse = request.args.get("warehouse_id", "wh-default")
-            # 确定性纯读：sku 在册即 42 件（零持久状态，每次同参同响应）
-            items = [{"sku": sku, "quantity": 42, "warehouse": warehouse}] if sku else []
+            # 确定性纯读：sku 在册即 42 件（零持久状态，每次同参同响应）；
+            # available＝quantity 为零预留纯读桩的桩侧事实源（T4-002/005 冻结断言
+            # output.available 的上游形态——适配层只展开不派生数值，KD-01 同构）。
+            items = (
+                [{"sku": sku, "quantity": 42, "available": 42, "warehouse": warehouse}] if sku else []
+            )
             return jsonify({"items": items, "count": len(items)})
 
         return app
@@ -92,15 +103,16 @@ class MockStack:
     # ---- 生命周期 -------------------------------------------------------------
 
     def start(self) -> None:
-        self._start_app(self._erp_app(), 5001)
-        self._start_app(self._email_app(), 5002)
+        self.erp_port = self._start_app(self._erp_app(), self.erp_port)
+        self.email_port = self._start_app(self._email_app(), self.email_port)
 
-    def _start_app(self, app: Flask, port: int) -> None:
+    def _start_app(self, app: Flask, port: int) -> int:
         server = make_server("127.0.0.1", port, app, threaded=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self._servers.append(server)
         self._threads.append(thread)
+        return int(server.server_address[1])
 
     def stop(self) -> None:
         for server in self._servers:
