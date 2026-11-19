@@ -2,6 +2,22 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 训练场 r2 真机制修复轮（E 面）：规则层剔除 D3-01——rubric-v2 口径变更与噪声带跨轴诚实处理（2026-11-19）
+
+第三批读数暴露一处**规则层口径缺陷**：判据 D3-01「方案覆盖 rubric.must_produce」用**精确子串**去匹配 rubric 里的**交付物整句**（rubric 真身在 `SimulationScenario.reference_json.rubric`，106/106 场景齐备且 must_produce 非空），真模型方案几乎不逐字复现 ⇒ 该判据在全部场景上恒 0 分；但它 `verified=true`（有证据行）⇒ 仍占维度权重 0.5，把 D3 维度分数上限压到 0.2；且 `CRITERION_TO_FAILURE` 只把 D3-02 映射到 FA-03 ⇒ **D3-01 只压分、不产生任何可处置信号**（不挂失败码）。
+
+本轮处置（蔡工 2026-11-19 拍板②：规则层剔除 D3-01，语义交模型层 L-B）：
+
+- `server/src/fde_api/simulation/evaluation_rules.py`：`RUBRIC_VERSION` 由 `rubric-v1` 升 **`rubric-v2`**；删除 D3-01 判据块（D3-02 weight 0.3／D3-03 weight 0.2 **原样保留，不重新分配权重**）——交付物覆盖的语义判定交模型层 L-B（模型层评分基准块已把 must_produce 整句逐项交给模型判）。
+- `server/src/fde_api/simulation/regression_runner.py`：缺省噪声带 `0.1049` 及其标签轴 `rubric-v1|model:server` **保持不贴新标签**（该带只在其实测轴下可用，改贴新轴＝假绿）；新增「band 不可用 ⇒ 模型层判 `insufficient_data`」分支。
+- `server/src/fde_api/simulation/regression_service.py`：`_resolve_noise_band` 在「无存档带且当前轴 ≠ 缺省带轴」时返回 `band=None`（不套缺省带）；存档带取值非法 ⇒ 400 `invalid_request` fail-closed（不再回落缺省带）。
+- `server/src/fde_api/simulation/evaluation_prompt.py`：`build_evaluation_messages` 的 `rubric_version` 缺省值改为取 `evaluation_rules.RUBRIC_VERSION`（消灭陈旧默认值陷阱；SYSTEM_PROMPT 正文零动 ⇒ 提示词指纹不变）。
+- 测试：NEW `server/tests/test_simulation_rubric_v2.py` 8 例；`test_simulation_textmatch.py` 的「事实类与交付物类两套判据」钉**换代**为「规则层不再产出 D3-01、事实类仍走 textmatch、交付物类语义交模型层」；`test_simulation_regression.py` 三处轴字面量随现算轴升 v2 换代（语义不变：跨轴仍 409 fail-closed）。
+
+★**双口径并列登记（这是口径变更，不是效果改善）**：同一第三批 run 集，v1（含 D3-01）与 v2（剔除 D3-01 后按剩余判据归一）读数——D3 维度均分 **0.2038 → 0.4077**、总分均 **0.7477 → 0.7783**、verdict pass **14 → 19**（v2 为纯函数复算、**不含 hard_fail 判定**；v1 报告口径含 hard_fail 判定 ⇒ 两组 verdict 分布不可直接相比）。历史读数一律**按轴并列登记**，不得跨轴直比。
+
+★**新轴的后续义务**：现算评估轴变为 `rubric-v2|model:server` ⇒ 旧套件存档轴不符 ⇒ 409 fail-closed（与「复判定须新建套件」纪律一致）；新轴在归档实测噪声带前，模型层判定一律 `insufficient_data`（诚实不假绿）。
+
 ## [未发布] — 训练场 r2 真机制修复轮（D 面）：白问轮收口——访谈轮数按可披露事实数动态收口（2026-11-19）
 
 承 C 面（#534）之后的第三批真机取证：150 轮追问里 **75 轮是白问（50%）**，但归因显示 **零真缺陷面**——白问是「事实池已挖尽 + 阶段闸拦」的结构性副产物，不携带任何信息。本轮把这些结构性白问从轮次预算里剪掉。零迁移零路由零表＝口径 534/56/163/93 不变（单头 `f0a1b2c3d4e5`，2026-11-19 现测）。

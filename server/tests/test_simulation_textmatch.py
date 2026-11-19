@@ -68,10 +68,14 @@ def test_facts_and_deliverables_use_two_different_criteria():
     """事实类（must_identify）与交付物类（must_produce）**走两套判据**。
 
     - 事实类：字面重叠匹配（在「已确认问题/根因」文本上）；
-    - 交付物类：在**交付正文**上找（方案/产物里有没有真正产出那件事）。
+    - 交付物类：**规则层不再用字面匹配冒充语义判定**——rubric-v2 起
+      D3-01「方案覆盖 rubric.must_produce」已从规则层剔除（交付物整句做
+      精确子串匹配恒为 0，只压分不产失败码），交付物覆盖的**语义判定交
+      模型层 L-B**（评分基准块把 must_produce 整句给模型逐项判）。
 
     这条区分是必要的：交付物条目若拿去与事实文本做字面匹配，会把「提到了客户
-    画像」误判成「产出了线索采集去重流程」。
+    画像」误判成「产出了线索采集去重流程」；反过来，交付物整句也不该用字面
+    匹配判覆盖——真模型方案不会逐字复现整句交付物。
     """
     from fde_api.simulation.evaluation_rules import score_criteria
 
@@ -104,8 +108,11 @@ def test_facts_and_deliverables_use_two_different_criteria():
     # 事实类：改写措辞仍命中（精确子串做不到）
     assert by_key["D1-01"].score > 0
     assert by_key["D1-01"].verified is True
-    # 交付物类：在交付正文里找到 ⇒ 命中
-    assert by_key["D3-01"].score == 1.0
+    # 交付物类：规则层不再产出 D3-01（语义判定交模型层 L-B）
+    assert "D3-01" not in by_key
+    # D3 维度剩余判据仍在位（规模相称／既定约束带入）
+    assert by_key["D3-02"].dimension == "D3"
+    assert by_key["D3-03"].dimension == "D3"
 
 
 def test_best_match_returns_the_closest_candidate():

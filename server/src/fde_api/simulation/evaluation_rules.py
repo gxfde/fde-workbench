@@ -22,7 +22,21 @@ from typing import Any
 from fde_api.simulation.textmatch import matches
 
 # 评分规则版本（变更须升版并在报告中标明，历史评估不改写）
-RUBRIC_VERSION = "rubric-v1"
+#
+# rubric-v2（2026-11-19）：**规则层剔除 D3-01「方案覆盖 rubric.must_produce」**。
+# 原因（真机取证：训练场 r2 制造行业 25 场景批跑）：D3-01 用**精确子串**判
+# 「方案是否覆盖交付物整句」，而 rubric.must_produce 本身是交付物整句 ⇒ 真模型
+# 方案几乎不逐字复现 ⇒ D3-01 在在库全部场景上恒 0 分（verified=true 却零命中），
+# 把 D3 维度上限压到 0.2；且 D3-01 **不挂任何失败码**（``failure_analyzer`` 的
+# ``CRITERION_TO_FAILURE`` 只挂 D3-02→FA-03）⇒ 只压分、不产可处置信号。
+# 处置：交付物覆盖的**语义判定交模型层 L-B**（评分基准块把 must_produce 整句
+# 给模型逐项判，见 ``evaluation_prompt.py`` 与 ``model_evaluation.py``），
+# 规则层不再用字面匹配冒充语义判定（同族纪律：事实类仍走 ``textmatch.matches``，
+# 因为事实类本就要求字面命中）。
+# ★口径变更：D3 维度分与总分刻度随之变化（D3 内部按已核实判据权重归一，
+#   另 ``unverified_ratio`` 分母由 7.0 降为 6.5）⇒ 历史读数与新读数**必须
+#   按版本双口径并列登记**，不可直接比。
+RUBRIC_VERSION = "rubric-v2"
 
 # 七维度与初始权重（G1 §9.1）
 DIMENSIONS: tuple[tuple[str, str, float], ...] = (
@@ -431,26 +445,9 @@ def score_criteria(
 
     # ---- D3 解决方案质量 ----------------------------------------------
     sections = design.get("solution_sections") or []
-    must_produce = rubric["must_produce"]
-    design_blob = str(design)
-    hit_produce = [text for text in must_produce if text and text in design_blob]
-    criteria.append(
-        Criterion(
-            key="D3-01",
-            dimension="D3",
-            title="方案覆盖 rubric.must_produce",
-            weight=0.5,
-            score=(len(hit_produce) / len(must_produce)) if must_produce else 0.0,
-            evidence_refs=tuple(
-                [{"kind": "solution", "text": text} for text in hit_produce]
-                + [
-                    {"kind": "expected_missing", "text": text}
-                    for text in must_produce
-                    if text not in hit_produce
-                ]
-            ),
-        )
-    )
+    # ★rubric-v2：原 D3-01「方案覆盖 rubric.must_produce」已从规则层移除
+    # （用精确子串判交付物整句 ⇒ 恒 0 分且不挂任何失败码；交付物覆盖的语义
+    #   判定交模型层 L-B，依据见文件头 RUBRIC_VERSION 注释）。
     criteria.append(
         Criterion(
             key="D3-02",

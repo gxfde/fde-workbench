@@ -530,7 +530,8 @@ def test_noise_band_nail_3_axis_mismatch_fails_closed_409(operator):
     body = response.get_json()["error"]
     assert body["code"] == "noise_band_axis_mismatch"
     assert body["details"]["archived_axis"] == "rubric-v1|model:server"
-    assert body["details"]["current_axis"] == "rubric-v1|model:stub"
+    # rubric-v2 起当前轴随规则版本推进（旧轴存档 ⇒ 409 fail-closed，语义不变）
+    assert body["details"]["current_axis"] == "rubric-v2|model:stub"
 
 
 def test_noise_band_nail_4_default_constant_matches_l2_ledger_anchor():
@@ -567,7 +568,7 @@ def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(ope
             "baseline_config": {
                 "adapter_mode": "mock",
                 "model_mode": "stub",
-                "noise_band": {"axis": "rubric-v1|model:stub", "band": 0.1049, "anchor_n": 3},
+                "noise_band": {"axis": "rubric-v2|model:stub", "band": 0.1049, "anchor_n": 3},
             },
         },
     ).get_json()["data"]
@@ -592,7 +593,7 @@ def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(ope
     assert sync_resp.status_code == 201, sync_resp.get_json()
     sync_data = sync_resp.get_json()["data"]
     assert sync_data["deltas"]["noise_band"] == 0.1049
-    assert sync_data["deltas"]["noise_band_axis"] == "rubric-v1|model:stub"
+    assert sync_data["deltas"]["noise_band_axis"] == "rubric-v2|model:stub"
     assert sync_data["deltas"]["model_verdict"] == "insufficient_data"
 
     # workbench 套件返回 202 queued_async + job_id

@@ -30,6 +30,7 @@ from fde_api.simulation.models import (
 )
 from fde_api.simulation.regression_runner import (
     DEFAULT_NOISE_BAND,
+    DEFAULT_NOISE_BAND_AXIS,
     RunSummary,
     compare,
     result_fingerprint,
@@ -170,16 +171,23 @@ def _resolve_modes(baseline_config: dict[str, Any]) -> tuple[str, str]:
 
 def _resolve_noise_band(
     baseline_config: dict[str, Any], *, model_mode: str
-) -> tuple[float, str]:
+) -> tuple[float | None, str]:
     """解析套件存档噪声带并执行评估轴强绑定比对（L5 §2.4，§6-3 拍板确认）。
 
     现算轴 ``f"{RUBRIC_VERSION}|model:{model_mode}"`` 与 ``baseline_config.noise_band.axis``
     不符 ⇒ 409 ``noise_band_axis_mismatch`` fail-closed（防错轴带跨轴套用）。
+
+    ★无可用带 ⇒ 返回 ``band=None``（不是缺省带）：缺省带 0.1049 是在
+    ``rubric-v1|model:server`` 轴下实测的观测极差，换轴后它不再是本轴的带；
+    套用即跨轴套带（假绿家族）⇒ 本轴无实测带时模型层判定一律
+    ``insufficient_data``（不可用即不判），待在新轴下实测归档后再跑。
     """
     current_axis = f"{RUBRIC_VERSION}|model:{model_mode}"
     archived = baseline_config.get("noise_band")
     if archived is None:
-        return DEFAULT_NOISE_BAND, current_axis
+        if current_axis == DEFAULT_NOISE_BAND_AXIS:
+            return DEFAULT_NOISE_BAND, current_axis
+        return None, current_axis
     if not isinstance(archived, dict):
         raise ScenarioServiceError(
             "invalid_request", "baseline_config.noise_band 必须是对象。"
@@ -193,12 +201,18 @@ def _resolve_noise_band(
             {"archived_axis": archived_axis.strip(), "current_axis": current_axis},
         )
     raw_band = archived.get("band")
-    band = (
-        float(raw_band)
-        if isinstance(raw_band, (int, float)) and not isinstance(raw_band, bool) and raw_band >= 0
-        else DEFAULT_NOISE_BAND
-    )
-    return band, current_axis
+    if not (
+        isinstance(raw_band, (int, float))
+        and not isinstance(raw_band, bool)
+        and raw_band >= 0
+    ):
+        raise ScenarioServiceError(
+            "invalid_request",
+            f"baseline_config.noise_band.band 非法（缺档案按当前轴 {current_axis} 实测归档）。",
+            400,
+            {"current_axis": current_axis},
+        )
+    return float(raw_band), current_axis
 
 
 def _prepare_regression_inputs(
@@ -206,7 +220,7 @@ def _prepare_regression_inputs(
     *,
     suite_id: str,
     proposal_id: str | None,
-) -> tuple[list[str], dict[str, Any], dict[str, Any], str, str, float, str]:
+) -> tuple[list[str], dict[str, Any], dict[str, Any], str, str, float | None, str]:
     suite = session.get(RegressionSuite, suite_id)
     if suite is None:
         raise ScenarioServiceError("not_found", "回归套件不存在。", 404)

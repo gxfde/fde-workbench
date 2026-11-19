@@ -34,6 +34,12 @@ OVERFIT_GAP_THRESHOLD = 0.15
 # 缺省值锚定 L2 底册 `docs/audit/训练场分布读数-L2底册-1.md` 锚点观测极差 0.1049
 # （评估轴 `rubric-v1|model:server`，anchor_n=3）。样本数 n < 3 ⇒ insufficient_data；
 # n ≥ 3 且 |model_total_delta| ≤ band ⇒ within_noise（严格大于才可判 improved/regressed）。
+#
+# ★轴绑定纪律（rubric-v2 起生效）：这两个常量**只在它们自己的轴下可用**——
+# 0.1049 是在 `rubric-v1|model:server` 轴下实测的观测极差，评估轴一变
+# （换规则版本／换评估器）它就不再是本轴的噪声带。**不得给常量改贴新轴标签**
+# （那是把旧轴的带冒充新轴的带 ⇒ 假绿）。换轴后若套件没有在当前轴下存档的带，
+# 模型层判定一律 `insufficient_data`（不可用即不判），待在新轴下实测归档。
 DEFAULT_NOISE_BAND = 0.1049
 DEFAULT_NOISE_BAND_AXIS = "rubric-v1|model:server"
 MIN_NOISE_BAND_SAMPLES = 3
@@ -130,12 +136,14 @@ def _compute_model_verdict(
     *,
     before: list[RunSummary],
     after: list[RunSummary],
-    band: float,
+    band: float | None,
 ) -> tuple[str, float | None]:
     """L-B 模型层独立判定（不动顶层 L-A verdict 闭集）。
 
     规则（delta-noise-band 同构，设计稿 §2.4）：
     - 参与对比的两组有效模型分样本数任一 < MIN_NOISE_BAND_SAMPLES (3) ⇒ insufficient_data；
+    - **噪声带在本轴不可用**（band=None，即本轴没有实测归档的带）⇒ insufficient_data
+      （不可用即不判，绝不套用别的轴的带）；
     - |Δ| <= band ⇒ within_noise（严格大于才脱离噪声域）；
     - Δ > band ⇒ improved；Δ < -band ⇒ regressed。
     """
@@ -145,6 +153,8 @@ def _compute_model_verdict(
         return "insufficient_data", None
     model_delta = round(_mean(after_vals) - _mean(before_vals), 4)
     if len(before_vals) < MIN_NOISE_BAND_SAMPLES or len(after_vals) < MIN_NOISE_BAND_SAMPLES:
+        return "insufficient_data", model_delta
+    if band is None:
         return "insufficient_data", model_delta
     if abs(model_delta) <= band:
         return "within_noise", model_delta
@@ -235,8 +245,17 @@ def compare(
         and train_gain > TOTAL_SIGNIFICANT_DELTA
     )
 
-    effective_band = float(DEFAULT_NOISE_BAND if noise_band is None else noise_band)
     effective_axis = str(noise_band_axis or "")
+    if (
+        noise_band is None
+        and effective_axis
+        and effective_axis != DEFAULT_NOISE_BAND_AXIS
+    ):
+        # 本轴没有实测归档的噪声带 ⇒ **不套用缺省带**（缺省带是它自己那个轴下
+        # 实测的，套到本轴＝跨轴套带 ⇒ 假绿）⇒ 模型层不判（insufficient_data）。
+        effective_band: float | None = None
+    else:
+        effective_band = float(DEFAULT_NOISE_BAND if noise_band is None else noise_band)
     model_verdict, model_total_delta = _compute_model_verdict(
         before=before, after=after, band=effective_band
     )

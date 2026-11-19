@@ -17,6 +17,11 @@ from typing import Any, Iterator
 
 from fde_api.ai.prompt_registry import version_of
 
+# 规则版本标签的单一权威＝evaluation_rules.RUBRIC_VERSION（不另立字面量，
+# 免得提示词里的「规则版本」与实际评分规则版本漂移——那会让模型层的评估轴
+# 名不副实）。
+from fde_api.simulation.evaluation_rules import RUBRIC_VERSION
+
 SYSTEM_PROMPT = """你是 FDE 交付质量的独立评估员。
 
 你只做一件事：按给定的评分基准（Rubric）给**分项评分 + 证据引用**。
@@ -109,7 +114,7 @@ def build_evaluation_messages(
     judge_view: dict[str, Any],
     artifacts: dict[str, Any],
     traces: list[dict[str, Any]] | None = None,
-    rubric_version: str = "rubric-v1",
+    rubric_version: str = RUBRIC_VERSION,
 ) -> list[dict[str, str]]:
     """构造模型评估的 messages（system + user）。
 
