@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
@@ -26,7 +27,7 @@ from sqlalchemy.orm import joinedload
 
 from fde_api.action_execution.executor import ActionExecutor, replay_payload_from_row, request_fingerprint
 from fde_api.action_execution.errors import ActionExecutionError
-from fde_api.action_execution.models import ActionCompensation, ActionExecution
+from fde_api.action_execution.models import ActionCompensation, ActionExecution, ActionExecutionLog
 from fde_api.action_execution.schemas import build_error, build_rollback_result
 from fde_api.auth.models import User
 from fde_api.control.access import authorize_ai_capability
@@ -36,6 +37,8 @@ from fde_api.extensions import db
 from fde_api.workbench.models import new_uuid
 
 AE_CAPABILITY = "action_execution.invoke"  # CAPABILITY_REQUIREMENTS：project_operator（AE1-WP1 注册）
+
+logger = logging.getLogger(__name__)
 
 
 def _canonical(value: Any) -> str:
@@ -264,6 +267,50 @@ class _NoCompensator:
 NO_COMPENSATOR = _NoCompensator()
 
 
+def _write_audit_log(session: Any, execution_id: str, result: dict[str, Any]) -> None:
+    """审计落行（AE1-WP4，U1 ``$defs/AuditObject`` 9 必填＋``$defs/CostObject`` 3 字段）。
+
+    纪律：
+    - **一行一执行**：``execution_id`` UNIQUE——重复 finalize（防御路径）不追加；
+    - **零明文**：审计行只落 ``params_sha256``；应用日志同口径——只落指纹
+      与计数，绝不落 params/响应体（C-08）；
+    - **append-only**：只在终态 succeeded 写入；失败路径不落审计行（无真实
+      起止时间即不伪造），失败留痕在 ``action_executions.error_json``。
+    """
+    audit = result["audit"]
+    cost = result["cost"]
+    existing = session.scalar(select(ActionExecutionLog).where(ActionExecutionLog.execution_id == execution_id))
+    if existing is not None:
+        return
+    session.add(
+        ActionExecutionLog(
+            id=new_uuid(),
+            execution_id=execution_id,
+            org_id=audit["org_id"],
+            connector_id=audit["connector_id"],
+            method=audit["method"],
+            params_sha256=audit["params_sha256"],
+            actor_user_id=audit["actor_user_id"],
+            approval_id=audit["approval_id"],
+            started_at=datetime.fromisoformat(audit["started_at"]),
+            finished_at=datetime.fromisoformat(audit["finished_at"]),
+            duration_ms=int(audit["duration_ms"]),
+            tool_calls=int(cost["tool_calls"]),
+            estimated_usd=cost["estimated_usd"],
+        )
+    )
+    # 应用日志腿：结构化一行，只含指纹/计数锚——零 params、零响应体。
+    logger.info(
+        "ae_execution_audited execution_id=%s connector=%s method=%s params_sha256=%s duration_ms=%s tool_calls=%s",
+        execution_id,
+        audit["connector_id"],
+        audit["method"],
+        audit["params_sha256"],
+        audit["duration_ms"],
+        cost["tool_calls"],
+    )
+
+
 def _finalize_in_flight(
     payload: dict,
     *,
@@ -303,6 +350,8 @@ def _finalize_in_flight(
             row.audit_json = result["audit"]
             row.cost_json = result["cost"]
             row.rollback_json = result["rollback"]
+            # WP4 审计落行（与终态同事务——审计与执行记录原子一致）
+            _write_audit_log(session, row.id, result)
         else:
             assert error is not None
             row.status = "failed"

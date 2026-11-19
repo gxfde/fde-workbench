@@ -1,4 +1,6 @@
-"""action_execution 域模型：``action_executions`` 执行记录（AE1-WP1）。
+"""action_execution 域模型：``action_executions`` 执行记录（AE1-WP1）＋
+``action_compensations`` 回滚批次（AE1-WP2）＋ ``action_execution_logs``
+审计日志（AE1-WP4）。
 
 纪律（契约 U1 / 53 号）：
 - **零明文**：参数只存 ``params_sha256``，``params`` 明文不落库（U1
@@ -7,13 +9,27 @@
   x-idempotency.constraint.ddl；新表新约束，既有约束零触碰——禁改清单第 6 项）;
 - **status 闭集**：契约 ``ExecutionStatus`` 五值（succeeded/failed/cancelled/
   replayed/awaiting_approval）CHECK 机械约束；
-- **append-only**：无 PATCH/DELETE 面；复放不落新行（同键一行真身）。
+- **append-only**：无 PATCH/DELETE 面；复放不落新行（同键一行真身）；
+  审计表（WP4）同口径——一行一执行、无 JSON 自由列（C-08 响应体零回显的
+  结构保证）。
 """
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
@@ -125,5 +141,67 @@ class ActionCompensation(Base, TimestampMixin):
             "compensations": self.compensations_json,
             "error": self.error_json,
             "reason": self.reason,
+            "created_at": str(self.created_at),
+        }
+
+
+class ActionExecutionLog(Base, TimestampMixin):
+    """审计日志（AE1-WP4，契约 U1 ``$defs/AuditObject`` 9 必填 ＋ ``$defs/CostObject`` 3 字段）。
+
+    - **一行一执行**：``execution_id`` UNIQUE——复放不落新行（同键一行真身，
+      与 ``action_executions`` 的复放口径一致）；一次执行恰一条审计行；
+    - **append-only**：无 PATCH/DELETE 面；写入只发生在执行终态（succeeded），
+      失败路径不落审计行（无真实起止时间即不伪造；失败留痕在
+      ``action_executions.error_json``）；
+    - **零明文（C-08 结构保证）**：窄列结构，**无任何 JSON 自由列**——params
+      只落 ``params_sha256``（64 hex），上游响应体整段不落库（审计面不存在
+      可回显的字段）；
+    - **成本预算**：``estimated_usd`` ≥ 0 且 T4 单任务累计 ≤ $0.10（51:213）；
+    - **租户面**：按值存 ``org_id``（复用 orgs 标识体系，禁自造 tenant_id）。
+    """
+
+    __tablename__ = "action_execution_logs"
+    __table_args__ = (
+        CheckConstraint("duration_ms >= 0", name="ck_action_execution_logs_duration"),
+        CheckConstraint("tool_calls >= 0", name="ck_action_execution_logs_tool_calls"),
+        CheckConstraint("estimated_usd >= 0", name="ck_action_execution_logs_usd"),
+        CheckConstraint("char_length(params_sha256) = 64", name="ck_action_execution_logs_sha_length"),
+        UniqueConstraint("execution_id", name="uq_action_execution_logs_execution"),
+        Index("ix_action_execution_logs_org_started", "org_id", "started_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    execution_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_executions.id", ondelete="RESTRICT"), nullable=False
+    )
+    org_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connector_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    method: Mapped[str] = mapped_column(String(64), nullable=False)
+    params_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    tool_calls: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_usd: Mapped[Any] = mapped_column(Numeric(12, 6), nullable=False)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "org_id": self.org_id,
+            "connector_id": self.connector_id,
+            "method": self.method,
+            "params_sha256": self.params_sha256,
+            "actor_user_id": self.actor_user_id,
+            "approval_id": self.approval_id,
+            "started_at": str(self.started_at),
+            "finished_at": str(self.finished_at),
+            "duration_ms": self.duration_ms,
+            "cost": {
+                "tool_calls": self.tool_calls,
+                "duration_ms": self.duration_ms,
+                "estimated_usd": float(self.estimated_usd),
+            },
             "created_at": str(self.created_at),
         }

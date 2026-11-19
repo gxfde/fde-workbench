@@ -680,6 +680,9 @@ def db_session(app) -> Session:
         # AE1-WP2：回滚批次行。execution_id→action_executions（**FK RESTRICT**）
         # ——必须**先于** ActionExecution 清理（AE1 action_execution 域，子先父后）。
         __import__("fde_api.action_execution.models", fromlist=["ActionCompensation"]).ActionCompensation,
+        # AE1-WP4：审计日志行。execution_id→action_executions（**FK RESTRICT**）
+        # ——必须**先于** ActionExecution 清理（AE1 action_execution 域，子先父后）。
+        __import__("fde_api.action_execution.models", fromlist=["ActionExecutionLog"]).ActionExecutionLog,
         # AE1-WP1：单步执行记录行。**零外键**（org/requester 按值存，契约
         # OrgId string；禁自造 tenant_id）——清理序无硬依赖，随域段落位。
         __import__("fde_api.action_execution.models", fromlist=["ActionExecution"]).ActionExecution,

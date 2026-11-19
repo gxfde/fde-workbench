@@ -1,10 +1,10 @@
 {
  "route_count": 541,
  "blueprint_count": 57,
- "table_count": 165,
- "revision_count": 95,
+ "table_count": 166,
+ "revision_count": 96,
  "heads": [
-  "d9e3f5a7c1b9"
+  "e2b4d6f8a0c2"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -613,6 +613,14 @@
    "down_revision": "c3e7a9b1d5f4",
    "create_tables": [
     "project_evidence"
+   ],
+   "add_column_tables": []
+  },
+  "e2b4d6f8a0c2": {
+   "file": "e2b4d6f8a0c2_action_execution_logs.py",
+   "down_revision": "d9e3f5a7c1b9",
+   "create_tables": [
+    "action_execution_logs"
    ],
    "add_column_tables": []
   },
