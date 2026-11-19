@@ -236,6 +236,8 @@ def _check_step_params(errors: list[dict[str, str]], step: dict[str, Any], path:
         allowed = {"column", "to_type"}
         if to_type == "decimal":
             allowed |= {"scale", "rounding"}
+        if to_type == "enum":
+            allowed |= {"values"}
         _reject_extra(allowed)
         if not _require("column", "to_type"):
             return
@@ -260,6 +262,30 @@ def _check_step_params(errors: list[dict[str, str]], step: dict[str, Any], path:
                     f"{p_path}.rounding",
                     f"rounding {params['rounding']!r} 不在闭集 {ROUNDING_MODES} 内。",
                 )
+        if to_type == "enum":
+            # 值域必须显式声明（WP4 二批，fail-closed 沿 decimal scale/rounding
+            # 先例）——执行期「越界→cast_failed」查域的前提（17 号 §3.1）。
+            if "values" not in params:
+                _err(
+                    errors,
+                    "missing_parameter",
+                    p_path,
+                    "cast 到 enum 必须显式声明 values 值域（非空字符串数组）。",
+                )
+            else:
+                values = params.get("values")
+                if (
+                    not isinstance(values, list)
+                    or not values
+                    or not all(_is_str(v) and v for v in values)
+                    or len(set(values)) != len(values)
+                ):
+                    _err(
+                        errors,
+                        "invalid_parameter_value",
+                        f"{p_path}.values",
+                        "values 须为非空、无重复、全非空字符串的数组。",
+                    )
     elif op == "normalize_datetime":
         _reject_extra({"column", "to_tz"})
         if not _require("column", "to_tz"):

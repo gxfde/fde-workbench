@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, ROUND_HALF_UP
 from math import isfinite
+from time import monotonic
 from zoneinfo import ZoneInfo
 from datetime import datetime, date
 from typing import Any
@@ -41,6 +42,9 @@ from fde_api.data_engineering.transform_plan import validate_plan
 TRANSFORM_MAX_INPUT_ROWS = 10_000
 TRANSFORM_MAX_OUTPUT_ROWS = 10_000
 TRANSFORM_MAX_REJECT_ROWS = 10_000
+# 独立秒闸（WP4 二批，17 号 §2.4 闭集成员）：执行墙钟上限——初值定参 30s
+# （同步请求生命周期内；行数上限只约束规模不约束单步耗时），实测后冻结。
+TRANSFORM_MAX_RUNTIME_SECONDS = 30
 
 # 拒绝账本 reason 码闭集（17 号 §3.3；T3 data_eng.reject_ledger 对齐）
 REJECT_REASONS = (
@@ -163,8 +167,30 @@ def _cast_value(value: str, to_type: str, params: dict[str, Any]) -> str | float
     if to_type == "string":
         return value
     if to_type == "enum":
-        return value  # 值域约束由 map_enum 承载；cast enum=原样
-    # date/datetime：计划面已禁 string→时间域（无格式声明槽），仅同域规整
+        # 值域校验（WP4 二批，17 号 §3.1「越界→cast_failed」收口）：计划面强制
+        # 显式声明 ``values``（fail-closed，沿 decimal scale/rounding 先例），
+        # 执行期查域——域外行级拒绝，域内原样保留。
+        if value in (params.get("values") or []):
+            return value
+        raise _RowReject("cast_failed")
+    if to_type == "date":
+        # 同域规整（WP4 二批，§3.1「同域规整应成功」收口）：date→date 解析后
+        # 输出 ISO 规范形；cast 无时区/格式声明槽，仅同域。
+        try:
+            return date.fromisoformat(value).isoformat()
+        except (ValueError, TypeError) as error:
+            raise _RowReject("cast_failed") from error
+    if to_type == "datetime":
+        # 同域规整：与 normalize_datetime 同解析口径（ISO 复形或仅日期补午夜），
+        # 规范化输出；不带 to_tz 换时区（时区归 normalize_datetime 算子）。
+        try:
+            if "T" in value or ":" in value:
+                parsed = datetime.fromisoformat(value)
+            else:
+                parsed = datetime.combine(date.fromisoformat(value), datetime.min.time())
+        except (ValueError, TypeError) as error:
+            raise _RowReject("cast_failed") from error
+        return parsed.isoformat()
     raise _RowReject("cast_failed")
 
 
@@ -344,6 +370,7 @@ def execute_plan(
     max_input_rows: int = TRANSFORM_MAX_INPUT_ROWS,
     max_output_rows: int = TRANSFORM_MAX_OUTPUT_ROWS,
     max_reject_rows: int = TRANSFORM_MAX_REJECT_ROWS,
+    max_runtime_seconds: int | None = TRANSFORM_MAX_RUNTIME_SECONDS,
 ) -> dict[str, Any]:
     """执行已校验计划（纯函数；17 号 §2/§3 全语义）。
 
@@ -405,8 +432,41 @@ def execute_plan(
             ledger.append({"row_index": row_index, "reason": reason, "column": column})
 
     output_budget_exhausted = False
+    # 独立秒闸（WP4 二批，17 号 §2.4）：执行墙钟上限——步骤边界＋行级循环
+    # 双检查点；触顶＝budget_exhausted/max_runtime_seconds 诚实终态（非静默
+    # 截断），已完成步骤的血缘与账本照常随行。None＝禁用（测试面）。
+    deadline: float | None = None
+    if max_runtime_seconds is not None:
+        deadline = monotonic() + max_runtime_seconds
+
+    def _runtime_exceeded() -> bool:
+        return deadline is not None and monotonic() > deadline
+
+    def _runtime_budget_result() -> dict[str, Any]:
+        return {
+            "status": "budget_exhausted",
+            "failure_reason": "max_runtime_seconds",
+            "output_rows": [],
+            "output_row_count": 0,
+            "output_columns": [dict(name=name, type=ctype) for name, ctype in schema.items()],
+            "reject_ledger": ledger,
+            "rejected_row_count": len(rejected),
+            "overflow_count": len(overflow),
+            "quality_report": quality_report,
+            "lineage": lineage,
+            "conservation": {
+                "input_rows": input_count,
+                "output_rows": 0,
+                "rejected_rows": len(rejected),
+                "overflow_count": len(overflow),
+                "ok": True,
+            },
+        }
+
     steps_by_id = {step["id"]: step for step in plan["steps"]}
     for step_id in report["dependency_graph"]["topological_order"]:
+        if _runtime_exceeded():
+            return _runtime_budget_result()
         step = steps_by_id[step_id]
         op = str(step.get("op"))
         step_in = len(current)
@@ -438,6 +498,8 @@ def execute_plan(
                 seen_keys: set[tuple[Any, ...]] = set()
                 kept: list[tuple[int, dict[str, Any]]] = []
                 for row_index, row in current:
+                    if _runtime_exceeded():
+                        return _runtime_budget_result()
                     key = tuple(row.get(k) for k in keys)
                     if key not in seen_keys:
                         seen_keys.add(key)
@@ -481,6 +543,8 @@ def execute_plan(
                 # 行级算子
                 next_current = []
                 for row_index, row in current:
+                    if _runtime_exceeded():
+                        return _runtime_budget_result()
                     try:
                         new_row, new_schema = _apply_row_step(step, schema, row, tables)
                         schema = new_schema
