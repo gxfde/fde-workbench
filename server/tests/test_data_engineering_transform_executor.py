@@ -35,7 +35,7 @@ from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
 from fde_api.auth.tokens import issue_access_token
 from fde_api.data_engineering.models import DataProfile, TransformPlan, TransformRun
-from fde_api.data_engineering.transform_executor import execute_plan
+from fde_api.data_engineering.transform_executor import TRANSFORM_MAX_RUNTIME_SECONDS, execute_plan
 from fde_api.data_engineering.transform_plan import PLAN_VERSION, validate_plan
 from fde_api.files.models import ProjectFile, ProjectFileVersion
 from fde_api.workbench.models import Project
@@ -863,3 +863,111 @@ def test_submit_run_connector_profile_file_input_mismatch(client, db_session, se
     assert response.status_code == 400
     assert response.get_json()["error"]["code"] == "snapshot_mismatch"
     assert db_session.query(TransformRun).count() == 0
+
+
+# ---- WP4 二批（P1 2026-11-19 交互确认单批准三项）：⑤cast enum 值域 / ⑥date·datetime 同域规整 / ④独立秒闸 ----
+
+
+def test_cast_enum_requires_declared_domain() -> None:
+    """⑤（计划面 additive，fail-closed 沿 decimal scale/rounding 先例）：cast 到 enum 必须显式声明 values 值域。"""
+    plan = _plan(
+        steps=[{"id": "s1", "op": "cast", "params": {"column": "operator_id", "to_type": "enum"}}],
+        output={"columns": [{"name": "operator_id", "type": "enum"}]},
+    )
+    report = validate_plan(plan)
+    assert not report["valid"]
+    assert any(e["code"] == "missing_parameter" for e in report["errors"]), report["errors"]
+
+
+def test_cast_enum_values_must_be_nonempty_unique_strings() -> None:
+    """⑤（计划面）：values 须为非空、无重复、全非空字符串数组——缺一则拒。"""
+    for bad in ([], ["A", "A"], ["A", ""], ["A", 3], "AB"):
+        plan = _plan(
+            steps=[
+                {"id": "s1", "op": "cast", "params": {"column": "operator_id", "to_type": "enum", "values": bad}}
+            ],
+            output={"columns": [{"name": "operator_id", "type": "enum"}]},
+        )
+        report = validate_plan(plan)
+        assert not report["valid"], bad
+        assert any(e["code"] == "invalid_parameter_value" for e in report["errors"]), (bad, report["errors"])
+
+
+def test_cast_enum_rejects_out_of_domain_values() -> None:
+    """⑤（执行器，17 号 §3.1「越界→cast_failed」缺口收口）：值域外行级拒绝，域内保留。"""
+    plan = _plan(
+        steps=[
+            {"id": "s1", "op": "cast", "params": {"column": "operator_id", "to_type": "enum", "values": ["A", "B"]}}
+        ],
+        output={"columns": [{"name": "operator_id", "type": "enum"}]},
+    )
+    rows = _rows([dict(BASE_ROW, operator_id="A"), dict(BASE_ROW, eq_id="EQ-2", operator_id="ZZ")])
+    report = execute_plan(plan, rows)
+
+    assert report["status"] == "succeeded", report
+    assert report["output_rows"] == [dict(BASE_ROW, operator_id="A")]
+    assert _ledger(report) == [{"row_index": 1, "reason": "cast_failed", "column": "operator_id"}]
+    assert report["conservation"] == {
+        "input_rows": 2,
+        "output_rows": 1,
+        "rejected_rows": 1,
+        "overflow_count": 0,
+        "ok": True,
+    }
+
+
+def test_cast_date_same_domain_normalizes() -> None:
+    """⑥（17 号 §3.1「同域规整应成功」缺口收口）：date→date 规范化输出；非 ISO 日期行级 cast_failed。"""
+    plan = _plan(
+        input={"columns": [{"name": "eq_id", "type": "string"}, {"name": "day", "type": "date"}]},
+        steps=[{"id": "s1", "op": "cast", "params": {"column": "day", "to_type": "date"}}],
+        output={"columns": [{"name": "eq_id", "type": "string"}, {"name": "day", "type": "date"}]},
+    )
+    report = execute_plan(plan, _rows([{"eq_id": "EQ-1", "day": "2026-01-02"}]))
+    assert report["status"] == "succeeded", report
+    assert report["output_rows"] == [{"eq_id": "EQ-1", "day": "2026-01-02"}]
+
+    bad = execute_plan(plan, _rows([{"eq_id": "EQ-1", "day": "02/01/2026"}]))
+    assert bad["status"] == "succeeded"
+    assert _reasons(bad) == {"cast_failed"}
+    assert bad["output_rows"] == []
+    assert bad["conservation"]["rejected_rows"] == 1
+
+
+def test_cast_datetime_same_domain_normalizes() -> None:
+    """⑥：datetime→datetime 规范化输出（ISO 复形/仅日期补午夜）；解析失败行级 cast_failed。"""
+    plan = _plan(
+        steps=[{"id": "s1", "op": "cast", "params": {"column": "measured_at", "to_type": "datetime"}}],
+        output={"columns": [{"name": "eq_id", "type": "string"}, {"name": "measured_at", "type": "datetime"}]},
+    )
+    report = execute_plan(plan, _rows([dict(BASE_ROW)]))
+    assert report["status"] == "succeeded", report
+    assert report["output_rows"][0]["measured_at"] == "2026-01-02T08:00:00"
+
+    date_only = execute_plan(plan, _rows([dict(BASE_ROW, measured_at="2026-01-02")]))
+    assert date_only["output_rows"][0]["measured_at"] == "2026-01-02T00:00:00"
+
+    bad = execute_plan(plan, _rows([dict(BASE_ROW, measured_at="not-a-date")]))
+    assert _reasons(bad) == {"cast_failed"}
+    assert bad["output_rows"] == []
+
+
+def test_runtime_seconds_budget_exhausted() -> None:
+    """④独立秒闸（17 号 §2.4 资源上限闭集成员）：触顶＝budget_exhausted/max_runtime_seconds 诚实终态非静默截断。"""
+    assert TRANSFORM_MAX_RUNTIME_SECONDS >= 1  # 初值定参为正（沿 AF0 MAX_TOOL_ROUNDS 先例）
+
+    plan = _plan()
+    report = execute_plan(plan, _rows([BASE_ROW]), max_runtime_seconds=0)
+    assert report["status"] == "budget_exhausted"
+    assert report["failure_reason"] == "max_runtime_seconds"
+    assert report["output_rows"] == []
+    assert report["output_row_count"] == 0
+    assert report["output_columns"] != []  # schema 保留（与 max_output_rows 分支同形）
+    assert report["lineage"] == []
+
+
+def test_runtime_seconds_check_passes_below_deadline() -> None:
+    """④：宽裕时限下正常完成（闸不误伤）。"""
+    plan = _plan()
+    report = execute_plan(plan, _rows([BASE_ROW]), max_runtime_seconds=600)
+    assert report["status"] == "succeeded", report
