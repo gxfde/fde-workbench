@@ -53,7 +53,12 @@ TOOLS: dict[str, tuple[str, str | None, dict[str, Any], str, int]] = {
     "ontology_logic_run": ("在项目绑定的已固定本体版本上执行声明的 Logic（受限声明式表达式，输入输出 Schema 强校验，只读确定性计算，零副作用）。", "ontology.read", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "logic_key": {"type": "string"}, "input": {"type": "object"}}, "read", 0),
     "ontology_action_propose": ("对项目绑定的已固定本体版本提议受控受审动作（默认 dry-run 仿真，零副作用；真执行必须人工批准）。", "ontology.write", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "action_key": {"type": "string"}, "input": {"type": "object"}}, "write_db", 1),
     "ontology_action_execute": ("执行已获人工批准的 ActionRequest（仅 approved 可执行；执行档默认被 Agent 运行面剥离，强授权单独放行）。", "ontology.write", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "action_key": {"type": "string"}, "request_id": {"type": "string"}}, "write_db", 3),
-    "ontology_dry_validate": ("在项目绑定的已固定本体版本上对候选变更集做纯预检：零状态变更只读校验，返回 verdict(pass|violations|conflict)、violations 明细（item_index/check/message）与冲突实体，供「先读真实校验错误、再修正候选」的循环使用。不物化候选、不进入锁定工作集；本体与固定版本由服务端从项目绑定解析，调用方不可指定。proposed_json 是候选条目数组，每条形如 {\"op\": \"create\"|\"update\"|\"deprecate\", \"entity_type\": \"object_types\"|\"property_definitions\"|\"relation_types\"|\"data_sources\", \"entity_key\": 小写字母或数字开头、仅含小写字母/数字/短横线/下划线的标识, \"payload\": {…}}；property_definitions 的 payload 必含 display_name、object_type_id、data_type，data_type 仅允许 string/number/boolean/date/datetime/enum/ref；条目不得携带 captured_from（服务身份专用）。", "ontology.read", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "proposed_json": {"type": "array", "items": {"type": "object"}}}, "read", 0),
+    # 描述须短（≤300 字符）且不得内嵌 JSON 大括号示例（test_ai_tool_loop 钉）：
+    # AF1-WP5 评测矩阵实证（2026-11-17，贪心确定性二分）——qwen3 级模型在
+    # 长描述（531 字含候选形状枚举/JSON 示例）下生成不可解析 tool call，
+    # Ollama 原生面解析失败整段丢弃（182 字头段 100% 正常）；候选形状约束
+    # 由 Skill 规则面 + 服务端 violations 闭环承载（工具描述不是执法面）。
+    "ontology_dry_validate": ("在项目绑定的已固定本体版本上对候选变更集做纯预检：零状态变更只读校验，返回 verdict(pass|violations|conflict)、violations 明细（item_index/check/message）与冲突实体，供「先读真实校验错误、再修正候选」的循环使用。不物化候选、不进入锁定工作集；本体与固定版本由服务端从项目绑定解析，调用方不可指定。", "ontology.read", {"project_id": {"type": "string"}, "binding_id": {"type": "string"}, "proposed_json": {"type": "array", "items": {"type": "object"}}}, "read", 0),
     "project_list": ("列出当前账号有权查看的项目，可按名称搜索。", "project.read", {"query": {"type": "string"}}, "read", 0),
     "project_read": ("读取授权项目的背景、模块、任务和调研资料；项目成员可读各成员的个人备忘。", "project.read", {"project_id": {"type": "string"}}, "read", 0),
     DATA_QUALITY_FEEDBACK_TOOL: (
@@ -199,6 +204,10 @@ def call_tool(session, *, user, claims, allowed, name, arguments):
     if name in ("ontology_logic_run", "ontology_action_propose", "ontology_action_execute", "ontology_dry_validate"):
         from fde_api.control.ontology_gateway import call_ontology_tool
 
+        # AF1-WP5 G2（追认落地）：ontology 工具族与其他工具面同闸——先过
+        # _project（execution claims 的 project_id 窄化 + can_view；S-01），
+        # 再进 integrations 桥（桥内 S-01/S-13 校验保留为纵深防御二层）。
+        _project(session, user, claims, str(arguments.get("project_id", "")))
         execution_id = claims.get("execution_id")
         if not isinstance(execution_id, str) or not execution_id:
             raise ControlServiceError("invalid_request", "本次 AI 执行缺少可审计编号。", 400)

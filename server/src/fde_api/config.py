@@ -374,6 +374,13 @@ class Settings(BaseSettings):
     ai_selfhosted_model: str = ""
     ai_selfhosted_api_key: SecretStr | None = Field(default=None, repr=False)
     ai_selfhosted_supports_tools: bool = True
+    # S-SERV A 案（批5 决策单，2026-11-18 P1「全部批准」）：手动工具调用档。
+    # 评测四轮实证（docs/ai-fde/09 §4.2）：Ollama 系端点的原生工具解析器对
+    # 破损 tool-call JSON 静默整段吞（token 记账在、零 emission）——开关开启
+    # 时直连循环剥 tools、格式指令随 system 注入、响应按 <tool_call> 文本块
+    # 自解析（tolerant 链）。默认关（生产行为不变）；仅建议对 Ollama 系
+    # serving 开启。实现=control/manual_tool_call.py，循环/审批/审计面零变化。
+    ai_selfhosted_manual_tool_calling: bool = False
     # 非 loopback/私网端点须显式开启（防公网 URL 冒名「自托管」档——红线：
     # 客户敏感数据不默认发公共模型）
     ai_selfhosted_allow_public: bool = False
