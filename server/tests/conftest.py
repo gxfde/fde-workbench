@@ -677,6 +677,9 @@ def db_session(app) -> Session:
         # AF2-WP2：类型化转换计划行。同上 **FK RESTRICT** 双外键——先于
         # projects/users 清理（AF2 data_engineering 域）。
         __import__("fde_api.data_engineering.models", fromlist=["TransformPlan"]).TransformPlan,
+        # AE1-WP1：单步执行记录行。**零外键**（org/requester 按值存，契约
+        # OrgId string；禁自造 tenant_id）——清理序无硬依赖，随域段落位。
+        __import__("fde_api.action_execution.models", fromlist=["ActionExecution"]).ActionExecution,
         __import__("fde_api.system_configuration", fromlist=["SystemConfiguration"]).SystemConfiguration,
         # 获客诊断 T-15：渠道链接注册表。``created_by`` 指向 users（**FK
         # SET NULL**）；与线索行零外键（channel_ref 是字符串列）——先于

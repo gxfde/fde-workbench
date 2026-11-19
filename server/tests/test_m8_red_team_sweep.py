@@ -43,6 +43,7 @@ from uuid import uuid4
 
 import pytest
 
+from fde_api.action_execution.models import ActionExecution
 from fde_api.agents.models import AgentArtifact, AgentRegistry, AgentRun
 from fde_api.auth.tokens import issue_access_token
 from fde_api.control.chat import AIConversation
@@ -87,6 +88,7 @@ def _candidate_get_var_routes(app):
 # value 为「用 B 企业资源 ID 拼出具体路径」的构造器。
 # 条数基线由 test_m8_sweep_registry_count_and_semantic_baseline 钉住。
 ROUTES = {
+    ("GET", "/api/v1/action-executions/<execution_id>"): lambda w: f"/api/v1/action-executions/{w['execution_b'].id}",
     ("GET", "/api/v1/agents/runs/<run_id>"): lambda w: f"/api/v1/agents/runs/{w['run'].id}",
     ("GET", "/api/v1/agents/runs/<run_id>/artifacts/<artifact_id>/content"): lambda w: f"/api/v1/agents/runs/{w['run'].id}/artifacts/{w['artifact'].id}/content",
     ("GET", "/api/v1/agents/runs/<run_id>/tool-calls"): lambda w: f"/api/v1/agents/runs/{w['run'].id}/tool-calls",
@@ -984,6 +986,29 @@ def m8_world(db_session):
     )
     db_session.add(run_b)
 
+    # AE1-WP1：单步执行记录行（B 租户资产——爬扫面新成员的阳性对照资源；
+    # 零外键，org_id 按值存 B 企业租户）
+    execution_b = ActionExecution(
+        id=str(uuid4()),
+        idempotency_key=f"m8-exec-{uuid4().hex}",
+        org_id=org_b.id,
+        requester_id=user_b.id,
+        action_id="mock.erp.query_inventory",
+        connector_id="mock.erp",
+        method="query_inventory",
+        params_sha256="a" * 64,
+        request_fingerprint="b" * 64,
+        dry_run=True,
+        risk_level=0,
+        approval_id=None,
+        status="succeeded",
+        output_json={"simulated": True},
+        audit_json={},
+        cost_json={},
+        rollback_json={"supported": False, "execution_id": None},
+    )
+    db_session.add(execution_b)
+
     action_id = uuid4().hex + uuid4().hex
     db_session.add(
         OperationEvent(
@@ -1020,6 +1045,7 @@ def m8_world(db_session):
         "profile_b": profile_b,
         "plan_b": plan_b,
         "run_b": run_b,
+        "execution_b": execution_b,
         "action_id": action_id,
     }
 
@@ -1120,7 +1146,11 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
+<<<<<<< HEAD
     assert len(ROUTES) == 49, ("爬扫面条数基线被改动：", len(ROUTES))
+=======
+    assert len(ROUTES) == 46, ("爬扫面条数基线被改动：", len(ROUTES))
+>>>>>>> c1fe044d (feat(action-execution): AE1-WP1 单步 T4 执行链 ActionExecutor——五层校验顺序+15 码闭集+零明文（契约 U1 v1.0.3 FROZEN 逐字对齐；TDD 63 钉+迁移 c7d1e3a5b9f2+M8 爬扫面 46+审计清单/archify 重生成）)
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),
