@@ -986,7 +986,7 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - **真机取证**（真相层 `训练场分布读数/r2-mfg-batch-20261118/`，仓内零落）：12/12 失败 run 全在 `phase=interview`（`workbench_model_failed:ai_output_truncated`）；全量 workbench run 152 的失败面＝截断 23／认证 54／不可用 18／限流 15（长期高频，非复跑特有）；最近 500 条审计里 35 条失败调用 `output_tokens` 全为 0、成功调用中 `output_tokens==512` 者 11 条 ⇒ 推理模型把 `PROBE_MAX_TOKENS=512` 整段烧在 reasoning 上、正文零产出 ⇒ `finish_reason=length` ⇒ 抛 `ai_output_truncated`；66 个 analysis trace 结构化回落计数 0 ⇒ analyze/design 腿（`PHASE_MAX_TOKENS=32768`）非问题面。
 - **修复**：`adapters/workbench.py` NEW `PROBE_RETRY_MAX_TOKENS = 4096`（**仅截断失败路径**同消息重试并抬预算，成功路径不变）＋ NEW `_is_truncated_failure()`（只降级截断；限流／认证／不可用照旧诚实冒泡）＋ NEW `_probe_fallback_question()`（三级确定性退路：未披露方向 → 已披露方向 → **通用问法**；三级皆无才冒泡）；退路写 trace 事件 `probe_model_failed_fallback`。
 - **验证**：7 钉（重试抬预算／成功路径预算不变／双截断退候选问法并留痕／退路优先未披露方向／定向用尽退通用问法／非截断不重试不降级／端到端「probe 全截断仍 completed 且两条事实都披露」）；定向 68 passed；变异四连全红→还原复绿（还原后 sha256 逐位一致）；ruff 清；mypy 277/277 零新增。零迁移零路由零表＝口径 531/56/162/92 不变（单头 `e8f9a0b1c2d3`，2026-11-18 现测）。
-- **未做（授权边界）**：活体部署（与覆层发布后的第三批复跑协调）；A 面覆层 `simulation_workbench` 提案 PROP-577E85F8 的 decide/release（须蔡工密码过四闸）；第三批（处置后新 seed 复跑）度量处置效果。
+- **闭环回执（2026-11-19/20，洁癖收尾回写）**：三项全部完成——A 面覆层 PROP-577E85F8 蔡工亲输密码发布（2026-11-19 01:41，overlay `6ef23be1`）；第三批 25/25 completed（解锁率 0.246→0.5、D1 +0.164／D2 +0.1695、截断失败清零）；活体部署随收官轮完成（2026-11-19 23:1x，url_map 538／rubric-v2 在位）。
 
 #### ✅ T-L0 r2 真机制修复轮（D 面，2026-11-19，状态：**已实施**——白问轮收口：访谈轮数按可披露事实数动态收口）
 
@@ -994,10 +994,10 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - **修复**（`server/src/fde_api/simulation/runner.py`）：①`_build_probe_questions` 撤下阶段闸拦方向（访谈是唯一交互点 ⇒ 无损）；②NEW `_interview_disclosable_fact_count()`（阶段可披露且带探针关键词的事实数）＋NEW `_effective_interview_rounds()`（有效轮数＝`max(1, min(配置, 可披露+1+escalate))`；`max_rounds` 改为**轮数上限**；零可披露仍留 1 轮泛问）；③trace 事件 `interview_round_budget` 留痕四项参数。
 - **验证**：NEW 4 钉＋既有 1 钉改写；`tests/test_simulation_runner.py` 25 passed；台账钉＋行数预算 5 passed；ruff 清；mypy 277/277 零新增；**变异三连全红→还原复绿**（还原后 sha256 逐位一致）。零迁移零路由零表＝口径 534/56/163/93 不变（单头 `f0a1b2c3d4e5`，2026-11-19 现测）。
 - **口径声明**：解锁率分母随轮数收缩而变 ⇒ 跨轮读数不可直接比；效果判据改用「披露事实数＋事实提取率」；跨轮读数须前后并列登记。
-- **未做（授权边界）**：活体部署（等两个代码 PR 落完后统一部署）；PR-B（D3-01 规则层剔除＋`RUBRIC_VERSION` 升 v2）。
+- **闭环回执（2026-11-20，洁癖收尾回写）**：两项全部完成——PR-B 随 E 面落地（#540 `3e0365c5`）；活体部署完成且**第五批实证**：轮数 6 固定→4.28 动态（4×18+5×7）、白问率 78%→27.1%、token 省 47%，披露事实/run 3.28 持平。
 
 
-#### ✅ T-L0 r2 规则层口径变更轮（E 面，2026-11-19，状态：**已实施**，PR #待回填）
+#### ✅ T-L0 r2 规则层口径变更轮（E 面，2026-11-19，状态：**已实施并部署**，PR #540 `3e0365c5`）
 
 - **触发**：第三批（batch3）读数暴露 D3-01 结构性缺陷——精确子串判交付物整句 ⇒ 106/106 场景恒 0 分；`verified=true` 仍占权重 0.5 ⇒ D3 维度上限被压到 0.2；`CRITERION_TO_FAILURE` 不挂任何失败码 ⇒ 只压分、不产信号。
 - **处置（蔡工 2026-11-19 拍板②）**：规则层剔除 D3-01，交付物覆盖语义交模型层 L-B；`RUBRIC_VERSION` → `rubric-v2`；噪声带跨轴诚实处理（缺省带标签留在实测轴 `rubric-v1|model:server`／他轴无带 ⇒ 模型层 `insufficient_data`／存档带非法 ⇒ 400 fail-closed）；提示词侧 `rubric_version` 缺省取单一权威。
