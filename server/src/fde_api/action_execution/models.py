@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
@@ -79,4 +79,51 @@ class ActionExecution(Base, TimestampMixin):
             "rollback": self.rollback_json,
             "created_at": str(self.created_at),
             "updated_at": str(self.updated_at),
+        }
+
+
+class ActionCompensation(Base, TimestampMixin):
+    """回滚批次登记（AE1-WP2，U1 ``x-rollback``）。
+
+    一次 ``rollback_action`` ＝ 一行批次：``status`` 四态闭集
+    （``rolled_back|not_supported|failed|noop``）＋ ``compensations_json`` 逐条
+    补偿登记（条目 ``{compensation_id, kind, target, status, detail}``，
+    ``status ∈ succeeded|failed|skipped``）＋ ``error_json`` 诚实失败对象。
+
+    幂等（U1 ``x-rollback.idempotency`` / U2 S-AE-03 A3）：``execution_id``
+    唯一＝一回滚批次真身——重复回滚短路复用既有批次（补偿副作用计数不增）。
+    零明文：``target`` 只携带 ``connector_id/method#params_sha256 前缀`` 锚。
+    """
+
+    __tablename__ = "action_compensations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('rolled_back', 'not_supported', 'failed', 'noop')",
+            name="ck_action_compensations_status",
+        ),
+        UniqueConstraint("execution_id", name="uq_action_compensations_execution"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    execution_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_executions.id", ondelete="RESTRICT"), nullable=False
+    )
+    org_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    requester_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 回滚发起人
+    rollback_key: Mapped[str | None] = mapped_column(String(160), nullable=True)  # U1 形参；缺省由 execution_id 派生
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    compensations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    error_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "org_id": self.org_id,
+            "requester_id": self.requester_id,
+            "status": self.status,
+            "compensations": self.compensations_json,
+            "error": self.error_json,
+            "reason": self.reason,
+            "created_at": str(self.created_at),
         }

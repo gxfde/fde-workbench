@@ -3,6 +3,10 @@
 POST /api/v1/action-executions             提交单步动作（幂等键必填；契约 U1
      ``ActionExecutionRequest`` 形态；默认门＝白名单 fail-closed ＋ 未接线
      派发 fail-closed——WP3 接白名单加载器与连接器适配）
+POST /api/v1/action-executions/<id>/rollback   回滚（契约 U1 ``x-rollback``：
+     四态诚实失败——``rolled_back|not_supported|failed|noop`` 均以 HTTP 200
+     ＋ ``data.error`` 对象返回〔exceptions_note：诚实失败态不冒充成功〕；
+     幂等——同 execution_id 重复调用复用既有批次，零重复补偿副作用）
 GET  /api/v1/action-executions/<id>        执行详情（同租户；跨租户 404 不泄露）
 
 错误信封沿 Workbench ``{data:null,error:{code,message,details}}``（契约
@@ -37,6 +41,24 @@ def submit_action():
     payload = request.get_json(silent=True)
     result = service.submit_action(actor=g.current_user, payload=payload)
     return jsonify({"data": result, "error": None}), 201
+
+
+@action_execution_blueprint.post("/action-executions/<execution_id>/rollback")
+@require_auth
+def rollback_execution(execution_id: str):
+    """回滚（U1 ``x-rollback``）：body ``{reason?}`` → ``RollbackResult``。
+
+    四态均 HTTP 200（诚实失败态以 ``data.error`` 对象承载，不冒充成功；
+    ``not_found`` 404 仍走信封）。幂等：同 execution_id 重复调用复用既有批次。
+    补偿器生产装配＝``NO_COMPENSATOR``（fail-closed → ``not_supported``）；
+    真实补偿器随 WP3 连接器适配按 kind 注册。
+    """
+    payload = request.get_json(silent=True) or {}
+    reason = payload.get("reason")
+    result = service.rollback_action(
+        actor=g.current_user, execution_id=execution_id, reason=reason if isinstance(reason, str) else None
+    )
+    return jsonify({"data": result, "error": None}), 200
 
 
 @action_execution_blueprint.get("/action-executions/<execution_id>")

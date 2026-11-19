@@ -1146,11 +1146,7 @@ def test_m8_sweep_registry_count_and_semantic_baseline():
        均被拒」的路由若停留在排除登记里即转红（正向降级逃逸口）；
     ④ 阳性对照可行者若仍被排除，必须是「角色面」唯一形态（org 隔离不适用）。
     """
-<<<<<<< HEAD
-    assert len(ROUTES) == 49, ("爬扫面条数基线被改动：", len(ROUTES))
-=======
-    assert len(ROUTES) == 46, ("爬扫面条数基线被改动：", len(ROUTES))
->>>>>>> c1fe044d (feat(action-execution): AE1-WP1 单步 T4 执行链 ActionExecutor——五层校验顺序+15 码闭集+零明文（契约 U1 v1.0.3 FROZEN 逐字对齐；TDD 63 钉+迁移 c7d1e3a5b9f2+M8 爬扫面 46+审计清单/archify 重生成）)
+    assert len(ROUTES) == 50, ("爬扫面条数基线被改动：", len(ROUTES))
     assert len(_EXCLUSION_RECORDS) == 74, (
         "排除登记条数基线被改动：",
         len(_EXCLUSION_RECORDS),

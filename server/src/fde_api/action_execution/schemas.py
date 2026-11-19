@@ -176,3 +176,61 @@ def build_result(
     else:
         result["replayed_from_execution_id"] = None
     return result
+
+
+def _validate_compensation(comp: Any) -> None:
+    if not isinstance(comp, dict):
+        raise ActionExecutionError("validation_failed", "compensations 条目须为对象。")
+    missing = [k for k in ("compensation_id", "kind", "target", "status") if not comp.get(k)]
+    if missing:
+        raise ActionExecutionError("validation_failed", f"补偿条目缺必填字段：{'、'.join(missing)}。")
+    if comp["status"] not in ("succeeded", "failed", "skipped"):
+        raise ActionExecutionError("validation_failed", f"补偿条目状态闭集外：{comp['status']}。")
+
+
+def build_rollback_result(
+    *,
+    execution_id: str,
+    status: str,
+    compensations: list[dict],
+    error: dict | None,
+    output: dict | None = None,
+) -> dict[str, Any]:
+    """契约 $defs/RollbackResult：四态与 error/compensations 的 if/then 绑定在构造层强制。
+
+    - ``rolled_back`` ⇒ error null ＋ compensations ≥1 且每条恒 ``succeeded``
+      （任一条 failed/skipped 只能走 ``failed``——部分补偿不得谎报整体成功）；
+    - ``not_supported`` ⇒ error.code 恒 ``rollback_not_supported``；
+    - ``failed`` ⇒ error.code 恒 ``compensation_failed``（details.compensation_ids
+      由调用方列出失败条目）；
+    - ``noop`` ⇒ error null 且 compensations 空数组（不省略——省略与空数组不可区分）。
+    """
+    if status not in ROLLBACK_STATUSES:
+        raise ValueError(f"回滚状态闭集外：{status}")
+    for comp in compensations:
+        _validate_compensation(comp)
+    result: dict[str, Any] = {"execution_id": execution_id, "status": status}
+    if status == "rolled_back":
+        if error is not None:
+            raise ActionExecutionError("validation_failed", "rolled_back 态 error 必须为 null。")
+        if len(compensations) < 1 or any(c["status"] != "succeeded" for c in compensations):
+            raise ActionExecutionError(
+                "validation_failed", "rolled_back 要求补偿 ≥1 条且每条恒 succeeded。"
+            )
+    elif status == "noop":
+        if error is not None:
+            raise ActionExecutionError("validation_failed", "noop 态 error 必须为 null。")
+        if compensations:
+            raise ActionExecutionError("validation_failed", "noop 态 compensations 必须为空数组。")
+    elif status == "not_supported":
+        if error is None or error.get("code") != "rollback_not_supported":
+            raise ActionExecutionError("validation_failed", "not_supported 态 error.code 恒 rollback_not_supported。")
+    elif status == "failed":
+        if error is None or error.get("code") != "compensation_failed":
+            raise ActionExecutionError("validation_failed", "failed 态 error.code 恒 compensation_failed。")
+        if not any(c["status"] == "failed" for c in compensations):
+            raise ActionExecutionError("validation_failed", "failed 态须含至少一条 failed 补偿。")
+    result["compensations"] = compensations
+    result["output"] = output
+    result["error"] = error
+    return result

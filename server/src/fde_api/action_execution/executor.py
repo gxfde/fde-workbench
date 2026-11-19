@@ -102,12 +102,19 @@ class ActionExecutor:
         approval_gate: ApprovalGate,
         dispatch: Dispatch,
         clock: Clock | None = None,
+        in_flight_lock: Callable[[str], None] | None = None,
     ) -> None:
         self._idempotency = idempotency_gate
         self._whitelist = whitelist_gate
         self._approval = approval_gate
         self._dispatch = dispatch
         self._clock = clock or (lambda: datetime.now(UTC))
+        # WP2 在途锁（U1 x-idempotency.in_flight / U2 A9）：L5 之后、执行段之前
+        # 调用（入参 execution_id——锁行与终态同一行状态机推进）——落
+        # ``awaiting_approval`` 锁行占用 UNIQUE(org_id, idempotency_key)，
+        # 并发败者在**零副作用窗口**即被 409 挡下（dispatch 未发生 ⇒ 副作用恒 1）。
+        # None＝不占锁（WP1 单元桩路径；生产装配由 service 提供真锁）。
+        self._in_flight_lock = in_flight_lock
 
     def execute(self, request: dict) -> dict[str, Any]:
         validate_request_shape(request)  # L1（含敏感键扫描）
@@ -128,8 +135,10 @@ class ActionExecutor:
         self._whitelist.check(request["connector_id"], request["method"])  # L3
         approval = self._approval.verify(request)  # L4
         validate_conditional(request)  # L5 兜底（异常直连路径 422）
-        started = self._clock()
         execution_id = new_uuid()
+        if self._in_flight_lock is not None:
+            self._in_flight_lock(execution_id)  # WP2 在途锁（唯一约束兜底；拒绝路径未至此层零落库）
+        started = self._clock()
         if request["dry_run"]:
             output = simulate_output(request)
         else:
