@@ -1,0 +1,168 @@
+{
+  "version": "1.3.1",
+  "artifact": "AE0-WP4 连接器白名单 v1",
+  "generated_at": "2026-11-18",
+  "status": "FROZEN-v1（2026-11-18 AE0 出口冻结）——D2 已 P1「全部批准」（52 号 §2 D2 拍板落痕：AE0–AE1 仅内部 API + Mock 外部系统、真实系统归 AE3、白名单格式按 D2③）；本件即按裁决校准后的冻结版（v1.0→v1.1：methods 语义改 D2③ 动作方法名、动词/路径移入 http_bindings；v1.1→v1.2：评审轮校准——error_code_table 主表状态由 DRAFT 校正为 FROZEN-v1、connectors[0] 增 methods 收窄与输出归一化登记〔KD-01〕；v1.2→v1.3：评审轮补 `constraints.header_allowlist`——承载 D2 拍板执行层安全范式四件套「白名单 + SSRF 预检 + Header 白名单 + fail-closed 默认关」中此前无条目承载的 Header 白名单项）。白名单属安全红线件：四条为封闭集合，变更须审核后升 v2；v1.3.1（2026-11-19）：**Q9 实测回填**（53 号 §2.4 Q9 拍板授权「归口 AE1 开工轮实测回填」）＝mock.erp/mock.email 两条 notes 追加实测证据与请求/响应形状定稿——**连接器封闭集合、methods、http_bindings、constraints 零改动**（change_control 口径：非语义修订，不触发 v2）",
+  "authority": {
+    "work_order": "docs/ai-fde/52-ae0-work-order.md §2 D2（连接器白名单范围；v0.3 版含拍板落痕）、§3 工作包表 WP4",
+    "handbook": "docs/ai-fde/_exec-handbook.md §2.2 WP4（lines 209-257）",
+    "recon": "docs/ai-fde/_ae0-wp1-recon.md §3.3（ontology-service 出站/凭据三件）、§4 G-AE-4（无统一连接器注册面）",
+    "negative_variants": "docs/ai-fde/51-ae-evaluation.md §3 S-AE-01~06（lines 112-159）",
+    "execution_contract": "docs/ai-fde/_ae-execution-contract-v1.json（WP2，FROZEN-v1；x-error-codes / x-dry-run / x-tenant-isolation / x-idempotency 与本件口径已对齐）",
+    "workbench_commit": "81242018（D:/test/fde-workbench，2026-11-18 10:40 +0800）",
+    "ontology_service_baseline": "89974cb（本仓子目录，两提交间 src/ 零差异）"
+  },
+  "scope": {
+    "included": "AE0–AE1 仅内部 API（Workbench 自身 HTTP 面）+ Mock 外部系统（本地桩服务）",
+    "excluded": "真实外部系统（真实 ERP/CRM/BI、真实 OAuth 授权流）归 AE3，需客户授权 + OAuth 安全审计",
+    "no_runtime_registration": "本件为安全红线件：连接器集合冻结，新增连接器必须审核后升版（v2），运行时不得动态注册未审核连接器"
+  },
+  "connectors": [
+    {
+      "id": "workbench.ontology",
+      "name": "workbench.ontology",
+      "type": "internal",
+      "base_url": "http://localhost:8010",
+      "methods": ["read"],
+      "http_bindings": [
+        {"http_method": "GET", "path": "/api/v1/projects/{project_id}/ontology/terms"}
+      ],
+      "auth_type": "bearer_token",
+      "risk_level": 0,
+      "allowed_side_effects": {
+        "has_external_side_effect": false,
+        "description": "只读查询本体术语清单，无写库、无外部系统副作用、无通知发出；副作用计数恒为 0",
+        "idempotency_assertion": "同 idempotency_key 重复调用 3 次：响应一致，且 Workbench 侧无任何状态变更（术语表行数与版本号逐次比对不变）"
+      },
+      "notes": "落点核实：D:/test/fde-workbench/server/src/fde_api/ontology/routes.py:102-111（@ontology_blueprint.get(\"/terms\") + @require_auth + list_terms，can_view 只读面），蓝本前缀 /api/v1/projects/<project_id>/ontology 见同文件:54-56。base_url 端口 8010 来自 server/src/fde_api/config.py:18-19（api_host=127.0.0.1 / api_port=8010）与 README.md:170（flask run --host 127.0.0.1 --port 8010）；本件写 localhost 与 127.0.0.1 等价（回环）。auth_type=bearer_token：认证取 Authorization: Bearer <JWT>（server/src/fde_api/auth/decorators.py:95-99），JWT 必填 claim 见同文件:111（sub/role/pwd/ver/iat/exp/iss），org 归属以库内 users.org_id 为准（decorators.py:47-49，不取令牌 claim）——跨租户由服务端强制，AE 侧不得自造 tenant_id。字段口径：本件统一用 52 号 §2 D2③ 的 id/type/methods（v1.1 校准：methods＝动作方法名〔D2③ 示例语义：read / create / query_inventory / send〕，HTTP 动词与路径移入 http_bindings 数组，内层键 http_method + path；工作令优先于执行手册；手册 §2.2 WP4 写 name/allowed_methods/allowed_paths，本件不写这两套名）；name 与 id 同值，可读描述只在本 notes 内，不另造第二套命名字段。**methods 收窄登记（诚实登记）**：52 号 §2 D2③ 举例为 methods=[\"create\",\"read\"]（双方法），本条只登记 [\"read\"]——因实测端点只暴露只读面 list_terms（routes.py:102-111），本轮无第二个已核实动作可登记（ontology 写面在 Workbench 本体未核实存在）；收窄只减不增、不放宽任何动作面，若 AE1 需并入 create 须先核实落点并审核后升白名单 v2。**输出归一化登记（KD-01，评审轮新增）**：本条端点实测响应信封为 {data:{items:[…]}, error:null}（service.list_project_terms 返回 {\"items\":[…]}, service.py:1581-1611；元素为 serialize_term 字段，service.py:399-414），而任务集 T4-001 冻结断言取 output.ontologies / output.count——内部推荐由执行器适配层按本条登记的归一化规则产出 output = {ontologies:[…], count:int}（元素派生 {ontology_id,name,org_id}），使冻结断言逐字可判定；归一化规则待 P1 终判（53 号 Q14 / 任务集 known_divergences.KD-01）。"
+    },
+    {
+      "id": "workbench.workflow",
+      "name": "workbench.workflow",
+      "type": "internal",
+      "base_url": "http://localhost:8010",
+      "methods": ["create"],
+      "http_bindings": [
+        {"http_method": "POST", "path": "/api/v1/projects/{project_id}/workflows"}
+      ],
+      "auth_type": "bearer_token",
+      "risk_level": 1,
+      "allowed_side_effects": {
+        "has_external_side_effect": false,
+        "description": "内部写库副作用：在本租户项目下创建一条工作流定义草稿（workflow_definitions 行 + 初始版本），无外部系统副作用、无邮件或外部通知发出",
+        "idempotency_assertion": "同 idempotency_key 重试 3 次：项目内工作流定义条数只增 1；注意该路由本身不强制幂等键（载荷仅 name/dag/description，见 notes 落点），幂等保证必须由 AE 执行器层（WP2 契约）提供"
+      },
+      "notes": "落点核实：D:/test/fde-workbench/server/src/fde_api/workflows/routes.py:41-57（@workflows_blueprint.post(\"/api/v1/projects/<project_id>/workflows\") + @require_auth + create_workflow_route，can_manage 建草稿，返回 201；executor.load_project(manage=True) 已做项目归属校验）。排除项（不在本白名单）：发布 workflows/<id>/publish 为 admin 限定（routes.py:60-65）、发起运行 workflows/<id>/runs 另有载荷与幂等语义（routes.py:81-107）、validate/generate-ai-draft 均为 POST 写面（routes.py:242, 272）——AE0–AE1 只放「建草稿」一条。幂等缺口（诚实登记）：该建草稿路由不读 idempotency_key（对比 routes.py:81-107 的 runs 路由读 idempotency_key），故「同键不重复建」只能由 AE 执行器侧保证，AE1 必须补一条同键重放只建 1 条的测试钉。risk_level=1 沿 Workbench 目录同尺度（api_catalog.py:161-167：只读=0，普通写=1，外部=2，确认类=3），与 automation_tasks risk CHECK 0–4 同尺度（control/models.py:81）。字段口径同 workbench.ontology 条（id/type/methods/paths，工作令优先于手册）。"
+    },
+    {
+      "id": "mock.erp",
+      "name": "mock.erp",
+      "type": "external-mock",
+      "base_url": "http://localhost:5001",
+      "methods": ["query_inventory"],
+      "http_bindings": [
+        {"http_method": "GET", "path": "/mock-erp/inventory"}
+      ],
+      "auth_type": "api_key",
+      "risk_level": 0,
+      "allowed_side_effects": {
+        "has_external_side_effect": false,
+        "description": "只读查询 Mock ERP 库存，无状态变更；Mock 侧不写任何持久状态（AE1 须实现为纯读桩）",
+        "idempotency_assertion": "重试 3 次响应一致，且 Mock 库存桩的调用前后状态快照逐字段相同（无扣减、无预留、无流水）"
+      },
+      "notes": "语义口径差异登记：手册 §2.2 WP4 写 Mock ERP 为 `POST /mock-erp/orders`（建单，有外部副作用），本件按 52 号 §2 D2③「mock.erp / methods: [query_inventory]」与工作令 D3②「调用 Mock 外部 API（如『查询库存』）」取只读查询形态，理由=工作令优先于执行手册（与字段名差异同一原则）。如 AE1 确需建单动作，须走白名单改版（审核后升 v2），不得运行时新增。端口 5001 沿手册示例（_exec-handbook.md §2.2 WP4 步骤 2「Mock ERP API（本地 Flask/FastAPI）」同款端口），但仓库内未核实存在任何 Mock 服务实现（D:/test/fde-workbench/server 与 ontology-service 全量 grep「mock-erp/mock_erp/mock-email/mock_email」零命中），故 base_url/path/port 为 AE1 建议值待实测。auth_type=api_key 且凭据为占位值：AE0–AE1 只用内部 API 与 Mock，占位凭据经 env:// 句柄解析（ontology-service/src/ontology_service/connectors.py:71-79，仅内存解析，绝不落盘/入日志，S-07），绝无真实客户凭据。字段口径同前两条。**Q9 实测回填（2026-11-19，AE1-WP3）**：Mock 桩已从零实现＝AE1 侧夹具 `server/tests/_ae_mock_stack.py`（workbench 仓内）——127.0.0.1:5001 `GET /mock-erp/inventory` **纯读桩**（按 sku 返回确定性库存行，零持久状态，带请求计数器供「零连接」断言）；**请求/响应形状定稿**：请求 query `{sku, warehouse_id?}`，响应 `{items:[{sku,quantity,warehouse}], count}`；本条端口 5001 与路径 `/mock-erp/inventory` 即实测值（建议值→实测）；真 HTTP 往返实证钉＝`test_ae_wp4_idempotency_single_side_effect` 的 mock.erp 腿（桩侧请求计数 ==1，HTTP 200）。"
+    },
+    {
+      "id": "mock.email",
+      "name": "mock.email",
+      "type": "external-mock",
+      "base_url": "http://localhost:5002",
+      "methods": ["send"],
+      "http_bindings": [
+        {"http_method": "POST", "path": "/mock-email/send"}
+      ],
+      "auth_type": "api_key",
+      "risk_level": 3,
+      "allowed_side_effects": {
+        "has_external_side_effect": true,
+        "description": "有外部副作用：向 Mock 邮箱投递一封邮件（Mock 服务端状态变更 + 收件箱新增 1 条）。这是 AE0–AE1 白名单内唯一的外部写副作用动作，也是幂等断言（S-AE-02）与回滚断言（S-AE-03）的主锚点",
+        "idempotency_assertion": "同 idempotency_key 重试 3 次：Mock 收件箱邮件条数只增 1、内容只 1 份；换新 key 才允许再发 1 封"
+      },
+      "notes": "形态与手册一致：Mock Email（`POST /mock-email/send`，_exec-handbook.md §2.2 WP4 步骤 2）；手册写「本地 SMTP 测试服务器」，本件登记为 HTTP 端点形态（手册同款路径），SMTP/收件箱实现归 AE1，端口 5002 与路径均为 AE1 建议值、仓库内未核实存在（grep 零命中，见 mock.erp 条）。risk_level=3 是**收紧**而非放松，理由有二：①目录派生口径（api_catalog.py:161-170）对外部写派生为 2，但 automation_approvals 的 risk_level CHECK 约束是 3–4（control/models.py:170），risk=2 的动作在现结构下**根本进不了审批表**＝外部写副作用绕过审批面；②任务书 §15 红线「Action 写操作默认 dry-run + 审批 + 幂等 + 审计」要求外部副作用动作必须经审批，故取 3。代价与前置：risk=3 落到 automation_approvals 后，执行须过控制面既有白名单段——现仅硬编码 task.batch_assign 一项（control/service.py:873-874，其余一律 403 tool_not_allowed），该缺口即 G-AE-1（_ae0-wp1-recon.md §4，blocking WP2），AE1 须先落 WP2 契约的可扩展 allow-list 机制。跨件自洽：WP2 契约 _ae-execution-contract-v1.json 的 x-dry-run 规定「dry_run=false 的写型动作在 risk_level≥3 时 approval_id 必填」，与本条 risk_level=3 取值一致。字段口径同前三条。**Q9 实测回填（2026-11-19，AE1-WP3）**：Mock 桩已实现＝同夹具——127.0.0.1:5002 `POST /mock-email/send` **可计数副作用桩**（收件箱内存列表逐条 append；响应 `{message_id, delivered_count:1, mailbox_count}`，另含 `GET /mock-email/inbox` 检视面）；**请求体形状定稿**：JSON `{to, subject, body}`；本条端口 5002 与路径 `/mock-email/send` 即实测值；`idempotency_assertion` 实证钉＝`test_ae_wp4_idempotency_single_side_effect`（同键 3 次：响应逐字一致＋桩侧外呼恰 1 次＋收件箱新增 1 条——幂等语义由 AE1 执行器 L2 复放通道保证，桩不自带幂等）。"
+    }
+  ],
+  "constraints": {
+    "fail_closed": {
+      "summary": "未在白名单注册的 endpoint 一律拒绝并记 403，不得静默放通；连接器通道整体默认关闭，缺配置即拒",
+      "precedent": "D:/test/fde-workbench/server/src/fde_api/control/service.py:873-874（工具白名单仅 task.batch_assign，其余 403 tool_not_allowed）；ontology-service/src/ontology_service/outbound.py:52-64（assert_outbound_allowed，通道未启用即抛错）+ settings.py:62（outbound_webhook_enabled 默认 false）+ settings.py:108-117（生产环境启用但白名单为空 → 启动即拒）",
+      "ae_rule": "AE 执行器解析连接器请求时，先按本文件 connectors 精确匹配三元组 (connector_id, method, http_binding)——method＝动作方法名（methods[]），http_binding＝动词+路径对（http_bindings[]，v1.1 校准：原 (connector_id, method, path) 中 path 语义并入 http_binding）；命中失败即 403 并写审计事件（S-AE-06 检测口径，51 号:154-159）"
+    },
+    "ssrf_precheck": {
+      "summary": "主机白名单 + 解析即校验（不等连接）+ 禁止重定向跟随；AE0–AE1 目标全为回环地址，故公网 IP 规则在 AE3 真实外部系统时启用",
+      "precedent": "ontology-service/src/ontology_service/outbound.py:28-34（_resolve_host 解析全部 IP，解析失败即拒）、:37-49（_is_public_ip 拒私网/回环/链路本地/保留/组播/未指定）、:52-64（主机白名单 + 全部解析 IP 公网校验）、:74（follow_redirects=False）",
+      "ae_deviation": "M6 既有口径是「全部解析 IP 必须是公网」（拒回环），而 AE0–AE1 的四个连接器 base_url 全是 localhost（回环）——两者直接冲突。AE 线取**同精神反向规则**：主机必须命中本白名单的 localhost+固定端口，且解析后全部 IP 必须是回环地址（127.0.0.0/8、::1）；一旦解析出任何非回环 IP（即 localhost 域名被劫持指向真实客户主机或公网），立即 403 —— DNS 重绑定前置拦截在 AE0–AE1 依然成立，只是方向由「必须公网」翻为「必须回环」。公网 IP 强制规则原文保留在 outbound.py:37-49，AE3 引入真实外部系统时原样复用",
+      "sandbox_egress": "D:/test/fde-workbench/server/src/fde_api/agents/sandbox.py:9-12（egress 默认 --network none；allowlist 档 per-run 网络 + iptables 白名单）、:57-58（egress 默认 deny）、:235-244（deny 档带白名单 = 配置矛盾，拒绝而非静默忽略 → SandboxError egress_allowlist_conflicts_deny）——AE 执行器在沙箱内访问 Mock 时，egress 必须走 allowlist 档且白名单只含回环 CIDR"
+    },
+    "header_allowlist": {
+      "summary": "出站请求头按白名单放行：只允许逐条登记的头名，其余请求头一律不外发（**白名单范式四件套之一**：白名单 + SSRF 预检 + Header 白名单 + fail-closed 默认关，52 号 §2 D2 拍板落痕）",
+      "precedent": "ontology-service/src/ontology_service/outbound.py:87-95（受控 webhook 的固定头集：Content-Type: application/json + Idempotency-Key: <外部幂等键> + 可选 Authorization: Bearer <凭据>——头集固定、由代码构造，非调用方透传）",
+      "ae_rule": "AE 执行器外呼时，请求头集合 ＝ 固定基线（Content-Type / Accept / User-Agent 按实现固定值）＋ 逐连接器登记的允许头（如 Authorization: Bearer <凭据句柄解析值>、Idempotency-Key: <本次幂等键>、X-Request-Id）+ **调用方不得自定义任何头**（params 里出现头名字段即 422 validation_failed，不得静默透传）；凭据头值只来自凭据句柄的内存解析结果，绝不取自 params；头名大小写不敏感匹配，拒绝时记 403 tool_not_allowed 并写审计（承接 C-01 fail-closed 口径）",
+      "open_item": "**本字段名与粒度为 AE0 校准自造**（D2 落痕只给了「Header 白名单」范式名，未逐字指定字段与登记粒度）——与 `http_bindings` 同类，待 P1 追认（53 号 Q6b 一并追认）"
+    },
+    "credential_storage": {
+      "summary": "凭据 Fernet 密文落库、绝不回显；凭据句柄仅内存解析，不落盘、不入日志、不进快照",
+      "precedent": "D:/test/fde-workbench/server/src/fde_api/agents/credentials.py:20-21（只存密文绝不回显：序列化只出 credential_configured bool）、:62-74（_cipher Fernet）、:133-155（save_credential 明文只在写入瞬间进 Fernet）、:115（只出 bool）；ontology-service/src/ontology_service/connectors.py:71-118（S-07 句柄 env://vault://file:// 仅内存解析）",
+      "ae_rule": "AE0–AE1 四条连接器均用占位凭据；真实客户凭据与 OAuth 令牌归 AE3。AE 执行器日志/审计/错误消息一律只出现凭据句柄 id，不得出现明文"
+    },
+    "log_redaction": {
+      "summary": "access_token / refresh_token / client_secret 不得出现在日志、错误消息、响应体任何位置；另有 redact() 值级兜底",
+      "precedent": "51 号:138-142（S-AE-04 检测＝全文搜索日志不得含 access_token/refresh_token/client_secret）；D:/test/fde-workbench/server/src/fde_api/agents/sandbox.py:312-317（redact() 把凭据值替换为 ***）",
+      "ae_rule": "AE1 须提供「日志全文 grep 敏感键 = 0 命中」的测试钉；异常栈与 httpx 错误消息同样适用（上游错误体不得整段回显）"
+    },
+    "timeout_and_quota": {
+      "summary": "每次外呼必带超时上限；并发与队列等待独立短超时；超限快速干净拒绝",
+      "precedent": "ontology-service/src/ontology_service/settings.py:48（connector_timeout_seconds=5.0）、:51（connector_queue_timeout_seconds=2.0）、:55-57（max_rows=1000 / max_bytes=5MB / max_concurrency=4）；connectors.py:60-69（并发槽 + 排队超时 → 429 rate_limited）；outbound.py:97-101（超时 → ApiError timeout）",
+      "ae_rule": "AE 执行器对四个连接器统一：单次调用超时上限（沿 connector_timeout_seconds 量级）、并发上限、失败不无限重试（automation 链无自动重投，人工重触发，见 _ae0-wp1-recon.md §4 G-AE-3）"
+    },
+    "response_body_zero_echo": {
+      "summary": "上游响应体不回显进快照/审计/错误消息，只回传状态码与经脱敏/归一后的最小结果",
+      "precedent": "ontology-service/src/ontology_service/outbound.py:9（响应体零回显）、:86-95（只回传上游 HTTP 状态码）、:102-107（非 2xx 只带 http_status 进 details）、:111-113（outbound_host 只留主机名供排障）",
+      "ae_rule": "Mock ERP / Mock Email 的响应体在 AE 契约中只允许「结果摘要 + 状态码」入审计；原始响应体不落 audit_events、不进 Agent 上下文"
+    },
+    "oauth_flow": {
+      "summary": "AE0–AE1 只用内部 API 与 Mock，占位凭据，不实现 OAuth 授权流；真实 OAuth（授权码/PKCE、token 刷新与过期、撤销）归 AE3",
+      "precedent": "51 号:72-88（T6 外部系统集成任务族，评分维度含 OAuth 流程 token 获取/刷新/过期处理；门禁 AE3 T6 OAuth 100%）、:175-183（§4.2 阶段门禁公式）；52 号 §2 D2②（真实低风险系统亦仅归 AE3，需客户授权 + OAuth 安全审计）",
+      "ae_rule": "AE0–AE1 四条连接器的 auth_type 只有 bearer_token（内部 JWT）与 api_key（占位），无 oauth2 类型；白名单文件本身不含任何 client_id/client_secret/token 值"
+    },
+    "tenant_isolation": {
+      "summary": "租户隔离服务端强制，复用 orgs 模型（org_id），禁自造 tenant_id；跨租户调用返回 404",
+      "precedent": "D:/test/fde-workbench/server/src/fde_api/auth/decorators.py:47-49（org 上下文读库值 users.org_id，不取令牌 claim）；ontology-service/src/ontology_service/errors.py:1-5（跨租户一律 404 不泄露存在性，伪造/越权 403）；51 号:146-151（S-AE-05 检测口径）",
+      "ae_rule": "本白名单**不引入**任何租户字段或租户路由参数之外的隔离机制；隔离由被调端点既有服务端闸强制，AE 执行器不得自行过滤 org_id（禁自造 tenant_id）"
+    },
+    "idempotency": {
+      "summary": "写端点强制幂等键；同键同体复放原响应，同键异体 409",
+      "precedent": "ontology-service/src/ontology_service/idempotency.py:1（写端点幂等语义）、:22-40（缺键=422 validation_failed；同键异体=409 idempotency_mismatch）、:44-52（find_replay 复放）；D:/test/fde-workbench/server/src/fde_api/control/models.py:135（automation_task_runs.idempotency_key 非空 + UNIQUE）、D:/test/fde-workbench/server/src/fde_api/workflows/routes.py:81-107（runs 路由读 idempotency_key，同键返回既有 run）",
+      "ae_rule": "四条连接器中 mock.email 与 workbench.workflow 为写型动作，幂等键由 AE 执行器层强制（WP2 契约）；workbench.workflow 建草稿路由自身不强制幂等键（见该条 notes），AE1 必须补同键重放测试钉"
+    },
+    "approval_and_dry_run": {
+      "summary": "Action 写操作默认 dry-run + 审批 + 幂等 + 审计；审批面 decide_automation_approval 本体禁改（禁改清单）",
+      "precedent": "任务书 §15 安全红线；D:/test/fde-workbench/server/src/fde_api/control/models.py:170（automation_approvals.risk_level CHECK 3–4）；52 号 §6 禁改清单（审批面 / 租户隔离 / 迁移 append-only / TrustBoard / 连接器白名单 / 幂等唯一约束）；_ae0-wp1-recon.md §2.1（S04 四眼闸）、§4 G-AE-1（批准后可执行工具白名单硬编码 1 项，blocking WP2）",
+      "ae_rule": "本白名单不新增审批语义、不改审批面；mock.email（risk 3）进入既有审批面执行需先解决 G-AE-1 的 allow-list 扩展"
+    },
+    "change_control": {
+      "summary": "白名单是安全红线件：四条为封闭集合，新增/修改连接器必须审核后改版（v2），运行时不得动态注册未审核连接器；禁改清单含「连接器白名单」",
+      "precedent": "_exec-handbook.md §2.2 WP5 步骤 5（AE1 禁改清单新增：连接器白名单，禁止运行时新增未审核连接器）；52 号 §6 禁改清单；_ae0-wp1-recon.md §4 G-AE-4（无统一 AE 连接器注册面，本件为新落安全红线件）",
+      "ae_rule": "AE 执行器须以本文件（或其审后改版）为唯一注册面，加载失败/缺失即 fail-closed 拒绝，不得回退到「任意 URL 可调」"
+    },
+    "error_code_table": {
+      "summary": "本清单的「不通过时错误码」主表＝WP2 执行器契约 x-error-codes（15 码闭集，2026-11-18 13:17 落盘，**状态 FROZEN-v1**——随 AE0 出口与本件同时冻结）；辅助表＝ontology-service 统一码表；HTTP 状态沿 Workbench 既有惯例（errors.py:9-18 的 {data:null,error:{code,message,details}} 信封）",
+      "precedent": "docs/ai-fde/_ae-execution-contract-v1.json → x-error-codes（tool_not_allowed 403 / validation_failed 422 / sensitive_argument_forbidden 422 / approval_required 403 / self_review_forbidden 409 / permission_revoked 403 / not_found 404 / idempotency_mismatch 409 / idempotency_in_flight 409）；ontology-service/src/ontology_service/errors.py:13-34（CODE_STATUS：forbidden 403 / validation_failed 422 / idempotency_mismatch 409 / rate_limited 429 / unavailable 503 / timeout 504 / not_found 404）；D:/test/fde-workbench/server/src/fde_api/errors.py:9-18（error_response(code, message, status) 同形）",
+      "open_item": "WP2 闭集未收 timeout(504) / rate_limited(429) / unavailable(503) / SSRF 专用码 —— 本件不自造新码，相关条目暂引 ontology-service 辅助码表，缺口已登记于 _ae-connectors-security-checklist.md §4 Q8（归 WP2 侧决定是否扩闭集）"
+    },
+    "field_schema_reconciliation": {
+      "summary": "本件字段名统一为 52 号 §2 D2③ 口径（id / type / methods），另加 http_bindings 承载 HTTP 动词与路径；不采用手册 §2.2 WP4 的 name/allowed_methods/allowed_paths；工作令优先于执行手册",
+      "precedent": "docs/ai-fde/52-ae0-work-order.md D2③ 白名单格式示例（字段 id/type/methods，methods＝动作方法名语义）vs docs/ai-fde/_exec-handbook.md:220-243（WP4 步骤 3 示例，字段 name/allowed_methods/allowed_paths）",
+      "resolution": "按项目守则权威优先级（任务书 > 决议文档 > 工作令 > 执行手册），取工作令口径；手册字段名不写进本件，避免两套字段混写。手册的 base_url/auth_type 语义与本件一致，予以沿用。v1.0→v1.1 校准（2026-11-18，D2 拍板落痕「白名单格式按 D2③」）：v1.0 曾把 methods 登记为 HTTP 动词（GET/POST）——与 D2③ 示例语义（methods=[\"query_inventory\"] 等＝动作方法名）不符，且与 WP2 契约 method 字段描述、任务集 method 取值形成三方法径分歧（原任务集 open_divergence 登记项）；现 methods＝动作方法名，HTTP 动词+路径移入 http_bindings（内层 http_method + path），动词与路径精确匹配约束不丢失。http_bindings 字段命名为 AE0 校准自造（D2③ 未逐字指定），已登记任务集 §11-7 与 53 号 Q6 为待 P1 追认项"
+    }
+  }
+}

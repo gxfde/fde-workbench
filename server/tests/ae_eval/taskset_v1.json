@@ -1,0 +1,501 @@
+{
+  "version": "1.4",
+  "task_set": "_ae-tasks-v1",
+  "family": "T4",
+  "status": "FROZEN-v1（2026-11-18 AE0 出口冻结；D1–D3 已 P1 拍板，52 号 §2 落痕）",
+  "generated_at": "2026-11-18",
+  "revision_note": "v1.0→v1.1（2026-11-18）：AE0-WP2 契约件 _ae-execution-contract-v1.json 与 AE0-WP4 白名单件 _ae-connectors-whitelist-v1.json 在本工作区并行会话中落盘（均 DRAFT），本任务集据此把观测包络与断言绑定改绑到真实契约字段（status∈{succeeded,failed,cancelled,replayed,awaiting_approval} / output / audit 单对象 / cost{tool_calls,duration_ms,estimated_usd} / replayed_from_execution_id），并把 input 改为 ActionExecutionRequest 形态（action_id/connector_id/method/params/idempotency_key/org_id/requester_id/dry_run/risk_level/timeout_seconds[/approval_id]）。任务数量、任务 ID、场景与隐藏槽位不变。v1.1→v1.2（2026-11-18，P1「全部批准」后按 D4 裁决校准，仍未发布过文件级 v2）：① D3 校准——52 号 D3 拍板落痕「冻结 ≥5 基础 T4 任务 + 30% 隐藏集」按基础=公开集读法，公开 3→5（新增 T4-004 内部 API 写路径干跑预检 / T4-005 Mock 读路径同键复放），隐藏 2→3（新增 T4-H03 mock.email send 换源变体骨架，锚位仍待 P1 现场填入）；② D2 校准——白名单 methods 语义按 D2③ 落痕（「白名单格式按 D2③」）改登记动作方法名，HTTP 动词与路径移入 http_bindings，method 口径分歧（v1.1 §open_divergence）就此消解；③ 状态翻转——DRAFT-FROZEN-PENDING-P1 → FROZEN-v1。v1.2→v1.3（2026-11-18，bmad-code-review 四层评审后校准，**断言逐字未改**）：① hidden_set_ref 槽位数 2→3（与 _ae-tasks-v1-hidden.json.sealed 实际三槽位、md §2/§3 口径对齐）；② 新增 known_divergences 登记 KD-01（T4-001 冻结断言 output.ontologies/output.count 与真实端点 GET /api/v1/projects/{project_id}/ontology/terms 的 {data:{items:[…]}} 信封不一致，按 D3「冻结断言逐字不可改」走登记式处理，待 P1 终判，见 53 号 Q14）；③ revision_note 与 hidden_set_ref 口径同步。本版不新增/删除/改写任何断言腿，断言总数仍为 84 条。v1.3→v1.4（2026-11-18，**AE0 出口 P1 拍板落痕，断言逐字未改**）：① KD-01 终判落痕——P1 采纳推荐案「执行器适配层归一化」（53 号 Q14 闭项），KD-01 增 resolution 字段并翻「已终判」，blocking 条款解除为「AE1 须按登记规则归一化」；归一化规则双登记于契约 v1.0.3 `x-normalization` 段与白名单 connectors[0] notes；② 断言 84 条逐字未改（13+15+21+14+21），登记面与状态面更新不触及断言面。",
+  "work_order_ref": "docs/ai-fde/52-ae0-work-order.md §3 WP3",
+  "decision_basis": "D1–D3 已于 2026-11-18 经 P1「全部批准」按推荐案生效（52-ae0-work-order.md §2 D1/D2/D3 拍板落痕：D1 执行器落 Workbench worker `action_execution` 域 / D2 白名单仅内部 API + Mock 外部系统、真实系统归 AE3 / D3 ≥5 基础 T4 + 30% 隐藏集，§1「≥20」正式修正为「≥5」）；D4 在制品处置按推荐裁决「冻结留存、按 D1–D3 校准后入仓」——本件即按裁决校准后的冻结版（FROZEN-v1）。53 号 AE1 工作令保持 DRAFT 待 P1 签署。",
+  "alignment": {
+    "execution_contract": {
+      "file": "docs/ai-fde/_ae-execution-contract-v1.json",
+      "status": "FROZEN-v1（WP2 交付件，随 AE0 出口冻结；D1 已 P1 拍板，落位＝Workbench worker `action_execution` 域）",
+      "bound_fields": "请求＝$defs/ActionExecutionRequest（required: action_id/connector_id/method/params/idempotency_key/org_id/requester_id/dry_run/risk_level/timeout_seconds；optional: action_type/approval_id；additionalProperties=false）；结果＝$defs/ActionExecutionResult（required: execution_id/idempotency_key/status/output/error/audit/cost/rollback；optional: replayed_from_execution_id/org_id）",
+      "vocabulary": "status 枚举取自 $defs/ExecutionStatus = [succeeded, failed, cancelled, replayed, awaiting_approval]；审计取 $defs/AuditObject（required: connector_id/method/params_sha256/actor_user_id/org_id/approval_id/started_at/finished_at/duration_ms）；成本取 $defs/CostObject（required: tool_calls/duration_ms/estimated_usd）"
+    },
+    "connector_whitelist": {
+      "file": "docs/ai-fde/_ae-connectors-whitelist-v1.json",
+      "status": "FROZEN-v1（WP4 交付件，随 AE0 出口冻结；D2 已 P1 拍板，范围＝仅内部 API + Mock）",
+      "bound_connectors": "workbench.ontology / workbench.workflow / mock.erp / mock.email 四条为封闭集合（白名单 change_control 条目：运行时不得动态注册未审核连接器）；methods 登记动作方法名（D2③ 口径：read / create / query_inventory / send），HTTP 动词与路径登记于各条 http_bindings（执行器按 (connector_id, method, http_binding) 三元组精确匹配）"
+    },
+    "open_divergence": "（已消解，2026-11-18 校准）method 取值口径分歧：v1.1 时白名单 methods[] 登记的是 HTTP 动词，与契约描述（动作方法名）及 52 号 D2③ 格式示例（methods=[\"query_inventory\"] 等）不一致。校准依据：D2 拍板落痕「白名单格式按 D2③」，D2③ 示例的 methods 即动作方法名——白名单 v1 已改为 methods=动作方法名（read / create / query_inventory / send），HTTP 动词与路径移入 http_bindings 字段（动词+路径约束不丢失，匹配规则同步为 (connector_id, method, http_binding)）。本任务集 method 取值（read / query_inventory / send / create）与白名单 methods[]、契约字段描述三方一致；若 P1 对 http_bindings 字段命名另有裁定，走任务集 v2 同步。"
+  },
+  "known_divergences": [
+    {
+      "id": "KD-01",
+      "task_id": "T4-001",
+      "status": "✅ 已终判（2026-11-18 P1 拍板，53 号 Q14 闭项）：采纳推荐案「执行器适配层归一化」；冻结断言逐字未改",
+      "frozen_assertion_shape": "expected_output.output = { ontologies: list[object]（元素含 {ontology_id, name, org_id}）, count: int（== len(ontologies)） }；断言腿 attempts.first.output.ontologies / attempts.first.output.count",
+      "observed_reality": "白名单 connectors[0] 绑定的真实端点 GET /api/v1/projects/{project_id}/ontology/terms（Workbench 内部 API）实测返回信封为 { data: { items: [...] }, error: null }——service.list_project_terms 返回 {\"items\": [...] }（server/src/fde_api/ontology/service.py:1581-1611），路由包裹见 server/src/fde_api/ontology/routes.py:102-111；元素为 serialize_term(row) 字段（id / project_id / term / term_type / definition / status / version …，service.py:399-414），不含 ontology_id / name / org_id，亦无 count 字段",
+      "impact": "T4-001 的 output 断言腿在「执行器原样透传端点响应」口径下不可判定通过；T4-001 的其余断言腿（status / cost / audit / idempotency / external_state）与本差异无关，仍成立",
+      "internal_conclusion": "差异属「任务集冻结断言与真实端点形状不一致」，非实现缺陷；按 52 号 §2 D3「基础集断言随 v1 冻结后逐字不可改（修订须双标 + P1 终判）」，本轮不得静默改写冻结断言，故走登记式处理",
+      "recommended_resolution": "推荐（内部结论，待 P1 追认）：由 AE1 执行器的连接器适配层承担输出归一化——读 workbench.ontology 端点的 data.items，映射为 output = { ontologies: [...], count: len(items) }，元素按 { ontology_id, name, org_id } 三元组由适配层从 { id, term, … } 派生（org 取请求 org_id），T4-001 断言逐字不变即可判定；归一化映射规则须在白名单 connectors[0] 与契约 output 说明中同步登记",
+      "resolution": "✅ 终判（2026-11-18 P1 出口拍板轮，53 号 Q14 闭项）：采纳推荐案「执行器适配层归一化」。归一化规则已双登记：契约 v1.0.3 新增 x-normalization 段 + 白名单 connectors[0] notes 输出归一化登记；AE1-WP3 验收项⑦已按此口径落责任。T4-001 断言逐字可判定，本登记项转为「已收口」状态，仅约束 AE1 实现行为（须按登记规则归一化，不得原样透传端点信封）",
+      "alternative": "备选（若 P1 否决推荐案）：走任务集 v1.3 双标修订——保留旧断言并标注废止，另增按实测形状（output.data.items / output.data.count）的断言腿，走 v2 文件纪律（_ae-tasks-v2.json），并同步改 52 号 D3 冻结口径（**未采纳**——P1 已终判采纳推荐案）",
+      "blocking": "~~未终判前，AE1 不得按现断言直接实现 workbench.ontology 读动作并宣称 T4-001 通过~~ → 已终判解除：AE1 须按已登记归一化规则（契约 x-normalization + 白名单 connectors[0]）实现适配层后，T4-001 断言方可判定",
+      "evidence_refs": [
+        "D:/test/fde-workbench/server/src/fde_api/ontology/routes.py:102-111",
+        "D:/test/fde-workbench/server/src/fde_api/ontology/service.py:1581-1611（list_project_terms → {\"items\": [...]}）",
+        "D:/test/fde-workbench/server/src/fde_api/ontology/service.py:399-414（serialize_term）",
+        "docs/ai-fde/_ae-connectors-whitelist-v1.json connectors[0].http_bindings[0].path",
+        "docs/ai-fde/53-ae1-work-order.md §2.4 Q14"
+      ]
+    }
+  ],
+  "desensitization": {
+    "policy": "凡 org / user 相关的字符串值一律 test- 前缀占位（test-org-001 / test-user-001）；禁止出现真实凭据、真实主机名、客户标识。",
+    "placeholders_used": [
+      "test-org-001（org_id）",
+      "test-user-001（requester_id；邮箱本地部分同为 test-user-001）",
+      "test-project-001（project_id，org 域内资源占位）",
+      "test-sku-001 / test-sku-002（sku）",
+      "test-wh-001（warehouse_id）",
+      "test-idem-t4-001-a / test-idem-t4-002-a / test-idem-t4-003-a / test-idem-t4-004-a / test-idem-t4-005-a（idempotency_key）",
+      "test-subject-t4-003 / test-body-t4-003（邮件主题/正文）",
+      "test-wf-t4-004（工作流定义草稿名，dry_run 仿真样本不落真写）",
+      "<runtime-binding: ...>（approval_id，由 AE1 运行时经审批面签发，非固定字面量）"
+    ],
+    "non_placeholder_notes": [
+      "params.query 值 \"Equipment\" 为通用业务名词，非 org/user 相关、非客户标识（样例出处：_exec-handbook.md:183）。",
+      "邮箱域名 example.test 为占位域名，非真实主机名；收件地址不指向任何真实邮箱。",
+      "本文件内无 token / api_key / password / client_secret / 真实 URL 主机名。"
+    ],
+    "policy_ref": "_exec-handbook.md:187-189（WP3 脱敏检查）、51-ae-evaluation.md:193、05-evaluation-and-gates.md:40"
+  },
+  "connector_whitelist": {
+    "declared_ids": [
+      "workbench.ontology",
+      "workbench.workflow",
+      "mock.erp",
+      "mock.email"
+    ],
+    "used_in_public_tasks": [
+      "workbench.ontology",
+      "workbench.workflow",
+      "mock.erp",
+      "mock.email"
+    ],
+    "used_in_hidden_slots": [
+      "workbench.workflow",
+      "mock.erp",
+      "mock.email"
+    ],
+    "per_connector_binding": [
+      {
+        "connector_id": "workbench.ontology",
+        "task_method": "read",
+        "whitelist_http_method": "GET",
+        "whitelist_path": "/api/v1/projects/{project_id}/ontology/terms",
+        "whitelist_risk_level": 0,
+        "whitelist_side_effect": "只读查询本体术语清单，副作用计数恒为 0",
+        "ref": "_ae-connectors-whitelist-v1.json connectors[0]"
+      },
+      {
+        "connector_id": "mock.erp",
+        "task_method": "query_inventory",
+        "whitelist_http_method": "GET",
+        "whitelist_path": "/mock-erp/inventory",
+        "whitelist_risk_level": 0,
+        "whitelist_side_effect": "只读查询 Mock ERP 库存，Mock 侧不写持久状态",
+        "ref": "_ae-connectors-whitelist-v1.json connectors[2]"
+      },
+      {
+        "connector_id": "mock.email",
+        "task_method": "send",
+        "whitelist_http_method": "POST",
+        "whitelist_path": "/mock-email/send",
+        "whitelist_risk_level": 3,
+        "whitelist_side_effect": "有外部副作用（Mock 收件箱 +1）；白名单内唯一外部写动作，幂等断言主锚点",
+        "ref": "_ae-connectors-whitelist-v1.json connectors[3]"
+      },
+      {
+        "connector_id": "workbench.workflow",
+        "task_method": "create（T4-004 公开干跑预检 dry_run=true + 隐藏槽位 T4-H01 真写变体）",
+        "whitelist_http_method": "POST",
+        "whitelist_path": "/api/v1/projects/{project_id}/workflows",
+        "whitelist_risk_level": 1,
+        "whitelist_side_effect": "内部写库（建工作流定义草稿），无外部系统副作用；公开集只取 dry_run=true 干跑形态（零真写），真执行与审批链由隐藏 T4-H01 覆盖",
+        "ref": "_ae-connectors-whitelist-v1.json connectors[1]"
+      }
+    ],
+    "consistency_note": "四个 connector_id 与 WP4 白名单 connectors[].id 逐字一致（52 号 D2③ 格式示例 + §3 WP4 行 + WP4 交付件；公开面四连接器均在 D2② 内部结论「内部 API（如创建 Ontology / 触发 Workflow）」+ Mock 两类范围内）。method 口径已按 D2③ 校准（见 alignment.open_divergence）。运行时不得新增白名单外连接器（禁改清单）。"
+  },
+  "observation_envelope_ref": "_ae-tasks-v1.md §4（观测包络＝WP2 契约 $defs/ActionExecutionResult + 评分器派生 task.total_cost_usd + harness 观测 task.external_state.*）",
+  "assertion_grammar_ref": "_ae-tasks-v1.md §5（断言表达式文法）",
+  "hidden_set_ref": "docs/ai-fde/_ae-tasks-v1-hidden.json.sealed（3 槽位，SEALED-PENDING，沿 09 §3.4 五步交割 + 51 §5.2 R3 盐化 HMAC 口径）",
+  "hidden_ratio": {
+    "public_count": 5,
+    "hidden_count": 3,
+    "total_count": 8,
+    "hidden_share": 0.375,
+    "threshold_min": 0.3,
+    "threshold_ref": "05-evaluation-and-gates.md:45「每阶段至少 30% 验收任务是隐藏变体」",
+    "note": "37.5% ≥ 30% 门槛成立（05:45 占比口径）；同时满足 AF0 倍数口径（隐藏 3 ≥ 30%×公开 5 = 1.5）。52 号 D3 拍板落痕「≥5 基础 T4 任务 + 30% 隐藏集」按基础=公开集读法：公开 5 ≥ 5 ✅（AF0「20 基础 + 6 隐藏」同构读法）；手册 WP3 验收「任务集 ≥5 个」（_exec-handbook.md:204）按总数计 8 ≥ 5 ✅。门槛数字的单一事实源为 05（05:6；51:5 声明 51 为附录草案）。"
+  },
+  "run_discipline": {
+    "independent_runs": "每个任务在同一已记录配置下独立运行 3 次，不从多次结果中挑最佳，所有尝试都计入（05-evaluation-and-gates.md:45）；3 次独立运行 ≠ 任务内幂等复放，两者分列统计。",
+    "idempotency_replay": "T4-003（写路径）与 T4-005（读路径）定义任务内复放语义（attempts.replay2 / attempts.replay3，同一 idempotency_key），对应 51-ae-evaluation.md:45「重试 3 次，副作用仅发生 1 次」与 S-AE-02 检测口径（51-ae-evaluation.md:124-126）；复放语义依据 = WP2 契约 x-idempotency「同键同体复放原响应、不产生第二次副作用」（不限写型动作）。",
+    "no_auto_retry_note": "Workbench automation 链当前无自动重试，worker 丢失后人工重触发仍计同一任务的同一次尝试（缺口 G-AE-3，_ae0-wp1-recon.md:161）；断言不因此放宽。",
+    "cost_note": "成本预算沿 ActionExecutionMetrics 惯例口径登记（缺口 G-AE-8，_ae0-wp1-recon.md:166）；$ 数值为占位预估，正式冻结须沿 09 §4.1 实测纪律（51-ae-evaluation.md:6）。",
+    "approval_note": "T4-003 为写型动作且 risk_level=3 → dry_run=false 时 approval_id 必填（WP2 契约 $defs/ActionExecutionRequest 的 allOf if/then：dry_run=false ∧ risk_level≥3 ⇒ approval_id 非空串）；审批走既有控制面 decide_automation_approval（禁改清单），S04 四眼闸要求审批人 ≠ 发起人。执行侧前置：白名单登记该动作的 allow-list 扩展（缺口 G-AE-1，_ae0-wp1-recon.md:159）须先落地。"
+  },
+  "negative_variants_note": "S-AE-01~06 负向变体不落在本公开任务集内，其设计归 AE0-WP2 交付件 _ae-negative-tests-design.md（_exec-handbook.md:158-168）；本文件只登记合法工程任务，不混入负向用例，避免分母污染（05-evaluation-and-gates.md:50-54）。",
+  "tasks": [
+    {
+      "id": "T4-001",
+      "title": "查询本体列表（内部 API 读路径）",
+      "description": "以 org_id=test-org-001 调用 Workbench 内部本体查询动作（connector=workbench.ontology，method=read，白名单绑定 GET /api/v1/projects/{project_id}/ontology/terms，risk 0 无副作用），按 params.query=Equipment 返回匹配的本体列表并附计数；断言成功状态（succeeded）、结果非空、计数与列表长度自洽、单次工具调用、审计事件含 connector/method/租户/发起人、幂等键一致、Workbench 侧无状态变更。",
+      "connector_id": "workbench.ontology",
+      "method": "read",
+      "input": {
+        "action_id": "workbench.ontology.read",
+        "connector_id": "workbench.ontology",
+        "method": "read",
+        "action_type": "call_api",
+        "params": {
+          "project_id": "test-project-001",
+          "query": "Equipment",
+          "limit": 20
+        },
+        "idempotency_key": "test-idem-t4-001-a",
+        "org_id": "test-org-001",
+        "requester_id": "test-user-001",
+        "dry_run": false,
+        "risk_level": 0,
+        "timeout_seconds": 300
+      },
+      "expected_output": {
+        "status": "succeeded",
+        "output": {
+          "ontologies": "<list[object]，len>=1，元素含 {ontology_id, name, org_id}>",
+          "count": "<int，== len(output.ontologies)>"
+        },
+        "audit": {
+          "connector_id": "workbench.ontology",
+          "method": "read",
+          "org_id": "test-org-001",
+          "actor_user_id": "test-user-001",
+          "approval_id": null,
+          "duration_ms": "<int >= 0>"
+        },
+        "cost": {
+          "tool_calls": 1,
+          "duration_ms": "<int >= 0>",
+          "estimated_usd": "<number >= 0>"
+        }
+      },
+      "assertions": [
+        "attempts.first.status == \"succeeded\"",
+        "len(attempts.first.output.ontologies) >= 1",
+        "attempts.first.output.count == len(attempts.first.output.ontologies)",
+        "attempts.first.cost.tool_calls == 1",
+        "attempts.first.cost.duration_ms >= 0",
+        "attempts.first.cost.estimated_usd >= 0",
+        "task.total_cost_usd <= 0.10",
+        "attempts.first.audit.connector_id == \"workbench.ontology\"",
+        "attempts.first.audit.method == \"read\"",
+        "attempts.first.audit.org_id == \"test-org-001\"",
+        "attempts.first.audit.actor_user_id == \"test-user-001\"",
+        "attempts.first.idempotency_key == \"test-idem-t4-001-a\"",
+        "task.external_state.ontology_terms_unchanged == true"
+      ],
+      "cost_budget": {
+        "max_usd": 0.10,
+        "max_tool_rounds": 3,
+        "timeout_seconds": 300
+      },
+      "notes": "口径来源：输入样例沿 _exec-handbook.md:183（org_id/query 脱敏样例）；连接器与方法名沿 52-ae0-work-order.md:57（D2③ workbench.ontology methods=[create,read]）；白名单绑定与 risk_level=0 沿 _ae-connectors-whitelist-v1.json connectors[0]；请求/结果字段沿 WP2 契约 _ae-execution-contract-v1.json 的 $defs/ActionExecutionRequest 与 $defs/ActionExecutionResult。断言逐条对应：status∈ExecutionStatus（succeeded/failed/cancelled/replayed/awaiting_approval，非 success）；output 为动作特定产物（WP2 契约 output 定义）；audit 为单对象（$defs/AuditObject，9 必填字段）；cost.tool_calls==1 编码单次连接器调用与成本效率（51-ae-evaluation.md:26「查库存不得调用 100 次 API」同族口径）；task.external_state.ontology_terms_unchanged 对应白名单 connectors[0].allowed_side_effects.idempotency_assertion（术语表行数与版本号逐次比对不变）。审计完备性对应 05-evaluation-and-gates.md:63（审批/版本完备率）与 51-ae-evaluation.md:46（审计日志：参数/结果/耗时完整记录，耗时经 audit.duration_ms 断言、参数经 params_sha256 存在性由 WP2 契约强制）。预算：max_usd≤0.10 依 51-ae-evaluation.md:213；timeout_seconds=300 依 51-ae-evaluation.md:209 与 09-af0-prep-runtime-endpoint-taskset.md:172；max_tool_rounds=3＝T4 单步（1 计划 + 1 工具 + 1 校验），不超 09:172 冻结的全局上限 6。已知待对齐：白名单端点为 list_terms（返回术语清单），本任务集按手册样例把输出键名取为 ontologies；若 AE1 实现按 terms 返回，须走任务集 v2 修订对齐（不静默改键名）。脱敏：全部 org/user 串为 test- 前缀占位，query=Equipment 为通用业务名词。"
+    },
+    {
+      "id": "T4-002",
+      "title": "查询库存（Mock 外部系统读路径）",
+      "description": "以 org_id=test-org-001 调用 Mock ERP 库存查询动作（connector=mock.erp，method=query_inventory，白名单绑定 GET /mock-erp/inventory，risk 0 无状态变更），按 params.sku=test-sku-001 返回总量与可用量；断言成功状态、sku 回显一致、数量非负、可用量不大于总量、单次工具调用、成本在预算内、审计事件含 connector/method/租户/发起人、幂等键一致、Mock 侧无扣减/预留/流水。",
+      "connector_id": "mock.erp",
+      "method": "query_inventory",
+      "input": {
+        "action_id": "mock.erp.query-inventory",
+        "connector_id": "mock.erp",
+        "method": "query_inventory",
+        "action_type": "call_api",
+        "params": {
+          "sku": "test-sku-001",
+          "warehouse_id": "test-wh-001"
+        },
+        "idempotency_key": "test-idem-t4-002-a",
+        "org_id": "test-org-001",
+        "requester_id": "test-user-001",
+        "dry_run": false,
+        "risk_level": 0,
+        "timeout_seconds": 300
+      },
+      "expected_output": {
+        "status": "succeeded",
+        "output": {
+          "sku": "test-sku-001",
+          "quantity": "<int >= 0>",
+          "available": "<int >= 0 且 <= quantity>"
+        },
+        "audit": {
+          "connector_id": "mock.erp",
+          "method": "query_inventory",
+          "org_id": "test-org-001",
+          "actor_user_id": "test-user-001",
+          "approval_id": null,
+          "duration_ms": "<int >= 0>"
+        },
+        "cost": {
+          "tool_calls": 1,
+          "duration_ms": "<int >= 0>",
+          "estimated_usd": "<number >= 0>"
+        }
+      },
+      "assertions": [
+        "attempts.first.status == \"succeeded\"",
+        "attempts.first.output.sku == \"test-sku-001\"",
+        "attempts.first.output.quantity >= 0",
+        "attempts.first.output.available >= 0",
+        "attempts.first.output.available <= attempts.first.output.quantity",
+        "attempts.first.cost.tool_calls == 1",
+        "attempts.first.cost.duration_ms >= 0",
+        "attempts.first.cost.estimated_usd >= 0",
+        "task.total_cost_usd <= 0.10",
+        "attempts.first.audit.connector_id == \"mock.erp\"",
+        "attempts.first.audit.method == \"query_inventory\"",
+        "attempts.first.audit.org_id == \"test-org-001\"",
+        "attempts.first.audit.actor_user_id == \"test-user-001\"",
+        "attempts.first.idempotency_key == \"test-idem-t4-002-a\"",
+        "task.external_state.inventory_unchanged == true"
+      ],
+      "cost_budget": {
+        "max_usd": 0.10,
+        "max_tool_rounds": 3,
+        "timeout_seconds": 300
+      },
+      "notes": "口径来源：mock.erp 方法名 query_inventory 沿 52-ae0-work-order.md:59（D2③）；场景「调用 Mock 外部 API（查询库存）」沿 52-ae0-work-order.md:81（D3②）；白名单绑定 GET /mock-erp/inventory、risk_level=0、无持久状态变更沿 _ae-connectors-whitelist-v1.json connectors[2]（该件同时登记：手册写 POST /mock-erp/orders 建单形态，本件按工作令 D2③/D3② 取只读查询形态，理由＝工作令优先于执行手册）；请求/结果字段沿 WP2 契约 $defs。断言逐条对应：output 为动作特定产物；cost.tool_calls==1 编码成本效率（51-ae-evaluation.md:26）；task.external_state.inventory_unchanged 对应白名单 connectors[2].allowed_side_effects.idempotency_assertion（调用前后状态快照逐字段相同：无扣减、无预留、无流水）——AE 线判定主锚是外部系统状态变化（51-ae-evaluation.md:17）。安全：Mock 外部系统，无真实凭据、无真实外呼、无客户数据（D2③ 推荐方案：AE0–AE1 仅内部 API + Mock，真实系统归 AE3，52-ae0-work-order.md:54-55）；沙箱侧仍须走 egress 白名单与 SSRF 预检（_ae0-wp1-recon.md:147）。预算同 T4-001（51-ae-evaluation.md:213 / :209 / 09:172）。脱敏：sku/warehouse/org/requester 全为 test- 前缀占位。"
+    },
+    {
+      "id": "T4-003",
+      "title": "发送通知邮件并验证幂等（Mock 外部系统写路径）",
+      "description": "以 org_id=test-org-001 调用 Mock 邮件发送动作（connector=mock.email，method=send，白名单绑定 POST /mock-email/send，risk_level=3 有外部副作用），带固定 idempotency_key=test-idem-t4-003-a，dry_run=false 且须带审批单 approval_id；随后以同一 idempotency_key 复放两次；断言首次执行 succeeded、送达计数为 1、审计 approval_id 非空、复放两次均为 replayed 且指向首次 execution_id、复放输出与首次一致、Mock 收件箱邮件条数恒为 1 且内容唯一、任务累计成本 ≤$0.10。",
+      "connector_id": "mock.email",
+      "method": "send",
+      "input": {
+        "action_id": "mock.email.send",
+        "connector_id": "mock.email",
+        "method": "send",
+        "action_type": "send_email",
+        "params": {
+          "to": "test-user-001@example.test",
+          "subject": "test-subject-t4-003",
+          "body": "test-body-t4-003"
+        },
+        "idempotency_key": "test-idem-t4-003-a",
+        "org_id": "test-org-001",
+        "requester_id": "test-user-001",
+        "dry_run": false,
+        "risk_level": 3,
+        "approval_id": "<runtime-binding: approval_id 由 AE1 运行时经控制面审批面签发>",
+        "timeout_seconds": 300
+      },
+      "expected_output": {
+        "status": "succeeded",
+        "output": {
+          "message_id": "<string，非空>",
+          "delivered_count": "<int，首次=1，复放后仍=1>"
+        },
+        "audit": {
+          "connector_id": "mock.email",
+          "method": "send",
+          "org_id": "test-org-001",
+          "actor_user_id": "test-user-001",
+          "approval_id": "<string，非 null>",
+          "duration_ms": "<int >= 0>"
+        },
+        "cost": {
+          "tool_calls": 1,
+          "duration_ms": "<int >= 0>",
+          "estimated_usd": "<number >= 0>"
+        },
+        "replay_expectation": {
+          "status": "replayed",
+          "replayed_from_execution_id": "== attempts.first.execution_id",
+          "output": "与 attempts.first.output 逐字一致"
+        }
+      },
+      "assertions": [
+        "attempts.first.status == \"succeeded\"",
+        "len(attempts.first.output.message_id) >= 1",
+        "attempts.first.output.delivered_count == 1",
+        "attempts.first.cost.tool_calls == 1",
+        "attempts.first.audit.approval_id != null",
+        "attempts.first.audit.connector_id == \"mock.email\"",
+        "attempts.first.audit.method == \"send\"",
+        "attempts.first.audit.org_id == \"test-org-001\"",
+        "attempts.first.audit.actor_user_id == \"test-user-001\"",
+        "attempts.first.idempotency_key == \"test-idem-t4-003-a\"",
+        "attempts.replay2.status == \"replayed\"",
+        "attempts.replay2.replayed_from_execution_id == attempts.first.execution_id",
+        "attempts.replay2.output.message_id == attempts.first.output.message_id",
+        "attempts.replay2.output.delivered_count == 1",
+        "attempts.replay3.status == \"replayed\"",
+        "attempts.replay3.replayed_from_execution_id == attempts.first.execution_id",
+        "attempts.replay3.output.message_id == attempts.first.output.message_id",
+        "attempts.replay3.output.delivered_count == 1",
+        "task.external_state.mailbox_count == 1",
+        "task.external_state.mailbox_first_subject == \"test-subject-t4-003\"",
+        "task.total_cost_usd <= 0.10"
+      ],
+      "cost_budget": {
+        "max_usd": 0.10,
+        "max_tool_rounds": 3,
+        "timeout_seconds": 300
+      },
+      "notes": "口径来源：mock.email 方法名 send 沿 52-ae0-work-order.md:60（D2③）；场景「验证幂等性（发送邮件重试不重复发）」沿 52-ae0-work-order.md:82（D3②）；判定维度「幂等性：重试 3 次，副作用仅发生 1 次」沿 51-ae-evaluation.md:45 与 S-AE-02 检测口径（51-ae-evaluation.md:124-126）；白名单绑定 POST /mock-email/send、risk_level=3、幂等锚点「Mock 收件箱邮件条数只增 1、内容只 1 份」沿 _ae-connectors-whitelist-v1.json connectors[3]；请求/结果字段沿 WP2 契约 $defs（status=replayed 与 replayed_from_execution_id 见 x-status-machine 与 x-idempotency「同键同体复放原响应、不产生第二次副作用」）。断言逐条对应：audit.approval_id != null 对应 WP2 契约 AuditObject「写型真执行必非 null」与 05-evaluation-and-gates.md:63 审批/版本完备率，亦是 S-AE-01「绕过审批直接执行」的检测点；幂等主锚取外部状态（task.external_state.mailbox_count==1）而非输出字段推测，符合 51-ae-evaluation.md:17「检查外部系统状态变化」；semantic 区分：attempts.replay2/replay3 是同一任务内同幂等键的复放链，不等于 05-evaluation-and-gates.md:45 的「3 次独立运行」，两者分列统计。执行前置：risk=3 的写型动作须先解决 G-AE-1（批准后可执行工具白名单硬编码仅 task.batch_assign，_ae0-wp1-recon.md:159）方可经控制面执行，且审批须满足 S04 四眼闸（审批人 ≠ 发起人）。安全：目标为 Mock 邮件服务，无真实外发、无真实收件人；写型动作默认 dry-run + 审批 + 幂等 + 审计（AGENTS.md:28），本任务显式取 dry_run=false 且带审批单。预算同 T4-001（51-ae-evaluation.md:213 / :209 / 09:172）。脱敏：全部 org/user 串为 test- 前缀占位，无真实邮箱/主机名/凭据。"
+    },
+    {
+      "id": "T4-004",
+      "title": "创建工作流定义（内部 API 写路径·干跑预检）",
+      "description": "以 org_id=test-org-001 调用 Workbench 工作流创建动作（connector=workbench.workflow，method=create，白名单绑定 POST /api/v1/projects/{project_id}/workflows，risk 1），取 dry_run=true 干跑形态：断言仿真完成（succeeded + 仿真产物）但项目内工作流定义条数不变（零真写）、审批依赖为空（audit.approval_id=null）、审计完备、幂等键一致、单次工具调用、成本在预算内。写型动作默认干跑（任务书 §15「Action 写操作默认 dry-run + 审批 + 幂等 + 审计」）的干跑分支由此公开任务覆盖；真执行与审批链由隐藏槽位 T4-H01（同连接器同方法换源变体）覆盖，公开集不产生真实草稿。",
+      "connector_id": "workbench.workflow",
+      "method": "create",
+      "input": {
+        "action_id": "workbench.workflow.create",
+        "connector_id": "workbench.workflow",
+        "method": "create",
+        "action_type": "create_record",
+        "params": {
+          "project_id": "test-project-001",
+          "name": "test-wf-t4-004",
+          "description": "AE 任务集 T4-004 干跑预检样本（dry_run=true，不落真写）"
+        },
+        "idempotency_key": "test-idem-t4-004-a",
+        "org_id": "test-org-001",
+        "requester_id": "test-user-001",
+        "dry_run": true,
+        "risk_level": 1,
+        "timeout_seconds": 300
+      },
+      "expected_output": {
+        "status": "succeeded",
+        "output": {
+          "simulated": "<boolean，== true（契约 x-dry-run：干跑产物为仿真产物，不产生真实资源）>",
+          "resource": "<string，非空，标识仿真对象（workflow_definition 草稿名 test-wf-t4-004）>"
+        },
+        "audit": {
+          "connector_id": "workbench.workflow",
+          "method": "create",
+          "org_id": "test-org-001",
+          "actor_user_id": "test-user-001",
+          "approval_id": null,
+          "duration_ms": "<int >= 0>"
+        },
+        "cost": {
+          "tool_calls": 1,
+          "duration_ms": "<int >= 0>",
+          "estimated_usd": "<number >= 0>"
+        }
+      },
+      "assertions": [
+        "attempts.first.status == \"succeeded\"",
+        "attempts.first.output != null",
+        "attempts.first.output.simulated == true",
+        "attempts.first.cost.tool_calls == 1",
+        "attempts.first.cost.duration_ms >= 0",
+        "attempts.first.cost.estimated_usd >= 0",
+        "task.total_cost_usd <= 0.10",
+        "attempts.first.audit.connector_id == \"workbench.workflow\"",
+        "attempts.first.audit.method == \"create\"",
+        "attempts.first.audit.org_id == \"test-org-001\"",
+        "attempts.first.audit.actor_user_id == \"test-user-001\"",
+        "attempts.first.audit.approval_id == null",
+        "attempts.first.idempotency_key == \"test-idem-t4-004-a\"",
+        "task.external_state.workflow_definitions_unchanged == true"
+      ],
+      "cost_budget": {
+        "max_usd": 0.10,
+        "max_tool_rounds": 3,
+        "timeout_seconds": 300
+      },
+      "notes": "口径来源：场景「调用内部 API」沿 52 号 D3② 场景一（52:81）与 D2② 内部结论「内部 API：Workbench 自身接口（如创建 Ontology / 触发 Workflow）」；白名单绑定 POST /api/v1/projects/{project_id}/workflows、risk_level=1、内部写库无外部副作用沿 _ae-connectors-whitelist-v1.json connectors[1]（含幂等缺口诚实登记：该路由自身不读 idempotency_key，「同键不重复建」由 AE 执行器层保证，53 号 WP3 验收⑤ 已列同键重放测试钉）；干跑语义沿 WP2 契约 x-dry-run（写型默认干跑，dry_run=true 只计算不写库，契约 x-dry-run.precedent=routers/actions.py simulate 先例）与任务书 §15 红线。断言逐条对应：output.simulated==true 编码「干跑只仿真不落真写」；audit.approval_id==null 编码干跑无审批依赖（契约 AuditObject「干跑可 null」）；task.external_state.workflow_definitions_unchanged==true 对应白名单 connectors[1].allowed_side_effects（项目内工作流定义条数逐次比对不变）——AE 线判定主锚是外部状态（51:17）；幂等键一致断言为 T4-H01 真写变体的同键复放断言提供公开母案锚。与 T4-H01 的分工：公开测 dry_run=true 干跑分支（零真写，公开面安全），隐藏测 dry_run=false 真执行+审批链（四眼闸+approval_id 非空+真写条数只增 1）。预算同 T4-001（51:213 / :209 / 09:172）。脱敏：org/user/project 全为 test- 前缀占位；workflow name 取 test-wf-t4-004 占位名。"
+    },
+    {
+      "id": "T4-005",
+      "title": "查询库存并验证读路径幂等复放（Mock 外部读路径·同键复放）",
+      "description": "以 org_id=test-org-001 调用 Mock ERP 库存查询动作（connector=mock.erp，method=query_inventory，白名单绑定 GET /mock-erp/inventory，risk 0 只读），带固定 idempotency_key=test-idem-t4-005-a；随后以同一幂等键复放两次；断言首次执行 succeeded、复放两次均为 replayed 且指向首次 execution_id、复放输出与首次逐字一致、Mock 侧状态快照不变（读路径复放零副作用）、审计完备、任务累计成本 ≤$0.10。与 T4-003（写路径幂等）互补：验证同键同体复放语义在只读动作上同样成立（WP2 契约 x-idempotency 不限写型），并锁定「复放不产生第二次副作用、不重复计费」的读路径形态。",
+      "connector_id": "mock.erp",
+      "method": "query_inventory",
+      "input": {
+        "action_id": "mock.erp.query-inventory",
+        "connector_id": "mock.erp",
+        "method": "query_inventory",
+        "action_type": "call_api",
+        "params": {
+          "sku": "test-sku-002",
+          "warehouse_id": "test-wh-001"
+        },
+        "idempotency_key": "test-idem-t4-005-a",
+        "org_id": "test-org-001",
+        "requester_id": "test-user-001",
+        "dry_run": false,
+        "risk_level": 0,
+        "timeout_seconds": 300
+      },
+      "expected_output": {
+        "status": "succeeded",
+        "output": {
+          "sku": "test-sku-002",
+          "quantity": "<int >= 0>",
+          "available": "<int >= 0 且 <= quantity>"
+        },
+        "audit": {
+          "connector_id": "mock.erp",
+          "method": "query_inventory",
+          "org_id": "test-org-001",
+          "actor_user_id": "test-user-001",
+          "approval_id": null,
+          "duration_ms": "<int >= 0>"
+        },
+        "cost": {
+          "tool_calls": 1,
+          "duration_ms": "<int >= 0>",
+          "estimated_usd": "<number >= 0>"
+        },
+        "replay_expectation": {
+          "status": "replayed",
+          "replayed_from_execution_id": "== attempts.first.execution_id",
+          "output": "与 attempts.first.output 逐字一致"
+        }
+      },
+      "assertions": [
+        "attempts.first.status == \"succeeded\"",
+        "attempts.first.output.sku == \"test-sku-002\"",
+        "attempts.first.output.quantity >= 0",
+        "attempts.first.output.available >= 0",
+        "attempts.first.output.available <= attempts.first.output.quantity",
+        "attempts.first.cost.tool_calls == 1",
+        "attempts.first.audit.connector_id == \"mock.erp\"",
+        "attempts.first.audit.method == \"query_inventory\"",
+        "attempts.first.audit.org_id == \"test-org-001\"",
+        "attempts.first.audit.actor_user_id == \"test-user-001\"",
+        "attempts.first.audit.approval_id == null",
+        "attempts.first.idempotency_key == \"test-idem-t4-005-a\"",
+        "attempts.replay2.status == \"replayed\"",
+        "attempts.replay2.replayed_from_execution_id == attempts.first.execution_id",
+        "attempts.replay2.output.sku == attempts.first.output.sku",
+        "attempts.replay2.output.quantity == attempts.first.output.quantity",
+        "attempts.replay3.status == \"replayed\"",
+        "attempts.replay3.replayed_from_execution_id == attempts.first.execution_id",
+        "attempts.replay3.output.quantity == attempts.first.output.quantity",
+        "task.external_state.inventory_unchanged == true",
+        "task.total_cost_usd <= 0.10"
+      ],
+      "cost_budget": {
+        "max_usd": 0.10,
+        "max_tool_rounds": 3,
+        "timeout_seconds": 300
+      },
+      "notes": "口径来源：连接器与路径同 T4-002（白名单 connectors[2]）；复放语义沿 WP2 契约 x-idempotency（同键同体复放原响应、replayed_from_execution_id 指向首次，不限写型动作）与 51:45「重试 3 次，副作用仅发生 1 次」、S-AE-02 检测口径（51:124-126）。与 T4-002 的区分：T4-002 断言单次调用的业务正确性（无复放链），本任务断言同键复放链的三态（首次 + replay2 + replay3）。与 T4-003 的区分：T4-003 锚写副作用计数（mailbox_count==1），本任务锚读路径复放的输出逐字一致 + 状态快照不变（读复放无副作用可计数，输出一致性与 external_state 不变即完整刻画「不重复执行」）。断言不断言 replay2/replay3 的 cost.tool_calls（契约未定义复放尝试的成本语义，避免过度约束 AE1 实现；成本上界由 task.total_cost_usd ≤$0.10 兜底）。semantic 区分同 T4-003：任务内复放链 ≠ 05:45 的 3 次独立运行，分列统计。安全：Mock 只读，无真实外呼、无凭据（同 T4-002）。预算同 T4-001（51:213 / :209 / 09:172）。脱敏：sku 取 test-sku-002（与 T4-002 样本区分）、org/user/warehouse 全为 test- 前缀占位。"
+    }
+  ]
+}

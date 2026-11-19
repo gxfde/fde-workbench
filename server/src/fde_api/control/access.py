@@ -91,6 +91,11 @@ CAPABILITY_REQUIREMENTS = {
     # =write_db 且真执行另有审批闸）在两张 provider 面上永不可达。
     "ontology.read": "project_operator",
     "ontology.write": "project_manager",
+    # AE1-WP1（docs/ai-fde/53 §3）：单步动作执行能力。项目内操作档
+    # （project_operator）——执行侧另有审批闸（risk≥3 dry_run=false 须
+    # approval_id，L4 复算 AutomationApproval；拍板复核人＝同项目另一成员，
+    # 四眼闸由 decide_automation_approval 既有语义承载）。
+    "action_execution.invoke": "project_operator",
 }
 
 

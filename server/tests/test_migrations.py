@@ -123,7 +123,10 @@ GATES_JSON_SHA256 = "f52afe884af8026eef28af66abdae0d2c8f7b07a25d100bf0a647276b51
 # AF2-WP1 第二批（D5）：connector source_kind + 快照锚四列（d5e6f7a8b9c0；挂 c3d8e7a2f1b6）
 # AF2-WP2：transform_plans 计划面表（e8f9a0b1c2d3；挂 d5e6f7a8b9c0）
 # AF2-WP3：transform_runs 隔离执行记录表（f0a1b2c3d4e5；挂 e8f9a0b1c2d3）
-HEAD_REVISION = "f0a1b2c3d4e5"
+# AE1-WP1：action_executions 单步执行记录表（c7d1e3a5b9f2；挂 f0a1b2c3d4e5）
+# AE1-WP2：action_compensations 回滚批次表（d9e3f5a7c1b9；挂 c7d1e3a5b9f2）
+# AE1-WP4：action_execution_logs 审计日志表（e2b4d6f8a0c2；挂 d9e3f5a7c1b9）
+HEAD_REVISION = "e2b4d6f8a0c2"
 
 PLAINTEXT_ENTERPRISE_COLUMNS = (
     "enterprise_name",
@@ -1238,7 +1241,10 @@ def test_known_alembic_revisions_covers_current_head(test_settings):
     # + AF2-WP1 第二批（D5 connector 锚四列 d5e6f7a8b9c0）之后 = 91
     # + AF2-WP2（transform_plans 计划面 e8f9a0b1c2d3）之后 = 92
     # + AF2-WP3（transform_runs 隔离执行 f0a1b2c3d4e5）之后 = 93
-    assert len(known) == 93
+    # + AE1-WP1（action_executions 单步执行 c7d1e3a5b9f2）之后 = 94
+    # + AE1-WP2（action_compensations 回滚批次 d9e3f5a7c1b9）之后 = 95
+    # + AE1-WP4（action_execution_logs 审计日志 e2b4d6f8a0c2）之后 = 96
+    assert len(known) == 96
     # 链内任意已落戳都在集内（下探历史抽样：共享老 revision + M6-WP0 缝合
     # 新入的 fork 支链头——钉「支链确实入了集」而非只靠聚合值）
     for historical in ("b5d9e3f7a1c6", "c9e3a7d1b5f8", "ebb003a5c3a8", "a9f3e5c7b1d2"):

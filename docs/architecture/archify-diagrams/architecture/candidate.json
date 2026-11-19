@@ -173,7 +173,7 @@
    "id": "api",
    "type": "backend",
    "label": "Flask API (fde_api)",
-   "sublabel": "127.0.0.1:8010 · 56 蓝图 · 538 路由",
+   "sublabel": "127.0.0.1:8010 · 57 蓝图 · 541 路由",
    "tag": "v0.3.0",
    "sources": [
     {
@@ -298,7 +298,7 @@
    "id": "db",
    "type": "database",
    "label": "PostgreSQL 16",
-   "sublabel": "twenty-db:5432/fde_workbench · 163 表 · 93 迁移",
+   "sublabel": "twenty-db:5432/fde_workbench · 166 表 · 96 迁移",
    "tag": "WSL 既有实例",
    "sources": [
     {
@@ -632,7 +632,7 @@
  "cards": [
   {
    "dot": "cyan",
-   "title": "服务端业务域 (fde_api 单体 · 56 蓝图)",
+   "title": "服务端业务域 (fde_api 单体 · 57 蓝图)",
    "items": [
     "项目交付: 门禁 G1–G9 · 报价/收款/合同/任务 · 产物候选与换版徽标",
     "售前主线: 调研 discovery · 交付方案 plans · 测试证据 quality · 结项封包 handover",
