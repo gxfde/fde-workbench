@@ -2,6 +2,18 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 训练场 r2 遗留四项收口轮：存量假发现批量裁定＋读数入账＋标定挂账＋回滚脚本交付（2026-11-20）
+
+纯运维＋数据登记轮：零代码零迁移零路由零桌面（结构口径不变，唯一真身 `docs/audit/v3-workbench-inventory.json`）。承接 #548/#549（rubric-v3 上线）后的人工拍板遗留四项；蔡工 2026-11-20 指示「遗留问题可以使用交互式选择方式解决」，交互式选择未获答复 ⇒ 按「按推荐项执行＋逐项留痕可推翻」先例推进（#124/#125 委托先例、somwyn G8/G9 批注代录先例同族）。报告：`docs/audit/训练场r2-遗留四项收口报告-20261120.md`。
+
+- **①存量假发现批量裁定**：第五批 FA-01×19＋FA-02×19 共 38 条 open 发现批量 reject（38/38 HTTP 200，活体 `POST /simulation/findings/<id>/adjudicate`）。判据＝逐条重叠率重算（106 个 expected_missing 项无一命中 0.25 阈值——94 项有重叠不足阈值＋12 项字面零重叠且均为 rubric 通用训条句）＋判据已随 rubric-v3 退役 ⇒ 判据假阴性主体的历史口径残留；逐条 note 含重叠率证据、报告 sha256 指针与授权依据。回执真相层 `LC裁定回执-第五批FA01FA02-20261120.json`。
+- **③第五批读数入账 `regression_results`**：行 `3e385f7d`（套件 `r2-mfg-25-replay`，基线自比形态 proposal_id=None，before=after=第五批实测 25 run：mean_total 0.874／mean_model_total 0.7667／model_runs 25）。verdict=`no_change`（规则层自比 Δ=0）＋model_verdict=`insufficient_data`（rubric-v2 轴无实测带——缺省带 0.1049 属 rubric-v1 轴，跨轴不套用）。系统对 out-of-band 登记无 API 入口 ⇒ 容器内运维级写入，`compare`/`result_fingerprint` 用系统真身（落库字段形状与 `execute_regression_sync` 同构），fingerprint 的 config 加 `_out_of_band` 标记 ⇒ 不与系统未来真实自比撞幂等；场景集合与套件 25 场景逐位对齐已核；HTTP 读面回读 200。回执真相层 `回归结果登记回执-第五批读数-20261120.json`。
+- **④rubric-v3 轴噪声带标定（挂账交蔡工）**：方法＝锚点 IMP-SOMWYN-E2E 同 run 反复 evaluate n=3 取 model_total 极差（`run_batch.py` 锚点模式首跑＋对既有锚点 run `3fc5617f` 重试，60s 间隔）——五轮调用全 `ai_rate_limited`；审计取证 11-19 17:57 后模型通道零成功调用且 16 小时空窗后首调即败 ⇒ 判定 MiniMax 配额/限流外部闸（同第五批先例）。读数回执真相层 `rubricv3-noise-20261120/`。恢复两步（脚本已备于仓外 zcode-tmp）：蔡工补配额 → `calibrate_v3_band.py`（3 轮取极差）→ `archive_v3_band.py`（band 存档进**新建**套件 `r2-mfg-25-replay-v3-noiseband` 的 `baseline_config.noise_band`，axis=`rubric-v3|model:server`——旧套件存档轴 rubric-v1 ⇒ v3 复判定必 409，复判定须新建套件）。
+- **②三挂错靶覆层回滚（脚本交付，执行权蔡工亲输密码）**：PROP-BE8D36B1／PROP-4F648E3F／PROP-E17DAD62 的 overlay purpose（discovery_extract／simulation_diagnostic_judge／plans_delivery_plan_draft）与 workbench 三腿实际 purpose 不咬合，2026-11-18 发布以来注入计数＝0（近 30 天审计分桶复核）⇒ 退役零回归风险；连带退役同源三 lesson 为预期（BE8D36B1「25/25 全因访谈不足」已被第五批推翻、4F648E3F 判据已随 rubric-v3 剔除、E17DAD62 的 FA-03 已由生效载体 PROP-A44B5646 处置；三 lesson 平台级注入 agent 上下文〔industries 空＝全行业〕，退役有真实正收益）。保留面（PROP-BE6DE878 lesson＋`6ef23be1`/`c6eccc50` 两生效 workbench 覆层）预检强校验，任一预检不满足即中止。脚本：`rollback_three_overlays.py`（只读预检 → 输入 YES → getpass 亲输 admin 密码 → 逐提案 rollback：published→approved＋lesson/overlay retired＋OperationEvent 留痕）。
+- **运行时数据面变化（唯一）**：mock 锚点 run `3fc5617f`（seed 20301120）＋评估行 2 行（deterministic rubric-v3＝pass/1.0；model rubric-v3＝unavailable/ai_rate_limited 如实落库）＋`regression_results` +1 行。零迁移零路由零表。
+
+挂账：④待蔡工补 MiniMax 配额后两步闭环；②待蔡工亲输密码执行回滚。
+
 ## [未发布] — 训练场 r2 真相重估轮（F 面）：规则层剔除 D1-01/D2-01——rubric-v3 口径变更（2026-11-20）
 
 第五批（rubric-v2 统一 seed 段，25/25 completed）读数暴露：残余失败发现 FA-01×19＋FA-02×19 的主体是**判据假阴性**，不是模型缺陷。逐条取证（89 条 must_identify 现算）：D1-01「识别出客户真实问题」与 D2-01「根因覆盖度」在规则层是**同一计算**（同一 `hit_identify`、同一 textmatch 0.25 字面重叠，占 D1 权重 0.5＋D2 权重 0.6），而真模型对同一语义的自由措辞普遍落在 0.10–0.25 重叠区间 ⇒ **58% 的 MI 有重叠却被拒**（完全零重叠仅 7%）；传导核对证伪「漏识别」假设（披露事实 3.28/run vs root_causes 3.32/run，0/25 漏条目）。与 D3-01 同族（字面匹配冒充语义判定）但危害更大：非恒 0 且**挂失败码**（`CRITERION_TO_FAILURE` 的 D1-01→FA-01／D2-01→FA-02 ⇒ 假发现成批 confirmed 入库——旧链路靠 D1-01 的 expected_missing 双向证据「永远 confirmed」绕过提案闸）。
