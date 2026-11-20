@@ -263,10 +263,16 @@ class TestIdempotencyEndToEnd:
         assert replay["status"] == "replayed"  # 终态复放，非 in_flight
 
     def test_existing_constraints_untouched(self) -> None:
-        """53 号 WP2 验收①：既有幂等约束逐字未动（禁改清单第 6 项的机械复核）。"""
+        """53 号 WP2 验收①：既有幂等约束逐字未动（禁改清单第 6 项的机械复核）。
+
+        路径锚：按 ``__file__`` 解析（评审补强 G2-26/G2-27：原先用 CWD 相对
+        路径，从仓根运行即 ``FileNotFoundError``——同批其它文件均用
+        ``Path(__file__)``，此处对齐）。
+        """
         from pathlib import Path
 
-        control = Path("src/fde_api/control/models.py").read_text(encoding="utf-8")
-        agents = Path("src/fde_api/agents/models.py").read_text(encoding="utf-8")
+        src_root = Path(__file__).resolve().parents[1] / "src" / "fde_api"
+        control = (src_root / "control" / "models.py").read_text(encoding="utf-8")
+        agents = (src_root / "agents" / "models.py").read_text(encoding="utf-8")
         assert 'UniqueConstraint("idempotency_key", name="uq_automation_task_runs_idempotency")' in control
         assert "uq_agent_runs_idempotency_active" in agents

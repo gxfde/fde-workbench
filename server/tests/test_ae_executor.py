@@ -1,4 +1,4 @@
-"""AE1-WP1：单步执行链 ActionExecutor（53 号 §3 WP1；契约 U1 ``_ae-execution-contract-v1.json`` v1.0.3 FROZEN）。
+"""AE1-WP1：单步执行链 ActionExecutor（53 号 §3 WP1；契约 U1 ``_ae-execution-contract-v1.json`` v1.0.5 FROZEN）。
 
 编排链＝「幂等门 → 白名单门 → 审批闸 → 干跑/真执行 → 审计 → 结果」，按 U1
 ``x-validation-order`` **固定五层顺序**判定（上层未过即短路，层内错误码唯一）：
@@ -50,7 +50,7 @@ from fde_api.auth.tokens import issue_access_token
 from fde_api.control.service import ControlServiceError, decide_automation_approval
 from multi_tenant_harness import add_member, make_enterprise_org, make_project, make_user
 
-# ---- 契约常量（与 U1 v1.0.3 $defs 逐字对齐；漂移即钉红） -----------------------
+# ---- 契约常量（与 U1 v1.0.5 $defs 逐字对齐；漂移即钉红） -----------------------
 
 REQUEST_REQUIRED = (
     "action_id",

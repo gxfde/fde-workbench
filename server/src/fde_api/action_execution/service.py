@@ -453,9 +453,15 @@ def rollback_action(
     - **审批读法**（U1 ``x-rollback.exceptions.approval_required``）：AE1 单步
       补偿＝撤销既有被审批副作用（非新副作用），被原执行 ``approval_id`` 覆盖；
       risk≥3 真执行行 approval_id 缺失属 L4 不变量破缺 → 防御 403。
+    - **异常集补齐**（评审补强 G2-19：契约 ``x-rollback.exceptions`` 七码逐码
+      落地）：入参非法 → 422 ``validation_failed``；发起人对该动作能力已失权
+      → 403 ``permission_revoked``；同幂等键不同执行体 → 409
+      ``idempotency_mismatch``（其余四码既有实现不动）。
     """
     if compensator is None:
         compensator = NO_COMPENSATOR
+    _validate_rollback_input(execution_id=execution_id, reason=reason, idempotency_key=idempotency_key)
+    _assert_rollback_capability(actor)
     with _ae_session() as session:
         row = session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
         if row is None or row.org_id != actor.org_id:
@@ -472,11 +478,56 @@ def rollback_action(
                 "error": batch.error_json,
             }
 
+        # 契约 x-rollback.exceptions：回滚请求携带的幂等键与同键既有请求体
+        # 不一致 → 409 idempotency_mismatch（同键指向另一执行体＝请求体漂移）。
+        if idempotency_key:
+            same_key_other = session.scalar(
+                select(ActionCompensation).where(
+                    ActionCompensation.rollback_key == idempotency_key,
+                    ActionCompensation.execution_id != execution_id,
+                )
+            )
+            if same_key_other is not None:
+                raise ActionExecutionError("idempotency_mismatch", "回滚幂等键与同键既有请求体不一致。")
+
         result = _compute_rollback(row, compensator)
         _persist_compensation_batch(
             row, result, actor=actor, reason=reason, idempotency_key=idempotency_key
         )
         return result
+
+
+def _validate_rollback_input(
+    *, execution_id: str, reason: str | None, idempotency_key: str | None
+) -> None:
+    """契约 ``x-rollback.exceptions``：入参非法 → 422 ``validation_failed``。
+
+    逐字对齐契约签名域：``execution_id`` 1..128；``reason`` ≤500；回滚幂等键
+    1..160（缺省由 execution_id 派生——缺省不校验）。路由面已拦 reason 超长
+    （routes.py 评审 P17），此处补服务面直调路径（内部调用/测试直调）。
+    """
+    if not isinstance(execution_id, str) or not execution_id.strip() or len(execution_id) > 128:
+        raise ActionExecutionError("validation_failed", "execution_id 非法（1..128 字符）。")
+    if reason is not None and (not isinstance(reason, str) or len(reason) > 500):
+        raise ActionExecutionError("validation_failed", "回滚原因超长（≤500 字符）。")
+    if idempotency_key is not None and (
+        not isinstance(idempotency_key, str) or not (1 <= len(idempotency_key) <= 160)
+    ):
+        raise ActionExecutionError("validation_failed", "回滚幂等键非法（1..160 字符）。")
+
+
+def _assert_rollback_capability(actor: User) -> None:
+    """契约 ``x-rollback.exceptions``：发起人对该动作能力已失权 → 403。
+
+    与提交面同档位口径（``effective_ai_access`` ＋ ``CAPABILITY_REQUIREMENTS``
+    的 ``action_execution.invoke``＝project_operator）；沿 Workbench
+    ``control/service.py:865-871`` 执行前权限重验同源判定。判定只依赖发起人
+    自身档位，不泄露目标执行是否存在（跨租户仍走 404 口径）。
+    """
+    level, _source = effective_ai_access(actor)
+    required = CAPABILITY_REQUIREMENTS.get(AE_CAPABILITY)
+    if required is None or ACCESS_RANK.get(level, -1) < ACCESS_RANK.get(required, 0):
+        raise ActionExecutionError("permission_revoked", "回滚发起人不具备该操作权限。")
 
 
 def _compute_rollback(row: ActionExecution, compensator: Any) -> dict[str, Any]:

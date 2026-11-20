@@ -33,6 +33,7 @@ __all__ = [
     "AssertionSyntaxError",
     "MISSING",
     "evaluate_all",
+    "evaluate_all_detailed",
     "evaluate_assertion",
     "parse_assertion",
 ]
@@ -377,11 +378,28 @@ def evaluate_assertion(expression: str, scope: dict[str, Any]) -> bool:
 
 
 def evaluate_all(expressions: list[str], scope: dict[str, Any]) -> list[bool]:
-    """逐条求值；文法不合的条目登记为 **False**（不静默跳过、不中断整轮）。"""
-    results: list[bool] = []
+    """逐条求值；文法不合的条目登记为 **False**（不静默跳过、不中断整轮）。
+
+    兼容入口——只取判定位；**登记位**（文法错误原文）经 ``evaluate_all_detailed``
+    暴露给评分器（报告可区分「断言写错」与「断言不成立」）。"""
+    return [passed for _expression, passed, _error in evaluate_all_detailed(expressions, scope)]
+
+
+def evaluate_all_detailed(
+    expressions: list[str], scope: dict[str, Any]
+) -> list[tuple[str, bool, str | None]]:
+    """逐条求值并**登记**文法错误（评审补强 G3-23）。
+
+    返回 ``(表达式原文, 判定, 错误登记)`` 三元组列表：
+    - 判定位：文法不合恒为 **False**（证据缺失＝不通过，不静默跳过）；
+    - 错误登记：文法不合时为 ``assertion_syntax_error: <原因>``，合规时为 ``None``
+      ——模块头承诺的「判 FAIL **并登记**」由本函数兑现（此前错误被吞，
+      报告里「断言写错」与「断言不成立」同形，无法复核）。
+    """
+    results: list[tuple[str, bool, str | None]] = []
     for expression in expressions:
         try:
-            results.append(evaluate_assertion(expression, scope))
-        except AssertionSyntaxError:
-            results.append(False)
+            results.append((expression, evaluate_assertion(expression, scope), None))
+        except AssertionSyntaxError as error:
+            results.append((expression, False, f"assertion_syntax_error: {error}"))
     return results

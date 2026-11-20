@@ -9,6 +9,12 @@
 - 比例区间（05:66）：二项比例给 **95% Wilson 区间**，并显式标注小样本
   不确定性。
 
+**登记纪律（评审补强 G3-22/G3-23）**：
+- **文法错误登记**：文法不合的断言判 FAIL **并登记**原因（``syntax_errors``
+  ＋逐条 ``error`` 位）——报告可区分「断言写错」与「断言不成立」；
+- **任务集外 ID 明示**：任务集外记录 ``known_task=false`` ＋ note 标注——
+  与「任务集内某任务本就零断言」不再同形。
+
 本模块是**纯函数面**（无 DB / 无网络）：落盘记录进、指标出。
 """
 from __future__ import annotations
@@ -19,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ae_eval.assertions import evaluate_all
+from ae_eval.assertions import evaluate_all_detailed
 from ae_eval.records import RunRecord
 
 __all__ = [
@@ -36,10 +42,16 @@ Z_95 = 1.959963984540054
 
 @dataclass(frozen=True)
 class AssertionOutcome:
-    """单条断言的判定结果（表达式逐字留存，便于复核）。"""
+    """单条断言的判定结果（表达式逐字留存，便于复核）。
+
+    ``error``＝**文法错误登记位**（评审补强 G3-23）：文法不合时为
+    ``assertion_syntax_error: <原因>``，合规时为 ``None``——报告据此可区分
+    「断言写错」（登记位非空）与「断言不成立」（登记位为空）。
+    """
 
     expression: str
     passed: bool
+    error: str | None = None
 
 
 @dataclass
@@ -50,6 +62,7 @@ class TaskScore:
     run_index: int
     outcomes: list[AssertionOutcome] = field(default_factory=list)
     note: str = ""
+    known_task: bool = True
 
     @property
     def passed(self) -> bool:
@@ -64,15 +77,25 @@ class TaskScore:
     def failed_expressions(self) -> list[str]:
         return [outcome.expression for outcome in self.outcomes if not outcome.passed]
 
+    @property
+    def syntax_errors(self) -> list[str]:
+        """文法错误登记（评审补强 G3-23）——独立于失败断言清单。"""
+        return [outcome.expression for outcome in self.outcomes if outcome.error is not None]
+
     def to_json(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "run_index": self.run_index,
             "passed": self.passed,
+            # 任务集外 ID 与「本任务本就零断言」在报告里同形（补强 G3-22：
+            # known_task=False 明示「任务集外」，不靠失败清单反推）
+            "known_task": self.known_task,
             "failed_expressions": self.failed_expressions,
+            "syntax_errors": self.syntax_errors,
             "note": self.note,
             "assertions": [
-                {"expression": outcome.expression, "passed": outcome.passed} for outcome in self.outcomes
+                {"expression": outcome.expression, "passed": outcome.passed, "error": outcome.error}
+                for outcome in self.outcomes
             ],
         }
 
@@ -145,13 +168,27 @@ def score_records(
 
     scores: list[TaskScore] = []
     for record in records:
-        expressions = assertions_by_task.get(record.task_id, [])
+        expressions = assertions_by_task.get(record.task_id)
+        known_task = expressions is not None
+        if expressions is None:
+            # 任务集外 ID：零断言 ⇒ 不通过（不静默通过），但**明示**「任务集外」
+            # ——与「任务集内某任务本就零断言」在报告里可区分（补强 G3-22）
+            expressions = []
         outcomes = [
-            AssertionOutcome(expression=expression, passed=passed)
-            for expression, passed in zip(expressions, evaluate_all(expressions, record.envelope()), strict=True)
+            AssertionOutcome(expression=expression, passed=passed, error=error)
+            for expression, passed, error in evaluate_all_detailed(expressions, record.envelope())
         ]
+        note = record.note
+        if not known_task:
+            note = f"{note} unknown_task_id:任务集外任务 ID（无断言可判）".strip()
         scores.append(
-            TaskScore(task_id=record.task_id, run_index=record.run_index, outcomes=outcomes, note=record.note)
+            TaskScore(
+                task_id=record.task_id,
+                run_index=record.run_index,
+                outcomes=outcomes,
+                note=note,
+                known_task=known_task,
+            )
         )
 
     total_runs = len(scores)

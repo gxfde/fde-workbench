@@ -1,4 +1,4 @@
-"""action_execution 三形态校验与构造（契约 U1 v1.0.3 $defs 的实现侧真身）。
+"""action_execution 三形态校验与构造（契约 U1 v1.0.5 $defs 的实现侧真身）。
 
 分工：``validate_request_shape``＝五层顺序的第 1 层（结构/类型/枚举/闭集/
 敏感键）；``validate_conditional``＝第 5 层兜底（if/then 条件必填——运行时
@@ -9,6 +9,10 @@
 字段域与契约 $defs 逐字对齐（漂移即钉红：tests/test_ae_executor.py 常量区）。
 敏感键扫描复用 ``control.access.contains_sensitive_argument``（同一真身，不
 复刻词表）。
+
+**拒绝消息不回显敏感键名**（评审补强 G2-11）：白名单 ``constraints.
+log_redaction`` 要求敏感键「不得出现在日志、错误消息、响应体任何位置」——
+未登记字段清单里若混有敏感键名，只报「含敏感键名」不报键名本身。
 """
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ import re
 from typing import Any
 
 from fde_api.action_execution.errors import ERROR_STATUS, ActionExecutionError
-from fde_api.control.access import contains_sensitive_argument
+from fde_api.control.access import SENSITIVE_ARGUMENT_KEY, contains_sensitive_argument
 
 EXECUTION_STATUSES = frozenset({"succeeded", "failed", "cancelled", "replayed", "awaiting_approval"})
 ROLLBACK_STATUSES = frozenset({"rolled_back", "not_supported", "failed", "noop"})
@@ -63,13 +67,30 @@ def _contains_non_finite_number(value: Any) -> bool:
     return False
 
 
+def _unknown_fields_message(unknown: list[str]) -> str:
+    """未登记字段清单的消息文案（**不回显敏感键名**）。
+
+    评审补强 G2-11：白名单 ``constraints.log_redaction`` 要求敏感键名不得
+    出现在错误消息任何位置——未登记字段里混入 ``access_token`` 之类键名时，
+    只报「含敏感键名」不报键名本身（非敏感字段照常列出，便于定位）。
+    """
+    sensitive = [name for name in unknown if SENSITIVE_ARGUMENT_KEY.search(str(name))]
+    plain = [name for name in unknown if name not in sensitive]
+    parts: list[str] = []
+    if plain:
+        parts.append("、".join(plain))
+    if sensitive:
+        parts.append("含敏感键名")
+    return f"请求包含未登记字段：{'、'.join(parts)}。"
+
+
 def validate_request_shape(payload: Any) -> None:
     """第 1 层：形状/类型/枚举/闭集/敏感键。不跑条件必填（归第 4/5 层）。"""
     if not isinstance(payload, dict):
         _reject("validation_failed", "请求体须为 JSON 对象。")
     unknown = sorted(set(payload) - REQUEST_ALLOWED)
     if unknown:
-        _reject("validation_failed", f"请求包含未登记字段：{'、'.join(unknown)}。")
+        _reject("validation_failed", _unknown_fields_message(unknown))
     for field in REQUEST_REQUIRED:
         if field not in payload:
             _reject("validation_failed", f"缺少必填字段：{field}。")
