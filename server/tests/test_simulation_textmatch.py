@@ -68,14 +68,17 @@ def test_facts_and_deliverables_use_two_different_criteria():
     """事实类（must_identify）与交付物类（must_produce）**走两套判据**。
 
     - 事实类：字面重叠匹配（在「已确认问题/根因」文本上）；
-    - 交付物类：**规则层不再用字面匹配冒充语义判定**——rubric-v2 起
-      D3-01「方案覆盖 rubric.must_produce」已从规则层剔除（交付物整句做
-      精确子串匹配恒为 0，只压分不产失败码），交付物覆盖的**语义判定交
-      模型层 L-B**（评分基准块把 must_produce 整句给模型逐项判）。
+    - 交付物类（must_produce）与**事实覆盖判定（D1-01/D2-01）**：规则层
+      不再用字面匹配冒充语义判定——rubric-v2 起 D3-01 剔除（精确子串判
+      交付物整句恒 0），rubric-v3 起 D1-01/D2-01 也剔除（0.25 字面重叠
+      对模型自由措辞是假阴性主体：第五批 89 条 MI 逐条现算，58% 有重叠
+      被拒、传导率 100% 证伪漏识别）——两类语义判定都交模型层 L-B。
 
     这条区分是必要的：交付物条目若拿去与事实文本做字面匹配，会把「提到了客户
-    画像」误判成「产出了线索采集去重流程」；反过来，交付物整句也不该用字面
-    匹配判覆盖——真模型方案不会逐字复现整句交付物。
+    画像」误判成「产出了线索采集去重流程」；反过来，语义覆盖（识别出什么/
+    覆盖了什么交付物）也不该由字面重叠判定——真模型的措辞与 rubric 整句
+    天然不同构。``textmatch`` 自 v3 起是独立工具（规则层零消费），本文件
+    其余钉保留为工具自身的校准证明。
     """
     from fde_api.simulation.evaluation_rules import score_criteria
 
@@ -105,12 +108,13 @@ def test_facts_and_deliverables_use_two_different_criteria():
     )
     by_key = {item.key: item for item in with_paraphrase}
 
-    # 事实类：改写措辞仍命中（精确子串做不到）
-    assert by_key["D1-01"].score > 0
-    assert by_key["D1-01"].verified is True
-    # 交付物类：规则层不再产出 D3-01（语义判定交模型层 L-B）
+    # 字面覆盖判据（D1-01/D2-01/D3-01）全部不在规则层（语义判定交模型层 L-B）
+    assert "D1-01" not in by_key
+    assert "D2-01" not in by_key
     assert "D3-01" not in by_key
-    # D3 维度剩余判据仍在位（规模相称／既定约束带入）
+    # 规则层保留的机械判据仍在位
+    assert by_key["D1-02"].dimension == "D1"
+    assert by_key["D2-02"].dimension == "D2"
     assert by_key["D3-02"].dimension == "D3"
     assert by_key["D3-03"].dimension == "D3"
 

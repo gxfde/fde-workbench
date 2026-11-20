@@ -84,6 +84,10 @@ def operator(client, db_session, settings):
 def lead(client, db_session, settings):
     return _make_client(client, db_session, settings, role="project_lead")
 
+@pytest.fixture
+def admin(client, db_session, settings):
+    return _make_client(client, db_session, settings, role="admin")
+
 
 @pytest.fixture(autouse=True)
 def _clean_simulation(db_session):
@@ -170,7 +174,7 @@ def test_low_scoring_criterion_produces_a_confirmed_finding():
         "scores": {
             "criteria": [
                 {
-                    "key": "D1-01",
+                    "key": "D1-02",
                     "dimension": "D1",
                     "title": "识别出客户真实问题",
                     "score": 0.0,
@@ -257,9 +261,17 @@ def _proposal_payload(finding_ids: list[str], **overrides) -> dict:
     return payload
 
 
-def test_proposal_can_be_created_from_a_confirmed_finding(operator):
+def test_proposal_can_be_created_from_a_confirmed_finding(operator, admin):
     run = _run_and_evaluate(operator)
     analysis = operator.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3 换代：mock 零披露只产 hypothesis（D1-01 的 expected_missing
+    # 「永远 confirmed」链路正是本轮剔除的假发现机制）⇒ 走 L-C 裁定面显式 confirm。
+    for item in analysis["items"]:
+        resp = admin.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "夹具裁定：rubric-v3 换代"},
+        )
+        assert resp.status_code == 200, resp.get_json()
     finding_ids = [item["id"] for item in analysis["items"]]
 
     response = operator.post(
@@ -312,9 +324,17 @@ def test_proposal_requires_a_confirmed_root_cause(operator, db_session):
     assert response.get_json()["error"]["code"] == "conflict"
 
 
-def test_duplicate_proposal_for_same_findings_and_target_is_rejected(operator):
+def test_duplicate_proposal_for_same_findings_and_target_is_rejected(operator, admin):
     run = _run_and_evaluate(operator)
     analysis = operator.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3 换代：mock 零披露只产 hypothesis（D1-01 的 expected_missing
+    # 「永远 confirmed」链路正是本轮剔除的假发现机制）⇒ 走 L-C 裁定面显式 confirm。
+    for item in analysis["items"]:
+        resp = admin.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "夹具裁定：rubric-v3 换代"},
+        )
+        assert resp.status_code == 200, resp.get_json()
     finding_ids = [item["id"] for item in analysis["items"]]
 
     first = operator.post("/api/v1/simulation/proposals", json=_proposal_payload(finding_ids))
@@ -324,9 +344,17 @@ def test_duplicate_proposal_for_same_findings_and_target_is_rejected(operator):
     assert second.status_code == 409
 
 
-def test_operator_cannot_approve_a_proposal(operator):
+def test_operator_cannot_approve_a_proposal(operator, admin):
     run = _run_and_evaluate(operator)
     analysis = operator.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3 换代：mock 零披露只产 hypothesis（D1-01 的 expected_missing
+    # 「永远 confirmed」链路正是本轮剔除的假发现机制）⇒ 走 L-C 裁定面显式 confirm。
+    for item in analysis["items"]:
+        resp = admin.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "夹具裁定：rubric-v3 换代"},
+        )
+        assert resp.status_code == 200, resp.get_json()
     finding_ids = [item["id"] for item in analysis["items"]]
     proposal = operator.post(
         "/api/v1/simulation/proposals", json=_proposal_payload(finding_ids)
@@ -340,9 +368,17 @@ def test_operator_cannot_approve_a_proposal(operator):
     assert response.status_code == 403
 
 
-def test_approval_requires_password_and_reason(lead):
+def test_approval_requires_password_and_reason(lead, admin):
     run = _run_and_evaluate(lead)
     analysis = lead.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3 换代：mock 零披露只产 hypothesis（D1-01 的 expected_missing
+    # 「永远 confirmed」链路正是本轮剔除的假发现机制）⇒ 走 L-C 裁定面显式 confirm。
+    for item in analysis["items"]:
+        resp = admin.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "夹具裁定：rubric-v3 换代"},
+        )
+        assert resp.status_code == 200, resp.get_json()
     finding_ids = [item["id"] for item in analysis["items"]]
     proposal = lead.post(
         "/api/v1/simulation/proposals", json=_proposal_payload(finding_ids)
@@ -366,9 +402,17 @@ def test_approval_requires_password_and_reason(lead):
     assert wrong_password.status_code == 403
 
 
-def test_approval_ends_at_approved_without_publishing(lead):
+def test_approval_ends_at_approved_without_publishing(lead, admin):
     run = _run_and_evaluate(lead)
     analysis = lead.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3 换代：mock 零披露只产 hypothesis（D1-01 的 expected_missing
+    # 「永远 confirmed」链路正是本轮剔除的假发现机制）⇒ 走 L-C 裁定面显式 confirm。
+    for item in analysis["items"]:
+        resp = admin.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "夹具裁定：rubric-v3 换代"},
+        )
+        assert resp.status_code == 200, resp.get_json()
     finding_ids = [item["id"] for item in analysis["items"]]
     proposal = lead.post(
         "/api/v1/simulation/proposals", json=_proposal_payload(finding_ids)

@@ -89,11 +89,12 @@ def _summary(
 # ---------------------------------------------------------------------------
 
 
-def test_rubric_version_is_v2():
-    """规则版本升 v2（历史 v1 评估行不改写，靠幂等键含版本天然分列）。"""
+def test_rubric_version_never_regresses_below_v2():
+    """口径只前进不回退（v3 起精确版本断言移交 test_simulation_rubric_v3.py）。"""
     from fde_api.simulation.evaluation_rules import RUBRIC_VERSION
 
-    assert RUBRIC_VERSION == "rubric-v2"
+    assert RUBRIC_VERSION.startswith("rubric-v")
+    assert RUBRIC_VERSION != "rubric-v1"
 
 
 def test_rule_layer_no_longer_emits_d3_01():
@@ -145,9 +146,11 @@ def test_noise_band_unavailable_on_new_axis_resolves_to_none():
     """当前轴（rubric-v2）没有实测归档的带 ⇒ 解析结果 band=None（不是缺省带）。"""
     from fde_api.simulation.regression_service import _resolve_noise_band
 
+    from fde_api.simulation.evaluation_rules import RUBRIC_VERSION
+
     band, axis = _resolve_noise_band({}, model_mode="server")
 
-    assert axis == "rubric-v2|model:server"
+    assert axis == f"{RUBRIC_VERSION}|model:server"
     assert band is None
 
 
@@ -164,12 +167,15 @@ def test_noise_band_default_still_resolved_on_its_own_axis(monkeypatch):
 
 def test_invalid_archived_noise_band_fails_closed():
     """存档带的值非法 ⇒ 400 fail-closed（不得回落成缺省带跨轴套用）。"""
+    from fde_api.simulation.evaluation_rules import RUBRIC_VERSION
     from fde_api.simulation.regression_service import _resolve_noise_band
     from fde_api.simulation.service import ScenarioServiceError
 
     with pytest.raises(ScenarioServiceError) as excinfo:
         _resolve_noise_band(
-            {"noise_band": {"axis": "rubric-v2|model:server", "band": "not-a-number"}},
+            # 轴用当前轴写法：旧轴存档会先触发 noise_band_axis_mismatch
+            # （轴纪律），本钉只测「值非法」分支
+            {"noise_band": {"axis": f"{RUBRIC_VERSION}|model:server", "band": "not-a-number"}},
             model_mode="server",
         )
 

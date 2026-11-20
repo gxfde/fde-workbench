@@ -19,7 +19,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from fde_api.simulation.textmatch import matches
 
 # 评分规则版本（变更须升版并在报告中标明，历史评估不改写）
 #
@@ -31,12 +30,29 @@ from fde_api.simulation.textmatch import matches
 # ``CRITERION_TO_FAILURE`` 只挂 D3-02→FA-03）⇒ 只压分、不产可处置信号。
 # 处置：交付物覆盖的**语义判定交模型层 L-B**（评分基准块把 must_produce 整句
 # 给模型逐项判，见 ``evaluation_prompt.py`` 与 ``model_evaluation.py``），
-# 规则层不再用字面匹配冒充语义判定（同族纪律：事实类仍走 ``textmatch.matches``，
-# 因为事实类本就要求字面命中）。
+# 规则层不再用字面匹配冒充语义判定（rubric-v3 起事实类也不走——0.25 字面重叠
+# 对模型自由措辞是假阴性主体，见下方 v3 注释；``textmatch`` 库保留为独立工具）。
 # ★口径变更：D3 维度分与总分刻度随之变化（D3 内部按已核实判据权重归一，
 #   另 ``unverified_ratio`` 分母由 7.0 降为 6.5）⇒ 历史读数与新读数**必须
 #   按版本双口径并列登记**，不可直接比。
-RUBRIC_VERSION = "rubric-v2"
+#
+# rubric-v3（2026-11-20）：**规则层剔除 D1-01「识别出客户真实问题」与
+# D2-01「根因覆盖度」**。原因（第五批真机取证，25 completed run／89 条
+# must_identify 逐条现算）：两判据共用同一 ``hit_identify``（0.25 字面重叠
+# textmatch）判「模型是否识别出 must_identify」，而真模型对同一语义的自由
+# 措辞普遍落在 0.10–0.25 重叠区间 ⇒ 58% 的 MI 有重叠却被拒（完全零重叠仅
+# 7%）；传导核对证伪「漏识别」假设（披露事实 3.28/run vs root_causes
+# 3.32/run，0/25 漏条目）⇒ 主体是**判据假阴性**。与 D3-01 同族（字面匹配
+# 冒充语义判定）但危害更大：非恒 0 且**挂失败码**（D1-01→FA-01、
+# D2-01→FA-02 ⇒ 假发现成批入库，第五批 38 条）。处置：MI 覆盖的语义判定
+# 交模型层 L-B（评分基准块把 must_identify 整句给模型逐项判，输出契约
+# ``MI-n`` 即落点）；规则层 D1 剩 D1-02/D1-03、D2 剩 D2-02，按已核实判据
+# 权重归一；``CRITERION_TO_FAILURE`` 同步摘除 D1-01/D2-01 两映射（D1-02/
+# D2-02 保留——零披露/零结构化仍应报 FA-01/FA-02）。
+# ★口径变更：D1/D2 维度分与总分刻度随之变化 ⇒ 历史读数按版本双口径并列
+#   登记，不可跨轴直比；v2/v3 轴均无实测噪声带（缺省带标签留在其实测轴
+#   ``rubric-v1|model:server``）⇒ 模型层 ``insufficient_data``。
+RUBRIC_VERSION = "rubric-v3"
 
 # 七维度与初始权重（G1 §9.1）
 DIMENSIONS: tuple[tuple[str, str, float], ...] = (
@@ -350,37 +366,8 @@ def score_criteria(
     structured = bool(artifacts.get("structured", True))
     criteria: list[Criterion] = []
 
-    # ---- D1 访谈与需求识别 --------------------------------------------
-    must_identify = rubric["must_identify"]
-    root_causes = analysis.get("root_causes") or []
-    root_texts = [str(item.get("text") or "") for item in root_causes]
-    # 覆盖判定走**字面重叠**（textmatch），不用精确子串——Rubric 写「应当识别出
-    # 什么」，产物写「实际说了什么」，措辞天然不同（G9 校准，阈值见 textmatch）。
-    hit_identify = [
-        text
-        for text in must_identify
-        if any(text and matches(text, candidate) for candidate in root_texts)
-    ]
-    criteria.append(
-        Criterion(
-            key="D1-01",
-            dimension="D1",
-            title="识别出客户真实问题（rubric.must_identify）",
-            weight=0.5,
-            score=(len(hit_identify) / len(must_identify)) if must_identify else 0.0,
-            # 覆盖类判据的证据是**双向**的：命中的项 + **应命中却缺失**的项。
-            # 「该有而没有」本身就是证据（否则「没找到根因」永远无法核实，
-            # 结论会停在 inconclusive，失败分析也就无从下手）。
-            evidence_refs=tuple(
-                [{"kind": "root_cause", "text": text} for text in hit_identify]
-                + [
-                    {"kind": "expected_missing", "text": text}
-                    for text in must_identify
-                    if text not in hit_identify
-                ]
-            ),
-        )
-    )
+    # rubric-v3：D1-01「识别出客户真实问题」已剔除（语义覆盖交模型层 MI-n，
+    # 依据见文件头版本注释）——D1 按 D1-02/D1-03 归一。
     criteria.append(
         Criterion(
             key="D1-02",
@@ -411,34 +398,17 @@ def score_criteria(
         )
     )
 
-    # ---- D2 业务流程与本体建模 ----------------------------------------
-    criteria.append(
-        Criterion(
-            key="D2-01",
-            dimension="D2",
-            title="根因覆盖度（相对 must_identify）",
-            weight=0.6,
-            score=(len(hit_identify) / len(must_identify)) if must_identify else 0.0,
-            evidence_refs=tuple(
-                [{"kind": "root_cause", "text": text} for text in root_texts]
-                + [
-                    {"kind": "expected_missing", "text": text}
-                    for text in must_identify
-                    if text not in hit_identify
-                ]
-            ),
-        )
-    )
-    terms = analysis.get("requirements") or []
+    # rubric-v3：D2-01「根因覆盖度」已剔除（与 D1-01 同一计算、同一假阴性面，
+    # 依据见文件头）——D2 只剩 D2-02，按其权重归一。
     criteria.append(
         Criterion(
             key="D2-02",
             dimension="D2",
             title="领域对象/流程被结构化",
             weight=0.4,
-            score=1.0 if terms else 0.0,
+            score=1.0 if requirements else 0.0,
             evidence_refs=tuple(
-                {"kind": "requirement", "key": str(item.get("key"))} for item in terms
+                {"kind": "requirement", "key": str(item.get("key"))} for item in requirements
             ),
         )
     )

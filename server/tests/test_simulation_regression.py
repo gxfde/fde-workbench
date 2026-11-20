@@ -76,7 +76,9 @@ def _make_client(client, db_session, settings, *, role: str = "fde_engineer") ->
 
 @pytest.fixture
 def operator(client, db_session, settings):
-    return _make_client(client, db_session, settings, role="fde_engineer")
+    # rubric-v3 换代：夹具要在 analyze 后走 L-C 裁定面（confirm 需 admin/
+    # project_lead）——本文件无 fde_engineer 权限负例，operator 升 admin。
+    return _make_client(client, db_session, settings, role="admin")
 
 
 @pytest.fixture
@@ -300,6 +302,14 @@ def _proposal(operator, *, run_split: str = "train") -> dict:
     ).get_json()["data"]
     operator.post(f"/api/v1/simulation/runs/{run['id']}/evaluate")
     analysis = operator.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3：mock 零披露 run 只产 hypothesis 根因（旧链路靠 D1-01 的
+    # expected_missing 证据「永远 confirmed」绕过提案闸——那正是本轮剔除的
+    # 假发现机制）⇒ 夹具改走 L-C 裁定面显式 confirm（闸语义：人工裁定确认）。
+    for item in analysis["items"]:
+        operator.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "回归夹具：人工裁定确认（rubric-v3 换代）"},
+        )
     finding_ids = [item["id"] for item in analysis["items"]]
     response = operator.post(
         "/api/v1/simulation/proposals",
@@ -389,6 +399,14 @@ def test_proposal_from_blind_set_findings_is_rejected(operator):
     ).get_json()["data"]
     operator.post(f"/api/v1/simulation/runs/{run['id']}/evaluate")
     analysis = operator.post(f"/api/v1/simulation/runs/{run['id']}/analyze").get_json()["data"]
+    # rubric-v3：mock 零披露 run 只产 hypothesis 根因（旧链路靠 D1-01 的
+    # expected_missing 证据「永远 confirmed」绕过提案闸——那正是本轮剔除的
+    # 假发现机制）⇒ 夹具改走 L-C 裁定面显式 confirm（闸语义：人工裁定确认）。
+    for item in analysis["items"]:
+        operator.post(
+            f"/api/v1/simulation/findings/{item['id']}/adjudicate",
+            json={"action": "confirm", "note": "回归夹具：人工裁定确认（rubric-v3 换代）"},
+        )
     finding_ids = [item["id"] for item in analysis["items"]]
 
     response = operator.post(
@@ -531,7 +549,7 @@ def test_noise_band_nail_3_axis_mismatch_fails_closed_409(operator):
     assert body["code"] == "noise_band_axis_mismatch"
     assert body["details"]["archived_axis"] == "rubric-v1|model:server"
     # rubric-v2 起当前轴随规则版本推进（旧轴存档 ⇒ 409 fail-closed，语义不变）
-    assert body["details"]["current_axis"] == "rubric-v2|model:stub"
+    assert body["details"]["current_axis"] == "rubric-v3|model:stub"
 
 
 def test_noise_band_nail_4_default_constant_matches_l2_ledger_anchor():
@@ -568,7 +586,7 @@ def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(ope
             "baseline_config": {
                 "adapter_mode": "mock",
                 "model_mode": "stub",
-                "noise_band": {"axis": "rubric-v2|model:stub", "band": 0.1049, "anchor_n": 3},
+                "noise_band": {"axis": "rubric-v3|model:stub", "band": 0.1049, "anchor_n": 3},
             },
         },
     ).get_json()["data"]
@@ -593,7 +611,7 @@ def test_regression_accepts_candidate_payload_and_queues_async_for_workbench(ope
     assert sync_resp.status_code == 201, sync_resp.get_json()
     sync_data = sync_resp.get_json()["data"]
     assert sync_data["deltas"]["noise_band"] == 0.1049
-    assert sync_data["deltas"]["noise_band_axis"] == "rubric-v2|model:stub"
+    assert sync_data["deltas"]["noise_band_axis"] == "rubric-v3|model:stub"
     assert sync_data["deltas"]["model_verdict"] == "insufficient_data"
 
     # workbench 套件返回 202 queued_async + job_id

@@ -2,6 +2,20 @@
 
 本文件记录 FDE Workbench 开源版本的主要变化。版本号遵循语义化版本规范；首次公开源码版本为 `v0.1.0`。
 
+## [未发布] — 训练场 r2 真相重估轮（F 面）：规则层剔除 D1-01/D2-01——rubric-v3 口径变更（2026-11-20）
+
+第五批（rubric-v2 统一 seed 段，25/25 completed）读数暴露：残余失败发现 FA-01×19＋FA-02×19 的主体是**判据假阴性**，不是模型缺陷。逐条取证（89 条 must_identify 现算）：D1-01「识别出客户真实问题」与 D2-01「根因覆盖度」在规则层是**同一计算**（同一 `hit_identify`、同一 textmatch 0.25 字面重叠，占 D1 权重 0.5＋D2 权重 0.6），而真模型对同一语义的自由措辞普遍落在 0.10–0.25 重叠区间 ⇒ **58% 的 MI 有重叠却被拒**（完全零重叠仅 7%）；传导核对证伪「漏识别」假设（披露事实 3.28/run vs root_causes 3.32/run，0/25 漏条目）。与 D3-01 同族（字面匹配冒充语义判定）但危害更大：非恒 0 且**挂失败码**（`CRITERION_TO_FAILURE` 的 D1-01→FA-01／D2-01→FA-02 ⇒ 假发现成批 confirmed 入库——旧链路靠 D1-01 的 expected_missing 双向证据「永远 confirmed」绕过提案闸）。
+
+本轮处置（蔡工 2026-11-20 拍板「按推荐实施」＝真相重估报告意见 1＋2）：
+
+- `server/src/fde_api/simulation/evaluation_rules.py`：`RUBRIC_VERSION` 升 **rubric-v3**；删除 D1-01/D2-01 两判据块（与 #540 剔 D3-01 同构）；D1 按 D1-02/D1-03、D2 按 D2-02 按已核实判据权重归一；`textmatch` 退出规则层消费面（库与工具校准钉保留）。
+- `server/src/fde_api/simulation/failure_analyzer.py`：`CRITERION_TO_FAILURE` 摘除 D1-01/D2-01 两映射；D1-02→FA-01、D2-02→FA-02 保留（零披露/零结构化仍应报——机械可验证面）。
+- MI 覆盖的语义判定交模型层 L-B（评分基准块已把 must_identify 整句给模型逐项判，输出契约 `MI-n` 即落点——信息不丢失，弱判定退出）。
+- 测试：NEW `server/tests/test_simulation_rubric_v3.py` 12 钉（版本／判据边界／D1+D2 归一／失败码闭集／HF-07 不受影响／噪声带轴纪律沿用）＋4 处换代：`test_simulation_textmatch.py` 判据钉（三桶字面覆盖判据全不在规则层）、`test_simulation_rubric_v2.py` 版本钉改「不回退」＋轴钉版本无关化、`test_simulation_regression.py` 三处轴字面量升 v3、`test_simulation_improvement*.py`／`test_simulation_e2e.py` 夹具换代（mock 零披露只产 hypothesis ⇒ 走 L-C 裁定面显式 confirm——把旧链路绕闸的假 confirmed 机制换成真实裁定流）。
+- 验证：定向 13 套件 **185 passed**；mypy 277/277 零新增；ruff 绿；行数预算/台账同步/蓝图同步钉绿（evaluation_rules 672→642 行只减不增）；**变异四连全红→还原复绿**（复活 D1-01／复活映射／版本回写／破坏归一）。
+
+★**口径变更**：D1/D2 维度分与总分刻度随之变化 ⇒ 历史读数按版本双口径并列登记、不跨轴直比；v3 轴无实测噪声带（缺省带标签留在实测轴 `rubric-v1|model:server`）⇒ 模型层 `insufficient_data`。★**效果指标纪律**：FA-01/FA-02 条数与 D1/D2 维度分在 v3 前的历史批不可用作效果指标（分母被假阴性污染）；效果判据改用披露事实数／提取率／传导率＋模型层 verdict。零迁移零路由零表。
+
 ## [未发布] — 优化 R1b：隔离验证部署协调（2026-11-19）
 
 - 同一宿主的受管计划共用持久占用槽，不按工作树或 Compose 项目分桶；仅当前置、写入及结果核验都通过才释放。进程消失、状态损坏或验证失败均不允许自动接管。

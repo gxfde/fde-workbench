@@ -80,9 +80,9 @@ FAILURE_CATEGORIES: dict[str, dict[str, str]] = {
 
 # 判据 → 失败分类（直接命中 ⇒ confirmed）
 CRITERION_TO_FAILURE: dict[str, str] = {
-    "D1-01": "FA-01",
+    # rubric-v3：D1-01/D2-01 已从规则层剔除（判据假阴性，见 evaluation_rules
+    # 版本注释）⇒ 两映射同步摘除；D1-02/D2-02 保留（零披露/零结构化仍应报）。
     "D1-02": "FA-01",
-    "D2-01": "FA-02",
     "D2-02": "FA-02",
     "D3-02": "FA-03",
     "D4-01": "FA-04",

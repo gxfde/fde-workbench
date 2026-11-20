@@ -24,6 +24,7 @@ from sqlalchemy import delete, select
 from conftest import INITIAL_PASSWORD
 from fde_api.auth.models import User
 from fde_api.auth.passwords import hash_password
+from fde_api.simulation.improvement_service import adjudicate_finding
 from fde_api.auth.tokens import issue_access_token
 from fde_api.extensions import db
 from fde_api.simulation import evaluator, run_service
@@ -346,7 +347,7 @@ def test_viewer_is_rejected_across_the_training_lab_surface(viewer):
 # ---------------------------------------------------------------------------
 
 
-def test_failure_analysis_yields_a_confirmed_finding_and_a_proposal(operator, seeded_scenarios):
+def test_failure_analysis_yields_a_confirmed_finding_and_a_proposal(operator, seeded_scenarios, db_session):
     """失败分析 → 结构化改进提案（闭环）。"""
     scenario = seeded_scenarios[0]
     run = run_service.create_run(
@@ -362,15 +363,36 @@ def test_failure_analysis_yields_a_confirmed_finding_and_a_proposal(operator, se
     analysis = analyze_run(actor=operator.user, run_id=run["id"])
 
     assert analysis["created"] >= 1
+    # rubric-v3 换代：mock 零披露只产 hypothesis（旧链路靠 D1-01 的
+    # expected_missing 证据「永远 confirmed」⇒ 那正是本轮剔除的假发现机制）。
+    # 闭环语义改为：L-C 裁定面 confirm ⇒ analyze 幂等重跑带 confirmed 终裁。
+    admin = User(
+        username=f"sim.e2e.admin.{uuid4().hex[:8]}",
+        display_name="Simulation e2e admin",
+        role="admin",
+        password_hash=hash_password(INITIAL_PASSWORD),
+        must_change_password=False,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+    for finding in analysis["items"]:
+        adjudicate_finding(
+            actor=admin,
+            finding_id=finding["id"],
+            payload={"action": "confirm", "note": "e2e 夹具裁定：rubric-v3 换代"},
+        )
+    analysis = analyze_run(actor=operator.user, run_id=run["id"])
     confirmed = [
         finding
         for finding in analysis["items"]
-        if any(
+        if finding.get("status") == "confirmed"
+        or any(
             str(cause.get("confidence")) == "confirmed"
             for cause in finding["root_causes"]
         )
     ]
-    assert confirmed, "低分且有证据 ⇒ 应产出 confirmed 根因"
+    assert confirmed, "人工裁定 confirm 后 ⇒ analyze 投影应带 confirmed 终裁"
 
     proposal = create_proposal(
         actor=operator.user,

@@ -180,7 +180,7 @@ def _add_evaluation(
 
 _LOW_CRITERIA = [
     {
-        "key": "D1-01",
+        "key": "D1-02",
         "dimension": "D1",
         "title": "识别出客户真实问题",
         "score": 0.1,
