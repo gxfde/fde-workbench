@@ -16,6 +16,8 @@
 
 ★**口径变更**：D1/D2 维度分与总分刻度随之变化 ⇒ 历史读数按版本双口径并列登记、不跨轴直比；v3 轴无实测噪声带（缺省带标签留在实测轴 `rubric-v1|model:server`）⇒ 模型层 `insufficient_data`。★**效果指标纪律**：FA-01/FA-02 条数与 D1/D2 维度分在 v3 前的历史批不可用作效果指标（分母被假阴性污染）；效果判据改用披露事实数／提取率／传导率＋模型层 verdict。零迁移零路由零表。
 
+**活体部署回执（2026-11-20，合并后）**：从 fork/main `80563f13` 快进的隔离部署树 `D:/test/fde-wt-rubricv2-deploy` 重建三镜像（api `b4cb6a53`／worker `04e78281`／scheduler `4a5f98e0`）＋`up -d --force-recreate`；接管检查器零 FAIL（compose 插值 1 变量＋关键键 6 全在位、migrations 挂载源在场）。**三验全绿**：①活体 `url_map` **542**（non-static 541）②容器内 `alembic current`＝**`e2b4d6f8a0c2` (head)**，与从本工作树迁移文件现算的单 head 逐位一致（本次补跑 upgrade 应用三条待迁移 `c7d1e3a5b9f2`／`d9e3f5a7c1b9`／`e2b4d6f8a0c2`——并发线 AE1-WP1/WP2/WP4 的新增表，DB 原停在 `f0a1b2c3d4e5`）③三镜像 ID 与本工作树构建产物逐位一致；容器内 `RUBRIC_VERSION="rubric-v3"` 在位、`CRITERION_TO_FAILURE` 已无 D1-01/D2-01；api/worker/scheduler 三容器 healthy＋ready/live 200。★**教训 ⑯ 复现并加固**：部署前现役旧镜像连 `alembic current` 都跑不起来（`ModuleNotFoundError: No module named 'fde_api.action_execution'`）——「有值 ≠ =head」的更强形态是「**连值都取不到**」⇒ 部署顺序必须是「先重建容器、再跑 upgrade、再验 head」，且 head 必须由迁移文件现算（merge 迁移多父，单纯按 down_revision 首项取会误判多 head）。★**口径现测校正**：`docs/audit/v3-workbench-inventory.json`（唯一机器可读真身）现测＝**541 路由／57 蓝图／166 表／96 迁移，单头 `e2b4d6f8a0c2`**（并发线 #538 AE1-WP1–WP4 与 #543 AF2-WP5 推进结构面）；AGENTS「最新终态速览」段同步校正，各轮入口数字仍为「当轮基线值」，引用前须现测该 JSON。
+
 ## [未发布] — 优化 R1b：隔离验证部署协调（2026-11-19）
 
 - 同一宿主的受管计划共用持久占用槽，不按工作树或 Compose 项目分桶；仅当前置、写入及结果核验都通过才释放。进程消失、状态损坏或验证失败均不允许自动接管。

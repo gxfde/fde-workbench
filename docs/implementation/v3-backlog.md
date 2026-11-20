@@ -1011,6 +1011,7 @@ AI 执行状态读取 / 行业模板取消标记）登记于 §4-①~③，**不
 - **处置（蔡工拍板「按推荐实施」＝意见 1＋2）**：规则层剔除 D1-01/D2-01（与 #540 同构），MI 覆盖语义交模型层 L-B（`MI-n` 落点）；`CRITERION_TO_FAILURE` 同步摘除两映射（D1-02/D2-02 保留）；`RUBRIC_VERSION` 升 **rubric-v3**；噪声带轴纪律沿用 #540。
 - **验证**：NEW 12 钉＋4 处换代（textmatch 判据钉／v2 版本钉改不回退／回归轴字面量/improvement+e2e 夹具走 L-C 裁定面）；定向 13 套件 185 passed；mypy 277 零新增；变异四连全红→还原复绿。
 - **口径声明**：D1/D2 维度分与总分刻度变更 ⇒ 双口径并列；FA-01/FA-02 条数与 D1/D2 分在历史批不可用作效果指标（假阴性污染分母）。
+- **活体部署（2026-11-20，合并后）**：隔离部署树 `D:/test/fde-wt-rubricv2-deploy` 快进至 fork/main `80563f13` → 重建三镜像＋`up -d --force-recreate` → 容器内 `alembic upgrade head` 补跑并发线三条待迁移（`c7d1e3a5b9f2`／`d9e3f5a7c1b9`／`e2b4d6f8a0c2`，DB 原停在 `f0a1b2c3d4e5`）→ **三验全绿**（url_map 542 non-static 541／容器内 `alembic current`＝`e2b4d6f8a0c2 (head)`＝迁移文件现算单 head／三镜像 ID 逐位一致）＋容器内 `RUBRIC_VERSION="rubric-v3"` 在位；★口径现测＝**541 路由／57 蓝图／166 表／96 迁移，单头 `e2b4d6f8a0c2`**。
 - **未做（授权边界）**：存量假发现（第五批 38＋历史批）的批量裁定属人工拍板；FA-01/FA-02 已发布提案的 overlay 支作废/重建待治理面；`regression_results` 登记同 E 面（out-of-band 口径不同）。
 
 ### T-M7 商机数据归属权与区域服务商（M7-1 轮）— **结构就绪·待授权**（2026-11-12）
