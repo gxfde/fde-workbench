@@ -68,7 +68,7 @@ class TestWhitelistLoader:
     def test_whitelist_snapshot_matches_source_anchor(self, whitelist_snapshot) -> None:
         """仓内快照锚：v1.3 / 4 连接器封闭集 / 14 constraints——白名单改版 v2
         时此钉显式翻新（防快照静默漂移）。"""
-        assert whitelist_snapshot["version"] == "1.3.2"  # v1.3.2＝评审轮 D3 KD-02/D4 登记落痕（2026-11-20，契约 v1.0.4 双登记）
+        assert whitelist_snapshot["version"] == "1.3.3"  # v1.3.3＝B 桶 B-4 拍板 ae_rule 读法澄清（notes-only；v1.3.2＝KD-02/D4）
         assert [c["id"] for c in whitelist_snapshot["connectors"]] == [
             "workbench.ontology",
             "workbench.workflow",

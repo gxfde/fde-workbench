@@ -1,5 +1,5 @@
 """AE1-WP4：审计日志与成本登记（53 号 §3 WP4；契约 U1 ``$defs/AuditObject`` /
-``$defs/CostObject`` v1.0.5 FROZEN）。
+``$defs/CostObject`` v1.0.6 FROZEN）。
 
 WP4 交付面＝``action_execution_logs`` 表（append-only 迁移）＋审计写入函数＋
 本文件钉＋敏感键 grep 闸。验收六条逐条落钉（53 号 §3 WP4 行）：

@@ -1,8 +1,8 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "artifact": "AE0-WP4 连接器白名单 v1",
   "generated_at": "2026-11-18",
-  "status": "FROZEN-v1（2026-11-18 AE0 出口冻结）——D2 已 P1「全部批准」（52 号 §2 D2 拍板落痕：AE0–AE1 仅内部 API + Mock 外部系统、真实系统归 AE3、白名单格式按 D2③）；本件即按裁决校准后的冻结版（v1.0→v1.1：methods 语义改 D2③ 动作方法名、动词/路径移入 http_bindings；v1.1→v1.2：评审轮校准——error_code_table 主表状态由 DRAFT 校正为 FROZEN-v1、connectors[0] 增 methods 收窄与输出归一化登记〔KD-01〕；v1.2→v1.3：评审轮补 `constraints.header_allowlist`——承载 D2 拍板执行层安全范式四件套「白名单 + SSRF 预检 + Header 白名单 + fail-closed 默认关」中此前无条目承载的 Header 白名单项）。白名单属安全红线件：四条为封闭集合，变更须审核后升 v2；v1.3.1（2026-11-19）：**Q9 实测回填**（53 号 §2.4 Q9 拍板授权「归口 AE1 开工轮实测回填」）＝mock.erp/mock.email 两条 notes 追加实测证据与请求/响应形状定稿——**连接器封闭集合、methods、http_bindings、constraints 零改动**（change_control 口径：非语义修订，不触发 v2）",
+  "status": "FROZEN-v1（2026-11-18 AE0 出口冻结）——D2 已 P1「全部批准」（52 号 §2 D2 拍板落痕：AE0–AE1 仅内部 API + Mock 外部系统、真实系统归 AE3、白名单格式按 D2③）；本件即按裁决校准后的冻结版（v1.0→v1.1：methods 语义改 D2③ 动作方法名、动词/路径移入 http_bindings；v1.1→v1.2：评审轮校准——error_code_table 主表状态由 DRAFT 校正为 FROZEN-v1、connectors[0] 增 methods 收窄与输出归一化登记〔KD-01〕；v1.2→v1.3：评审轮补 `constraints.header_allowlist`——承载 D2 拍板执行层安全范式四件套「白名单 + SSRF 预检 + Header 白名单 + fail-closed 默认关」中此前无条目承载的 Header 白名单项）。白名单属安全红线件：四条为封闭集合，变更须审核后升 v2；v1.3.1（2026-11-19）：**Q9 实测回填**（53 号 §2.4 Q9 拍板授权「归口 AE1 开工轮实测回填」）＝mock.erp/mock.email 两条 notes 追加实测证据与请求/响应形状定稿——**连接器封闭集合、methods、http_bindings、constraints 零改动**（change_control 口径：非语义修订，不触发 v2）；v1.3.2（2026-11-20）：评审轮 D3 KD-02 归一化登记（mock.erp query_inventory items[0] 展开）＋D4 跨租户 403 登记落痕——notes-only；v1.3.3（2026-11-20，B 桶 B-4 拍板落痕）：fail_closed.ae_rule 读法澄清——「写审计事件」按 **应用日志腿** 履行（``ae_whitelist_rejected``，connectors.py）：拒绝发生在锁前、无真实起止时间，不落审计表行以守零伪造审计纪律（51:154-159 检测口径不变）——notes-only，连接器封闭集合、methods、http_bindings、constraints 结构零改动",
   "authority": {
     "work_order": "docs/ai-fde/52-ae0-work-order.md §2 D2（连接器白名单范围；v0.3 版含拍板落痕）、§3 工作包表 WP4",
     "handbook": "docs/ai-fde/_exec-handbook.md §2.2 WP4（lines 209-257）",
@@ -95,7 +95,7 @@
     "fail_closed": {
       "summary": "未在白名单注册的 endpoint 一律拒绝并记 403，不得静默放通；连接器通道整体默认关闭，缺配置即拒",
       "precedent": "D:/test/fde-workbench/server/src/fde_api/control/service.py:873-874（工具白名单仅 task.batch_assign，其余 403 tool_not_allowed）；ontology-service/src/ontology_service/outbound.py:52-64（assert_outbound_allowed，通道未启用即抛错）+ settings.py:62（outbound_webhook_enabled 默认 false）+ settings.py:108-117（生产环境启用但白名单为空 → 启动即拒）",
-      "ae_rule": "AE 执行器解析连接器请求时，先按本文件 connectors 精确匹配三元组 (connector_id, method, http_binding)——method＝动作方法名（methods[]），http_binding＝动词+路径对（http_bindings[]，v1.1 校准：原 (connector_id, method, path) 中 path 语义并入 http_binding）；命中失败即 403 并写审计事件（S-AE-06 检测口径，51 号:154-159）"
+      "ae_rule": "AE 执行器解析连接器请求时，先按本文件 connectors 精确匹配三元组 (connector_id, method, http_binding)——method＝动作方法名（methods[]），http_binding＝动词+路径对（http_bindings[]，v1.1 校准：原 (connector_id, method, path) 中 path 语义并入 http_binding）；命中失败即 403 并写审计事件（S-AE-06 检测口径，51 号:154-159；v1.3.3 读法澄清：审计事件＝**应用日志腿** ``ae_whitelist_rejected``〔action_execution/connectors.py〕——L3 拒绝发生在在途锁之前，无 execution_id 与真实起止时间，不落审计表行以守零伪造审计纪律；审计完备率与拒绝留痕分别由应用日志与执行记录承担）"
     },
     "ssrf_precheck": {
       "summary": "主机白名单 + 解析即校验（不等连接）+ 禁止重定向跟随；AE0–AE1 目标全为回环地址，故公网 IP 规则在 AE3 真实外部系统时启用",

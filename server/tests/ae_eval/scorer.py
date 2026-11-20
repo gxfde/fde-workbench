@@ -15,6 +15,11 @@
 - **任务集外 ID 明示**：任务集外记录 ``known_task=false`` ＋ note 标注——
   与「任务集内某任务本就零断言」不再同形。
 
+**分母锚纪律（评审补强 G3-11/B-2）**：``score_records`` 可携带预登记运行总
+数（``expected_runs``）——落盘记录数与之不符即在报告顶层显著标注
+``denominator_mismatch``；分母本身**不改**（05:54），杜绝「漏产一条＝静默
+抬高成功率」。
+
 本模块是**纯函数面**（无 DB / 无网络）：落盘记录进、指标出。
 """
 from __future__ import annotations
@@ -152,6 +157,8 @@ def _load_taskset(taskset_path: str | Path) -> dict[str, Any]:
 def score_records(
     records: list[RunRecord],
     taskset_path: str | Path,
+    *,
+    expected_runs: int | None = None,
 ) -> dict[str, Any]:
     """落盘记录 × 冻结任务集 → 逐条判定 + 指标 + 报告数据。
 
@@ -159,7 +166,12 @@ def score_records(
     - ``task_scores``：每次运行的逐条断言判定；
     - ``metrics``：成功率 / 幂等率 / 审计完备率（含 Wilson 95% 区间）；
     - ``counts``：唯一任务数与运行次数（05:47 分列口径）；
-    - ``task_definitions``：任务集元信息（版本/断言总数），供报告引用。
+    - ``denominator_mismatch``：预登记分母锚不符时的显著标注（评审补强
+      G3-11/B-2——分母本身**不改**，只标注）；一致或未提供锚时缺省。
+
+    ``expected_runs``（05:54 机械保护）：评测前预登记的运行总数；落盘记录数
+    与之不符（漏产/多产）即在报告顶层显著标注，杜绝「漏产一条＝分母缩小＝
+    成功率静默抬高」。
     """
     taskset = _load_taskset(taskset_path)
     assertions_by_task: dict[str, list[str]] = {
@@ -260,7 +272,7 @@ def score_records(
         ),
     ]
 
-    return {
+    result: dict[str, Any] = {
         "taskset": {
             "version": taskset.get("version"),
             "status": taskset.get("status"),
@@ -278,3 +290,12 @@ def score_records(
         "metrics": [metric.to_json() for metric in metrics],
         "failed_task_scores": [score.to_json() for score in scores if not score.passed],
     }
+    if expected_runs is not None and total_runs != expected_runs:
+        # 预登记分母锚不符（评审补强 G3-11/B-2）：**分母不改**，顶层显著标注
+        # ——「漏产一条＝分母缩小＝成功率静默抬高」的机械保护。
+        result["denominator_mismatch"] = {
+            "expected_runs": expected_runs,
+            "actual_runs": total_runs,
+            "note": "预登记运行总数与落盘记录数不符——分母未改（05:54），本标注须人工复核后方可采信报告",
+        }
+    return result

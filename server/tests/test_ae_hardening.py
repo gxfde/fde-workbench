@@ -67,7 +67,7 @@ _SERVER_ROOT = Path(__file__).resolve().parents[1]
 _SNAPSHOT = _SERVER_ROOT / "src" / "fde_api" / "action_execution" / "whitelist.json"
 _TASKSET = _SERVER_ROOT / "tests" / "ae_eval" / "taskset_v1.json"
 
-#: 契约 U1 v1.0.5 ``x-error-codes.codes`` 逐码转写（15 码闭集）——**独立于实现
+#: 契约 U1 v1.0.6 ``x-error-codes.codes`` 逐码转写（15 码闭集）——**独立于实现
 #: 常量**书写，H14 用它把实现侧 ``ERROR_STATUS`` 钉死（实现漂移即红）。
 CONTRACT_ERROR_CODES: dict[str, int] = {
     "validation_failed": 422,
@@ -87,7 +87,7 @@ CONTRACT_ERROR_CODES: dict[str, int] = {
     "sensitive_argument_forbidden": 422,
 }
 
-#: 契约 U1 v1.0.5 ``x-rollback.exceptions`` 七码（HTTP 状态逐码转写）。
+#: 契约 U1 v1.0.6 ``x-rollback.exceptions`` 七码（HTTP 状态逐码转写）。
 CONTRACT_ROLLBACK_EXCEPTIONS: dict[str, int] = {
     "not_found": 404,
     "validation_failed": 422,

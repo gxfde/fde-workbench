@@ -1,6 +1,6 @@
 """AE1-WP3 连接器白名单门＋SSRF 回环反向预检＋Header 白名单＋真 HTTP 派发。
 
-白名单快照（``whitelist.json``）＝docs 仓冻结件 v1.3.2 的仓内只读副本（v1.3.2＝评审轮 D3 KD-02/D4 登记落痕，2026-11-20）
+白名单快照（``whitelist.json``）＝docs 仓冻结件 v1.3.3 的仓内只读副本（v1.3.3＝B 桶 B-4 拍板：fail_closed.ae_rule 读法澄清〔审计事件＝应用日志腿〕，2026-11-20；v1.3.2＝KD-02/D4 登记）
 （变更只能走白名单改版 v2＋评审；**缺失/损坏 fail-closed 全拒**——禁改
 清单第 5/7 项：不得回退「任意 URL 可调」）。匹配三元组＝
 ``(connector_id, method, http_binding)`` 精确匹配（Q6b 追认字段口径：

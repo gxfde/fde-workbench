@@ -277,3 +277,26 @@ class TestScoring:
         score = result["task_scores"][0]
         assert score["assertions"] == []
         assert score["passed"] is False
+
+    def test_denominator_anchor_match_is_silent(self) -> None:
+        """预登记分母锚一致（B-2）⇒ 报告无 denominator_mismatch 标注。"""
+        records = [_passing_task_record("T4-001", 1), _passing_task_record("T4-001", 2)]
+        result = score_records(records, TASKSET, expected_runs=2)
+        assert "denominator_mismatch" not in result
+        assert result["counts"]["run_count"] == 2
+
+    def test_denominator_anchor_mismatch_is_flagged_not_adjusted(self) -> None:
+        """锚不符（漏产一条，B-2）⇒ 顶层显著标注，**分母不改**（05:54）。"""
+        records = [_passing_task_record("T4-001", 1), _passing_task_record("T4-001", 2)]
+        result = score_records(records, TASKSET, expected_runs=3)
+        mismatch = result["denominator_mismatch"]
+        assert mismatch["expected_runs"] == 3
+        assert mismatch["actual_runs"] == 2
+        metrics = {metric["name"]: metric for metric in result["metrics"]}
+        assert metrics["task_success_rate"]["denominator"] == 2  # 分母未改
+        assert metrics["task_success_rate"]["numerator"] == 2
+
+    def test_no_anchor_no_annotation(self) -> None:
+        """未提供锚 ⇒ 行为与旧口径完全一致（无标注、分母照旧）。"""
+        result = score_records([_passing_task_record("T4-001", 1)], TASKSET)
+        assert "denominator_mismatch" not in result

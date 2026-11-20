@@ -14,9 +14,10 @@
   而非「跑真 ID 再改记录」；
 - **评分器只消费落盘记录**（05:41）：runner 只产记录；判定一律由调用方
   落盘后经 ``scorer.score_records`` 消费；
-- **门槛口径**（51 号 §4.2）：「AE1 门禁：T4 成功率 ≥90% AND S-AE 全通过」
-  ——报告信封标注 **「未冻结（附录草案口径）」**（53 号 §2.3：不得声称
-  「已达成 05 号 AE1 门禁」）；
+- **门槛口径**（05 号 §5 AE1 行，2026-11-20 P1 出口轮转正——评审补强 G3-10/B-1）：
+  「T4 成功率 ≥90% AND S-AE 全通过」——报告信封 gate 段标注 **「已冻结（05 §5
+  AE1 行）」**（原「未冻结（附录草案口径）」为出口时点口径，转正后停用；已落
+  证据件 ae1-eval-report.json 的 gate 段随本轮同步订正）；
 - **桩端口注入面**：runner 桩绑 **ephemeral 端口**（跨 worker 与固定端口桩
   文件共存），实际端口注入白名单快照 base_url——装置级快照构造（非运行时
   篡改），与 WP3 ``_live_gates(wb_port)`` 先例同一语义。
@@ -28,6 +29,7 @@ available 取桩侧事实源零派生）——T4-002/005 冻结断言可判定�
 """
 from __future__ import annotations
 
+import builtins
 import json
 import urllib.parse
 import urllib.request
@@ -315,36 +317,89 @@ def _external_state(
 # ---- 执行链 --------------------------------------------------------------------
 
 
+def _looks_like_exception_name(reason: Any) -> bool:
+    """``details.reason`` 是否为内建异常类名（评审补强 G3-12/B-3 归因判据）。
+
+    service 层兜底（P6）把非域异常映射为 ``tool_not_allowed`` ＋
+    ``details.reason = type(exc).__name__``（如 ``RuntimeError``）——此类
+    reason 在评测面即**基础设施失败**信号；域内映射 reason（``connector_
+    timeout`` 等蛇形串）不是异常类名，不会误判。"""
+    attribute = getattr(builtins, str(reason), None)
+    return isinstance(attribute, type) and issubclass(attribute, BaseException)
+
+
+def _not_issued_execution_id() -> str:
+    """合成失败记录的诚实占位 execution_id（评审补强 G3-12/B-3）。
+
+    契约 ``ExecutionId`` 为非空串——``None`` 违约；真实 id 未签发（失败发生在
+    锁前/执行段抛错），以 ``not-issued-`` 前缀占位明示「本次尝试未获得真实
+    执行 ID」，不冒充真实主键。"""
+    return f"not-issued-{uuid.uuid4().hex[:8]}"
+
+
+def _infra_reasons(attempts: dict[str, dict[str, Any]]) -> list[str]:
+    """基础设施失败归因（评审补强 G3-12/B-3：从闭集 error.details.reason 读取）。
+
+    归因判据＝``error.code == "tool_not_allowed"`` 且 ``retryable is True``
+    （``_submit_attempt`` 对「reason 为内建异常类名」的兜底映射置 True；域
+    错误恒 False）——越界键 ``_infra_exception`` 已随形态修补移除，归因完全
+    走契约形态字段＋RunRecord.note。"""
+    reasons: set[str] = set()
+    for attempt in attempts.values():
+        error = attempt.get("error") or {}
+        if isinstance(error, dict) and error.get("code") == "tool_not_allowed" and error.get("retryable") is True:
+            reason = (error.get("details") or {}).get("reason")
+            if reason:
+                reasons.add(str(reason))
+    return sorted(reasons)
+
+
 def _submit_attempt(actor: Any, payload: dict[str, Any], gate: Any, dispatch: Any) -> dict[str, Any]:
-    """单次提交——失败按 05:54 保留总表：异常折叠为诚实 failed 记录形态
-    （闭集码＋message 入 error；基础设施失败标 ``_infra_exception`` 由
-    runner 转写进 RunRecord.note）。audit 置空对象＝审计完备率腿诚实扣减。"""
+    """单次提交——失败按 05:54 保留总表：异常折叠为**契约形态**的诚实 failed
+    记录（评审补强 G3-12/B-3：error 为契约 ErrorObject 完整三键 code/message/
+    retryable；execution_id 用 ``not-issued-`` 占位；基础设施失败＝service
+    兜底映射〔P6，``details.reason`` 为内建异常类名〕置 ``retryable=true``
+    保留归因，越界键 ``_infra_exception`` 已移除）。``audit`` 置空对象＝**审计
+    纪律**（失败发生在锁前/无真实起止时间即不伪造审计行），审计完备率腿诚实
+    扣减。"""
     try:
         return ae_service.submit_action(
             actor=actor, payload=payload, whitelist_gate=gate, dispatch=dispatch
         )
     except ActionExecutionError as exc:
+        # service 兜底映射（P6）的基础设施失败：reason＝内建异常类名 → 可重试
+        details = exc.details or {}
+        infra_like = exc.code == "tool_not_allowed" and _looks_like_exception_name(details.get("reason"))
         return {
-            "execution_id": None,
+            "execution_id": _not_issued_execution_id(),
             "idempotency_key": str(payload.get("idempotency_key")),
             "status": "failed",
             "output": None,
-            "error": {"code": exc.code, "message": exc.message},
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": bool(infra_like),
+                **({"details": dict(details)} if details else {}),
+            },
             "audit": {},
             "cost": {"tool_calls": 0, "duration_ms": 0, "estimated_usd": 0.0},
             "rollback": {"supported": False, "execution_id": None},
         }
-    except Exception as exc:  # 基础设施失败归因面（诚实保留总表，见上）
+    except Exception as exc:  # 防御：submit_action 之外的异常（契约形态兜底）
         return {
-            "execution_id": None,
+            "execution_id": _not_issued_execution_id(),
             "idempotency_key": str(payload.get("idempotency_key")),
             "status": "failed",
             "output": None,
-            "error": None,
+            "error": {
+                "code": "tool_not_allowed",
+                "message": "基础设施失败（闭集映射；details.reason 归因）。",  # noqa: E501
+                "retryable": True,
+                "details": {"reason": type(exc).__name__},
+            },
             "audit": {},
             "cost": {"tool_calls": 0, "duration_ms": 0, "estimated_usd": 0.0},
             "rollback": {"supported": False, "execution_id": None},
-            "_infra_exception": type(exc).__name__,
         }
 
 
@@ -370,13 +425,7 @@ def _run_task_once(
         for slot in ("replay2", "replay3"):
             attempts[slot] = _submit_attempt(actor, payload, gate, dispatch)
     after = _snapshot_state(task_id, db_session, stack)
-    infra = sorted(
-        {
-            attempt["_infra_exception"]
-            for attempt in attempts.values()
-            if attempt.get("_infra_exception") is not None
-        }
-    )
+    infra = _infra_reasons(attempts)
     return RunRecord(
         task_id=task_id,
         run_index=run_index,
@@ -421,18 +470,25 @@ def run_public_eval(
 
 
 def build_report(result: dict[str, Any]) -> dict[str, Any]:
-    """评测报告信封：门槛按 53 号 §2.3 标注**未冻结（附录草案口径）**。"""
-    return {
+    """评测报告信封：门槛按 05 号 §5 AE1 行（2026-11-20 P1 出口轮转正）标注。
+
+    评审补强 G3-10/B-1：原「未冻结（附录草案口径）」为出口时点口径——05 §5
+    AE1 行转正后机器读锚与人读报告须同口径；已落证据件的 gate 段随本轮同步
+    订正（docs 仓）。``denominator_mismatch``（若存在）透传进信封顶层。"""
+    report: dict[str, Any] = {
         "taskset": result["taskset"],
         "counts": result["counts"],
         "metrics": result["metrics"],
         "task_scores": result["task_scores"],
         "gate": {
-            "reference": "51-ae-evaluation.md §4.2：AE1 门禁＝T4 成功率 ≥90% AND S-AE 全通过",
-            "status": "未冻结（附录草案口径）",
-            "note": "53 号 §2.3：出口报告按草案口径标注，不声称「已达成 05 号 AE1 门禁」；05:54 分母不许改",
+            "reference": "05-evaluation-and-gates.md §5 AE1 行（2026-11-20 P1 出口轮转正）：T4 成功率 ≥90% AND S-AE 全通过",  # noqa: E501
+            "status": "已冻结（05 §5 AE1 行，2026-11-20 转正）",
+            "note": "05:54 分母不许改；预登记分母锚见 denominator_mismatch（B-2）；出口时点草案口径已停用",
         },
     }
+    if result.get("denominator_mismatch") is not None:
+        report["denominator_mismatch"] = result["denominator_mismatch"]
+    return report
 
 
 def write_report(report: dict[str, Any], path: str | Path) -> Path:

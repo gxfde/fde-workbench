@@ -1,4 +1,4 @@
-"""action_execution 三形态校验与构造（契约 U1 v1.0.5 $defs 的实现侧真身）。
+"""action_execution 三形态校验与构造（契约 U1 v1.0.6 $defs 的实现侧真身）。
 
 分工：``validate_request_shape``＝五层顺序的第 1 层（结构/类型/枚举/闭集/
 敏感键）；``validate_conditional``＝第 5 层兜底（if/then 条件必填——运行时
