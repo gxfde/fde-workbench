@@ -168,7 +168,7 @@ def _make_approval(db_session, world, *, params: dict[str, Any]) -> Any:
         reviewed_by_user_id=world["actor"].id,
         request_key=f"ae-{uuid4().hex[:12]}",
         capability="action_execution.invoke",
-        tool_name="mock.email.send",
+        tool_name="action_execution.execute",  # 评审 D2 甲案：审批绑定比对
         arguments_json=params,
         arguments_sha256=_sha(params),
         risk_level=3,

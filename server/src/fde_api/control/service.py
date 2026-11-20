@@ -835,12 +835,12 @@ def dsh_approval_status(*, approval_id: str) -> dict[str, Any]:
 
 # ---- G-AE-1：批准后可执行工具的可扩展 allow-list（53 号 §3 WP3）----
 # 原为硬编码单工具判定（白名单 constraints.fail_closed 先例），本轮注册表化：
-# (capability, tool_name) → 执行器函数名；既有 task.batch_assign 行为不变；
-# 新增工具须审核后在此登记（白名单范式：运行时不得动态注册未审核工具）。
+# (capability, tool_name) → 执行器（注册表化，G-AE-1）；既有 task.batch_assign
+# 行为不变；新增工具须审核后在此登记（白名单范式：运行时不得动态注册未审核
+# 工具）。**值即执行器函数**（评审 P5：派发按注册表值路由——先前值存名字串
+# 而调用硬编码 _execute_batch_assign 的「死派发」已修）。注册表本体定义于
+# ``_execute_batch_assign`` 之后（字典字面量引用函数对象须先有定义）。
 # decide_automation_approval 本体（上方函数）零改动（禁改清单第 1 项）。
-APPROVABLE_DSH_TOOLS: dict[tuple[str, str], Any] = {
-    ("task.batch_assign", "project_tasks.batch_assign"): "_execute_batch_assign",
-}
 
 
 def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
@@ -888,10 +888,10 @@ def execute_approved_dsh_tool(*, approval_id: str) -> dict[str, Any]:
             if not access.allowed:
                 raise ControlServiceError("permission_revoked", "任务发起人已不具备该操作权限。", 403)
 
-            executor_name = APPROVABLE_DSH_TOOLS.get((approval.capability, approval.tool_name))
-            if executor_name is None:
+            executor = APPROVABLE_DSH_TOOLS.get((approval.capability, approval.tool_name))
+            if executor is None:
                 raise ControlServiceError("tool_not_allowed", "该 DSH 工具未在工作台启用。", 403)
-            result = _execute_batch_assign(session=session, approval=approval)
+            result = executor(session=session, approval=approval)
 
             approval.status = "executed"
             approval.executed_at = datetime.now(UTC)
@@ -949,6 +949,13 @@ def _batch_assign_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
             raise ControlServiceError("invalid_tool_arguments", "批量分配任务参数无效。", 400)
         normalized.append({"task_id": item["task_id"], "version": item["version"]})
     return {"member_user_id": member_user_id, "mode": mode, "assignments": normalized}
+
+
+# (capability, tool_name) → 执行器函数——注册表本体（评审 P5：值即函数对象，
+# 派发按注册表值路由；新增工具须审核后在此登记，运行时不得动态注册未审核工具）。
+APPROVABLE_DSH_TOOLS: dict[tuple[str, str], Any] = {
+    ("task.batch_assign", "project_tasks.batch_assign"): _execute_batch_assign,
+}
 
 
 def _serialize_account_user(user: User) -> dict[str, Any]:

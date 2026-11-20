@@ -192,6 +192,30 @@ def provision_pinned_world(db_session: Any) -> dict[str, Any]:
     return {"org": org, "user": user, "project": project}
 
 
+REVIEWER_ID = "test-reviewer-001"  # 评审 P15：四眼闸第二人（复核人≠发起人）
+
+
+def _ensure_reviewer(db_session: Any) -> str:
+    """字面 ID 世界的复核人行（不存在即建；org 同 test-org-001）。"""
+    from fde_api.auth.models import User as _User
+
+    if db_session.get(_User, REVIEWER_ID) is None:
+        db_session.add(
+            _User(
+                id=REVIEWER_ID,
+                username=REVIEWER_ID,
+                display_name="AE1 评测复核人（test- 占位）",
+                role="admin",
+                password_hash=hash_password(INITIAL_PASSWORD),
+                must_change_password=False,
+                is_active=True,
+                org_id=ORG_ID,
+            )
+        )
+        db_session.commit()
+    return REVIEWER_ID
+
+
 def _make_email_approval(db_session: Any, params: dict, risk_level: int) -> str:
     """T4-003 审批单直插（WP3 先例同构；指纹＝params canonical sha256）。
 
@@ -203,6 +227,7 @@ def _make_email_approval(db_session: Any, params: dict, risk_level: int) -> str:
         workflow_node_run_id=None,
         project_id=PROJECT_ID,
         requested_by_user_id=USER_ID,
+        reviewed_by_user_id=_ensure_reviewer(db_session),  # 评审 P15：四眼闸形式（复核人≠发起人）
         request_key=f"ae1-eval-t4-003-{uuid.uuid4().hex[:12]}",
         capability="action_execution.invoke",
         tool_name="action_execution.execute",

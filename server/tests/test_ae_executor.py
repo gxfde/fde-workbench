@@ -435,7 +435,13 @@ class TestResultBindings:
         """15 码闭集逐码在册；闭集外码构造 ErrorObject 拒绝（Q8：映射不造码）。"""
         from fde_api.action_execution.schemas import ERROR_STATUS, build_error
 
-        assert set(ERROR_STATUS) == set(ERROR_STATUS)  # 15 码
+        # 评审 P13：对照契约 15 码清单逐码（原 `set(X)==set(X)` 恒真自比较已修）
+        assert set(ERROR_STATUS) == {
+            "validation_failed", "approval_required", "approval_not_found", "approval_not_approved",
+            "approval_expired", "approval_integrity_failed", "self_review_forbidden", "permission_revoked",
+            "tool_not_allowed", "not_found", "idempotency_mismatch", "idempotency_in_flight",
+            "rollback_not_supported", "compensation_failed", "sensitive_argument_forbidden",
+        }
         assert len(ERROR_STATUS) == 15
         assert ERROR_STATUS["rollback_not_supported"] == 200
         assert ERROR_STATUS["compensation_failed"] == 200
@@ -731,7 +737,7 @@ def _make_approval(db_session, world, *, params: dict | None = None, status: str
         reviewed_by_user_id=reviewed_by.id if reviewed_by is not None else (world["reviewer"].id if status == "approved" else None),
         request_key=f"ae-{uuid4().hex[:12]}",
         capability=AE_CAPABILITY,
-        tool_name="mock.erp.query_inventory",
+        tool_name="action_execution.execute",  # 评审 D2 甲案：审批绑定比对（capability/tool_name 须与执行入口一致）
         arguments_json=arguments,
         arguments_sha256=_sha256_of(_canonical(arguments)),
         risk_level=risk_level,
@@ -953,19 +959,36 @@ class TestTenantAndRoutes:
         → 403 tool_not_allowed 信封（fail-closed 红线面）；白名单内干跑 →
         201 succeeded＋output.simulated=true（零外呼模拟——WP3 落位语义，
         原「未接线派发」占位面已由真门替代，53 号 §3 WP1/WP3 衔接口径）。"""
+        # 评审 P12：正腿钉死（白名单内干跑必 201——原 if/else 双分支把
+        # 「全 403 回归」静默放行）；fail-closed 腿拆独立钉。
         res = client.post(
             "/api/v1/action-executions",
             json=_request(org_id=ae_world["org"].id, requester_id=ae_world["actor"].id),
             headers=_auth(ae_world["actor"], settings),
         )
         body = res.get_json()
-        if res.status_code == 201:
-            assert body["data"]["status"] == "succeeded"
-            assert body["data"]["output"].get("simulated") is True  # 干跑零外呼模拟
-        else:
-            assert res.status_code == 403
-            assert body["data"] is None
-            assert body["error"]["code"] == "tool_not_allowed"
+        assert res.status_code == 201
+        assert body["error"] is None
+        assert body["data"]["status"] == "succeeded"
+        assert body["data"]["output"].get("simulated") is True  # 干跑零外呼模拟
+
+    def test_post_route_fail_closed_envelope_whitelist_out(self, client, db_session, ae_world, settings) -> None:
+        """P12 fail-closed 腿：白名单外 connector → 403 tool_not_allowed 信封。"""
+        res = client.post(
+            "/api/v1/action-executions",
+            json=_request(
+                connector_id="evil.api",
+                method="read",
+                action_id="evil.api.read",
+                org_id=ae_world["org"].id,
+                requester_id=ae_world["actor"].id,
+            ),
+            headers=_auth(ae_world["actor"], settings),
+        )
+        body = res.get_json()
+        assert res.status_code == 403
+        assert body["data"] is None
+        assert body["error"]["code"] == "tool_not_allowed"
 
     def test_post_route_missing_key_422_envelope(self, client, db_session, ae_world, settings) -> None:
         payload = _request(org_id=ae_world["org"].id, requester_id=ae_world["actor"].id)

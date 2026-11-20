@@ -28,13 +28,23 @@ action_execution_blueprint = Blueprint("action_execution", __name__, url_prefix=
 # WP3 生产装配：白名单门＝仓内快照只读加载（加载期固化，运行时不可变——
 # 禁改清单第 5/7 项：缺失/损坏 fail-closed；惰性构造＝首次请求时加载并
 # 缓存，快照缺失时在请求面 403 而非蓝本导入崩溃）。
+# 评审 P10：快照同源缓存——门与 SSRF 预检共用同一份深拷贝快照，杜绝
+# 「门缓存 vs 磁盘现读」双源 TOCTOU 与每请求重读盘。
 _WHITELIST_GATE: ConnectorWhitelist | None = None
+_WHITELIST_SNAPSHOT: dict | None = None
+
+
+def _whitelist_snapshot() -> dict:
+    global _WHITELIST_SNAPSHOT
+    if _WHITELIST_SNAPSHOT is None:
+        _WHITELIST_SNAPSHOT = load_whitelist()
+    return _WHITELIST_SNAPSHOT
 
 
 def _whitelist_gate() -> ConnectorWhitelist:
     global _WHITELIST_GATE
     if _WHITELIST_GATE is None:
-        _WHITELIST_GATE = ConnectorWhitelist(load_whitelist())
+        _WHITELIST_GATE = ConnectorWhitelist(_whitelist_snapshot())
     return _WHITELIST_GATE
 
 
@@ -57,7 +67,8 @@ def submit_action():
     dispatch = HttpDispatch(
         whitelist=gate,
         token=issue_access_token(g.current_user, current_app.config["SETTINGS"]),
-        whitelist_snapshot=None,
+        whitelist_snapshot=_whitelist_snapshot(),
+        timeout_seconds=300.0,  # 评审 P8：服务端超时上限＝契约 timeout_seconds 域上界
     )
     result = service.submit_action(actor=g.current_user, payload=payload, whitelist_gate=gate, dispatch=dispatch)
     return jsonify({"data": result, "error": None}), 201
@@ -75,6 +86,10 @@ def rollback_execution(execution_id: str):
     """
     payload = request.get_json(silent=True) or {}
     reason = payload.get("reason")
+    if isinstance(reason, str) and len(reason) > 500:
+        # U1 x-rollback.exceptions：reason 超长 → 422 validation_failed（评审 P17，
+        # 不让超长串直达 varchar(500) 列炸 DataError）
+        raise ActionExecutionError("validation_failed", "回滚原因超长（≤500 字符）。")
     result = service.rollback_action(
         actor=g.current_user, execution_id=execution_id, reason=reason if isinstance(reason, str) else None
     )

@@ -9,6 +9,6 @@ WP1（docs/ai-fde/53 §3）：单步 T4 执行链 ``ActionExecutor``——「幂
 纯核心 + ``ActionExecutor``）｜ ``service``（真门装配 + 落库）｜ ``routes``
 （POST 提交 / GET 详情）｜ ``models``（``action_executions`` append-only 执行
 记录）。表达式语义与连接器只读沙箱真身均在 ontology-service，workbench 侧
-不得复刻（D1 落痕实施约束）；白名单加载器与连接器适配归 AE1-WP3，本域 WP1
+不得复刻（D1 落痕实施约束）；白名单加载器与连接器适配已落（WP3），本域 WP1
 默认 fail-closed。
 """

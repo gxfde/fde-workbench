@@ -73,9 +73,9 @@ class IdempotencyGate(Protocol):
 
 
 class WhitelistGate(Protocol):
-    """L3 门：命中放行（返回 None）；未命中 raise 403 ``tool_not_allowed``（fail-closed）。"""
+    """L3 门：命中放行并返回登记 spec；未命中 raise 403 ``tool_not_allowed``（fail-closed）。"""
 
-    def check(self, connector_id: str, method: str) -> None: ...
+    def check(self, connector_id: str, method: str) -> Any: ...
 
 
 class ApprovalGate(Protocol):
@@ -121,7 +121,22 @@ class ActionExecutor:
         fingerprint = request_fingerprint(request)
         prior = self._idempotency.lookup(request["idempotency_key"], request["org_id"], fingerprint)  # L2
         if prior is not None:
-            # 复放：零新副作用、零新外呼——audit/cost 均复现首次（U3 T4-003）
+            # 复放：零新副作用、零新外呼——audit/cost 均复现首次（U3 T4-003）。
+            # 评审 D1 甲案：failed/cancelled 终态行复放**原失败响应**（status/error
+            # 随快照返回——不再伪 replayed 空载荷吞错）；succeeded 行走 replayed 通道。
+            prior_status = prior.get("status")
+            if prior_status is not None and prior_status != "succeeded":
+                return build_result(
+                    execution_id=prior["execution_id"],
+                    idempotency_key=request["idempotency_key"],
+                    status=prior_status,
+                    output=prior.get("output") or {},
+                    audit=prior.get("audit") or {},
+                    cost=prior.get("cost") or {},
+                    rollback=prior.get("rollback") or {},
+                    error=prior.get("error"),
+                    replayed_from_execution_id=prior["execution_id"],
+                )
             return build_result(
                 execution_id=prior["execution_id"],
                 idempotency_key=request["idempotency_key"],
@@ -132,7 +147,11 @@ class ActionExecutor:
                 rollback=prior["rollback"],
                 replayed_from_execution_id=prior["execution_id"],
             )
-        self._whitelist.check(request["connector_id"], request["method"])  # L3
+        spec = self._whitelist.check(request["connector_id"], request["method"])  # L3
+        # risk 对齐（评审 P2）：白名单登记的 risk_level 是收紧锚——调用方自声明
+        # 低于登记值时按登记值走后续门（L4 审批），杜绝自报低 risk 绕过写型审批。
+        registered_risk = int(spec.get("risk_level") or 0) if isinstance(spec, dict) else 0
+        request = {**request, "risk_level": max(int(request["risk_level"]), registered_risk)}
         approval = self._approval.verify(request)  # L4
         validate_conditional(request)  # L5 兜底（异常直连路径 422）
         execution_id = new_uuid()

@@ -23,6 +23,7 @@ workbench 服务面，全部绑回环固定端口（与白名单 v1.3 base_url �
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 from flask import Flask, jsonify, request
@@ -49,6 +50,7 @@ class MockStack:
         self.email_port = email_port
         self._servers: list[Any] = []
         self._threads: list[threading.Thread] = []
+        self._lock = threading.Lock()  # 评审 P17：Flask 线程化下计数/收件箱互斥
 
     # ---- mock.erp（纯读桩） ---------------------------------------------------
 
@@ -58,8 +60,18 @@ class MockStack:
 
         @app.get("/mock-erp/inventory")
         def inventory():  # type: ignore[untyped-decorator]
-            stack.erp_requests += 1
-            sku = request.args.get("sku")
+            with stack._lock:
+                stack.erp_requests += 1
+            sku = request.args.get("sku") or ""
+            # 评审 P8/P11 钉触发器走 sku 值语义（delay/redirect 等触发参数会被
+            # L1 未登记字段 422 拦下——sku 是白名单登记的合法业务字段）
+            if sku == "__timeout__":
+                time.sleep(2.0)  # timeout 接线钉的延迟源（<min(声明,服务端上限) 即断）
+                return jsonify({"items": [], "count": 0})
+            if sku == "__redirect__":
+                # 评审 P11：开放重定向测试锚——合法白名单 URL 触发 302；
+                # 禁跟随钉断言外呼不落到 Location 目标（二次计数不增）
+                return jsonify({}), 302, {"Location": "/mock-erp/inventory?sku=redirect-probe"}
             warehouse = request.args.get("warehouse_id", "wh-default")
             # 确定性纯读：sku 在册即 42 件（零持久状态，每次同参同响应）；
             # available＝quantity 为零预留纯读桩的桩侧事实源（T4-002/005 冻结断言
@@ -79,7 +91,8 @@ class MockStack:
 
         @app.post("/mock-email/send")
         def send():  # type: ignore[untyped-decorator]
-            stack.email_requests += 1
+            with stack._lock:
+                stack.email_requests += 1
             payload = request.get_json(silent=True) or {}
             message_id = f"msg-{stack.email_requests:04d}"
             stack.inbox.append(
@@ -107,7 +120,12 @@ class MockStack:
         self.email_port = self._start_app(self._email_app(), self.email_port)
 
     def _start_app(self, app: Flask, port: int) -> int:
-        server = make_server("127.0.0.1", port, app, threaded=True)
+        try:
+            server = make_server("127.0.0.1", port, app, threaded=True)
+        except OSError as error:
+            if port != 0:
+                raise PortOccupiedError(f"桩端口 {port} 被外部服务占用（fail-fast）") from error
+            raise
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self._servers.append(server)

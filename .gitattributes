@@ -6,3 +6,9 @@
 # 其余文本文件统一 LF 入库（提交时归一化，二进制文件自动豁免）。
 # 历史 write_text 事故曾把 14 个 .py 以 CRLF 入库，renormalize 修回。
 * text=auto
+
+# 评审 P4：冻结件仓内快照（byte 一致锚钉守护）checkout 恒 LF——text=auto 在
+# Windows smudge 时会把 LF 转 CRLF，锚钉（sha256+size）随检出环境翻转即红。
+tests/ae_eval/taskset_v1.json -text
+server/tests/ae_eval/taskset_v1.json -text
+server/src/fde_api/action_execution/whitelist.json -text

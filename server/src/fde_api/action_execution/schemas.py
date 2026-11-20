@@ -51,6 +51,18 @@ def _reject(code: str, message: str) -> None:
     raise ActionExecutionError(code, message)
 
 
+def _contains_non_finite_number(value: Any) -> bool:
+    """params 树内是否存在 NaN/Infinity 浮点（评审 P7——canonical JSON 拒 nan，
+    在 L1 拦下给出 422 而非更深层的裸 ValueError）。"""
+    if isinstance(value, float):
+        return value != value or value in (float("inf"), float("-inf"))
+    if isinstance(value, dict):
+        return any(_contains_non_finite_number(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_non_finite_number(v) for v in value)
+    return False
+
+
 def validate_request_shape(payload: Any) -> None:
     """第 1 层：形状/类型/枚举/闭集/敏感键。不跑条件必填（归第 4/5 层）。"""
     if not isinstance(payload, dict):
@@ -79,6 +91,10 @@ def validate_request_shape(payload: Any) -> None:
         _reject("validation_failed", "params 须为对象。")
     if contains_sensitive_argument(payload["params"]):
         _reject("sensitive_argument_forbidden", "参数命中敏感键名（凭据不得进动作材料）。")
+    if _contains_non_finite_number(payload["params"]):
+        # 评审 P7：NaN/Infinity 等非有限数值 → 422（不进指纹/落库链路——
+        # canonical JSON allow_nan=False 会在更深处的门之前炸裸 ValueError）
+        _reject("validation_failed", "params 含非有限数值（NaN/Infinity）。")
     idem_key = payload["idempotency_key"]
     if not _is_str(idem_key) or not (1 <= len(idem_key) <= IDEMPOTENCY_KEY_MAX):
         _reject("validation_failed", f"idempotency_key 须为 1..{IDEMPOTENCY_KEY_MAX} 字符。")

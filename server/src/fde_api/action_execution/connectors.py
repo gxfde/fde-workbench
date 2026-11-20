@@ -1,6 +1,6 @@
 """AE1-WP3 连接器白名单门＋SSRF 回环反向预检＋Header 白名单＋真 HTTP 派发。
 
-白名单快照（``whitelist.json``）＝docs 仓冻结件 v1.3 的仓内只读副本
+白名单快照（``whitelist.json``）＝docs 仓冻结件 v1.3.2 的仓内只读副本（v1.3.2＝评审轮 D3 KD-02/D4 登记落痕，2026-11-20）
 （变更只能走白名单改版 v2＋评审；**缺失/损坏 fail-closed 全拒**——禁改
 清单第 5/7 项：不得回退「任意 URL 可调」）。匹配三元组＝
 ``(connector_id, method, http_binding)`` 精确匹配（Q6b 追认字段口径：
@@ -31,6 +31,7 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
+import logging
 import socket
 import urllib.error
 import urllib.parse
@@ -39,6 +40,8 @@ from pathlib import Path
 from typing import Any
 
 from fde_api.action_execution.errors import ActionExecutionError
+
+logger = logging.getLogger(__name__)
 
 SNAPSHOT_PATH = Path(__file__).resolve().parent / "whitelist.json"
 
@@ -77,6 +80,30 @@ def load_whitelist(path: str | None = None) -> dict[str, Any]:
             "连接器白名单形态不完整（fail-closed）。",
             details={"reason": "whitelist_shape_invalid"},
         )
+    # 深层形态逐条校验（评审 P7a）：损坏白名单的任何形态破缺都 fail-closed，
+    # 绝不让 AttributeError/ValueError 之类裸异常冒泡成 500。
+    for conn in raw["connectors"]:
+        if not isinstance(conn, dict) or not isinstance(conn.get("id"), str) or not conn.get("id"):
+            raise ActionExecutionError(
+                "tool_not_allowed",
+                "连接器白名单形态不完整（fail-closed）。",
+                details={"reason": "whitelist_shape_invalid"},
+            )
+        try:
+            urllib.parse.urlsplit(str(conn.get("base_url", "")))
+        except ValueError:
+            raise ActionExecutionError(
+                "tool_not_allowed",
+                "连接器白名单形态不完整（fail-closed）。",
+                details={"reason": "whitelist_shape_invalid"},
+            ) from None
+        bindings = conn.get("http_bindings", [])
+        if not isinstance(bindings, list) or any(not isinstance(b, dict) for b in bindings):
+            raise ActionExecutionError(
+                "tool_not_allowed",
+                "连接器白名单形态不完整（fail-closed）。",
+                details={"reason": "whitelist_shape_invalid"},
+            )
     return copy.deepcopy(raw)  # 深拷贝固化（S-AE-06 A5：运行时改原 dict 不生效）
 
 
@@ -97,6 +124,11 @@ class ConnectorWhitelist:
     def check(self, connector_id: str, method: str) -> dict[str, Any]:
         spec = self._by_id.get(connector_id)
         if spec is None or method not in spec.get("methods", []):
+            # fail-closed 留痕（白名单 constraints.fail_closed.ae_rule「403 并写
+            # 审计事件」——评审 P16：应用日志腿，零 params/响应体）
+            logger.info(
+                "ae_whitelist_rejected connector=%s method=%s", connector_id, method
+            )
             raise ActionExecutionError("tool_not_allowed", "连接器或方法未在白名单注册（fail-closed）。")
         return spec
 
@@ -163,19 +195,31 @@ def _is_loopback(ip: str) -> bool:
         return False
 
 
-def expand_path_template(spec: dict[str, Any], params: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def expand_path_template(
+    spec: dict[str, Any], params: dict[str, Any], binding: dict[str, Any] | None = None
+) -> tuple[str, dict[str, Any]]:
     """白名单 path 模板展开：``{x}`` ← params.x（展开后移除）；返回
     ``(不含 query 的 URL, 剩余 params)``——剩余面由调用方按动词分流
     （GET → query string；POST → JSON body）。**目标地址恒来自白名单
-    base_url**——params 无法改写（S-AE-06 A3 口径的机制保证）。"""
-    binding = spec["http_bindings"][0]
+    base_url**——params 无法改写（S-AE-06 A3 口径的机制保证）。
+
+    ``binding``（评审 P9）：三元组第三腿——由调用方按 ``binding_for``
+    解析结果传入；缺省退回 ``http_bindings[0]``（单 method 连接器等价）。"""
+    resolved = binding if binding is not None else spec["http_bindings"][0]
     base = str(spec.get("base_url", "")).rstrip("/")
-    path = str(binding["path"])
+    path = str(resolved.get("path", ""))
     rest = dict(params)
     for key in list(rest):
         token = "{" + key + "}"
         if token in path:
-            path = path.replace(token, urllib.parse.quote(str(rest.pop(key)), safe=""))
+            value = rest.pop(key)
+            if not isinstance(value, (str, int, float, bool)):
+                raise ActionExecutionError(
+                    "validation_failed",
+                    "路径模板参数须为标量。",
+                    details={"reason": "path_param_not_scalar", "param": key},
+                )
+            path = path.replace(token, urllib.parse.quote(str(value), safe=""))
     return base + path, rest
 
 
@@ -211,6 +255,13 @@ def build_outbound_headers(*, auth_type: str, token: str | None, idempotency_key
         # AE0–AE1 占位凭据（constraints.oauth_flow：Mock 面零真实凭据；
         # 真实凭据句柄解析归 AE3）
         headers["X-Api-Key"] = _API_KEY_PLACEHOLDER
+    else:
+        # 评审 P7b：登记外的 auth_type → fail-closed 拒绝（不得静默无凭据头外呼）
+        raise ActionExecutionError(
+            "tool_not_allowed",
+            "连接器凭据形态未登记（fail-closed）。",
+            details={"reason": "auth_type_not_registered"},
+        )
     return headers
 
 
@@ -235,7 +286,13 @@ def normalize_output(*, connector_id: str, method: str, payload_json: Any, org_i
     available 取桩侧事实源零派生）；其余 mock.*/workbench.workflow 透传上游
     最小业务结果（成功态信封外壳不回显）。"""
     if connector_id == "workbench.ontology" and method == "read":
-        items = ((payload_json or {}).get("data") or {}).get("items") or []
+        # KD-01 失败腿（评审 P3——U1 x-normalization.rule 逐字）：error 非 null
+        # 或 data 缺失 → 归一化失败按上游错误映射，**不产出伪 output**。
+        if not isinstance(payload_json, dict) or payload_json.get("error") is not None or not isinstance(
+            payload_json.get("data"), dict
+        ):
+            raise map_upstream_failure(status=None, body="", reason="normalization_failed")
+        items = payload_json["data"].get("items") or []
         ontologies = [
             {"ontology_id": item.get("id"), "name": item.get("term"), "org_id": org_id}
             for item in items
@@ -277,7 +334,7 @@ class HttpDispatch:
         if not isinstance(params, dict):
             raise ActionExecutionError("validation_failed", "params 须为 JSON 对象。")
         reject_caller_headers(params)
-        url_base, remaining = expand_path_template(spec, params)
+        url_base, remaining = expand_path_template(spec, params, binding)
         http_method = binding["http_method"].upper()
         if http_method == "GET":
             url = url_base + ("?" + urllib.parse.urlencode(remaining) if remaining else "")
@@ -294,10 +351,13 @@ class HttpDispatch:
         )
         req = urllib.request.Request(url, data=body, headers=headers, method=http_method)
         opener = urllib.request.build_opener(_NoRedirect)
+        # 评审 P8：请求声明的 timeout_seconds 接线（1..300 契约域），与服务端
+        # 构造上限取小——声明字段不再是被接受后忽略的死字段。
+        effective_timeout = min(self._timeout, float(request.get("timeout_seconds") or self._timeout))
         try:
-            with opener.open(req, timeout=self._timeout) as response:
+            with opener.open(req, timeout=effective_timeout) as response:
                 status = response.status
-                payload = json.loads(response.read().decode("utf-8"))
+                data = response.read(5_000_001)  # 评审 P7a：响应体 5MB 上限（防内存耗尽）
         except urllib.error.HTTPError as error:
             error.read()  # 消费后丢弃（零回显）
             raise map_upstream_failure(status=error.code, body="", reason="connector_upstream_error") from None
@@ -308,6 +368,13 @@ class HttpDispatch:
             raise map_upstream_failure(status=None, body="", reason="connector_timeout") from None
         if status < 200 or status >= 300:
             raise map_upstream_failure(status=status, body="", reason="connector_upstream_error")
+        # 评审 P6：2xx 非 JSON／非 UTF-8 → 闭集映射（不裸异常 500、锁行诚实翻 failed）
+        if len(data) > 5_000_000:
+            raise map_upstream_failure(status=status, body="", reason="connector_upstream_error")
+        try:
+            payload = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            raise map_upstream_failure(status=status, body="", reason="connector_upstream_error") from None
         return normalize_output(
             connector_id=request["connector_id"],
             method=request["method"],
