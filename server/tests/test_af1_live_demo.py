@@ -40,7 +40,10 @@ from fde_api.workbench.models import Project
 
 from test_gates_api import admin_client, gate_project  # noqa: F401  (fixture 供给方)
 
-OLLAMA_BASE = "http://127.0.0.1:11434"
+# FDE_AF1_OLLAMA_BASE 可覆盖（WP5 仪器层连通性配置，2026-11-19：WSL NAT 模式
+# 下 Windows→WSL localhost 转发不可用，评测运行经 WSL IP 直连本机 Ollama；
+# 默认值=AF1 冻结配置不变——本行只增覆盖通道，不改任何运行语义）。
+OLLAMA_BASE = os.environ.get("FDE_AF1_OLLAMA_BASE", "http://127.0.0.1:11434")
 OLLAMA_MODEL = "qwen3:14b"
 DEMO_ACTOR = "af1-demo-agent"
 DEMO_PROJECT_REF = "af1-demo-project"
