@@ -1,10 +1,10 @@
 {
  "route_count": 541,
  "blueprint_count": 57,
- "table_count": 166,
- "revision_count": 96,
+ "table_count": 168,
+ "revision_count": 97,
  "heads": [
-  "e2b4d6f8a0c2"
+  "b3e8c7d1a9f4"
  ],
  "roots": [
   "ebb003a5c3a8"
@@ -169,6 +169,15 @@
     "regional_partners",
     "regional_sale_gate",
     "regional_service_settlements"
+   ],
+   "add_column_tables": []
+  },
+  "b3e8c7d1a9f4": {
+   "file": "b3e8c7d1a9f4_action_task_runs.py",
+   "down_revision": "e2b4d6f8a0c2",
+   "create_tables": [
+    "action_task_runs",
+    "action_task_nodes"
    ],
    "add_column_tables": []
   },

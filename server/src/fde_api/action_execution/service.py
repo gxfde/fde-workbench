@@ -29,7 +29,13 @@ from sqlalchemy.orm import joinedload
 
 from fde_api.action_execution.executor import ActionExecutor, replay_payload_from_row, request_fingerprint
 from fde_api.action_execution.errors import ActionExecutionError
-from fde_api.action_execution.models import ActionCompensation, ActionExecution, ActionExecutionLog
+from fde_api.action_execution.models import (
+    ActionCompensation,
+    ActionExecution,
+    ActionExecutionLog,
+    ActionTaskNode,
+    ActionTaskRun,
+)
 from fde_api.action_execution.schemas import build_error, build_rollback_result
 from fde_api.auth.models import User
 from fde_api.control.access import (
@@ -639,3 +645,33 @@ def get_execution_row(execution_id: str) -> ActionExecution | None:
     """内部辅助（测试/运维检视）：按 id 取原始行，无租户过滤。"""
     with _ae_session() as session:
         return session.scalar(select(ActionExecution).where(ActionExecution.id == execution_id))
+
+
+def get_task_run(*, actor: User, execution_id: str) -> dict[str, Any]:
+    """多步运行详情（AE2-WP2；同租户；跨租户 404 复用关闭面文案不泄露存在性）。
+
+    编排契约 ``_ae2-execution-contract-v1.json`` x-tenant-isolation：服务端
+    强制 org_id 绑定——跨租户一律 404，与 AE1 单步面同口径。"""
+    with _ae_session() as session:
+        row = session.scalar(select(ActionTaskRun).where(ActionTaskRun.id == execution_id))
+        if row is None or row.org_id != actor.org_id:
+            raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
+        return row.snapshot()
+
+
+def list_task_nodes(*, actor: User, execution_id: str) -> list[dict[str, Any]]:
+    """多步运行的节点清单（AE2-WP2；同租户；跨租户 404）。
+
+    节点行是**节点序列**的权威载体（编排契约 x-audit-and-cost：运行级只留
+    ``definition_sha256`` 指纹，节点级留 ``params_sha256``；图定义与参数
+    明文不落库）。节点产物（output）留在 AE1 执行行，编排表不复制。"""
+    with _ae_session() as session:
+        run = session.scalar(select(ActionTaskRun).where(ActionTaskRun.id == execution_id))
+        if run is None or run.org_id != actor.org_id:
+            raise ActionExecutionError("not_found", NOT_FOUND_MESSAGE)
+        rows = session.scalars(
+            select(ActionTaskNode)
+            .where(ActionTaskNode.run_id == execution_id)
+            .order_by(ActionTaskNode.created_at, ActionTaskNode.node_key)
+        )
+        return [row.snapshot() for row in rows]

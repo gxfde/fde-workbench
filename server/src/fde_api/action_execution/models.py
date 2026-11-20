@@ -1,14 +1,18 @@
 """action_execution 域模型：``action_executions`` 执行记录（AE1-WP1）＋
 ``action_compensations`` 回滚批次（AE1-WP2）＋ ``action_execution_logs``
-审计日志（AE1-WP4）。
+审计日志（AE1-WP4）＋ ``action_task_runs``/``action_task_nodes`` 多步编排
+（AE2-WP2）。
 
-纪律（契约 U1 / 53 号）：
+纪律（契约 U1 / 53 号 / 54 号）：
 - **零明文**：参数只存 ``params_sha256``，``params`` 明文不落库（U1
-  x-audit.zero_plaintext；审计表归 WP4 另落）；
+  x-audit.zero_plaintext；审计表归 WP4 另落）；AE2 编排表同口径——运行行只留
+  ``definition_sha256`` 指纹、节点行只留 ``params_sha256``，图定义与节点参数
+  明文**不落库**（契约 `_ae2-execution-contract-v1.json` x-audit-and-cost）；
 - **幂等唯一约束**：``UNIQUE(org_id, idempotency_key)``（U1
   x-idempotency.constraint.ddl；新表新约束，既有约束零触碰——禁改清单第 6 项）;
 - **status 闭集**：契约 ``ExecutionStatus`` 五值（succeeded/failed/cancelled/
-  replayed/awaiting_approval）CHECK 机械约束；
+  replayed/awaiting_approval）CHECK 机械约束；AE2 运行七态 ＋ 节点八值
+  （编排契约 x-status-machine）同口径 CHECK 落库；
 - **append-only**：无 PATCH/DELETE 面；复放不落新行（同键一行真身）；
   审计表（WP4）同口径——一行一执行、无 JSON 自由列（C-08 响应体零回显的
   结构保证）。
@@ -35,6 +39,30 @@ from sqlalchemy.orm import Mapped, mapped_column
 from fde_api.workbench.models import Base, TimestampMixin, new_uuid
 
 ACTION_EXECUTION_STATUSES = ("succeeded", "failed", "cancelled", "replayed", "awaiting_approval")
+
+# AE2 编排状态闭集（编排契约 `_ae2-execution-contract-v1.json` x-status-machine）：
+# 运行七态 ＋ 节点八值（与 Workbench `WorkflowNodeRun` 八值同义——语义对齐，
+# 实现独立，禁改区零触碰）。
+ACTION_TASK_RUN_STATUSES = (
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "compensating",
+    "rolled_back",
+    "compensation_failed",
+)
+ACTION_TASK_NODE_STATUSES = (
+    "pending",
+    "ready",
+    "running",
+    "waiting",
+    "succeeded",
+    "failed",
+    "skipped",
+    "cancelled",
+)
+ACTION_TASK_COMPENSATION_STATUSES = ("rolled_back", "not_supported", "failed", "noop")
 
 
 class ActionExecution(Base, TimestampMixin):
@@ -204,4 +232,120 @@ class ActionExecutionLog(Base, TimestampMixin):
                 "estimated_usd": float(self.estimated_usd),
             },
             "created_at": str(self.created_at),
+        }
+
+
+class ActionTaskRun(Base, TimestampMixin):
+    """一次多步运行（AE2-WP2，编排契约 ``_ae2-execution-contract-v1.json``）。
+
+    纪律：
+    - **零明文**：只留 ``definition_sha256`` 指纹（图定义与节点参数明文**不落库**
+      ——编排契约 x-audit-and-cost）；节点参数指纹另落节点行 ``params_sha256``；
+    - **运行级幂等**：``UNIQUE(org_id, idempotency_key)``（同键一行真身；跨租户同键
+      互不影响——org_id 参与约束）；
+    - **status 闭集**：七值 CHECK 落库（queued|running|succeeded|failed|
+      compensating|rolled_back|compensation_failed）；
+    - **append-only**：无 PATCH/DELETE 面；复放不落新行。
+    """
+
+    __tablename__ = "action_task_runs"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {ACTION_TASK_RUN_STATUSES!r}",
+            name="ck_action_task_runs_status",
+        ),
+        CheckConstraint("node_count >= 1 AND node_count <= 32", name="ck_action_task_runs_node_count"),
+        UniqueConstraint("org_id", "idempotency_key", name="uq_action_task_runs_org_idem"),
+        Index("ix_action_task_runs_org_status", "org_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    # 租户面按值存（复用 orgs 标识体系，禁自造 tenant_id）
+    org_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    requester_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 图定义指纹（canonical JSON → sha256 hex，64 位小写）；定义明文不落库
+    definition_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    error_code: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    error_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    audit_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    cost_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    rollback_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "execution_id": self.id,
+            "idempotency_key": self.idempotency_key,
+            "org_id": self.org_id,
+            "requester_id": self.requester_id,
+            "definition_sha256": self.definition_sha256,
+            "node_count": self.node_count,
+            "status": self.status,
+            "error_code": self.error_code,
+            "error": self.error_json,
+            "audit": self.audit_json,
+            "cost": self.cost_json,
+            "rollback": self.rollback_json,
+            "created_at": str(self.created_at),
+            "updated_at": str(self.updated_at),
+        }
+
+
+class ActionTaskNode(Base, TimestampMixin):
+    """多步运行内的节点行（AE2-WP2）。
+
+    纪律：
+    - **依赖快照冗余**：``depends_on_json`` 是定义侧快照（定义后续演进不影响历史
+      run 的可追溯性——同 ``WorkflowNodeRun.depends_on`` 口径，语义对齐、实现独立）；
+    - **节点唯一**：``UNIQUE(run_id, node_key)``；
+    - **status 闭集**：八值 CHECK 落库（pending|ready|running|waiting|succeeded|
+      failed|skipped|cancelled）；
+    - **零明文**：只留 ``params_sha256``；节点产物（output）留在 AE1 执行行
+      （``action_execution_id`` 指向），编排表不复制业务产物。
+    """
+
+    __tablename__ = "action_task_nodes"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {ACTION_TASK_NODE_STATUSES!r}",
+            name="ck_action_task_nodes_status",
+        ),
+        CheckConstraint(
+            "compensation_status IS NULL OR compensation_status IN "
+            f"{ACTION_TASK_COMPENSATION_STATUSES!r}",
+            name="ck_action_task_nodes_compensation_status",
+        ),
+        CheckConstraint("attempt >= 0", name="ck_action_task_nodes_attempt"),
+        UniqueConstraint("run_id", "node_key", name="uq_action_task_nodes_run_node"),
+        Index("ix_action_task_nodes_run_status", "run_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_task_runs.id", ondelete="RESTRICT"), nullable=False
+    )
+    node_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    depends_on_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 节点级幂等键（确定性派生：sha256(run_key｜node_key｜canonical(action)) 前 32 位）
+    node_idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    params_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 指向 AE1 单步执行行（节点＝一次 AE1 单步执行）
+    action_execution_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error_code: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    error_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    compensation_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "node_key": self.node_key,
+            "status": self.status,
+            "attempt": self.attempt,
+            "action_execution_id": self.action_execution_id,
+            "error_code": self.error_code,
+            "error": self.error_json,
+            "compensation_status": self.compensation_status,
         }
