@@ -190,6 +190,10 @@ def submit_action(
     返回契约 ``ActionExecutionResult`` 形态 dict；复放不落新行。拒绝路径以
     ``ActionExecutionError`` 冒泡（routes 转 ``{data:null,error:{...}}`` 信封）。
 
+    ``rollback_supported``：终态行 ``rollback_json.supported`` 的置位开关
+    （U1 ``x-rollback`` 可补偿锚）——AE2 编排按节点定义显式传入；缺省 False。
+    （AE2-WP3 前该形参被静默丢弃——断线修复见 ``_finalize_in_flight``。）
+
     WP2 在途锁（U1 ``x-idempotency.in_flight`` / U2 S-AE-02 A9）：L5 通过后、
     dispatch 前落 ``awaiting_approval`` 锁行占用 ``UNIQUE(org_id, idempotency_key)``
     ——并发败者在**零副作用窗口**（dispatch 未发生）即被 409 挡下；锁行与终态
@@ -238,7 +242,13 @@ def submit_action(
         # 复放零新行（同键一行真身）——replayed 快照与 D1 甲案 failed 复放快照
         # 均零 finalize（终态已在库；真执行失败走上方 except 路径 finalize）
         return result
-    _finalize_in_flight(payload, result=result, error=None, execution_id=lock_handle["execution_id"])
+    _finalize_in_flight(
+        payload,
+        result=result,
+        error=None,
+        execution_id=lock_handle["execution_id"],
+        rollback_supported=rollback_supported,
+    )
     return result
 
 
@@ -379,12 +389,19 @@ def _finalize_in_flight(
     result: dict[str, Any] | None,
     error: ActionExecutionError | None,
     execution_id: str | None = None,
+    rollback_supported: bool = False,
 ) -> None:
     """锁行 → 终态（同一行状态机推进；行不存在＝拒绝发生在锁前，零落库跳过）。
 
     ``execution_id``（评审 P1）：**本请求**锁行 id——finalize 只按它定位；
     None（兼容旧测试直调）退化按 (org, key) 查行。mismatch/in_flight 等
     锁前拒绝路径不传入（handle 未回填）＝零 finalize，不误伤他人行。
+
+    ``rollback_supported``（AE2-WP3 断线修复）：``submit_action`` 形参此前
+    在 finalize 处**静默丢弃**（executor 结果硬编码 ``supported: False``），
+    调用方置位不生效、回滚恒 ``not_supported``。现按调用方置位覆盖
+    ``rollback_json.supported``——缺省 False 与既有行为逐字一致（AE1 存量
+    调用零漂移；54 号 §6.5 陷阱点登记的实修）。
 
     ``db.session()`` 每次调用返回**全新 Session**（extensions.Database 非
     scoped）——查询与属性赋值必须用**同一 session 变量**（跨 session 的
@@ -424,7 +441,8 @@ def _finalize_in_flight(
                 row.approval_id = result["audit"]["approval_id"]
                 row.audit_json = result["audit"]
                 row.cost_json = result["cost"]
-                row.rollback_json = result["rollback"]
+                # rollback_supported 覆盖（AE2-WP3 断线修复；缺省 False＝既有行为）
+                row.rollback_json = {**result["rollback"], "supported": bool(rollback_supported)}
                 # WP4 审计落行（与终态同事务——审计与执行记录原子一致）
                 _write_audit_log(session, row.id, result)
             else:
