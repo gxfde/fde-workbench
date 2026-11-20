@@ -286,9 +286,30 @@ class TestFrozenTaskSetAssertions:
     def test_taskset_copy_is_byte_identical_to_frozen_source(self) -> None:
         """仓内副本＝docs 冻结件 `_ae-tasks-v1.json` 的 **byte 一致副本**
         （sha256 锚；白名单同款「仓内副本＋锚钉」先例——改副本即改冻结件）。"""
-        digest = hashlib.sha256(self.TASKSET.read_bytes()).hexdigest()
-        assert digest == "bbf20c9ed6977434cebb0523b69e594553e9ab1f8f7df688f120d20da4b2d8d7"
+        raw = self.TASKSET.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        assert digest == "bbf20c9ed6977434cebb0523b69e594553e9ab1f8f7df688f120d20da4b2d8d7", (
+            f"sha256={digest} size={len(raw)} CRLF={raw.count(chr(13).encode() + chr(10).encode())}"
+            " ——若 CRLF>0 系检出 smudge 假红（本文件须 LF 检出：见 .gitattributes 钉与"
+            " test_frozen_taskset_is_pinned_lf_in_gitattributes；禁止归一化字节迁就断言）"
+        )
         assert self.TASKSET.stat().st_size == 40542
+
+    def test_frozen_taskset_is_pinned_lf_in_gitattributes(self) -> None:
+        """检出 EOL 防回归钉：`.gitattributes` 的 `-text` 规则须在位。
+
+        AE1 评审修复轮（#547 评审 P4）已钉 ``taskset_v1.json -text``＝检出恒
+        blob 原样（LF），比 ``text eol=lf`` 更严格——提交不静默归一，任何字节
+        改动显式暴露给本类锚钉。仓库规则 ``* text=auto`` 未指定 eol 时按
+        native 检出（Windows＝CRLF），若无此规则，锚钉随检出环境翻转即红、
+        Windows 本机钩子与 CI Linux 两端假分离（2026-11-20 AF2-WP5 D11 提交
+        钩子实证；旧基 checkout 的遗留 smudge 文件不被 `-text` 自动 renormalize
+        ——删规则或重写 `.gitattributes` 会让地雷复发，本钉守护规则在位）。
+        """
+        attrs = Path(__file__).resolve().parents[2] / ".gitattributes"
+        rules = attrs.read_text(encoding="utf-8")
+        assert "server/tests/ae_eval/taskset_v1.json -text" in rules
+        assert "tests/ae_eval/taskset_v1.json -text" in rules
 
     def _assertions(self) -> list[str]:
         payload = json.loads(self.TASKSET.read_text(encoding="utf-8"))
